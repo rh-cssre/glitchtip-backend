@@ -11,13 +11,15 @@ class IssueViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class EventStoreAPIView(APIView):
-    def 
-    ty = metadata.get("type")
+    def nothing(self, metadata):
+        ty = metadata.get("type")
         if ty is None:
             return metadata.get("function") or "<unknown>"
         if not metadata.get("value"):
             return ty
-        return u"{}: {}".format(ty, truncatechars(metadata["value"].splitlines()[0], 100))
+        return u"{}: {}".format(
+            ty, truncatechars(metadata["value"].splitlines()[0], 100)
+        )
 
     def post(self, request, id: int, format=None):
         serializer = StoreSerializer(data=request.data)
