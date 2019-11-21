@@ -1,0 +1,7 @@
+test:
+  image: python:3.8
+  services:
+    - postgres:10-alpine
+  script:
+    - pip install -r requirements.txt
+    - ./manage.py test
