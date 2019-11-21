@@ -1,7 +1,8 @@
 test:
   image: python:3.8
   services:
-    - postgres:10-alpine
+    - name: postgres:10-alpine
+      alias: db
   script:
     - pip install -r requirements.txt
     - ./manage.py test
