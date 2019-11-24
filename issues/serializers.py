@@ -25,6 +25,8 @@ class IssueSerializer(serializers.ModelSerializer):
         model = Issue
         fields = (
             "id",
+            "title",
+            "location",
             "event",
         )
 
