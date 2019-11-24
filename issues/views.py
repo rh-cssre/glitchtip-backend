@@ -1,5 +1,5 @@
 from django.db import IntegrityError
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from .models import Issue, Event
@@ -13,6 +13,8 @@ class IssueViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class EventStoreAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+
     def post(self, request, id: int, format=None):
         serializer = StoreSerializer(data=request.data)
         if serializer.is_valid():
