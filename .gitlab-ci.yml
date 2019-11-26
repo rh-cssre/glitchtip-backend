@@ -22,6 +22,7 @@ build:
     - pip install docker-compose
     - docker pull $IMAGE_NAME:latest || true
     - $COMPOSE build
+    - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN registry.gitlab.com
     - docker tag ${PROJECT_NAME}_web ${IMAGE_NAME}:$CI_BUILD_REF_NAME
     - docker push $CONTAINER_TEST_IMAGE
 
