@@ -25,7 +25,7 @@ SECRET_KEY = "8s_m#s3z-8g=5!$!s*9%z*nc&zl=w6h25m^#9o&+!#xe84mec("
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -124,8 +124,16 @@ SITE_ID = 1
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/dev/howto/static-files/
+if DEBUG:  # Basically disable when DEBUG is true
+    STATIC_URL = '/static/'
+else: # This is needed for angular cli
+    STATIC_URL = '/'
+STATICFILES_DIRS = [
+    'dist',
+]
+STATIC_ROOT = path("static/")
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-STATIC_URL = "/static/"
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 

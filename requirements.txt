@@ -4,5 +4,7 @@ django-allauth==0.40.0
 django-cors-headers==3.2.0
 django-rest-auth==0.9.5
 django-enumfield==2.0
-psycopg2-binary
+psycopg2-binary==2.8.4
+uWSGI==2.0.18
+whitenoise==4.1.4
 ipdb
