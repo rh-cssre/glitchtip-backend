@@ -1,10 +1,11 @@
-FROM python:3.8
+FROM python:3.8-slim
 ENV PYTHONUNBUFFERED 1
 ENV PORT 8080
 
 RUN mkdir /code
 WORKDIR /code
 
+RUN apt-get update && apt-get install -y gcc
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
