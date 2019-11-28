@@ -68,6 +68,8 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -96,7 +98,14 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "glitchtip.wsgi.application"
 
-CORS_ORIGIN_ALLOW_ALL = True
+CORS_ORIGIN_ALLOW_ALL = env.bool('CORS_ORIGIN_ALLOW_ALL', True)
+CORS_ORIGIN_WHITELIST = env.tuple('CORS_ORIGIN_WHITELIST', str, default=())
+X_FRAME_OPTIONS = 'DENY'
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
+ENVIRONMENT = env.str('ENVIRONMENT', None)
+GLITCH_VERSION = env.str('PASSIT_VERSION', 'dev')
 
 # Database
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
