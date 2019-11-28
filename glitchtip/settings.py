@@ -13,6 +13,19 @@ https://docs.djangoproject.com/en/dev/ref/settings/
 import os
 import environ
 
+env = environ.Env(
+    DEBUG=(bool, True),
+    AWS_ACCESS_KEY_ID=(str, None),
+    AWS_SECRET_ACCESS_KEY=(str, None),
+    AWS_STORAGE_BUCKET_NAME=(str, None),
+    AWS_S3_ENDPOINT_URL=(str, None),
+    AWS_LOCATION=(str, None),
+    STATIC_URL=(str, "/static/"),
+    STATICFILES_STORAGE=(
+        str,
+        "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    ),
+)
 path = environ.Path()
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -23,12 +36,12 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # See https://docs.djangoproject.com/en/dev/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "8s_m#s3z-8g=5!$!s*9%z*nc&zl=w6h25m^#9o&+!#xe84mec("
+SECRET_KEY = env("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env("DEBUG")
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -46,6 +59,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "rest_auth",
+    "storages",
     "issues",
     "users",
 ]
@@ -88,13 +102,7 @@ CORS_ORIGIN_ALLOW_ALL = True
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": "postgres",
-        "USER": "postgres",
-        "HOST": "db",
-        "PORT": 5432,
-    }
+    "default": env.db(),
 }
 
 # Password validation
@@ -127,17 +135,19 @@ SITE_ID = 1
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/dev/howto/static-files/
-if DEBUG:  # Basically disable when DEBUG is true
-    STATIC_URL = '/static/'
-else: # This is needed for angular cli
-    STATIC_URL = '/'
+STATIC_URL = env("STATIC_URL")
+
+AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
+AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME")
+AWS_S3_ENDPOINT_URL = env("AWS_S3_ENDPOINT_URL")
+AWS_LOCATION = env("AWS_LOCATION")
+
 STATICFILES_DIRS = [
-    'dist',
+    "dist",
 ]
 STATIC_ROOT = path("static/")
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-
-
+STATICFILES_STORAGE = env("STATICFILES_STORAGE")
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 AUTH_USER_MODEL = "users.User"

@@ -13,3 +13,4 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgres://postgres:postgres@db:5432/postgres
+      SECRET_KEY: change_me
