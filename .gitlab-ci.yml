@@ -6,6 +6,8 @@ variables:
 
 test:
   image: python:3.8
+  variables:
+    SECRET_KEY: testing
   services:
     - name: postgres:10-alpine
       alias: db
