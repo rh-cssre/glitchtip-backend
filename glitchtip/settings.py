@@ -102,7 +102,7 @@ CORS_ORIGIN_ALLOW_ALL = True
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
 
 DATABASES = {
-    "default": env.db(),
+    'default': env.db(default='postgres://postgres:postgres@db:5432/postgres')
 }
 
 # Password validation
