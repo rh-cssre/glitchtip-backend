@@ -22,7 +22,7 @@ class Project(models.Model):
     def save(self, *args, **kwargs):
         if not self.id:
             # TODO make unique per project
-            self.slug = slugify(self.name)
+            self.slug = slugify(self.name)[:45]
         super().save(*args, **kwargs)
         ProjectKey.objects.create(project=self)
 
