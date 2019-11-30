@@ -3,6 +3,7 @@ from django.conf import settings
 from django.db import models
 from django.template.defaultfilters import slugify
 from uuid import uuid4
+from urllib.parse import urlparse
 
 
 class Project(models.Model):
@@ -49,6 +50,21 @@ class ProjectKey(models.Model):
     @classmethod
     def generate_api_key(cls):
         return uuid4().hex
+
+    @classmethod
+    def from_dsn(cls, dsn):
+        urlparts = urlparse(dsn)
+
+        public_key = urlparts.username
+        project_id = urlparts.path.rsplit("/", 1)[-1]
+
+        try:
+            return ProjectKey.objects.get(public_key=public_key, project=project_id)
+        except ValueError:
+            # ValueError would come from a non-integer project_id,
+            # which is obviously a DoesNotExist. We catch and rethrow this
+            # so anything downstream expecting DoesNotExist works fine
+            raise ProjectKey.DoesNotExist("ProjectKey matching query does not exist.")
 
     def dsn(self):
         return self.get_dsn()

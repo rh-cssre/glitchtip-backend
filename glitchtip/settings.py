@@ -12,6 +12,8 @@ https://docs.djangoproject.com/en/dev/ref/settings/
 
 import os
 import environ
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
 
 env = environ.Env(
     DEBUG=(bool, True),
@@ -43,6 +45,11 @@ DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = ["*"]
 GLITCHTIP_ENDPOINT = env.url("GLITCHTIP_ENDPOINT", default="https://example.com")
+
+sentry_sdk.init(
+    dsn="http://1e947f4cc820441490a45b16e6c3e60d@localhost:8000/1",
+    integrations=[DjangoIntegration()],
+)
 
 # Application definition
 

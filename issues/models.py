@@ -13,6 +13,7 @@ class EventType(enum.Enum):
 
 class Issue(models.Model):
     title = models.CharField(max_length=255)
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
     event_type = enum.EnumField(EventType)
     location = models.CharField(max_length=1024)
 
