@@ -42,7 +42,7 @@ SECRET_KEY = env("SECRET_KEY")
 DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = ["*"]
-
+GLITCHTIP_ENDPOINT = env.url("GLITCHTIP_ENDPOINT", default="https://example.com")
 
 # Application definition
 
@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     "storages",
     "issues",
     "users",
+    "projects",
 ]
 
 MIDDLEWARE = [
