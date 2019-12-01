@@ -46,10 +46,10 @@ DEBUG = env("DEBUG")
 ALLOWED_HOSTS = ["*"]
 GLITCHTIP_ENDPOINT = env.url("GLITCHTIP_ENDPOINT", default="https://example.com")
 
-sentry_sdk.init(
-    dsn="http://1e947f4cc820441490a45b16e6c3e60d@localhost:8000/1",
-    integrations=[DjangoIntegration()],
-)
+# sentry_sdk.init(
+#     dsn="http://1e947f4cc820441490a45b16e6c3e60d@localhost:8000/1",
+#     integrations=[DjangoIntegration()],
+# )
 
 # Application definition
 
@@ -84,6 +84,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    "glitchtip.middleware.proxy.DecompressBodyMiddleware",
 ]
 
 ROOT_URLCONF = "glitchtip.urls"

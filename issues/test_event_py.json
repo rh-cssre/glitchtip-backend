@@ -1,0 +1,169 @@
+{
+  "message": "hi",
+  "level": "info",
+  "event_id": "6600a066e64b4caf8ed7ec5af64ac4bd",
+  "timestamp": "2019-12-01T01:44:14.622752Z",
+  "breadcrumbs": [
+    {
+      "type": "subprocess",
+      "category": "subprocess",
+      "message": "'git log --pretty=format:%ct --quiet -1 HEAD'",
+      "data": {
+        "subprocess.cwd": "/usr/local/lib/python3.7/site-packages/django"
+      },
+      "timestamp": "2019-12-01T01:42:46.675888Z"
+    },
+    {
+      "type": "subprocess",
+      "category": "subprocess",
+      "message": "/sbin/ldconfig -p",
+      "data": {},
+      "timestamp": "2019-12-01T01:42:46.691756Z"
+    },
+    {
+      "type": "subprocess",
+      "category": "subprocess",
+      "message": "/usr/bin/gcc -Wl,-t -o /tmp/tmp1h4c6sd1 -lsodium",
+      "data": {},
+      "timestamp": "2019-12-01T01:42:46.693419Z"
+    },
+    {
+      "type": "subprocess",
+      "category": "subprocess",
+      "message": "/usr/bin/objdump -p -j .dynamic /usr/lib/gcc/x86_64-alpine-linux-musl/8.3.0/../../../../lib/libsodium.so",
+      "data": {},
+      "timestamp": "2019-12-01T01:42:46.712369Z"
+    },
+    {
+      "type": "http",
+      "category": "httplib",
+      "data": {
+        "url": "http://192.168.86.139:8000/api/1/store/",
+        "method": "POST",
+        "status_code": 500,
+        "reason": "Internal Server Error"
+      },
+      "timestamp": "2019-12-01T01:42:50.736090Z"
+    },
+    {
+      "type": "http",
+      "category": "httplib",
+      "data": {
+        "url": "http://192.168.86.139:8000/api/1/store/",
+        "method": "POST",
+        "status_code": 200,
+        "reason": "OK"
+      },
+      "timestamp": "2019-12-01T01:43:45.810875Z"
+    }
+  ],
+  "contexts": {
+    "runtime": {
+      "name": "CPython",
+      "version": "3.7.5",
+      "build": "3.7.5 (default, Oct 21 2019, 20:13:45) \n[GCC 8.3.0]"
+    }
+  },
+  "modules": {
+    "zipp": "0.6.0",
+    "whitenoise": "4.1.4",
+    "wheel": "0.33.6",
+    "werkzeug": "0.16.0",
+    "wcwidth": "0.1.7",
+    "vine": "1.3.0",
+    "uwsgi": "2.0.18",
+    "urllib3": "1.25.7",
+    "uritemplate": "3.0.0",
+    "traitlets": "4.3.3",
+    "sqlparse": "0.3.0",
+    "six": "1.13.0",
+    "simplejson": "3.16.0",
+    "simple-asymmetric": "0.6.1",
+    "setuptools": "41.4.0",
+    "sentry-sdk": "0.12.3",
+    "requests": "2.22.0",
+    "redis": "3.3.11",
+    "pytz": "2019.3",
+    "python-ldap": "3.2.0",
+    "python-dateutil": "2.8.0",
+    "pysodium": "0.7.3",
+    "pyotp": "2.3.0",
+    "pyopenssl": "17.5.0",
+    "pygments": "2.4.2",
+    "pycparser": "2.19",
+    "pyasn1": "0.4.8",
+    "pyasn1-modules": "0.2.7",
+    "ptyprocess": "0.6.0",
+    "psycopg2-binary": "2.8.4",
+    "prompt-toolkit": "2.0.10",
+    "piwikapi": "0.3",
+    "pip": "19.3.1",
+    "pickleshare": "0.7.5",
+    "pexpect": "4.7.0",
+    "parso": "0.5.1",
+    "openapi-codec": "1.3.2",
+    "mypy-lang": "0.5.0",
+    "more-itertools": "7.2.0",
+    "model-mommy": "2.0.0",
+    "markupsafe": "1.1.1",
+    "markdown": "3.1.1",
+    "kombu": "4.6.6",
+    "jinja2": "2.10.3",
+    "jedi": "0.15.1",
+    "itypes": "1.1.0",
+    "ipython": "7.9.0",
+    "ipython-genutils": "0.2.0",
+    "ipdb": "0.12.2",
+    "importlib-metadata": "0.23",
+    "idna": "2.8",
+    "freezegun": "0.3.12",
+    "djangorestframework": "3.10.3",
+    "django": "2.2.7",
+    "django-server-side-piwik": "1.1.1",
+    "django-rest-swagger": "2.2.0",
+    "django-rest-knox": "4.1.0",
+    "django-picklefield": "2.0",
+    "django-ipware": "2.1.0",
+    "django-extensions": "2.2.5",
+    "django-environ": "0.4.5",
+    "django-debug-toolbar": "2.1",
+    "django-csp": "3.5",
+    "django-cors-headers": "3.1.1",
+    "django-constance": "2.4.0",
+    "django-celery-email": "2.0.2",
+    "django-appconf": "1.0.3",
+    "dj-database-url": "0.5.0",
+    "decorator": "4.4.1",
+    "cryptography": "2.8",
+    "coverage": "4.5.4",
+    "coreschema": "0.0.4",
+    "coreapi": "2.3.3",
+    "chardet": "3.0.4",
+    "cffi": "1.13.2",
+    "certifi": "2019.9.11",
+    "celery": "4.3.0",
+    "billiard": "3.6.1.0",
+    "backcall": "0.1.0",
+    "amqp": "2.5.2"
+  },
+  "extra": { "sys.argv": ["./manage.py", "shell"] },
+  "release": "dev",
+  "server_name": "b0e637722318",
+  "sdk": {
+    "name": "sentry.python",
+    "version": "0.12.3",
+    "packages": [{ "name": "pypi:sentry-sdk", "version": "0.12.3" }],
+    "integrations": [
+      "argv",
+      "atexit",
+      "dedupe",
+      "django",
+      "excepthook",
+      "logging",
+      "modules",
+      "stdlib",
+      "threading"
+    ]
+  },
+  "platform": "python"
+}

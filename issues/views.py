@@ -36,13 +36,13 @@ class EventStoreAPIView(APIView):
             try:
                 event = Event.objects.create(
                     event_id=data["event_id"],
-                    exception=data["exception"],
+                    exception=data.get("exception"),
                     level=data["level"],
                     platform=data["platform"],
                     sdk=data["sdk"],
                     release=data["release"],
                     breadcrumbs=data["breadcrumbs"],
-                    request=data["request"],
+                    request=data.get("request"),
                     issue=issue,
                 )
             except IntegrityError:

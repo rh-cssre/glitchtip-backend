@@ -32,11 +32,11 @@ class IssueSerializer(serializers.ModelSerializer):
 
 
 class StoreSerializer(serializers.Serializer):
-    exception = serializers.JSONField()
+    exception = serializers.JSONField(required=False)
     level = serializers.CharField()
     event_id = serializers.UUIDField()
     platform = serializers.CharField()
     sdk = serializers.JSONField()
     release = serializers.CharField()
     breadcrumbs = serializers.JSONField()
-    request = serializers.JSONField()
+    request = serializers.JSONField(required=False)

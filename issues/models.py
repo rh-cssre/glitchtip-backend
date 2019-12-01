@@ -15,7 +15,7 @@ class Issue(models.Model):
     title = models.CharField(max_length=255)
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
     event_type = enum.EnumField(EventType)
-    location = models.CharField(max_length=1024)
+    location = models.CharField(max_length=1024, blank=True, null=True)
 
     def event(self):
         return self.event_set.first()
@@ -26,13 +26,13 @@ class Issue(models.Model):
 
 class Event(models.Model):
     event_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    exception = JSONField()
+    exception = JSONField(blank=True, null=True)
     level = models.CharField(max_length=255)
     platform = models.CharField(max_length=255)
     sdk = JSONField()
     release = models.CharField(max_length=255)
     breadcrumbs = JSONField()
-    request = JSONField()
+    request = JSONField(blank=True, null=True)
     received_at = models.DateTimeField(auto_now_add=True)
     issue = models.ForeignKey(Issue, on_delete=models.CASCADE)
 
