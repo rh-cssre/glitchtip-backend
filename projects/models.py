@@ -1,9 +1,10 @@
+from urllib.parse import urlparse
+from uuid import uuid4
 from django.contrib.postgres.fields import JSONField
 from django.conf import settings
 from django.db import models
-from django.template.defaultfilters import slugify
-from uuid import uuid4
-from urllib.parse import urlparse
+from django_extensions.db.fields import AutoSlugField
+from organizations.models import Organization
 
 
 class Project(models.Model):
@@ -12,18 +13,23 @@ class Project(models.Model):
     are the top level entry point for all data.
     """
 
-    slug = models.SlugField()
+    slug = AutoSlugField(populate_from=["name"])
     name = models.CharField(max_length=200)
+    organization = models.ForeignKey(
+        "organizations.Organization", on_delete=models.CASCADE
+    )
     date_added = models.DateTimeField(auto_now_add=True)
     platform = models.CharField(max_length=64, null=True)
+
+    class Meta:
+        unique_together = (("organization", "slug"),)
 
     def __str__(self):
         return self.name
 
     def save(self, *args, **kwargs):
-        if not self.id:
-            # TODO make unique per project
-            self.slug = slugify(self.name)[:45]
+        if not self.organization_id:  # Temp thing
+            self.organization = Organization.objects.get_or_create(name="test org")[0]
         super().save(*args, **kwargs)
         ProjectKey.objects.create(project=self)
 

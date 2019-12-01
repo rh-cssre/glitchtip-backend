@@ -3,9 +3,10 @@ from django.views.generic.base import TemplateView
 from rest_framework import routers
 from issues import urls as issuesUrls
 from projects import urls as projectsUrls
+from organizations_ext import urls as OrganizationsUrls
 
 
-routeLists = [issuesUrls.routeList, projectsUrls.routeList]
+routeLists = [issuesUrls.routeList, projectsUrls.routeList, OrganizationsUrls.routeList]
 
 router = routers.DefaultRouter()
 for routeList in routeLists:

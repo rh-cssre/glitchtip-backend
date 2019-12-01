@@ -3,8 +3,7 @@
     "editor.formatOnSave": true,
     "python.pythonPath": "env/bin/python",
     "python.linting.pylintArgs": [
-        "--load-plugins",
-        "pylint_django",
         "--enable=W0614"
-    ]
+    ],
+    "python.linting.enabled": true
 }
