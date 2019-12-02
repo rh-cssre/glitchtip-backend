@@ -44,7 +44,7 @@ SECRET_KEY = env("SECRET_KEY")
 DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = ["*"]
-GLITCHTIP_ENDPOINT = env.url("GLITCHTIP_ENDPOINT", default="https://example.com")
+GLITCHTIP_ENDPOINT = env.url("GLITCHTIP_ENDPOINT", default="http://localhost:8000")
 
 # sentry_sdk.init(
 #     dsn="http://1e947f4cc820441490a45b16e6c3e60d@localhost:8000/1",
