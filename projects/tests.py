@@ -8,7 +8,7 @@ class ProjectsAPITestCase(APITestCase):
     def setUp(self):
         self.user = baker.make("users.user")
         self.client.force_login(self.user)
-        self.url = "/api/projects/"
+        self.url = "/api/0/projects/"
 
     def test_projects_api_create(self):
         name = "test project"
