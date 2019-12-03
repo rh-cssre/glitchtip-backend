@@ -21,7 +21,7 @@ router.registry.extend(projectsRouter.registry)
 urlpatterns = [
     path("api/0/", include(router.urls)),
     path("api/0/", include("projects.urls")),
-    path("api/0/", include("issues.urls")),
+    path("api/", include("issues.urls")),
     path("rest-auth/", include("rest_auth.urls")),
     path("api/api-auth/", include("rest_framework.urls", namespace="rest_framework")),
     # These routes belong to the Angular single page app

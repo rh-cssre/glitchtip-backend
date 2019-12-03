@@ -16,7 +16,6 @@ class Issue(models.Model):
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
     event_type = enum.EnumField(EventType)
     location = models.CharField(max_length=1024, blank=True, null=True)
-    resolved = models.BooleanField(default=False)
 
     def event(self):
         return self.event_set.first()
