@@ -10,7 +10,7 @@ from .serializers import IssueSerializer, StoreSerializer
 from .event_store.error import ErrorEvent
 
 
-class IssueViewSet(viewsets.ReadOnlyModelViewSet):
+class IssueViewSet(viewsets.ModelViewSet):
     queryset = Issue.objects.all()
     serializer_class = IssueSerializer
 

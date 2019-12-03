@@ -4,15 +4,18 @@ from .models import Project, ProjectKey
 
 
 class ProjectKeySerializer(serializers.ModelSerializer):
+    dateCreated = serializers.DateTimeField(source="date_added", read_only=True)
+    id = serializers.CharField(source="public_key", read_only=True)
+    dsn = serializers.SerializerMethodField(read_only=True)
+    public = serializers.CharField(source="public_key", read_only=True)
+    projectId = serializers.PrimaryKeyRelatedField(source="project", read_only=True)
+
     class Meta:
         model = ProjectKey
-        fields = (
-            "label",
-            "public_key",
-            "date_added",
-            "dsn",
-        )
-        read_only_fields = ("dsn",)
+        fields = ("dateCreated", "dsn", "id", "label", "public", "projectId")
+
+    def get_dsn(self, obj):
+        return {"public": obj.get_dsn()}
 
 
 class ProjectSerializer(serializers.ModelSerializer):
