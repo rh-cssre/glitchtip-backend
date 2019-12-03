@@ -8,14 +8,14 @@ class IssueTestCase(APITestCase):
         project = baker.make("projects.Project")
         projectkey = project.projectkey_set.first()
 
-        url = f"/api/0/{project.id}/store/?sentry_key={projectkey.public_key}"
+        url = f"/api/{project.id}/store/?sentry_key={projectkey.public_key}"
         with open("issues/test_event.json") as json_file:
             data = json.load(json_file)
         res = self.client.post(url, data, format="json")
         self.assertEqual(res.status_code, 200)
 
     def test_store_api_auth_failure(self):
-        url = "/api/0/1/store/"
+        url = "/api/1/store/"
         with open("issues/test_event.json") as json_file:
             data = json.load(json_file)
         res = self.client.post(url, data, format="json")
