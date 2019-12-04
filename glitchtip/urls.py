@@ -1,22 +1,15 @@
 from django.urls import path, include, re_path
 from django.views.generic.base import TemplateView
 from rest_framework_nested import routers
-from issues import urls as issuesUrls
+from issues.urls import router as issuesRouter
 from projects.urls import router as projectsRouter
-from organizations_ext import urls as OrganizationsUrls
+from organizations_ext.urls import router as organizationsRouter
 
-
-routeLists = [issuesUrls.routeList, OrganizationsUrls.routeList]
 
 router = routers.DefaultRouter()
-for routeList in routeLists:
-    for route in routeList:
-        if len(route) > 2:
-            router.register(route[0], route[1], basename=route[2])
-        else:
-            router.register(route[0], route[1])
 router.registry.extend(projectsRouter.registry)
-
+router.registry.extend(issuesRouter.registry)
+router.registry.extend(organizationsRouter.registry)
 
 urlpatterns = [
     path("api/0/", include(router.urls)),

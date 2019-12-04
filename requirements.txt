@@ -1,3 +1,4 @@
+black
 Django>=3.0,<3.1
 djangorestframework==3.10.3
 django-allauth==0.40.0

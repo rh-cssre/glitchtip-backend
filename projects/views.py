@@ -5,6 +5,12 @@ from .serializers import ProjectSerializer, ProjectKeySerializer
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
+    """
+    Detail view is under /api/0/projects/{organization_slug}/{project_slug}/
+
+    Project keys/DSN's are available at /api/0/projects/{organization_slug}/{project_slug}/keys/
+    """
+
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
     lookup_value_regex = "([^/.]+)/(?P<proj_slug>[-\w]+)"
