@@ -13,18 +13,15 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
-    lookup_value_regex = "([^/.]+)/(?P<proj_slug>[-\w]+)"
-    lookup_field = "slug"
+    lookup_value_regex = r"(?P<org_slug>[^/.]+)/(?P<slug>[-\w]+)"
 
     def get_object(self):
-        # TODO make generic solution
-        org_slug = self.kwargs.get("slug").split("/")[0]
         queryset = self.filter_queryset(self.get_queryset())
-        filter_kwargs = {
-            self.lookup_field: self.kwargs["proj_slug"],
-            "organization__slug": org_slug,
-        }
-        obj = get_object_or_404(queryset, **filter_kwargs)
+        obj = get_object_or_404(
+            queryset,
+            slug=self.kwargs["slug"],
+            organization__slug=self.kwargs["org_slug"],
+        )
 
         # May raise a permission denied
         self.check_object_permissions(self.request, obj)
@@ -35,4 +32,14 @@ class ProjectViewSet(viewsets.ModelViewSet):
 class ProjectKeyViewSet(viewsets.ModelViewSet):
     queryset = ProjectKey.objects.all()
     serializer_class = ProjectKeySerializer
-    lookup_field = "slug"
+    lookup_field = "public_key"
+
+    def get_queryset(self):
+        return (
+            super()
+            .get_queryset()
+            .filter(
+                project__slug=self.kwargs["slug"],
+                project__organization__slug=self.kwargs["org_slug"],
+            )
+        )
