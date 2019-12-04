@@ -5,9 +5,9 @@ from .models import Project, ProjectKey
 
 class ProjectKeySerializer(serializers.ModelSerializer):
     dateCreated = serializers.DateTimeField(source="date_added", read_only=True)
-    id = serializers.CharField(source="public_key", read_only=True)
+    id = serializers.CharField(source="public_key_hex", read_only=True)
     dsn = serializers.SerializerMethodField(read_only=True)
-    public = serializers.CharField(source="public_key", read_only=True)
+    public = serializers.CharField(source="public_key_hex", read_only=True)
     projectId = serializers.PrimaryKeyRelatedField(source="project", read_only=True)
 
     class Meta:

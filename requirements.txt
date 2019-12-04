@@ -18,3 +18,4 @@ boto3>=1.10.28,<1.11
 sentry-sdk>=0.13.4,<0.14
 ipdb
 pylint
+pylint-django

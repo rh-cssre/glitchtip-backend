@@ -39,8 +39,7 @@ class ProjectKey(models.Model):
 
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     label = models.CharField(max_length=64, blank=True)
-    public_key = models.CharField(max_length=32, unique=True)
-    # public_key = models.UUIDField(default=uuid4, unique=True, editable=False)
+    public_key = models.UUIDField(default=uuid4, unique=True, editable=False)
     date_added = models.DateTimeField(auto_now_add=True)
     rate_limit_count = models.PositiveSmallIntegerField(blank=True, null=True)
     rate_limit_window = models.PositiveSmallIntegerField(blank=True, null=True)
@@ -48,15 +47,6 @@ class ProjectKey(models.Model):
 
     def __str__(self):
         return self.public_key
-
-    def save(self, *args, **kwargs):
-        if not self.id:
-            self.public_key = ProjectKey.generate_api_key()
-        super().save(*args, **kwargs)
-
-    @classmethod
-    def generate_api_key(cls):
-        return uuid4().hex
 
     @classmethod
     def from_dsn(cls, dsn):
@@ -73,11 +63,16 @@ class ProjectKey(models.Model):
             # so anything downstream expecting DoesNotExist works fine
             raise ProjectKey.DoesNotExist("ProjectKey matching query does not exist.")
 
+    @property
+    def public_key_hex(self):
+        """ The public key without dashes """
+        return self.public_key.hex
+
     def dsn(self):
         return self.get_dsn()
 
     def get_dsn(self):
-        key = self.public_key
+        key = self.public_key_hex
         urlparts = settings.GLITCHTIP_ENDPOINT
 
         # If we do not have a scheme or domain/hostname, dsn is never valid
