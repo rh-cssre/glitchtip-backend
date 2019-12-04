@@ -17,3 +17,4 @@ whitenoise>=4.1.4,<4.2
 boto3>=1.10.28,<1.11
 sentry-sdk>=0.13.4,<0.14
 ipdb
+pylint
