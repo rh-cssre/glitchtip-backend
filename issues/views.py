@@ -14,6 +14,16 @@ class IssueViewSet(viewsets.ModelViewSet):
     queryset = Issue.objects.all()
     serializer_class = IssueSerializer
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if "organization_slug" in self.kwargs:
+            qs = qs.filter(
+                project__organization__slug=self.kwargs["organization_slug"],
+            )
+        if "project_slug" in self.kwargs:
+            qs = qs.filter(project__slug=self.kwargs["project_slug"],)
+        return qs
+
 
 class EventStoreAPIView(APIView):
     permission_classes = [permissions.AllowAny]

@@ -5,20 +5,25 @@ from django_enumfield import enum
 
 
 class EventType(enum.Enum):
-    ERROR = 0
-    CSP = 1
+    error = 0
+    csp = 1
 
-    __default__ = ERROR
+    __default__ = error
 
 
 class Issue(models.Model):
     title = models.CharField(max_length=255)
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
-    event_type = enum.EnumField(EventType)
+    type = enum.EnumField(EventType)
     location = models.CharField(max_length=1024, blank=True, null=True)
 
     def event(self):
         return self.event_set.first()
+
+    @property
+    def type_name(self):
+        """ Verbose name for type of issue """
+        return self.type.name
 
     def __str__(self):
         return self.title

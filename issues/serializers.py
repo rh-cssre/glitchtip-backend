@@ -19,6 +19,7 @@ class EventSerializer(serializers.ModelSerializer):
 
 
 class IssueSerializer(serializers.ModelSerializer):
+    type = serializers.CharField(source="type_name")
     event = EventSerializer()
 
     class Meta:
@@ -26,6 +27,7 @@ class IssueSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "title",
+            "type",
             "location",
             "event",
         )
