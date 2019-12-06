@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from projects.serializers import ProjectReferenceSerializer
 from .models import Issue, Event
 
 
@@ -19,7 +20,9 @@ class EventSerializer(serializers.ModelSerializer):
 
 
 class IssueSerializer(serializers.ModelSerializer):
-    type = serializers.CharField(source="type_name")
+    type = serializers.CharField(source="get_type_display")
+    status = serializers.CharField(source="get_status_display")
+    project = ProjectReferenceSerializer()
     event = EventSerializer()
 
     class Meta:
@@ -28,6 +31,8 @@ class IssueSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "type",
+            "status",
+            "project",
             "location",
             "event",
         )

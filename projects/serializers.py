@@ -18,7 +18,13 @@ class ProjectKeySerializer(serializers.ModelSerializer):
         return {"public": obj.get_dsn()}
 
 
-class ProjectSerializer(serializers.ModelSerializer):
+class ProjectReferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Project
+        fields = ("platform", "slug", "id", "name")
+
+
+class ProjectSerializer(ProjectReferenceSerializer):
     avatar = serializers.SerializerMethodField()
     color = serializers.SerializerMethodField()
     dateCreated = serializers.DateTimeField(source="date_added", read_only=True)
@@ -31,8 +37,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     isPublic = serializers.SerializerMethodField()
     organization = OrganizationSerializer(read_only=True)
 
-    class Meta:
-        model = Project
+    class Meta(ProjectReferenceSerializer.Meta):
         fields = (
             "avatar",
             "color",

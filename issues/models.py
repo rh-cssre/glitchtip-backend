@@ -1,29 +1,35 @@
 import uuid
 from django.contrib.postgres.fields import JSONField
 from django.db import models
-from django_enumfield import enum
 
 
-class EventType(enum.Enum):
-    error = 0
-    csp = 1
+class EventType(models.IntegerChoices):
+    DEFAULT = 0, "default"
+    ERROR = 1, "error"
+    CSP = 2, "csp"
 
-    __default__ = error
+
+class EventStatus(models.IntegerChoices):
+    UNRESOLVED = 0, "unresolved"
+    RESOLVED = 1, "resolved"
+    IGNORED = 2, "ignored"
 
 
 class Issue(models.Model):
     title = models.CharField(max_length=255)
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
-    type = enum.EnumField(EventType)
-    location = models.CharField(max_length=1024, blank=True, null=True)
+    type = models.PositiveSmallIntegerField(
+        choices=EventType.choices, default=EventType.DEFAULT
+    )
+    location = models.CharField(
+        max_length=1024, blank=True, null=True
+    )  # TODO rename culprit
+    status = models.PositiveSmallIntegerField(
+        choices=EventStatus.choices, default=EventStatus.UNRESOLVED
+    )
 
     def event(self):
         return self.event_set.first()
-
-    @property
-    def type_name(self):
-        """ Verbose name for type of issue """
-        return self.type.name
 
     def __str__(self):
         return self.title
