@@ -1,0 +1,468 @@
+{
+  "level": "error",
+  "exception": {
+    "values": [
+      {
+        "module": null,
+        "type": "Exception",
+        "value": "This is a sample error",
+        "mechanism": { "type": "django", "handled": false },
+        "stacktrace": {
+          "frames": [
+            {
+              "filename": "django/core/handlers/exception.py",
+              "abs_path": "/usr/local/lib/python3.8/site-packages/django/core/handlers/exception.py",
+              "function": "inner",
+              "module": "django.core.handlers.exception",
+              "lineno": 34,
+              "pre_context": [
+                "    can rely on getting a response instead of an exception.",
+                "    \"\"\"",
+                "    @wraps(get_response)",
+                "    def inner(request):",
+                "        try:"
+              ],
+              "context_line": "            response = get_response(request)",
+              "post_context": [
+                "        except Exception as exc:",
+                "            response = response_for_exception(request, exc)",
+                "        return response",
+                "    return inner",
+                ""
+              ],
+              "vars": {
+                "request": "<WSGIRequest: GET '/api/0/make-sample-error/'>",
+                "exc": "Exception('This is a sample error')",
+                "get_response": "<bound method BaseHandler._get_response of <django.core.handlers.wsgi.WSGIHandler object at 0x7fccf51fbeb0>>"
+              },
+              "in_app": true
+            },
+            {
+              "filename": "django/core/handlers/base.py",
+              "abs_path": "/usr/local/lib/python3.8/site-packages/django/core/handlers/base.py",
+              "function": "_get_response",
+              "module": "django.core.handlers.base",
+              "lineno": 115,
+              "pre_context": [
+                "        if response is None:",
+                "            wrapped_callback = self.make_view_atomic(callback)",
+                "            try:",
+                "                response = wrapped_callback(request, *callback_args, **callback_kwargs)",
+                "            except Exception as e:"
+              ],
+              "context_line": "                response = self.process_exception_by_middleware(e, request)",
+              "post_context": [
+                "",
+                "        # Complain if the view returned None (a common error).",
+                "        if response is None:",
+                "            if isinstance(callback, types.FunctionType):    # FBV",
+                "                view_name = callback.__name__"
+              ],
+              "vars": {
+                "self": "<django.core.handlers.wsgi.WSGIHandler object at 0x7fccf51fbeb0>",
+                "request": "<WSGIRequest: GET '/api/0/make-sample-error/'>",
+                "response": "None",
+                "resolver": "<URLResolver 'glitchtip.urls' (None:None) '^/'>",
+                "resolver_match": "ResolverMatch(func=issues.views.MakeSampleErrorView, args=(), kwargs={}, url_name=None, app_names=[], namespaces=[], route=api/0/make-sample-error/)",
+                "callback": "<function MakeSampleErrorView at 0x7fccf1577af0>",
+                "callback_args": [],
+                "callback_kwargs": {},
+                "middleware_method": "<function CorsMiddleware.process_view at 0x7fccf143c310>",
+                "wrapped_callback": "<function MakeSampleErrorView at 0x7fccf1577af0>"
+              },
+              "in_app": true
+            },
+            {
+              "filename": "django/core/handlers/base.py",
+              "abs_path": "/usr/local/lib/python3.8/site-packages/django/core/handlers/base.py",
+              "function": "_get_response",
+              "module": "django.core.handlers.base",
+              "lineno": 113,
+              "pre_context": [
+                "                break",
+                "",
+                "        if response is None:",
+                "            wrapped_callback = self.make_view_atomic(callback)",
+                "            try:"
+              ],
+              "context_line": "                response = wrapped_callback(request, *callback_args, **callback_kwargs)",
+              "post_context": [
+                "            except Exception as e:",
+                "                response = self.process_exception_by_middleware(e, request)",
+                "",
+                "        # Complain if the view returned None (a common error).",
+                "        if response is None:"
+              ],
+              "vars": {
+                "self": "<django.core.handlers.wsgi.WSGIHandler object at 0x7fccf51fbeb0>",
+                "request": "<WSGIRequest: GET '/api/0/make-sample-error/'>",
+                "response": "None",
+                "resolver": "<URLResolver 'glitchtip.urls' (None:None) '^/'>",
+                "resolver_match": "ResolverMatch(func=issues.views.MakeSampleErrorView, args=(), kwargs={}, url_name=None, app_names=[], namespaces=[], route=api/0/make-sample-error/)",
+                "callback": "<function MakeSampleErrorView at 0x7fccf1577af0>",
+                "callback_args": [],
+                "callback_kwargs": {},
+                "middleware_method": "<function CorsMiddleware.process_view at 0x7fccf143c310>",
+                "wrapped_callback": "<function MakeSampleErrorView at 0x7fccf1577af0>"
+              },
+              "in_app": true
+            },
+            {
+              "filename": "django/views/decorators/csrf.py",
+              "abs_path": "/usr/local/lib/python3.8/site-packages/django/views/decorators/csrf.py",
+              "function": "wrapped_view",
+              "module": "django.views.decorators.csrf",
+              "lineno": 54,
+              "pre_context": [
+                "def csrf_exempt(view_func):",
+                "    \"\"\"Mark a view function as being exempt from the CSRF view protection.\"\"\"",
+                "    # view_func.csrf_exempt = True would also work, but decorators are nicer",
+                "    # if they don't have side effects, so return a new function.",
+                "    def wrapped_view(*args, **kwargs):"
+              ],
+              "context_line": "        return view_func(*args, **kwargs)",
+              "post_context": [
+                "    wrapped_view.csrf_exempt = True",
+                "    return wraps(view_func)(wrapped_view)"
+              ],
+              "vars": {
+                "args": ["<WSGIRequest: GET '/api/0/make-sample-error/'>"],
+                "kwargs": {},
+                "view_func": "<function MakeSampleErrorView at 0x7fccf1577a60>"
+              },
+              "in_app": true
+            },
+            {
+              "filename": "django/views/generic/base.py",
+              "abs_path": "/usr/local/lib/python3.8/site-packages/django/views/generic/base.py",
+              "function": "view",
+              "module": "django.views.generic.base",
+              "lineno": 71,
+              "pre_context": [
+                "            if not hasattr(self, 'request'):",
+                "                raise AttributeError(",
+                "                    \"%s instance has no 'request' attribute. Did you override \"",
+                "                    \"setup() and forget to call super()?\" % cls.__name__",
+                "                )"
+              ],
+              "context_line": "            return self.dispatch(request, *args, **kwargs)",
+              "post_context": [
+                "        view.view_class = cls",
+                "        view.view_initkwargs = initkwargs",
+                "",
+                "        # take name and docstring from class",
+                "        update_wrapper(view, cls, updated=())"
+              ],
+              "vars": {
+                "request": "<WSGIRequest: GET '/api/0/make-sample-error/'>",
+                "args": [],
+                "kwargs": {},
+                "self": "<issues.views.MakeSampleErrorView object at 0x7fccf02df310>",
+                "cls": "<class 'issues.views.MakeSampleErrorView'>",
+                "initkwargs": {}
+              },
+              "in_app": true
+            },
+            {
+              "filename": "rest_framework/views.py",
+              "abs_path": "/usr/local/lib/python3.8/site-packages/rest_framework/views.py",
+              "function": "dispatch",
+              "module": "rest_framework.views",
+              "lineno": 505,
+              "pre_context": [
+                "                handler = self.http_method_not_allowed",
+                "",
+                "            response = handler(request, *args, **kwargs)",
+                "",
+                "        except Exception as exc:"
+              ],
+              "context_line": "            response = self.handle_exception(exc)",
+              "post_context": [
+                "",
+                "        self.response = self.finalize_response(request, response, *args, **kwargs)",
+                "        return self.response",
+                "",
+                "    def options(self, request, *args, **kwargs):"
+              ],
+              "vars": {
+                "self": "<issues.views.MakeSampleErrorView object at 0x7fccf02df310>",
+                "request": "<rest_framework.request.Request object at 0x7fccf02df580>",
+                "args": [],
+                "kwargs": {},
+                "handler": "<bound method MakeSampleErrorView.get of <issues.views.MakeSampleErrorView object at 0x7fccf02df310>>"
+              },
+              "in_app": true
+            },
+            {
+              "filename": "rest_framework/views.py",
+              "abs_path": "/usr/local/lib/python3.8/site-packages/rest_framework/views.py",
+              "function": "handle_exception",
+              "module": "rest_framework.views",
+              "lineno": 465,
+              "pre_context": [
+                "",
+                "        context = self.get_exception_handler_context()",
+                "        response = exception_handler(exc, context)",
+                "",
+                "        if response is None:"
+              ],
+              "context_line": "            self.raise_uncaught_exception(exc)",
+              "post_context": [
+                "",
+                "        response.exception = True",
+                "        return response",
+                "",
+                "    def raise_uncaught_exception(self, exc):"
+              ],
+              "vars": {
+                "self": "<issues.views.MakeSampleErrorView object at 0x7fccf02df310>",
+                "exc": "Exception('This is a sample error')",
+                "exception_handler": "<function exception_handler at 0x7fccf15b60d0>",
+                "context": {
+                  "view": "<issues.views.MakeSampleErrorView object at 0x7fccf02df310>",
+                  "args": [],
+                  "kwargs": {},
+                  "request": "<rest_framework.request.Request object at 0x7fccf02df580>"
+                },
+                "response": "None"
+              },
+              "in_app": true
+            },
+            {
+              "filename": "rest_framework/views.py",
+              "abs_path": "/usr/local/lib/python3.8/site-packages/rest_framework/views.py",
+              "function": "raise_uncaught_exception",
+              "module": "rest_framework.views",
+              "lineno": 476,
+              "pre_context": [
+                "        if settings.DEBUG:",
+                "            request = self.request",
+                "            renderer_format = getattr(request.accepted_renderer, 'format')",
+                "            use_plaintext_traceback = renderer_format not in ('html', 'api', 'admin')",
+                "            request.force_plaintext_errors(use_plaintext_traceback)"
+              ],
+              "context_line": "        raise exc",
+              "post_context": [
+                "",
+                "    # Note: Views are made CSRF exempt from within `as_view` as to prevent",
+                "    # accidental removal of this exemption in cases where `dispatch` needs to",
+                "    # be overridden.",
+                "    def dispatch(self, request, *args, **kwargs):"
+              ],
+              "vars": {
+                "self": "<issues.views.MakeSampleErrorView object at 0x7fccf02df310>",
+                "exc": "Exception('This is a sample error')",
+                "request": "<rest_framework.request.Request object at 0x7fccf02df580>",
+                "renderer_format": "'api'",
+                "use_plaintext_traceback": "False"
+              },
+              "in_app": true
+            },
+            {
+              "filename": "rest_framework/views.py",
+              "abs_path": "/usr/local/lib/python3.8/site-packages/rest_framework/views.py",
+              "function": "dispatch",
+              "module": "rest_framework.views",
+              "lineno": 502,
+              "pre_context": [
+                "                handler = getattr(self, request.method.lower(),",
+                "                                  self.http_method_not_allowed)",
+                "            else:",
+                "                handler = self.http_method_not_allowed",
+                ""
+              ],
+              "context_line": "            response = handler(request, *args, **kwargs)",
+              "post_context": [
+                "",
+                "        except Exception as exc:",
+                "            response = self.handle_exception(exc)",
+                "",
+                "        self.response = self.finalize_response(request, response, *args, **kwargs)"
+              ],
+              "vars": {
+                "self": "<issues.views.MakeSampleErrorView object at 0x7fccf02df310>",
+                "request": "<rest_framework.request.Request object at 0x7fccf02df580>",
+                "args": [],
+                "kwargs": {},
+                "handler": "<bound method MakeSampleErrorView.get of <issues.views.MakeSampleErrorView object at 0x7fccf02df310>>"
+              },
+              "in_app": true
+            },
+            {
+              "filename": "issues/views.py",
+              "abs_path": "/code/issues/views.py",
+              "function": "get",
+              "module": "issues.views",
+              "lineno": 99,
+              "pre_context": [
+                "        return result.get(\"sentry_key\")",
+                "",
+                "",
+                "class MakeSampleErrorView(APIView):",
+                "    def get(self, request):"
+              ],
+              "context_line": "        raise Exception(\"This is a sample error\")",
+              "post_context": [],
+              "vars": {
+                "self": "<issues.views.MakeSampleErrorView object at 0x7fccf02df310>",
+                "request": "<rest_framework.request.Request object at 0x7fccf02df580>"
+              },
+              "in_app": true
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "event_id": "6194a7e07a264f59aeca4de05701e412",
+  "timestamp": "2019-12-08T15:49:28.805575Z",
+  "breadcrumbs": [
+    {
+      "message": "SELECT \"django_session\".\"session_key\", \"django_session\".\"session_data\", \"django_session\".\"expire_date\" FROM \"django_session\" WHERE (\"django_session\".\"expire_date\" > %s AND \"django_session\".\"session_key\" = %s) LIMIT 21",
+      "category": "query",
+      "data": {},
+      "timestamp": "2019-12-08T15:49:28.790692Z",
+      "type": "default"
+    },
+    {
+      "message": "SELECT \"users_user\".\"id\", \"users_user\".\"password\", \"users_user\".\"last_login\", \"users_user\".\"is_superuser\", \"users_user\".\"email\", \"users_user\".\"first_name\", \"users_user\".\"last_name\", \"users_user\".\"is_staff\", \"users_user\".\"is_active\" FROM \"users_user\" WHERE \"users_user\".\"id\" = %s LIMIT 21",
+      "category": "query",
+      "data": {},
+      "timestamp": "2019-12-08T15:49:28.798710Z",
+      "type": "default"
+    }
+  ],
+  "transaction": "/api/0/make-sample-error/",
+  "contexts": {
+    "trace": {
+      "trace_id": "9cb7c4e96dc44b1ead85c92d74b77159",
+      "span_id": "a0386ffe901093bb",
+      "parent_span_id": "a376f9408506b7e0",
+      "op": "django.middleware",
+      "description": "glitchtip.middleware.proxy.DecompressBodyMiddleware.__call__"
+    },
+    "runtime": {
+      "name": "CPython",
+      "version": "3.8.0",
+      "build": "3.8.0 (default, Nov 23 2019, 05:49:00) \n[GCC 8.3.0]"
+    }
+  },
+  "modules": {
+    "wrapt": "1.11.2",
+    "whitenoise": "4.1.4",
+    "wheel": "0.33.6",
+    "wcwidth": "0.1.7",
+    "uwsgi": "2.0.18",
+    "urllib3": "1.25.7",
+    "typed-ast": "1.4.0",
+    "traitlets": "4.3.3",
+    "toml": "0.10.0",
+    "sqlparse": "0.3.0",
+    "six": "1.13.0",
+    "setuptools": "41.6.0",
+    "sentry-sdk": "0.13.5",
+    "s3transfer": "0.2.1",
+    "requests": "2.22.0",
+    "requests-oauthlib": "1.3.0",
+    "regex": "2019.11.1",
+    "pytz": "2019.3",
+    "python3-openid": "3.1.0",
+    "python-dateutil": "2.8.0",
+    "pylint": "2.4.4",
+    "pylint-plugin-utils": "0.6",
+    "pylint-django": "2.0.13",
+    "pygments": "2.5.2",
+    "ptyprocess": "0.6.0",
+    "psycopg2-binary": "2.8.4",
+    "prompt-toolkit": "3.0.2",
+    "pip": "19.3.1",
+    "pickleshare": "0.7.5",
+    "pexpect": "4.7.0",
+    "pathspec": "0.6.0",
+    "parso": "0.5.1",
+    "oauthlib": "3.1.0",
+    "model-bakery": "1.0.2",
+    "mccabe": "0.6.1",
+    "lazy-object-proxy": "1.4.3",
+    "jmespath": "0.9.4",
+    "jedi": "0.15.1",
+    "isort": "4.3.21",
+    "ipython": "7.10.1",
+    "ipython-genutils": "0.2.0",
+    "ipdb": "0.12.3",
+    "idna": "2.8",
+    "drf-nested-routers": "0.91",
+    "docutils": "0.15.2",
+    "djangorestframework": "3.10.3",
+    "django": "3.0",
+    "django-storages": "1.8",
+    "django-rest-auth": "0.9.5",
+    "django-organizations": "1.1.2",
+    "django-extensions": "2.2.5",
+    "django-environ": "0.4.5",
+    "django-debug-toolbar": "2.1",
+    "django-cors-headers": "3.2.0",
+    "django-allauth": "0.40.0",
+    "defusedxml": "0.6.0",
+    "decorator": "4.4.1",
+    "click": "7.0",
+    "chardet": "3.0.4",
+    "certifi": "2019.11.28",
+    "botocore": "1.13.34",
+    "boto3": "1.10.34",
+    "black": "19.10b0",
+    "backcall": "0.1.0",
+    "attrs": "19.3.0",
+    "astroid": "2.3.3",
+    "asgiref": "3.2.3",
+    "appdirs": "1.4.3"
+  },
+  "extra": { "sys.argv": ["./manage.py", "runserver", "0.0.0.0:8000"] },
+  "request": {
+    "url": "http://localhost:8000/api/0/make-sample-error/",
+    "query_string": "",
+    "method": "GET",
+    "env": { "SERVER_NAME": "81bf6d47de7c", "SERVER_PORT": "8000" },
+    "headers": {
+      "Content-Length": "",
+      "Content-Type": "text/plain",
+      "Host": "localhost:8000",
+      "Connection": "keep-alive",
+      "Cache-Control": "max-age=0",
+      "Upgrade-Insecure-Requests": "1",
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36",
+      "Sec-Fetch-User": "?1",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3",
+      "Sec-Fetch-Site": "none",
+      "Sec-Fetch-Mode": "navigate",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Cookie": "",
+      "Dnt": "1"
+    },
+    "data": {}
+  },
+  "server_name": "81bf6d47de7c",
+  "sdk": {
+    "name": "sentry.python",
+    "version": "0.13.5",
+    "packages": [{ "name": "pypi:sentry-sdk", "version": "0.13.5" }],
+    "integrations": [
+      "argv",
+      "atexit",
+      "dedupe",
+      "django",
+      "excepthook",
+      "logging",
+      "modules",
+      "stdlib",
+      "threading"
+    ]
+  },
+  "platform": "python",
+  "_meta": {
+    "request": {
+      "headers": { "Cookie": { "": { "rem": [["!config", "x", 0, 221]] } } }
+    }
+  }
+}

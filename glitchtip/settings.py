@@ -46,10 +46,10 @@ DEBUG = env("DEBUG")
 ALLOWED_HOSTS = ["*"]
 GLITCHTIP_ENDPOINT = env.url("GLITCHTIP_ENDPOINT", default="http://localhost:8000")
 
-# sentry_sdk.init(
-#     dsn="http://1e947f4cc820441490a45b16e6c3e60d@localhost:8000/1",
-#     integrations=[DjangoIntegration()],
-# )
+sentry_sdk.init(
+    dsn="http://93f4c59478054bb991f74787173eef27@192.168.43.115:8000/1",
+    integrations=[DjangoIntegration()],
+)
 
 # Application definition
 
