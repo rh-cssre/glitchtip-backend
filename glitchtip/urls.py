@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.urls import path, include, re_path
 from django.views.generic.base import TemplateView
 from rest_framework_nested import routers
@@ -25,3 +26,12 @@ urlpatterns = [
         r"^(login|issues|settings).*$", TemplateView.as_view(template_name="index.html")
     ),
 ]
+if settings.DEBUG:
+    import debug_toolbar
+
+    urlpatterns = [
+        path("__debug__/", include(debug_toolbar.urls)),
+        # For django versions before 2.0:
+        # url(r'^__debug__/', include(debug_toolbar.urls)),
+    ] + urlpatterns
+

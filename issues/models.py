@@ -38,6 +38,11 @@ class Issue(models.Model):
         return self.title
 
 
+class EventTag(models.Model):
+    key = models.CharField(max_length=255)
+    value = models.CharField(max_length=225)
+
+
 class Event(models.Model):
     """
     An individual event. An issue is a set of like-events.
@@ -55,7 +60,7 @@ class Event(models.Model):
     # maps to request in JS (but it's normalized to OS, not just user agent)
     context = JSONField()
     # contexts literal. Empty in JS
-    contexts = JSONField(blank=True)
+    contexts = JSONField(blank=True, default=dict)
     # crashFile = ??? - always null for now
     # location of crash, sometimes a filename
     # .get_location() gives us this
@@ -69,7 +74,7 @@ class Event(models.Model):
     # maps to exception
     entries = JSONField()
     # Only shows up in JS event - not sure the difference from entries
-    errors = JSONField(blank=True)
+    errors = JSONField(blank=True, default=list)
     # fingerprints = ??? Presumably a unique way to identify similair events
     # groupingConfig = ??? Probably don't need this yet
     # Top file location in stacktrace maybe?
@@ -80,7 +85,7 @@ class Event(models.Model):
     # No idea how this is generated, doesn't match inbound event.
     # metadata = JSONField()
     # Maps to modules
-    packages = JSONField(blank=True)
+    packages = JSONField(blank=True, default=dict)
     # Maps to platform
     platform = models.CharField(max_length=255)
     # Will implement release later, client just sends a string
@@ -88,7 +93,7 @@ class Event(models.Model):
     # Maps to sdk
     sdk = JSONField()
     # size = ??? Shown in UI - WHY does it link to something almost but not quite the api!?
-    # tags = ??? Probably used to help search
+    tags = models.ManyToManyField(EventTag, blank=True)
     # title likely comes from event get_title function
     title = models.CharField(max_length=255)
     # type is only stored on the linked Issue
@@ -99,3 +104,8 @@ class Event(models.Model):
 
     def __str__(self):
         return self.event_id
+
+    @property
+    def event_id_hex(self):
+        """ The public key without dashes """
+        return self.event_id.hex

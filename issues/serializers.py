@@ -1,21 +1,36 @@
 from rest_framework import serializers
 from projects.serializers import ProjectReferenceSerializer
-from .models import Issue, Event, EventType
+from .models import Issue, Event, EventType, EventTag
+from .event_store.error import ErrorEvent
 
 
 class EventSerializer(serializers.ModelSerializer):
+    eventId = serializers.CharField(source="event_id_hex")
+    id = serializers.CharField(source="event_id_hex")
+    dateCreated = serializers.DateTimeField(source="created_at")
+    dateReceived = serializers.DateTimeField(source="received_at")
+
     class Meta:
         model = Event
         fields = (
-            "event_id",
-            "exception",
-            "level",
+            "eventId",
+            "id",
+            "issue",
+            "context",
+            "contexts",
+            "culprit",
+            "dateCreated",
+            "dateReceived",
+            "entries",
+            "errors",
+            "location",
+            "message",
+            "packages",
             "platform",
             "sdk",
-            "release",
-            "breadcrumbs",
-            "request",
-            "received_at",
+            "tags",
+            "title",
+            "user",
         )
 
 
@@ -23,7 +38,6 @@ class IssueSerializer(serializers.ModelSerializer):
     type = serializers.CharField(source="get_type_display")
     status = serializers.CharField(source="get_status_display")
     project = ProjectReferenceSerializer()
-    event = EventSerializer()
 
     class Meta:
         model = Issue
@@ -33,23 +47,25 @@ class IssueSerializer(serializers.ModelSerializer):
             "type",
             "status",
             "project",
-            "location",
-            "event",
+            "culprit",
         )
 
 
 class StoreDefaultSerializer(serializers.Serializer):
     type = EventType.DEFAULT
     breadcrumbs = serializers.JSONField()
+    contexts = serializers.JSONField()
     event_id = serializers.UUIDField()
+    extra = serializers.JSONField(required=False)
     level = serializers.CharField()
     message = serializers.CharField(required=False)
     platform = serializers.CharField()
     release = serializers.CharField(required=False)
     sdk = serializers.JSONField()
     timestamp = serializers.DateTimeField()
+    modules = serializers.JSONField(required=False)
 
-    def create(self, validated_data):
+    def create(self, project, data):
         error = ErrorEvent()
 
 
@@ -58,26 +74,30 @@ class StoreErrorSerializer(StoreDefaultSerializer):
     exception = serializers.JSONField(required=False)
     request = serializers.JSONField(required=False)
 
-    def create(self, validated_data):
+    def create(self, project, data):
         error = ErrorEvent()
         metadata = error.get_metadata(data)
         issue, _ = Issue.objects.get_or_create(
             title=error.get_title(metadata),
-            location=error.get_location(metadata),
+            culprit=error.get_location(metadata),
             project=project,
         )
-        # TODO update mapping
+
+        level_tag, _ = EventTag.objects.get_or_create(key="level", value=data["level"])
+        # release tag
+        breadcrumbs = data.get("breadcrumbs")
+        entries = [{"type": "breadcrumbs"}, {"data": {"values": breadcrumbs}}]
         event = Event.objects.create(
             event_id=data["event_id"],
-            exception=data.get("exception"),
-            level=data["level"],
             platform=data["platform"],
             sdk=data["sdk"],
-            release=data["release"],
-            breadcrumbs=data["breadcrumbs"],
-            request=data.get("request"),
+            entries=entries,
+            context=data.get("extra"),
+            contexts=data.get("contexts"),
             issue=issue,
+            packages=data.get("modules"),
         )
+        event.tags.add(level_tag)
 
 
 class StoreCSPReportSerializer(serializers.Serializer):

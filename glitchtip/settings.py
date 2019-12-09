@@ -17,6 +17,7 @@ from sentry_sdk.integrations.django import DjangoIntegration
 
 env = environ.Env(
     DEBUG=(bool, True),
+    DEBUG_TOOLBAR=(bool, False),
     AWS_ACCESS_KEY_ID=(str, None),
     AWS_SECRET_ACCESS_KEY=(str, None),
     AWS_STORAGE_BUCKET_NAME=(str, None),
@@ -47,9 +48,16 @@ ALLOWED_HOSTS = ["*"]
 GLITCHTIP_ENDPOINT = env.url("GLITCHTIP_ENDPOINT", default="http://localhost:8000")
 
 sentry_sdk.init(
-    dsn="http://93f4c59478054bb991f74787173eef27@192.168.43.115:8000/1",
+    dsn="http://9c31decfd46843ffb3c0ea548b71aafc@192.168.86.139:8000/1",
     integrations=[DjangoIntegration()],
 )
+
+
+def show_toolbar(request):
+    return env("DEBUG_TOOLBAR")
+
+
+DEBUG_TOOLBAR_CONFIG = {"SHOW_TOOLBAR_CALLBACK": show_toolbar}
 
 # Application definition
 
@@ -63,6 +71,7 @@ INSTALLED_APPS = [
     "allauth",
     "allauth.account",
     "corsheaders",
+    "debug_toolbar",
     "rest_framework",
     "rest_framework.authtoken",
     "rest_auth",
@@ -79,12 +88,12 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "debug_toolbar.middleware.DebugToolbarMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
     "glitchtip.middleware.proxy.DecompressBodyMiddleware",
 ]
 
