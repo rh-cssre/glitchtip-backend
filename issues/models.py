@@ -58,7 +58,7 @@ class Event(models.Model):
     # maps to extra in python
     #   sys.argv in python.
     # maps to request in JS (but it's normalized to OS, not just user agent)
-    context = JSONField()
+    context = JSONField(blank=True, default=dict)
     # contexts literal. Empty in JS
     contexts = JSONField(blank=True, default=dict)
     # crashFile = ??? - always null for now

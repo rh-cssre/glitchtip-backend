@@ -54,7 +54,7 @@ class IssueSerializer(serializers.ModelSerializer):
 class StoreDefaultSerializer(serializers.Serializer):
     type = EventType.DEFAULT
     breadcrumbs = serializers.JSONField()
-    contexts = serializers.JSONField()
+    contexts = serializers.JSONField(required=False)
     event_id = serializers.UUIDField()
     extra = serializers.JSONField(required=False)
     level = serializers.CharField()
@@ -62,7 +62,7 @@ class StoreDefaultSerializer(serializers.Serializer):
     platform = serializers.CharField()
     release = serializers.CharField(required=False)
     sdk = serializers.JSONField()
-    timestamp = serializers.DateTimeField()
+    timestamp = serializers.DateTimeField(required=False)
     modules = serializers.JSONField(required=False)
 
     def create(self, project, data):
@@ -87,16 +87,21 @@ class StoreErrorSerializer(StoreDefaultSerializer):
         # release tag
         breadcrumbs = data.get("breadcrumbs")
         entries = [{"type": "breadcrumbs"}, {"data": {"values": breadcrumbs}}]
-        event = Event.objects.create(
-            event_id=data["event_id"],
-            platform=data["platform"],
-            sdk=data["sdk"],
-            entries=entries,
-            context=data.get("extra"),
-            contexts=data.get("contexts"),
-            issue=issue,
-            packages=data.get("modules"),
-        )
+        params = {
+            "event_id": data["event_id"],
+            "platform": data["platform"],
+            "sdk": data["sdk"],
+            "entries": entries,
+            "issue": issue,
+        }
+        if data.get("contexts"):
+            params["contexts"] = data["contexts"]
+        if data.get("context"):
+            params["context"] = data["extra"]
+        if data.get("modules"):
+            params["packages"] = data["modules"]
+
+        event = Event.objects.create(**params)
         event.tags.add(level_tag)
 
 
