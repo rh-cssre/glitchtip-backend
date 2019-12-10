@@ -1,4 +1,5 @@
 from django.core.exceptions import SuspiciousOperation
+from django.db.models import Count, Min, Max
 from rest_framework import viewsets, permissions, exceptions
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -26,6 +27,11 @@ class IssueViewSet(viewsets.ModelViewSet):
             )
         if "project_slug" in self.kwargs:
             qs = qs.filter(project__slug=self.kwargs["project_slug"],)
+        qs = qs.annotate(
+            count=Count("event"),
+            firstSeen=Min("event__received_at"),
+            lastSeen=Max("event__received_at"),
+        )
         return qs
 
 

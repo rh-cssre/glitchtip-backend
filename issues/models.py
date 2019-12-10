@@ -15,12 +15,29 @@ class EventStatus(models.IntegerChoices):
     IGNORED = 2, "ignored"
 
 
+class LogLevel(models.IntegerChoices):
+    NOTSET = 0, "sample"
+    DEBUG = 1, "debug"
+    INFO = 2, "info"
+    WARNING = 3, "warning"
+    ERROR = 4, "error"
+    FATAL = 5, "fatal"
+
+
 class Issue(models.Model):
     """
     Sentry called this a "group". A issue is a collection of events with meta data
     such as resolved status.
     """
 
+    # annotations Not implemented
+    # assigned_to Not implemented
+    has_seen = models.BooleanField(default=False)
+    # is_bookmarked Not implement - is per user
+    is_public = models.BooleanField(default=False)
+    level = models.PositiveSmallIntegerField(
+        choices=LogLevel.choices, default=LogLevel.NOTSET
+    )
     title = models.CharField(max_length=255)
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
     type = models.PositiveSmallIntegerField(
