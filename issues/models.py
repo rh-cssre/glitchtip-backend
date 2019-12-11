@@ -32,6 +32,7 @@ class Issue(models.Model):
 
     # annotations Not implemented
     # assigned_to Not implemented
+    created = models.DateTimeField(auto_now_add=True, db_index=True)
     has_seen = models.BooleanField(default=False)
     # is_bookmarked Not implement - is per user
     is_public = models.BooleanField(default=False)
@@ -85,8 +86,12 @@ class Event(models.Model):
     culprit = models.CharField(max_length=1024, blank=True)
     # Maps to timestamp
     # In js, maps to breadcrumbs.timestamp???
-    created_at = models.DateTimeField(blank=True, null=True)
-    received_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="Date created as claimed by client it came from",
+    )
+    created = models.DateTimeField(auto_now_add=True, db_index=True)
     # dist = ??? - always null for now
     # maps to exception
     entries = JSONField()

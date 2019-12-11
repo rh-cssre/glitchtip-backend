@@ -18,7 +18,7 @@ class Project(models.Model):
     organization = models.ForeignKey(
         "organizations.Organization", on_delete=models.CASCADE
     )
-    date_added = models.DateTimeField(auto_now_add=True)
+    created = models.DateTimeField(auto_now_add=True, db_index=True)
     platform = models.CharField(max_length=64, null=True)
 
     class Meta:

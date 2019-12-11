@@ -29,8 +29,8 @@ class IssueViewSet(viewsets.ModelViewSet):
             qs = qs.filter(project__slug=self.kwargs["project_slug"],)
         qs = qs.annotate(
             count=Count("event"),
-            firstSeen=Min("event__received_at"),
-            lastSeen=Max("event__received_at"),
+            firstSeen=Min("event__created"),
+            lastSeen=Max("event__created"),
         )
         return qs
 
