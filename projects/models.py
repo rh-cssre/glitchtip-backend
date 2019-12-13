@@ -19,7 +19,7 @@ class Project(models.Model):
         "organizations.Organization", on_delete=models.CASCADE
     )
     created = models.DateTimeField(auto_now_add=True, db_index=True)
-    platform = models.CharField(max_length=64, null=True)
+    platform = models.CharField(max_length=64, blank=True, null=True)
 
     class Meta:
         unique_together = (("organization", "slug"),)
