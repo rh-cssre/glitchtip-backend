@@ -1,6 +1,5 @@
 from rest_framework.pagination import CursorPagination
 from rest_framework.response import Response
-from rest_framework.utils.urls import remove_query_param, replace_query_param
 
 
 class LinkHeaderPagination(CursorPagination):
@@ -19,7 +18,9 @@ class LinkHeaderPagination(CursorPagination):
             (next_url, "next"),
         ):
             if url is not None:
-                links.append('<{}>; rel="{}"'.format(url, label))
+                links.append('<{}>; rel="{}"; results="true"'.format(url, label))
+            else:
+                links.append('<>; rel="{}"; results="false"'.format(label))
 
         headers = {"Link": ", ".join(links)} if links else {}
 

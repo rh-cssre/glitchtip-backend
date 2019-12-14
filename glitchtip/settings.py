@@ -191,4 +191,5 @@ AUTHENTICATION_BACKENDS = (
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated",],
     "DEFAULT_PAGINATION_CLASS": "glitchtip.pagination.LinkHeaderPagination",
+    "PAGE_SIZE": 50,
 }
