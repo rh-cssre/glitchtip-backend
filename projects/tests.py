@@ -2,7 +2,7 @@ from django.conf import settings
 from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
-from .models import ProjectKey
+from .models import ProjectKey, Project
 
 
 class ProjectsAPITestCase(APITestCase):
@@ -24,13 +24,19 @@ class ProjectsAPITestCase(APITestCase):
         self.assertContains(res, project.name)
 
     def test_projects_api_create_unique_slug(self):
-        # TODO test with different orgs
         name = "test project"
         data = {"name": name}
         res = self.client.post(self.url, data)
         res = self.client.post(self.url, data)
         self.assertContains(res, name, status_code=201)
+        projects = Project.objects.all()
+        self.assertNotEqual(projects[0].slug, projects[1].slug)
         self.assertEqual(ProjectKey.objects.all().count(), 2)
+
+        org2 = baker.make("organizations.Organization")
+        org2_project = Project.objects.create(name=name, organization=org2)
+        # The same slug can exist between multiple organizations
+        self.assertEqual(projects[0].slug, org2_project.slug)
 
     def test_projects_pagination(self):
         """

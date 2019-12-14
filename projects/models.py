@@ -3,6 +3,7 @@ from uuid import uuid4
 from django.contrib.postgres.fields import JSONField
 from django.conf import settings
 from django.db import models
+from django.utils.text import slugify
 from django_extensions.db.fields import AutoSlugField
 from organizations.models import Organization
 
@@ -13,7 +14,7 @@ class Project(models.Model):
     are the top level entry point for all data.
     """
 
-    slug = AutoSlugField(populate_from=["name"])
+    slug = AutoSlugField(populate_from=["name", "organization_id"],)
     name = models.CharField(max_length=200)
     organization = models.ForeignKey(
         "organizations.Organization", on_delete=models.CASCADE
@@ -32,6 +33,15 @@ class Project(models.Model):
             self.organization = Organization.objects.get_or_create(name="test org")[0]
         super().save(*args, **kwargs)
         ProjectKey.objects.create(project=self)
+
+    def slugify_function(self, content):
+        """
+        Make the slug the project name. Validate uniqueness with both name and org id.
+        This works because when it runs on organization_id it returns an empty string.
+        """
+        if isinstance(content, str):
+            return slugify(self.name)
+        return ""
 
 
 class ProjectKey(models.Model):
