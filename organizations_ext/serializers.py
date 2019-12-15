@@ -3,7 +3,7 @@ from organizations.models import Organization
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
-    agreeTerms = serializers.BooleanField(write_only=True, required=True)
+    agreeTerms = serializers.BooleanField(write_only=True, required=False)
     dateCreated = serializers.DateTimeField(source="created", read_only=True)
     status = serializers.SerializerMethodField()
     avatar = serializers.SerializerMethodField()
@@ -23,11 +23,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "isEarlyAdopter",
             "require2FA",
         )
-        read_only_fields = ("id",)
-
-    def create(self, validated_data):
-        validated_data.pop("agreeTerms")
-        return super().create(validated_data)
+        read_only_fields = ("id", "slug")
 
     def get_status(self, obj):
         return {"id": "active", "name": "active"}
