@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.urls import path, include, re_path
-from django.views.generic.base import TemplateView
+from django.views.generic import TemplateView
 from rest_framework_nested import routers
 from issues.urls import router as issuesRouter
 from projects.urls import router as projectsRouter

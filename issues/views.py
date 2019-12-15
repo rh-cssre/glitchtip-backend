@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from utils.auth import parse_auth_header
 from projects.models import Project
-from .models import Issue, Event
+from .models import Issue, Event, EventStatus
 from .serializers import (
     IssueSerializer,
     EventSerializer,
@@ -16,6 +16,19 @@ from .serializers import (
 
 
 class IssueViewSet(viewsets.ModelViewSet):
+    """
+    View and bulk update issues.
+    
+    # Bulk updates
+
+    Submit PUT request to bulk update Issue statuses
+
+    ## Query Parameters
+
+    - id (int) — a list of IDs of the issues to be removed.  This parameter shall be repeated for each issue.
+
+    """
+
     queryset = Issue.objects.all()
     serializer_class = IssueSerializer
 
@@ -33,6 +46,14 @@ class IssueViewSet(viewsets.ModelViewSet):
             lastSeen=Max("event__created"),
         )
         return qs
+
+    def bulk_update(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        ids = request.GET.getlist("id")
+        queryset = queryset.filter(id__in=ids)
+        status = EventStatus.from_string(request.POST.get("status"))
+        queryset.update(status=status)
+        return Response({"status": status.label})
 
 
 class EventViewSet(viewsets.ReadOnlyModelViewSet):
@@ -55,7 +76,7 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
 class EventStoreAPIView(APIView):
     permission_classes = [permissions.AllowAny]
 
-    def get_serializer(self, data):
+    def get_serializer(self, data=[]):
         """ Determine event type and return serializer """
         if "exception" in data:
             return StoreErrorSerializer(data=data)
@@ -76,6 +97,7 @@ class EventStoreAPIView(APIView):
             serializer.create(project, serializer.data)
             return Response({"id": data["event_id"].replace("-", "")})
         # TODO {"error": "Invalid api key"}, CSP type, valid json but no type at all
+        print(serializer.errors)
         return Response()
 
     @classmethod

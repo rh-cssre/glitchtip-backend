@@ -2,6 +2,7 @@ import json
 from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip.test_utils import generators
+from .models import Issue, EventStatus
 
 
 class IssueStoreTestCase(APITestCase):
@@ -45,3 +46,23 @@ class EventTestCase(APITestCase):
         url = f"/api/0/projects/{project.organization.slug}/{project.slug}/events/"
         res = self.client.get(url)
         self.assertContains(res, event.pk.hex)
+
+
+class IssuesAPITestCase(APITestCase):
+    def setUp(self):
+        self.user = baker.make("users.user")
+        self.client.force_login(self.user)
+
+    def test_bulk_update(self):
+        """ Bulk update only supports Issue status """
+        project = baker.make("projects.Project")
+        issues = baker.make(Issue, project=project, _quantity=2)
+        url = f"/api/0/issues/?id={issues[0].id}&id={issues[1].id}"
+        status_to_set = EventStatus.RESOLVED
+        data = {"status": status_to_set.label}
+        res = self.client.put(url, data)
+        self.assertContains(res, status_to_set.label)
+        issues = Issue.objects.all()
+        self.assertEqual(issues[0].status, status_to_set)
+        self.assertEqual(issues[1].status, status_to_set)
+

@@ -102,7 +102,7 @@ ROOT_URLCONF = "glitchtip.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [path("dist")],
+        "DIRS": [path("dist"), path("templates")],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

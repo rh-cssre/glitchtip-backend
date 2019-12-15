@@ -54,7 +54,7 @@ class IssueSerializer(serializers.ModelSerializer):
     shortId = serializers.CharField(default="Not implemented", read_only=True)
     stats = serializers.JSONField(default=dict, read_only=True)
     status = serializers.CharField(source="get_status_display")
-    statusDetails = serializers.JSONField(default=dict)
+    statusDetails = serializers.JSONField(default=dict, read_only=True)
     subscriptionDetails = serializers.CharField(default=None, read_only=True)
     type = serializers.CharField(source="get_type_display", read_only=True)
     userCount = serializers.IntegerField(default=0, read_only=True)

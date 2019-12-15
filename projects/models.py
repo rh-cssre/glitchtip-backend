@@ -50,7 +50,7 @@ class ProjectKey(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     label = models.CharField(max_length=64, blank=True)
     public_key = models.UUIDField(default=uuid4, unique=True, editable=False)
-    date_added = models.DateTimeField(auto_now_add=True)
+    created = models.DateTimeField(auto_now_add=True)
     rate_limit_count = models.PositiveSmallIntegerField(blank=True, null=True)
     rate_limit_window = models.PositiveSmallIntegerField(blank=True, null=True)
     data = JSONField(blank=True, null=True)

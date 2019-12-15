@@ -1,8 +1,10 @@
 from django.urls import path, include
 from rest_framework_nested import routers
+from glitchtip.routers import BulkSimpleRouter
 from .views import IssueViewSet, EventViewSet, EventStoreAPIView, MakeSampleErrorView
 
-router = routers.SimpleRouter()
+
+router = BulkSimpleRouter()
 router.register(r"issues", IssueViewSet)
 
 issues_router = routers.NestedSimpleRouter(router, r"issues", lookup="issue")

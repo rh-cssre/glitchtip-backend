@@ -14,6 +14,12 @@ class EventStatus(models.IntegerChoices):
     RESOLVED = 1, "resolved"
     IGNORED = 2, "ignored"
 
+    @classmethod
+    def from_string(cls, string: str):
+        for status in cls:
+            if status.label == string:
+                return status
+
 
 class LogLevel(models.IntegerChoices):
     NOTSET = 0, "sample"
