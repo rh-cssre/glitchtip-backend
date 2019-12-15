@@ -27,7 +27,7 @@ class ProjectReferenceSerializer(serializers.ModelSerializer):
 class ProjectSerializer(ProjectReferenceSerializer):
     avatar = serializers.SerializerMethodField()
     color = serializers.SerializerMethodField()
-    dateCreated = serializers.DateTimeField(source="date_added", read_only=True)
+    dateCreated = serializers.DateTimeField(source="created", read_only=True)
     features = serializers.SerializerMethodField()
     firstEvent = serializers.SerializerMethodField()
     hasAccess = serializers.SerializerMethodField()
