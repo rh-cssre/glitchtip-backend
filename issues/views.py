@@ -51,7 +51,7 @@ class IssueViewSet(viewsets.ModelViewSet):
         queryset = self.get_queryset()
         ids = request.GET.getlist("id")
         queryset = queryset.filter(id__in=ids)
-        status = EventStatus.from_string(request.POST.get("status"))
+        status = EventStatus.from_string(request.data.get("status"))
         queryset.update(status=status)
         return Response({"status": status.label})
 
