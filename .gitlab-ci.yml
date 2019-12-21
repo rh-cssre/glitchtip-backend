@@ -15,7 +15,6 @@ test:
   script:
     - apt-get update && apt-get install -y gcc
     - pip install "poetry==$POETRY_VERSION"
-    - poetry.lock pyproject.toml /code/
     - poetry install --no-interaction --no-ansi
     - ./manage.py test
 
