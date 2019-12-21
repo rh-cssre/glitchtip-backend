@@ -10,7 +10,7 @@ router.register(r"organizations", OrganizationViewSet)
 organizations_router = routers.NestedSimpleRouter(
     router, r"organizations", lookup="organization"
 )
-organizations_router.register(r"issues", IssueViewSet, base_name="organization-issues")
+organizations_router.register(r"issues", IssueViewSet, basename="organization-issues")
 
 urlpatterns = [
     path("", include(router.urls)),

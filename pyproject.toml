@@ -1,0 +1,36 @@
+[tool.poetry]
+name = "glitchtip-backend"
+version = "0.1.0"
+description = "Django backend that powers GlitchTip, an open source reimplementation of Sentry"
+authors = ["David Burke"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.6"
+Django = "^3.0.1"
+djangorestframework = "^3.11.0"
+django-allauth = "^0.41.0"
+django-cors-headers = "^3.2.0"
+django-environ = "^0.4.5"
+django-extensions = "^2.2.5"
+django-rest-auth = "^0.9.5"
+django-organizations = "^1.1.2"
+django-storages = "^1.8"
+drf-nested-routers = "^0.91"
+psycopg2-binary = "^2.8.4"
+uWSGI = "^2.0.18"
+whitenoise = "^5.0.1"
+boto3 = "^1.10.44"
+sentry-sdk = "^0.13.5"
+
+[tool.poetry.dev-dependencies]
+black = "^19.10b0"
+django-debug-toolbar = "^2.1"
+ipdb = "^0.12.3"
+pylint = "^2.4.4"
+pylint-django = "^2.0.13"
+model_bakery = "^1.0.2"
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"

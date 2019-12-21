@@ -26,5 +26,5 @@ Run tests with `docker-compose run --rm web ./manage.py test`
 VS Code can do type checking and type inference. However, it requires setting up a virtual environment.
 
 1. Install Python 3 dependencies. For Ubuntu this is `apt install python3-dev python3-venv`
-2. Create virtual env in server folder `python3 -m venv env`
-3. Install requirements `env/bin/pip install -r requirements.txt`
+2. Install [poetry](https://python-poetry.org/docs/#installation)
+3. `poetry install`
