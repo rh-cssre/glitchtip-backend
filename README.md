@@ -27,4 +27,6 @@ VS Code can do type checking and type inference. However, it requires setting up
 
 1. Install Python 3 dependencies. For Ubuntu this is `apt install python3-dev python3-venv`
 2. Install [poetry](https://python-poetry.org/docs/#installation)
-3. `poetry install`
+3. Create Python virtual environment `python3 -m venv env`
+4. Activate environment `source env/bin/activate`
+5. Install packages `poetry install`

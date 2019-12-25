@@ -1,6 +1,7 @@
 from django.core.exceptions import SuspiciousOperation
 from django.db.models import Count, Min, Max
 from rest_framework import viewsets, permissions, exceptions
+from rest_framework.decorators import action
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from utils.auth import parse_auth_header
@@ -71,6 +72,12 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
         if "project_slug" in self.kwargs:
             qs = qs.filter(issue__project__slug=self.kwargs["project_slug"],)
         return qs
+
+    @action(detail=False, methods=["get"])
+    def latest(self, request, *args, **kwargs):
+        instance = self.get_queryset().first()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
 
 
 class EventStoreAPIView(APIView):

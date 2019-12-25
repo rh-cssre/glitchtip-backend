@@ -47,6 +47,14 @@ class EventTestCase(APITestCase):
         res = self.client.get(url)
         self.assertContains(res, event.pk.hex)
 
+    def test_events_latest(self):
+        event = baker.make("issues.Event")
+        event2 = baker.make("issues.Event", issue=event.issue)
+        url = f"/api/0/issues/{event.issue.id}/events/latest/"
+        res = self.client.get(url)
+        self.assertContains(res, event.pk.hex)
+        self.assertNotContains(res, event2.pk.hex)
+
 
 class IssuesAPITestCase(APITestCase):
     def setUp(self):

@@ -130,6 +130,9 @@ class Event(models.Model):
     # userReport = ?? We don't support user reports at this time
     # meta = ?? Not supported, doesn't seem used much
 
+    class Meta:
+        ordering = ["created"]
+
     def __str__(self):
         return self.event_id
 
