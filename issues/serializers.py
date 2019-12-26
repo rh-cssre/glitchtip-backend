@@ -34,6 +34,32 @@ class EventSerializer(serializers.ModelSerializer):
         )
 
 
+class EventDetailSerializer(EventSerializer):
+    nextEventID = serializers.SerializerMethodField()
+    previousEventID = serializers.SerializerMethodField()
+
+    class Meta(EventSerializer.Meta):
+        fields = EventSerializer.Meta.fields + ("nextEventID", "previousEventID",)
+
+    def get_next_or_previous(self, obj, is_next):
+        kwargs = self.context["view"].kwargs
+        filter_kwargs = {}
+        if kwargs.get("issue_pk"):
+            filter_kwargs["issue"] = kwargs["issue_pk"]
+        if is_next:
+            result = obj.next(**filter_kwargs)
+        else:
+            result = obj.previous(**filter_kwargs)
+        if result:
+            return str(result)
+
+    def get_nextEventID(self, obj):
+        return self.get_next_or_previous(obj, True)
+
+    def get_previousEventID(self, obj):
+        return self.get_next_or_previous(obj, False)
+
+
 class IssueSerializer(serializers.ModelSerializer):
     annotations = serializers.JSONField(default=list, read_only=True)
     assignedTo = serializers.CharField(default=None, read_only=True)

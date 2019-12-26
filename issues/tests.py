@@ -48,12 +48,16 @@ class EventTestCase(APITestCase):
         self.assertContains(res, event.pk.hex)
 
     def test_events_latest(self):
+        """
+        Should show more recent event with previousEventID of previous/first event
+        """
         event = baker.make("issues.Event")
         event2 = baker.make("issues.Event", issue=event.issue)
         url = f"/api/0/issues/{event.issue.id}/events/latest/"
         res = self.client.get(url)
-        self.assertContains(res, event.pk.hex)
-        self.assertNotContains(res, event2.pk.hex)
+        self.assertContains(res, event2.pk.hex)
+        self.assertEqual(res.data['previousEventID'], event.pk.hex)
+        self.assertEqual(res.data['nextEventID'], None)
 
 
 class IssuesAPITestCase(APITestCase):

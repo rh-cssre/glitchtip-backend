@@ -131,12 +131,25 @@ class Event(models.Model):
     # meta = ?? Not supported, doesn't seem used much
 
     class Meta:
-        ordering = ["created"]
+        ordering = ["-created"]
 
     def __str__(self):
-        return self.event_id
+        return self.event_id.hex
 
     @property
     def event_id_hex(self):
         """ The public key without dashes """
         return self.event_id.hex
+
+    def next(self, *args, **kwargs):
+        try:
+            return self.get_next_by_created()
+        except Event.DoesNotExist:
+            return None
+
+    def previous(self, **kwargs):
+        """ Get previous object by created date, pass filter kwargs """
+        try:
+            return self.get_previous_by_created(**kwargs)
+        except Event.DoesNotExist:
+            return None

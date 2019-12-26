@@ -10,6 +10,7 @@ from .models import Issue, Event, EventStatus
 from .serializers import (
     IssueSerializer,
     EventSerializer,
+    EventDetailSerializer,
     StoreDefaultSerializer,
     StoreErrorSerializer,
     StoreCSPReportSerializer,
@@ -60,6 +61,11 @@ class IssueViewSet(viewsets.ModelViewSet):
 class EventViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Event.objects.all()
     serializer_class = EventSerializer
+
+    def get_serializer_class(self):
+        if self.action in ['retrieve', 'latest']:
+            return EventDetailSerializer
+        return super().get_serializer_class()
 
     def get_queryset(self):
         qs = super().get_queryset()
