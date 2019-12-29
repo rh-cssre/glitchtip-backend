@@ -3,7 +3,6 @@ from organizations.models import Organization
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
-    agreeTerms = serializers.BooleanField(write_only=True, required=False)
     dateCreated = serializers.DateTimeField(source="created", read_only=True)
     status = serializers.SerializerMethodField()
     avatar = serializers.SerializerMethodField()
@@ -17,7 +16,6 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "name",
             "slug",
             "dateCreated",
-            "agreeTerms",
             "status",
             "avatar",
             "isEarlyAdopter",
