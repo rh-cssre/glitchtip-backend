@@ -12,8 +12,11 @@ issues_router.register(r"events", EventViewSet, basename="event-issues")
 
 # The API URLs are now determined automatically by the router.
 urlpatterns = [
-    path("<int:id>/store/", EventStoreAPIView.as_view()),
-    path("make-sample-error/", MakeSampleErrorView.as_view()),
     path("", include(router.urls)),
     path("", include(issues_router.urls)),
+]
+
+store_urlpatterns = [
+    path("<int:id>/store/", EventStoreAPIView.as_view()),
+    path("make-sample-error/", MakeSampleErrorView.as_view()),
 ]
