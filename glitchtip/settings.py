@@ -71,6 +71,7 @@ INSTALLED_APPS = [
     "allauth",
     "allauth.account",
     "corsheaders",
+    "django_filters",
     "debug_toolbar",
     "rest_framework",
     "rest_framework.authtoken",
@@ -192,4 +193,5 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated",],
     "DEFAULT_PAGINATION_CLASS": "glitchtip.pagination.LinkHeaderPagination",
     "PAGE_SIZE": 50,
+    "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
 }

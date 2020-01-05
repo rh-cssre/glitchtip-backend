@@ -56,20 +56,21 @@ class EventTestCase(APITestCase):
         url = f"/api/0/issues/{event.issue.id}/events/latest/"
         res = self.client.get(url)
         self.assertContains(res, event2.pk.hex)
-        self.assertEqual(res.data['previousEventID'], event.pk.hex)
-        self.assertEqual(res.data['nextEventID'], None)
+        self.assertEqual(res.data["previousEventID"], event.pk.hex)
+        self.assertEqual(res.data["nextEventID"], None)
 
 
 class IssuesAPITestCase(APITestCase):
     def setUp(self):
         self.user = baker.make("users.user")
         self.client.force_login(self.user)
+        self.url = "/api/0/issues/"
 
     def test_bulk_update(self):
         """ Bulk update only supports Issue status """
         project = baker.make("projects.Project")
         issues = baker.make(Issue, project=project, _quantity=2)
-        url = f"/api/0/issues/?id={issues[0].id}&id={issues[1].id}"
+        url = f"{self.url}?id={issues[0].id}&id={issues[1].id}"
         status_to_set = EventStatus.RESOLVED
         data = {"status": status_to_set.label}
         res = self.client.put(url, data)
@@ -77,4 +78,22 @@ class IssuesAPITestCase(APITestCase):
         issues = Issue.objects.all()
         self.assertEqual(issues[0].status, status_to_set)
         self.assertEqual(issues[1].status, status_to_set)
+
+    def test_filter_project(self):
+        baker.make(Issue)
+        project = baker.make("projects.Project")
+        issue = baker.make(Issue, project=project)
+
+        res = self.client.get(self.url, {"project": project.id})
+        self.assertEqual(len(res.data), 1)
+        self.assertContains(res, issue.id)
+
+    def test_filter_is_status(self):
+        """ Match sentry's usage of "is" for status filtering """
+        resolved_issue = baker.make(Issue, status=EventStatus.RESOLVED)
+        unresolved_issue = baker.make(Issue, status=EventStatus.UNRESOLVED)
+        res = self.client.get(self.url, {"query": "is:unresolved has:platform"})
+        self.assertEqual(len(res.data), 1)
+        self.assertContains(res, unresolved_issue.id)
+        self.assertNotContains(res, resolved_issue.id)
 

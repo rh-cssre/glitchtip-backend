@@ -39,6 +39,10 @@ lazy-object-proxy = ">=1.4.0,<1.5.0"
 six = ">=1.12,<2.0"
 wrapt = ">=1.11.0,<1.12.0"
 
+[package.dependencies.typed-ast]
+python = "<3.8"
+version = ">=1.4.0,<1.5"
+
 [[package]]
 category = "dev"
 description = "Classes Without Boilerplate"
@@ -237,6 +241,17 @@ version = "2.2.5"
 
 [package.dependencies]
 six = ">=1.2"
+
+[[package]]
+category = "main"
+description = "Django-filter is a reusable Django application for allowing users to filter querysets dynamically."
+name = "django-filter"
+optional = false
+python-versions = ">=3.4"
+version = "2.2.0"
+
+[package.dependencies]
+Django = ">=1.11"
 
 [[package]]
 category = "main"
@@ -786,8 +801,8 @@ python-versions = "*"
 version = "1.11.2"
 
 [metadata]
-content-hash = "2a6ebb15af5b55cdb35738e1a2212b8f7b8dcee08f9deba91c2b7fbebf0da9da"
-python-versions = "^3.8"
+content-hash = "506bc92e332ff9dfee47b4774fcc93a699bbc3aef8081c168597e2429e97cf0a"
+python-versions = "^3.6"
 
 [metadata.files]
 appdirs = [
@@ -872,6 +887,10 @@ django-environ = [
 django-extensions = [
     {file = "django-extensions-2.2.5.tar.gz", hash = "sha256:b58320d3fe3d6ae7d1d8e38959713fa92272f4921e662d689058d942a5b444f7"},
     {file = "django_extensions-2.2.5-py2.py3-none-any.whl", hash = "sha256:a9db7c56a556d244184f589f2437b4228de86ee45e5ebb837fb20c6d54e95ea5"},
+]
+django-filter = [
+    {file = "django-filter-2.2.0.tar.gz", hash = "sha256:c3deb57f0dd7ff94d7dce52a047516822013e2b441bed472b722a317658cfd14"},
+    {file = "django_filter-2.2.0-py3-none-any.whl", hash = "sha256:558c727bce3ffa89c4a7a0b13bc8976745d63e5fd576b3a9a851650ef11c401b"},
 ]
 django-organizations = [
     {file = "django-organizations-1.1.2.tar.gz", hash = "sha256:798af83f3072b476832fa6a0a476ef18d43674a7071644d7364b86f52f41c33f"},
