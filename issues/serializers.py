@@ -5,7 +5,7 @@ from .event_store.error import ErrorEvent
 
 
 class EventSerializer(serializers.ModelSerializer):
-    eventId = serializers.CharField(source="event_id_hex")
+    eventID = serializers.CharField(source="event_id_hex")
     id = serializers.CharField(source="event_id_hex")
     dateCreated = serializers.DateTimeField(source="created_at")
     dateReceived = serializers.DateTimeField(source="created")
@@ -13,7 +13,7 @@ class EventSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
         fields = (
-            "eventId",
+            "eventID",
             "id",
             "issue",
             "context",
