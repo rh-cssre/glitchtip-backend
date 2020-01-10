@@ -2,7 +2,7 @@ from django.conf import settings
 from django.urls import path, include, re_path
 from django.views.generic import TemplateView
 from rest_framework_nested import routers
-from issues.urls import router as issuesRouter, store_urlpatterns
+from issues.urls import router as issuesRouter
 from projects.urls import router as projectsRouter
 from organizations_ext.urls import router as organizationsRouter
 
@@ -17,7 +17,7 @@ urlpatterns = [
     path("api/0/", include("projects.urls")),
     path("api/0/", include("issues.urls")),
     path("api/0/", include("organizations_ext.urls")),
-    path("api/", include(store_urlpatterns)),
+    path("api/", include("event_store.urls")),
     path("rest-auth/", include("rest_auth.urls")),
     path("api/api-auth/", include("rest_framework.urls", namespace="rest_framework")),
     # These routes belong to the Angular single page app

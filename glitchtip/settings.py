@@ -47,9 +47,13 @@ DEBUG = env("DEBUG")
 ALLOWED_HOSTS = ["*"]
 GLITCHTIP_ENDPOINT = env.url("GLITCHTIP_ENDPOINT", default="http://localhost:8000")
 
+# For development purposes only, prints out inbound event store json
+EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
+
+# GlitchTip can track GlichTip's own errors.
+# If enabling this, use a different server to avoid infinite loops.
 sentry_sdk.init(
-    dsn="http://9c31decfd46843ffb3c0ea548b71aafc@192.168.86.139:8000/1",
-    integrations=[DjangoIntegration()],
+    dsn=env.str("SENTRY_DSN", None), integrations=[DjangoIntegration()],
 )
 
 
@@ -78,6 +82,7 @@ INSTALLED_APPS = [
     "rest_auth",
     "storages",
     "organizations",
+    "event_store",
     "issues",
     "users",
     "projects",

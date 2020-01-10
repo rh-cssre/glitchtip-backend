@@ -1,8 +1,7 @@
 from django.urls import path, include
 from rest_framework_nested import routers
 from glitchtip.routers import BulkSimpleRouter
-from .views import IssueViewSet, EventViewSet, EventStoreAPIView, MakeSampleErrorView
-
+from .views import IssueViewSet, EventViewSet
 
 router = BulkSimpleRouter()
 router.register(r"issues", IssueViewSet)
@@ -14,9 +13,4 @@ issues_router.register(r"events", EventViewSet, basename="event-issues")
 urlpatterns = [
     path("", include(router.urls)),
     path("", include(issues_router.urls)),
-]
-
-store_urlpatterns = [
-    path("<int:id>/store/", EventStoreAPIView.as_view()),
-    path("make-sample-error/", MakeSampleErrorView.as_view()),
 ]
