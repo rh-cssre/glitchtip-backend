@@ -25,6 +25,7 @@ class StoreErrorSerializer(StoreDefaultSerializer):
     type = EventType.ERROR
     exception = serializers.JSONField(required=False)
     request = serializers.JSONField(required=False)
+    transaction = serializers.CharField(required=False)
 
     def create(self, project, data):
         error = ErrorEvent()
@@ -45,6 +46,9 @@ class StoreErrorSerializer(StoreDefaultSerializer):
             "sdk": data["sdk"],
             "entries": entries,
             "issue": issue,
+            # https://gitlab.com/glitchtip/sentry-open-source/sentry/blob/master/src/sentry/event_manager.py#L412
+            # Sentry SDK primarily uses transaction. It has a fallback of get_culprit but isn't preferred. We don't implement this fallback
+            "culprit": data.get("transaction"),
         }
         if data.get("contexts"):
             params["contexts"] = data["contexts"]

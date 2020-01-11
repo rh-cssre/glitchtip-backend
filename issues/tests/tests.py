@@ -1,7 +1,6 @@
 from rest_framework.test import APITestCase
 from model_bakery import baker
-from glitchtip.test_utils import generators
-from .models import Issue, EventStatus
+from issues.models import Issue, EventStatus
 
 
 class EventTestCase(APITestCase):

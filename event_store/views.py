@@ -14,14 +14,15 @@ from .serializers import (
 
 class EventStoreAPIView(APIView):
     permission_classes = [permissions.AllowAny]
+    http_method_names = ["post"]
 
-    def get_serializer(self, data=[]):
+    def get_serializer_class(self, data=[]):
         """ Determine event type and return serializer """
         if "exception" in data:
-            return StoreErrorSerializer(data=data)
+            return StoreErrorSerializer
         if "platform" not in data:
-            return StoreCSPReportSerializer(data=data)
-        return StoreDefaultSerializer(data=data)
+            return StoreCSPReportSerializer
+        return StoreDefaultSerializer
 
     def post(self, request, *args, **kwargs):
         if settings.EVENT_STORE_DEBUG:
@@ -32,13 +33,12 @@ class EventStoreAPIView(APIView):
         ).first()
         if not project:
             raise exceptions.PermissionDenied()
-        serializer = self.get_serializer(request.data)
+        serializer = self.get_serializer_class(request.data)(data=request.data)
         if serializer.is_valid():
             data = serializer.data
             serializer.create(project, serializer.data)
             return Response({"id": data["event_id"].replace("-", "")})
         # TODO {"error": "Invalid api key"}, CSP type, valid json but no type at all
-        print(serializer.errors)
         return Response()
 
     @classmethod
