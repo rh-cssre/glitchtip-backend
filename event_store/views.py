@@ -1,9 +1,10 @@
 from django.core.exceptions import SuspiciousOperation
 from django.conf import settings
 from rest_framework import permissions, exceptions
+from rest_framework.negotiation import BaseContentNegotiation
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from utils.auth import parse_auth_header
+from sentry.utils.auth import parse_auth_header
 from projects.models import Project
 from .serializers import (
     StoreDefaultSerializer,
@@ -12,8 +13,28 @@ from .serializers import (
 )
 
 
+class IgnoreClientContentNegotiation(BaseContentNegotiation):
+    """
+    @sentry/browser sends an interesting content-type of text/plain when it's actually sending json
+    We have to ignore it and assume it's actually JSON
+    """
+
+    def select_parser(self, request, parsers):
+        """
+        Select the first parser in the `.parser_classes` list.
+        """
+        return parsers[0]
+
+    def select_renderer(self, request, renderers, format_suffix):
+        """
+        Select the first renderer in the `.renderer_classes` list.
+        """
+        return (renderers[0], renderers[0].media_type)
+
+
 class EventStoreAPIView(APIView):
     permission_classes = [permissions.AllowAny]
+    content_negotiation_class = IgnoreClientContentNegotiation
     http_method_names = ["post"]
 
     def get_serializer_class(self, data=[]):

@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework_nested import routers
-from issues.views import IssueViewSet
+from issues.views import IssueViewSet, EventViewSet
 from glitchtip.routers import BulkSimpleRouter
 from .views import OrganizationViewSet
 

@@ -1,7 +1,7 @@
-from .base import BaseEvent
-from utils.safe import truncatechars, get_path, trim
+from sentry.utils.safe import truncatechars, get_path, trim
 from stacktraces.processing import get_crash_frame_from_event_data
 from stacktraces.functions import get_function_name_for_frame
+from .base import BaseEvent
 
 
 def get_crash_location(data):

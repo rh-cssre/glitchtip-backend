@@ -130,7 +130,7 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 
 ENVIRONMENT = env.str("ENVIRONMENT", None)
-GLITCH_VERSION = env.str("PASSIT_VERSION", "dev")
+GLITCHTIP_VERSION = env.str("GLITCHTIP_VERSION", "dev")
 
 # Database
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases

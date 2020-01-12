@@ -1,7 +1,7 @@
 import six
 import logging
 from datetime import datetime
-from utils.safe import get_path
+from sentry.utils.safe import get_path
 
 
 def get_crash_frame_from_event_data(data, frame_filter=None):
