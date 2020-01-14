@@ -42,7 +42,7 @@ class SentryAPICompatTestCase(APITestCase):
         data = self.get_json_data(
             "event_store/test_data/django_template_error_event.json"
         )
-        self.assertCompareData(res.data, data, ["culprit", "title"])
+        self.assertCompareData(res.data, data, ["culprit", "title", "metadata"])
 
         url = reverse("issue-detail", kwargs={"pk": issue.pk})
         res = self.client.get(url)
@@ -51,7 +51,7 @@ class SentryAPICompatTestCase(APITestCase):
         data = self.get_json_data(
             "event_store/test_data/django_template_error_issue.json"
         )
-        self.assertCompareData(res.data, data, ["title",])
+        self.assertCompareData(res.data, data, ["title", "metadata"])
 
     def test_throw_error(self):
         res = self.client.post(self.event_store_url, throw_error, format="json")
@@ -64,7 +64,7 @@ class SentryAPICompatTestCase(APITestCase):
         issue = Event.objects.get(event_id=event_id).issue
 
         data = self.get_json_data("event_store/test_data/js_throw_error_event.json")
-        self.assertCompareData(res.data, data, ["title"])
+        self.assertCompareData(res.data, data, ["title", "metadata"])
         self.assertEqual(
             res.data["culprit"],
             "viewWrappedDebugError(http://localhost:4200/vendor.js)",
@@ -76,4 +76,4 @@ class SentryAPICompatTestCase(APITestCase):
         self.assertEqual(res.status_code, 200)
 
         data = self.get_json_data("event_store/test_data/js_throw_error_issue.json")
-        self.assertCompareData(res.data, data, ["title"])
+        self.assertCompareData(res.data, data, ["title", "metadata"])

@@ -39,18 +39,19 @@ class Issue(models.Model):
     # annotations Not implemented
     # assigned_to Not implemented
     created = models.DateTimeField(auto_now_add=True, db_index=True)
+    culprit = models.CharField(max_length=1024, blank=True, null=True)
     has_seen = models.BooleanField(default=False)
     # is_bookmarked Not implement - is per user
     is_public = models.BooleanField(default=False)
     level = models.PositiveSmallIntegerField(
         choices=LogLevel.choices, default=LogLevel.NOTSET
     )
-    title = models.CharField(max_length=255)
+    metadata = JSONField()
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
+    title = models.CharField(max_length=255)
     type = models.PositiveSmallIntegerField(
         choices=EventType.choices, default=EventType.DEFAULT
     )
-    culprit = models.CharField(max_length=1024, blank=True, null=True)
     status = models.PositiveSmallIntegerField(
         choices=EventStatus.choices, default=EventStatus.UNRESOLVED
     )
@@ -110,8 +111,8 @@ class Event(models.Model):
     location = models.CharField(max_length=1024, blank=True, null=True)
     # Set manually using sentry client sdk - for example a test message sets this
     message = models.CharField(max_length=1024, blank=True, null=True)
-    # No idea how this is generated, doesn't match inbound event.
-    # metadata = JSONField()
+    # set from event store object get_metadata
+    metadata = JSONField()
     # Maps to modules
     packages = JSONField(blank=True, default=dict)
     # Maps to platform

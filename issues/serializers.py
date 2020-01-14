@@ -24,6 +24,7 @@ class EventSerializer(serializers.ModelSerializer):
             "errors",
             "location",
             "message",
+            "metadata",
             "packages",
             "platform",
             "sdk",

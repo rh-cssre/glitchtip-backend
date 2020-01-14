@@ -34,7 +34,10 @@ class StoreErrorSerializer(StoreDefaultSerializer):
         metadata = error.get_metadata(data)
         title = error.get_title(metadata)
         issue, _ = Issue.objects.get_or_create(
-            title=title, culprit=error.get_location(metadata), project=project,
+            title=title,
+            culprit=error.get_location(metadata),
+            project=project,
+            defaults={"metadata": metadata},
         )
 
         level_tag, _ = EventTag.objects.get_or_create(key="level", value=data["level"])
@@ -51,6 +54,7 @@ class StoreErrorSerializer(StoreDefaultSerializer):
             # Sentry SDK primarily uses transaction. It has a fallback of get_culprit but isn't preferred. We don't implement this fallback
             "culprit": self.get_culprit(data),
             "title": title,
+            "metadata": metadata,
         }
         if data.get("contexts"):
             params["contexts"] = data["contexts"]
