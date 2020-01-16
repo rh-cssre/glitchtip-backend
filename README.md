@@ -11,7 +11,7 @@ Project status: Experimental. Open an issue and say hello if you'd like to help.
 
 # Developing
 
-We use Docker for development.
+We use Docker for development. View our [Contributing](./CONTRIBUTING.md) documentation if you'd like to help make GlitchTip better.
 
 ## Run local dev environment
 
