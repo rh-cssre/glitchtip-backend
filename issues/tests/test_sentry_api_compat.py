@@ -43,6 +43,10 @@ class SentryAPICompatTestCase(APITestCase):
             "event_store/test_data/django_template_error_event.json"
         )
         self.assertCompareData(res.data, data, ["culprit", "title", "metadata"])
+        self.assertEqual(
+            res.data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"][0]["vars"]["exc"],
+            data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"][0]["vars"]["exc"]
+        )
 
         url = reverse("issue-detail", kwargs={"pk": issue.pk})
         res = self.client.get(url)
