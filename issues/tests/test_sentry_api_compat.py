@@ -64,16 +64,18 @@ class SentryAPICompatTestCase(APITestCase):
         issue = Event.objects.get(event_id=event_id).issue
 
         data = self.get_json_data("event_store/test_data/js_throw_error_event.json")
-        self.assertCompareData(res.data, data, ["title", "metadata"])
+        self.assertCompareData(res.data, data, ["title"])
         self.assertEqual(
             res.data["culprit"],
             "viewWrappedDebugError(http://localhost:4200/vendor.js)",
             "Not perfect match, should really be viewWrappedDebugError(vendor)",
         )
+        self.assertEqual(res.data["metadata"]["function"], data["metadata"]["function"])
 
         url = reverse("issue-detail", kwargs={"pk": issue.pk})
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
 
         data = self.get_json_data("event_store/test_data/js_throw_error_issue.json")
-        self.assertCompareData(res.data, data, ["title", "metadata"])
+        self.assertCompareData(res.data, data, ["title"])
+        self.assertEqual(res.data["metadata"]["function"], data["metadata"]["function"])
