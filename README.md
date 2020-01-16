@@ -1,3 +1,6 @@
+<script src="https://liberapay.com/GlitchTip/widgets/button.js"></script>
+<noscript><a href="https://liberapay.com/GlitchTip/donate"><img alt="Donate using Liberapay" src="https://liberapay.com/assets/widgets/donate.svg"></a></noscript>
+
 # GlitchTip Backend
 
 GlitchTip is an open source, Sentry API compatible error tracking platform. It is a partial fork/partial reimplementation of Sentry's open source codebase before it went proprietary. Its goals are to be a modern, easy-to-develop error tracking platform that respects your freedom to use it any way you wish. Some differences include:
