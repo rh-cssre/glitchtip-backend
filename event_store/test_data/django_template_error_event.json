@@ -4,7 +4,7 @@
   "userReport": null,
   "projectID": "1855811",
   "previousEventID": null,
-  "message": null,
+  "message": "",
   "id": "9cccfef1b2e64e7ba09120418acd402f",
   "size": 20065,
   "errors": [],
@@ -54,7 +54,7 @@
       "_meta": null
     }
   ],
-  "dateCreated": "2020-01-11T17:04:31Z",
+  "dateCreated": "2020-01-11T17:04:31.306588Z",
   "dateReceived": "2020-01-11T17:04:31.672903Z",
   "user": null,
   "entries": [

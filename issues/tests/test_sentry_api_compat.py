@@ -43,9 +43,28 @@ class SentryAPICompatTestCase(APITestCase):
             "event_store/test_data/django_template_error_event.json"
         )
         self.assertCompareData(res.data, data, ["culprit", "title", "metadata"])
+        res_frames = res.data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"]
+        frames = data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"]
         self.assertEqual(
-            res.data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"][0]["vars"]["exc"],
-            data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"][0]["vars"]["exc"]
+            res_frames[0]["vars"]["exc"],
+            frames[0]["vars"]["exc"]
+        )
+        self.assertEqual(
+            res_frames[0]["vars"]["request"],
+            frames[0]["vars"]["request"]
+        )
+        # Memory address is different, truncate it
+        self.assertEqual(
+            res_frames[0]['vars']['get_response'][:-16],
+            frames[0]['vars']['get_response'][:-16]
+        )
+        self.assertEqual(
+            res_frames[0]["function"],
+            frames[0]["function"]
+        )
+        self.assertEqual(
+            res_frames[0]["filename"],
+            frames[0]["filename"]
         )
 
         url = reverse("issue-detail", kwargs={"pk": issue.pk})
