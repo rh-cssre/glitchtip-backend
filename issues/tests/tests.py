@@ -27,6 +27,18 @@ class EventTestCase(APITestCase):
         self.assertEqual(res.data["previousEventID"], event.pk.hex)
         self.assertEqual(res.data["nextEventID"], None)
 
+    def test_next_prev_event(self):
+        issue1 = baker.make("issues.Issue")
+        issue2 = baker.make("issues.Issue")
+        issue1_event1 = baker.make("issues.Event", issue=issue1)
+        issue2_event1 = baker.make("issues.Event", issue=issue2)
+        issue1_event2 = baker.make("issues.Event", issue=issue1)
+
+        url = f"/api/0/issues/{issue1.id}/events/latest/"
+        res = self.client.get(url)
+        self.assertContains(res, issue1_event2.pk.hex)
+        self.assertEqual(res.data["previousEventID"], issue1_event1.pk.hex)
+
 
 class IssuesAPITestCase(APITestCase):
     def setUp(self):

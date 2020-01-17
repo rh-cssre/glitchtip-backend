@@ -144,11 +144,11 @@ class Event(models.Model):
 
     def next(self, *args, **kwargs):
         try:
-            return self.get_next_by_created()
+            return self.get_next_by_created(**kwargs)
         except Event.DoesNotExist:
             return None
 
-    def previous(self, **kwargs):
+    def previous(self, *args, **kwargs):
         """ Get previous object by created date, pass filter kwargs """
         try:
             return self.get_previous_by_created(**kwargs)
