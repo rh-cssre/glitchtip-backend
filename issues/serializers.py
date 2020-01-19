@@ -8,6 +8,7 @@ class EventSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source="event_id_hex")
     dateCreated = serializers.DateTimeField(source="timestamp")
     dateReceived = serializers.DateTimeField(source="created")
+    tags = serializers.ListField(default=[])
 
     class Meta:
         model = Event
@@ -28,7 +29,7 @@ class EventSerializer(serializers.ModelSerializer):
             "packages",
             "platform",
             "sdk",
-            # "tags",
+            "tags",
             "title",
             # "user",
         )

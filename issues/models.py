@@ -109,7 +109,49 @@ class Event(models.Model):
 
     @property
     def entries(self):
-        return self.data.get("entries")
+        entries = []
+        exception = self.data.get("exception")
+        if exception:
+            # Some, but not all, keys are made more JS camel case like
+            for value in exception["values"]:
+                for frame in value["stacktrace"]["frames"]:
+                    if "abs_path" in frame:
+                        frame["absPath"] = frame.pop("abs_path")
+                    if "lineno" in frame:
+                        frame["lineNo"] = frame.pop("lineno")
+                        base_line_no = frame["lineNo"]
+                        context = []
+                        pre_context = frame.pop("pre_context", None)
+                        if pre_context:
+                            context += self._build_context(
+                                pre_context, base_line_no, True
+                            )
+                        context.append([base_line_no, frame.get("context_line")])
+                        post_context = frame.pop("post_context", None)
+                        if post_context:
+                            context += self._build_context(
+                                post_context, base_line_no, False
+                            )
+                        frame["context"] = context
+
+            entries.append({"type": "exception", "data": exception})
+        breadcrumbs = self.data.get("breadcrumbs")
+        if breadcrumbs:
+            entries.append({"type": "breadcrumbs", "data": {"values": breadcrumbs}})
+        return entries
+
+    def _build_context(self, context: list, base_line_no: int, is_pre: bool):
+        context_length = len(context)
+        result = []
+        for index, pre_context_line in enumerate(context):
+            if is_pre:
+                line_no = base_line_no - context_length + index
+            else:
+                line_no = base_line_no + 1 + index
+            result.append(
+                [line_no, pre_context_line,]
+            )
+        return result
 
     @property
     def metadata(self):

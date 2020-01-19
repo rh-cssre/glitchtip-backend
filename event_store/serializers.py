@@ -44,14 +44,10 @@ class StoreErrorSerializer(StoreDefaultSerializer):
         # level_tag, _ = EventTag.objects.get_or_create(key="level", value=data["level"])
         # release tag
         entries = []
-        exception = data.get("exception")
-        if exception:
-            entries.append({"type": "exception", "data": exception})
         breadcrumbs = data.get("breadcrumbs")
         if breadcrumbs:
             entries.append({"type": "breadcrumbs", "data": {"values": breadcrumbs}})
 
-        
         params = {
             "event_id": data["event_id"],
             "issue": issue,
@@ -59,7 +55,7 @@ class StoreErrorSerializer(StoreDefaultSerializer):
             "data": {
                 "contexts": data.get("contexts"),
                 "culprit": self.get_culprit(data),
-                # "entries": entries,
+                "exception": data.get("exception"),
                 "metadata": metadata,
                 "packages": data.get("modules"),
                 "platform": data["platform"],
