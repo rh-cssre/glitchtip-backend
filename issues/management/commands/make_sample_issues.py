@@ -28,7 +28,9 @@ class Command(BaseCommand):
                     baker.make("issues.Event", issue__project=project)
                 else:
                     data = event_generator.generate_random_event()
-                    serializer = EventStoreAPIView().get_serializer(data)
+                    serializer = EventStoreAPIView().get_serializer_class(data)(
+                        data=data
+                    )
                     serializer.is_valid()
                     serializer.create(project, serializer.data)
         else:

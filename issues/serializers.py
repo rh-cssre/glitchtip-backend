@@ -6,7 +6,7 @@ from .models import Issue, Event
 class EventSerializer(serializers.ModelSerializer):
     eventID = serializers.CharField(source="event_id_hex")
     id = serializers.CharField(source="event_id_hex")
-    dateCreated = serializers.DateTimeField(source="created_at")
+    dateCreated = serializers.DateTimeField(source="timestamp")
     dateReceived = serializers.DateTimeField(source="created")
 
     class Meta:
@@ -15,22 +15,22 @@ class EventSerializer(serializers.ModelSerializer):
             "eventID",
             "id",
             "issue",
-            "context",
+            # "context",
             "contexts",
             "culprit",
             "dateCreated",
             "dateReceived",
             "entries",
-            "errors",
-            "location",
-            "message",
+            # "errors",
+            # "location",
+            # "message",
             "metadata",
             "packages",
             "platform",
             "sdk",
-            "tags",
+            # "tags",
             "title",
-            "user",
+            # "user",
         )
 
 

@@ -28,6 +28,7 @@ class StoreErrorSerializer(StoreDefaultSerializer):
     exception = serializers.JSONField(required=False)
     request = serializers.JSONField(required=False)
     transaction = serializers.CharField(required=False)
+    timestamp = serializers.DateTimeField(required=False)
 
     def create(self, project, data):
         error = ErrorEvent()
@@ -40,43 +41,37 @@ class StoreErrorSerializer(StoreDefaultSerializer):
             defaults={"metadata": metadata},
         )
 
-        level_tag, _ = EventTag.objects.get_or_create(key="level", value=data["level"])
+        # level_tag, _ = EventTag.objects.get_or_create(key="level", value=data["level"])
         # release tag
         entries = []
         exception = data.get("exception")
         if exception:
-            entries.append({
-                "type": "exception",
-                "data": exception
-            })
+            entries.append({"type": "exception", "data": exception})
         breadcrumbs = data.get("breadcrumbs")
         if breadcrumbs:
-            entries.append({
-                "type": "breadcrumbs",
-                "data": {"values": breadcrumbs}
-            })
+            entries.append({"type": "breadcrumbs", "data": {"values": breadcrumbs}})
+
         
         params = {
             "event_id": data["event_id"],
-            "platform": data["platform"],
-            "sdk": data["sdk"],
-            "entries": entries,
             "issue": issue,
-            # https://gitlab.com/glitchtip/sentry-open-source/sentry/blob/master/src/sentry/event_manager.py#L412
-            # Sentry SDK primarily uses transaction. It has a fallback of get_culprit but isn't preferred. We don't implement this fallback
-            "culprit": self.get_culprit(data),
-            "title": title,
-            "metadata": metadata,
+            "timestamp": data.get("timestamp"),
+            "data": {
+                "contexts": data.get("contexts"),
+                "culprit": self.get_culprit(data),
+                # "entries": entries,
+                "metadata": metadata,
+                "packages": data.get("modules"),
+                "platform": data["platform"],
+                "sdk": data["sdk"],
+                "title": title,
+            },
         }
-        if data.get("contexts"):
-            params["contexts"] = data["contexts"]
-        if data.get("context"):
-            params["context"] = data["extra"]
-        if data.get("modules"):
-            params["packages"] = data["modules"]
+        # if data.get("context"):
+        #     params["context"] = data["extra"]
 
         event = Event.objects.create(**params)
-        event.tags.add(level_tag)
+        # event.tags.add(level_tag)
 
     def get_culprit(self, data):
         """Helper to calculate the default culprit"""

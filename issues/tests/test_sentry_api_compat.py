@@ -43,6 +43,7 @@ class SentryAPICompatTestCase(APITestCase):
             "event_store/test_data/django_template_error_event.json"
         )
         self.assertCompareData(res.data, data, ["culprit", "title", "metadata"])
+        import ipdb; ipdb.set_trace()
         res_frames = res.data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"]
         frames = data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"]
         self.assertEqual(
