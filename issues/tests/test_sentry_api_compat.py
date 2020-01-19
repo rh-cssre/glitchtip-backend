@@ -22,7 +22,7 @@ class SentryAPICompatTestCase(APITestCase):
         """ Compare data of two dict objects. Compare only provided fields list """
         for field in fields:
             self.assertEqual(
-                data1[field], data2[field], f"Failed for field '{field}'",
+                data1.get(field), data2.get(field), f"Failed for field '{field}'",
             )
 
     def get_json_data(self, path: str):
@@ -45,27 +45,26 @@ class SentryAPICompatTestCase(APITestCase):
         self.assertCompareData(res.data, data, ["culprit", "title", "metadata"])
         res_frames = res.data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"]
         frames = data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"]
-        self.assertEqual(
-            res_frames[0]["vars"]["exc"],
-            frames[0]["vars"]["exc"]
-        )
-        self.assertEqual(
-            res_frames[0]["vars"]["request"],
-            frames[0]["vars"]["request"]
-        )
-        # Memory address is different, truncate it
-        self.assertEqual(
-            res_frames[0]['vars']['get_response'][:-16],
-            frames[0]['vars']['get_response'][:-16]
-        )
-        self.assertEqual(
-            res_frames[0]["function"],
-            frames[0]["function"]
-        )
-        self.assertEqual(
-            res_frames[0]["filename"],
-            frames[0]["filename"]
-        )
+
+        for i in range(9):
+            # absPath don't always match - needs fixed
+            self.assertCompareData(res_frames[i], frames[i], ["absPath"])
+        for res_frame, frame in zip(res_frames, frames):
+            self.assertCompareData(
+                res_frame,
+                frame,
+                ["lineNo", "function", "filename", "module", "context"],
+            )
+            if frame.get("vars"):
+                self.assertCompareData(
+                    res_frame["vars"], frame["vars"], ["exc", "request"]
+                )
+                if frame["vars"].get("get_response"):
+                    # Memory address is different, truncate it
+                    self.assertEqual(
+                        res_frame["vars"]["get_response"][:-16],
+                        frame["vars"]["get_response"][:-16],
+                    )
 
         url = reverse("issue-detail", kwargs={"pk": issue.pk})
         res = self.client.get(url)
