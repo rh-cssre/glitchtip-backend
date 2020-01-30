@@ -24,6 +24,7 @@ urlpatterns = [
     path("rest-auth/", include("rest_auth.urls")),
     path("api/api-auth/", include("rest_framework.urls", namespace="rest_framework")),
     path("rest-auth/gitlab/connect/", GitlabConnect.as_view(), name="gitlab_connect"),
+    path("accounts/", include("allauth.urls")),  # Required for allauth
     # These routes belong to the Angular single page app
     re_path(r"^$", TemplateView.as_view(template_name="index.html")),
     re_path(
