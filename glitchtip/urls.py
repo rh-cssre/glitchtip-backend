@@ -6,7 +6,7 @@ from rest_framework_nested import routers
 from issues.urls import router as issuesRouter
 from projects.urls import router as projectsRouter
 from organizations_ext.urls import router as organizationsRouter
-from .social import GitlabConnect
+from . import social
 
 
 router = routers.DefaultRouter()
@@ -23,7 +23,32 @@ urlpatterns = [
     path("api/", include("event_store.urls")),
     path("rest-auth/", include("rest_auth.urls")),
     path("api/api-auth/", include("rest_framework.urls", namespace="rest_framework")),
-    path("rest-auth/gitlab/connect/", GitlabConnect.as_view(), name="gitlab_connect"),
+    path("rest-auth/gitlab/", social.GitlabLogin.as_view(), name="gitlab_login"),
+    path(
+        "rest-auth/gitlab/connect/",
+        social.GitlabConnect.as_view(),
+        name="gitlab_connect",
+    ),
+    path("rest-auth/github/", social.GithubLogin.as_view(), name="github_login"),
+    path(
+        "rest-auth/github/connect/",
+        social.GithubConnect.as_view(),
+        name="github_connect",
+    ),
+    path("rest-auth/google/", social.GoogleLogin.as_view(), name="google_login"),
+    path(
+        "rest-auth/google/connect/",
+        social.GoogleConnect.as_view(),
+        name="google_connect",
+    ),
+    path(
+        "rest-auth/microsoft/", social.MicrosoftLogin.as_view(), name="microsoft_login"
+    ),
+    path(
+        "rest-auth/microsoft/connect/",
+        social.MicrosoftConnect.as_view(),
+        name="microsoft_connect",
+    ),
     path("accounts/", include("allauth.urls")),  # Required for allauth
     # These routes belong to the Angular single page app
     re_path(r"^$", TemplateView.as_view(template_name="index.html")),
