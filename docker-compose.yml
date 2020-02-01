@@ -1,16 +1,29 @@
-version: '3.2'
+version: "3.4"
+x-environment: &default-environment
+  DATABASE_URL: postgres://postgres:postgres@db:5432/postgres
+  SECRET_KEY: change_me
+  ENABLE_SOCIAL_AUTH: "true"
+x-depends_on: &default-depends_on
+  - db
+  - redis
+x-volumes: &default-volumes
+  - .:/code
 services:
   db:
     image: postgres
+  redis:
+    image: redis
   web:
     build: .
     command: ./manage.py runserver 0.0.0.0:8000
-    depends_on:
-      - db
-    volumes:
-      - .:/code
+    depends_on: *default-depends_on
+    volumes: *default-volumes
     ports:
       - "8000:8000"
-    environment:
-      DATABASE_URL: postgres://postgres:postgres@db:5432/postgres
-      SECRET_KEY: change_me
+    environment: *default-environment
+  worker:
+    build: .
+    command: celery -A glitchtip worker -B -l INFO
+    depends_on: *default-depends_on
+    volumes: *default-volumes
+    environment: *default-environment

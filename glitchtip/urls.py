@@ -7,6 +7,7 @@ from issues.urls import router as issuesRouter
 from projects.urls import router as projectsRouter
 from organizations_ext.urls import router as organizationsRouter
 from . import social
+from .views import SettingsView
 
 
 router = routers.DefaultRouter()
@@ -21,6 +22,7 @@ urlpatterns = [
     path("api/0/", include("issues.urls")),
     path("api/0/", include("organizations_ext.urls")),
     path("api/", include("event_store.urls")),
+    path("api/settings/", SettingsView.as_view(), name="settings"),
     path("rest-auth/", include("rest_auth.urls")),
     path("api/api-auth/", include("rest_framework.urls", namespace="rest_framework")),
     path("rest-auth/gitlab/", social.GitlabLogin.as_view(), name="gitlab_login"),

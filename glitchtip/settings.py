@@ -81,6 +81,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.microsoft",
     "corsheaders",
+    "django_celery_results",
     "django_filters",
     "debug_toolbar",
     "rest_framework",
@@ -143,6 +144,15 @@ GLITCHTIP_VERSION = env.str("GLITCHTIP_VERSION", "dev")
 
 DATABASES = {"default": env.db(default="postgres://postgres:postgres@db:5432/postgres")}
 
+REDIS_URL = env.str("REDIS_URL", "redis://redis:6379/0")
+CELERY_BROKER_URL = REDIS_URL
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    "fanout_prefix": True,
+    "fanout_patterns": True,
+}
+CELERY_RESULT_BACKEND = "django-cache"
+CACHES = {"default": {"BACKEND": "redis_cache.RedisCache", "LOCATION": REDIS_URL}}
+
 # Password validation
 # https://docs.djangoproject.com/en/dev/ref/settings/#auth-password-validators
 
@@ -194,15 +204,8 @@ ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_USER_MODEL_USERNAME_FIELD = "email"
 
-SOCIALACCOUNT_PROVIDERS = {
-    "google": {
-        # For each OAuth based provider, either add a ``SocialApp``
-        # (``socialaccount`` app) containing the required client
-        # credentials, or list them here:
-        "APP": {"client_id": "123", "secret": "456", "key": ""}
-    }
-}
-
+# Show/Hide social auth. All or nothing at this time.
+ENABLE_SOCIAL_AUTH = env.bool("ENABLE_SOCIAL_AUTH", False)
 
 AUTHENTICATION_BACKENDS = (
     # Needed to login by username in Django admin, regardless of `allauth`
