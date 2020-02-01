@@ -17,13 +17,13 @@ class GitlabLogin(SocialLoginView):
 class GithubConnect(SocialConnectView):
     adapter_class = GitHubOAuth2Adapter
     client_class = OAuth2Client
-    callback_url = "set_me"
+    callback_url = "http://localhost:4200/login/github"
 
 
 class GithubLogin(SocialLoginView):
     adapter_class = GitHubOAuth2Adapter
     client_class = OAuth2Client
-    callback_url = "set_me"
+    callback_url = "http://localhost:4200/login/github"
 
 
 class GoogleConnect(SocialConnectView):
