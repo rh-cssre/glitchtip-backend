@@ -1,15 +1,22 @@
-#!/bin/sh
-uwsgi \
-    --module=glitchtip.wsgi:application \
-    --env DJANGO_SETTINGS_MODULE=glitchtip.settings \
-    --master --pidfile=/tmp/project-master.pid \
-    --http-socket=:$PORT \
-    --processes=8 \
-    --harakiri=300 \
-    --max-requests=5000 \
-    --die-on-term \
-    --enable-threads \
-    --single-interpreter \
-    --post-buffering \
-    --buffer-size=83146
+#!/usr/bin/env sh
+set -e
 
+SERVER_ROLE="${SERVER_ROLE:-web}"
+
+case $SERVER_ROLE in
+    web)
+        SCRIPT="./bin/run-uwsgi.sh"
+        ;;
+    worker)
+        SCRIPT="./bin/run-celery.sh"
+        ;;
+    beat)
+        SCRIPT="./bin/run-beat.sh"
+        ;;
+    *)
+        echo "Unknown server role provided: $SERVER_ROLE. Should be web|worker|beat."
+        exit 1
+        ;;
+esac
+
+source "$SCRIPT"
