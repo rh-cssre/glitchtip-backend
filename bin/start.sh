@@ -19,4 +19,4 @@ case $SERVER_ROLE in
         ;;
 esac
 
-source "$SCRIPT"
+. "$SCRIPT"
