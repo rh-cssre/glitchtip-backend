@@ -55,7 +55,7 @@ python = "<3.8"
 version = ">=1.4.0,<1.5"
 
 [[package]]
-category = "dev"
+category = "main"
 description = "Classes Without Boilerplate"
 name = "attrs"
 optional = false
@@ -545,6 +545,28 @@ version = "0.9.4"
 
 [[package]]
 category = "main"
+description = "An implementation of JSON Schema validation for Python"
+name = "jsonschema"
+optional = false
+python-versions = "*"
+version = "3.2.0"
+
+[package.dependencies]
+attrs = ">=17.4.0"
+pyrsistent = ">=0.14.0"
+setuptools = "*"
+six = ">=1.11.0"
+
+[package.dependencies.importlib-metadata]
+python = "<3.8"
+version = "*"
+
+[package.extras]
+format = ["idna", "jsonpointer (>1.13)", "rfc3987", "strict-rfc3339", "webcolors"]
+format_nongpl = ["idna", "jsonpointer (>1.13)", "webcolors", "rfc3986-validator (>0.1.0)", "rfc3339-validator"]
+
+[[package]]
+category = "main"
 description = "Messaging library for Python."
 name = "kombu"
 optional = false
@@ -736,6 +758,17 @@ pylint = ">=1.7"
 
 [[package]]
 category = "main"
+description = "Persistent/Functional/Immutable data structures"
+name = "pyrsistent"
+optional = false
+python-versions = "*"
+version = "0.15.7"
+
+[package.dependencies]
+six = "*"
+
+[[package]]
+category = "main"
 description = "Extensions to the standard Python datetime module"
 marker = "python_version >= \"2.7\""
 name = "python-dateutil"
@@ -853,6 +886,14 @@ rq = ["0.6"]
 sanic = ["sanic (>=0.8)"]
 sqlalchemy = ["sqlalchemy (>=1.2)"]
 tornado = ["tornado (>=5)"]
+
+[[package]]
+category = "main"
+description = "Simple, fast, extensible JSON encoder/decoder for Python"
+name = "simplejson"
+optional = false
+python-versions = ">=2.5, !=3.0.*, !=3.1.*, !=3.2.*"
+version = "3.17.0"
 
 [[package]]
 category = "main"
@@ -974,7 +1015,7 @@ docs = ["sphinx", "jaraco.packaging (>=3.2)", "rst.linker (>=1.9)"]
 testing = ["jaraco.itertools"]
 
 [metadata]
-content-hash = "1a4bb3ed4d649ac25f46e962e156ba824240d9c559e629d2729e23279a773495"
+content-hash = "af62aad2a129e4403a84bcb778acab23f2f807565de353c19384d4461a00ce68"
 python-versions = "^3.6"
 
 [metadata.files]
@@ -1140,6 +1181,10 @@ jmespath = [
     {file = "jmespath-0.9.4-py2.py3-none-any.whl", hash = "sha256:3720a4b1bd659dd2eecad0666459b9788813e032b83e7ba58578e48254e0a0e6"},
     {file = "jmespath-0.9.4.tar.gz", hash = "sha256:bde2aef6f44302dfb30320115b17d030798de8c4110e28d5cf6cf91a7a31074c"},
 ]
+jsonschema = [
+    {file = "jsonschema-3.2.0-py2.py3-none-any.whl", hash = "sha256:4e5b3cf8216f577bee9ce139cbe72eca3ea4f292ec60928ff24758ce626cd163"},
+    {file = "jsonschema-3.2.0.tar.gz", hash = "sha256:c8a85b28d377cc7737e46e2d9f2b4f44ee3c0e1deac6bf46ddefc7187d30797a"},
+]
 kombu = [
     {file = "kombu-4.6.7-py2.py3-none-any.whl", hash = "sha256:2a9e7adff14d046c9996752b2c48b6d9185d0b992106d5160e1a179907a5d4ac"},
     {file = "kombu-4.6.7.tar.gz", hash = "sha256:67b32ccb6fea030f8799f8fd50dd08e03a4b99464ebc4952d71d8747b1a52ad1"},
@@ -1252,6 +1297,9 @@ pylint-plugin-utils = [
     {file = "pylint-plugin-utils-0.6.tar.gz", hash = "sha256:57625dcca20140f43731311cd8fd879318bf45a8b0fd17020717a8781714a25a"},
     {file = "pylint_plugin_utils-0.6-py3-none-any.whl", hash = "sha256:2f30510e1c46edf268d3a195b2849bd98a1b9433229bb2ba63b8d776e1fc4d0a"},
 ]
+pyrsistent = [
+    {file = "pyrsistent-0.15.7.tar.gz", hash = "sha256:cdc7b5e3ed77bed61270a47d35434a30617b9becdf2478af76ad2c6ade307280"},
+]
 python-dateutil = [
     {file = "python-dateutil-2.8.1.tar.gz", hash = "sha256:73ebfe9dbf22e832286dafa60473e4cd239f8592f699aa5adaf10050e6e1823c"},
     {file = "python_dateutil-2.8.1-py2.py3-none-any.whl", hash = "sha256:75bb3f31ea686f1197762692a9ee6a7550b59fc6ca3a1f4b5d7e32fb98e2da2a"},
@@ -1307,6 +1355,36 @@ s3transfer = [
 sentry-sdk = [
     {file = "sentry-sdk-0.13.5.tar.gz", hash = "sha256:c6b919623e488134a728f16326c6f0bcdab7e3f59e7f4c472a90eea4d6d8fe82"},
     {file = "sentry_sdk-0.13.5-py2.py3-none-any.whl", hash = "sha256:05285942901d38c7ce2498aba50d8e87b361fc603281a5902dda98f3f8c5e145"},
+]
+simplejson = [
+    {file = "simplejson-3.17.0-cp27-cp27m-macosx_10_13_x86_64.whl", hash = "sha256:87d349517b572964350cc1adc5a31b493bbcee284505e81637d0174b2758ba17"},
+    {file = "simplejson-3.17.0-cp27-cp27m-win32.whl", hash = "sha256:1d1e929cdd15151f3c0b2efe953b3281b2fd5ad5f234f77aca725f28486466f6"},
+    {file = "simplejson-3.17.0-cp27-cp27m-win_amd64.whl", hash = "sha256:1ea59f570b9d4916ae5540a9181f9c978e16863383738b69a70363bc5e63c4cb"},
+    {file = "simplejson-3.17.0-cp33-cp33m-win32.whl", hash = "sha256:8027bd5f1e633eb61b8239994e6fc3aba0346e76294beac22a892eb8faa92ba1"},
+    {file = "simplejson-3.17.0-cp33-cp33m-win_amd64.whl", hash = "sha256:22a7acb81968a7c64eba7526af2cf566e7e2ded1cb5c83f0906b17ff1540f866"},
+    {file = "simplejson-3.17.0-cp34-cp34m-win32.whl", hash = "sha256:17163e643dbf125bb552de17c826b0161c68c970335d270e174363d19e7ea882"},
+    {file = "simplejson-3.17.0-cp34-cp34m-win_amd64.whl", hash = "sha256:0fe3994207485efb63d8f10a833ff31236ed27e3b23dadd0bf51c9900313f8f2"},
+    {file = "simplejson-3.17.0-cp35-cp35m-win32.whl", hash = "sha256:4cf91aab51b02b3327c9d51897960c554f00891f9b31abd8a2f50fd4a0071ce8"},
+    {file = "simplejson-3.17.0-cp35-cp35m-win_amd64.whl", hash = "sha256:fc9051d249dd5512e541f20330a74592f7a65b2d62e18122ca89bf71f94db748"},
+    {file = "simplejson-3.17.0-cp36-cp36m-macosx_10_13_x86_64.whl", hash = "sha256:86afc5b5cbd42d706efd33f280fec7bd7e2772ef54e3f34cf6b30777cd19a614"},
+    {file = "simplejson-3.17.0-cp36-cp36m-win32.whl", hash = "sha256:926bcbef9eb60e798eabda9cd0bbcb0fca70d2779aa0aa56845749d973eb7ad5"},
+    {file = "simplejson-3.17.0-cp36-cp36m-win_amd64.whl", hash = "sha256:daaf4d11db982791be74b23ff4729af2c7da79316de0bebf880fa2d60bcc8c5a"},
+    {file = "simplejson-3.17.0-cp37-cp37m-macosx_10_14_x86_64.whl", hash = "sha256:9a126c3a91df5b1403e965ba63b304a50b53d8efc908a8c71545ed72535374a3"},
+    {file = "simplejson-3.17.0-cp37-cp37m-win32.whl", hash = "sha256:fc046afda0ed8f5295212068266c92991ab1f4a50c6a7144b69364bdee4a0159"},
+    {file = "simplejson-3.17.0-cp37-cp37m-win_amd64.whl", hash = "sha256:7cce4bac7e0d66f3a080b80212c2238e063211fe327f98d764c6acbc214497fc"},
+    {file = "simplejson-3.17.0.tar.gz", hash = "sha256:2b4b2b738b3b99819a17feaf118265d0753d5536049ea570b3c43b51c4701e81"},
+    {file = "simplejson-3.17.0.win-amd64-py2.7.exe", hash = "sha256:1d346c2c1d7dd79c118f0cc7ec5a1c4127e0c8ffc83e7b13fc5709ff78c9bb84"},
+    {file = "simplejson-3.17.0.win-amd64-py3.3.exe", hash = "sha256:5cfd495527f8b85ce21db806567de52d98f5078a8e9427b18e251c68bd573a26"},
+    {file = "simplejson-3.17.0.win-amd64-py3.4.exe", hash = "sha256:8de378d589eccbc75941e480b4d5b4db66f22e4232f87543b136b1f093fff342"},
+    {file = "simplejson-3.17.0.win-amd64-py3.5.exe", hash = "sha256:f4b64a1031acf33e281fd9052336d6dad4d35eee3404c95431c8c6bc7a9c0588"},
+    {file = "simplejson-3.17.0.win-amd64-py3.6.exe", hash = "sha256:ad8dd3454d0c65c0f92945ac86f7b9efb67fa2040ba1b0189540e984df904378"},
+    {file = "simplejson-3.17.0.win-amd64-py3.7.exe", hash = "sha256:229edb079d5dd81bf12da952d4d825bd68d1241381b37d3acf961b384c9934de"},
+    {file = "simplejson-3.17.0.win32-py2.7.exe", hash = "sha256:4fd5f79590694ebff8dc980708e1c182d41ce1fda599a12189f0ca96bf41ad70"},
+    {file = "simplejson-3.17.0.win32-py3.3.exe", hash = "sha256:d140e9376e7f73c1f9e0a8e3836caf5eec57bbafd99259d56979da05a6356388"},
+    {file = "simplejson-3.17.0.win32-py3.4.exe", hash = "sha256:da00675e5e483ead345429d4f1374ab8b949fba4429d60e71ee9d030ced64037"},
+    {file = "simplejson-3.17.0.win32-py3.5.exe", hash = "sha256:7739940d68b200877a15a5ff5149e1599737d6dd55e302625650629350466418"},
+    {file = "simplejson-3.17.0.win32-py3.6.exe", hash = "sha256:60aad424e47c5803276e332b2a861ed7a0d46560e8af53790c4c4fb3420c26c2"},
+    {file = "simplejson-3.17.0.win32-py3.7.exe", hash = "sha256:1fbba86098bbfc1f85c5b69dc9a6d009055104354e0d9880bb00b692e30e0078"},
 ]
 six = [
     {file = "six-1.13.0-py2.py3-none-any.whl", hash = "sha256:1f1b7d42e254082a9db6279deae68afb421ceba6158efa6131de7b3003ee93fd"},

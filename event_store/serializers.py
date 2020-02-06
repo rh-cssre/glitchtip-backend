@@ -1,7 +1,8 @@
 from django.utils.encoding import force_text
 from rest_framework import serializers
-from issues.event_store.error import ErrorEvent
-from issues.models import EventType, EventTag, Event, Issue
+from sentry.eventtypes.error import ErrorEvent
+# from sentry.eventtypes.security import CspEvent
+from issues.models import EventType, Event, Issue
 from sentry.culprit import generate_culprit
 
 
@@ -83,3 +84,17 @@ class StoreCSPReportSerializer(serializers.Serializer):
     """ Very different format from others """
 
     type = EventType.CSP
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields.update({"csp-report": serializers.JSONField()})
+
+    def create(self, project, data):
+        pass
+        # data["csp"] = data.pop("csp-report")
+        # data["csp"]["blocked_uri"] = data["csp"]["blocked-uri"]
+        # data["csp"]["document_uri"] = data["csp"]["document-uri"]
+
+        # error = CspEvent()
+        # metadata = error.get_metadata(data)
+

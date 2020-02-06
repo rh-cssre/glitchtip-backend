@@ -238,6 +238,27 @@ HTTP_METHODS = (
 
 # See https://github.com/getsentry/semaphore/blob/master/general/src/protocol/constants.rs
 # VALID_PLATFORMS = semaphore.VALID_PLATFORMS
+VALID_PLATFORMS = [
+    "as3",
+    "c",
+    "cfml",
+    "cocoa",
+    "csharp",
+    "elixir",
+    "go",
+    "groovy",
+    "haskell",
+    "java",
+    "javascript",
+    "native",
+    "node",
+    "objc",
+    "other",
+    "perl",
+    "php",
+    "python",
+    "ruby",
+]
 
 OK_PLUGIN_ENABLED = _("The {name} integration has been enabled.")
 
