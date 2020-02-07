@@ -95,8 +95,14 @@ class StoreCSPReportSerializer(serializers.Serializer):
     def create(self, project, data):
         csp = data["csp-report"]
         title = self.get_title(csp)
-        culprit = ""
-        metadata = {}
+        culprit = self.get_culprit(csp)
+        uri = self.get_uri(csp)
+        directive = self.get_effective_directive(csp)
+        metadata = {
+            "message": title,
+            "uri": uri,
+            "directive": directive,
+        }
         issue, _ = Issue.objects.get_or_create(
             title=title,
             culprit=culprit,
@@ -104,9 +110,20 @@ class StoreCSPReportSerializer(serializers.Serializer):
             type=EventType.CSP,
             defaults={"metadata": metadata},
         )
+        # Convert - to _
+        normalized_csp = dict((k.replace("-", "_"), v) for k, v in csp.items())
+        if "effective_directive" not in normalized_csp:
+            normalized_csp["effective_directive"] = directive
         params = {
             "issue": issue,
-            "data": {},
+            "data": {
+                "culprit": culprit,
+                "csp": normalized_csp,
+                "title": title,
+                "metadata": metadata,
+                "message": title,
+                "type": EventType.CSP.label,
+            },
         }
         return Event.objects.create(**params)
 
@@ -120,13 +137,16 @@ class StoreCSPReportSerializer(serializers.Serializer):
         first_violation = data["violated-directive"].split()[0]
         return first_violation
 
+    def get_uri(self, data):
+        url = data["blocked-uri"]
+        return urlparse(url).netloc
+
     def get_title(self, data):
-        # "Blocked 'style' from 'example.com'"
         effective_directive = self.get_effective_directive(data)
         humanized_directive = effective_directive.replace("-src", "")
-        url = data["blocked-uri"]
-        host = urlparse(url).netloc
-        return f"Blocked '{humanized_directive}' from '{host}'"
+        uri = self.get_uri(data)
+        return f"Blocked '{humanized_directive}' from '{uri}'"
 
     def get_culprit(self, data):
-        return ""
+        # "style-src cdn.example.com"
+        return data.get("violated-directive")

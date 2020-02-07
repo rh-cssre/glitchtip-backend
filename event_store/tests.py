@@ -3,7 +3,7 @@ from django.shortcuts import reverse
 from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip.test_utils import generators
-from issues.models import Issue
+from issues.models import Issue, Event
 
 
 class EventStoreTestCase(APITestCase):
@@ -44,7 +44,8 @@ class EventStoreTestCase(APITestCase):
             }
         }
         res = self.client.post(url, data, format="json")
+        self.assertEqual(res.status_code, 200)
         expected_title = "Blocked 'style' from 'example.com'"
         issue = Issue.objects.get(title=expected_title)
-        self.assertTrue(issue)
-
+        event = Event.objects.get()
+        self.assertEqual(event.data["csp"]["effective_directive"], "style-src")
