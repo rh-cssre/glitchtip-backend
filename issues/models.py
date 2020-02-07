@@ -92,12 +92,15 @@ class Event(models.Model):
         ordering = ["-created"]
 
     def __str__(self):
-        return self.event_id.hex
+        return self.event_id_hex
 
     @property
     def event_id_hex(self):
         """ The public key without dashes """
-        return self.event_id.hex
+        if self.event_id:
+            if isinstance(self.event_id, str):
+                return self.event_id
+            return self.event_id.hex
 
     @property
     def contexts(self):

@@ -1,7 +1,7 @@
+from urllib.parse import urlparse
 from django.utils.encoding import force_text
 from rest_framework import serializers
 from sentry.eventtypes.error import ErrorEvent
-# from sentry.eventtypes.security import CspEvent
 from issues.models import EventType, Event, Issue
 from sentry.culprit import generate_culprit
 
@@ -39,6 +39,7 @@ class StoreErrorSerializer(StoreDefaultSerializer):
             title=title,
             culprit=error.get_location(metadata),
             project=project,
+            type=EventType.ERROR,
             defaults={"metadata": metadata},
         )
 
@@ -68,6 +69,7 @@ class StoreErrorSerializer(StoreDefaultSerializer):
         #     params["context"] = data["extra"]
 
         event = Event.objects.create(**params)
+        return event
         # event.tags.add(level_tag)
 
     def get_culprit(self, data):
@@ -87,14 +89,44 @@ class StoreCSPReportSerializer(serializers.Serializer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # This is done to support the hyphen
         self.fields.update({"csp-report": serializers.JSONField()})
 
     def create(self, project, data):
-        pass
-        # data["csp"] = data.pop("csp-report")
-        # data["csp"]["blocked_uri"] = data["csp"]["blocked-uri"]
-        # data["csp"]["document_uri"] = data["csp"]["document-uri"]
+        csp = data["csp-report"]
+        title = self.get_title(csp)
+        culprit = ""
+        metadata = {}
+        issue, _ = Issue.objects.get_or_create(
+            title=title,
+            culprit=culprit,
+            project=project,
+            type=EventType.CSP,
+            defaults={"metadata": metadata},
+        )
+        params = {
+            "issue": issue,
+            "data": {},
+        }
+        return Event.objects.create(**params)
 
-        # error = CspEvent()
-        # metadata = error.get_metadata(data)
+    def get_effective_directive(self, data):
+        """
+        Some browers return effective-directive and others don't.
+        Infer missing ones from violated directive
+        """
+        if "effective-directive" in data:
+            return data["effective-directive"]
+        first_violation = data["violated-directive"].split()[0]
+        return first_violation
 
+    def get_title(self, data):
+        # "Blocked 'style' from 'example.com'"
+        effective_directive = self.get_effective_directive(data)
+        humanized_directive = effective_directive.replace("-src", "")
+        url = data["blocked-uri"]
+        host = urlparse(url).netloc
+        return f"Blocked '{humanized_directive}' from '{host}'"
+
+    def get_culprit(self, data):
+        return ""

@@ -56,9 +56,8 @@ class EventStoreAPIView(APIView):
             raise exceptions.PermissionDenied()
         serializer = self.get_serializer_class(request.data)(data=request.data)
         if serializer.is_valid():
-            data = serializer.data
-            serializer.create(project, serializer.data)
-            return Response({"id": data["event_id"].replace("-", "")})
+            event = serializer.create(project, serializer.data)
+            return Response({"id": event.event_id_hex})
         # TODO {"error": "Invalid api key"}, CSP type, valid json but no type at all
         return Response()
 
@@ -88,19 +87,4 @@ class EventStoreAPIView(APIView):
 
 
 class CSPStoreAPIView(EventStoreAPIView):
-    def post(self, request, *args, **kwargs):
-        if settings.EVENT_STORE_DEBUG:
-            print(request.data)
-        sentry_key = EventStoreAPIView.auth_from_request(request)
-        project = Project.objects.filter(
-            id=kwargs.get("id"), projectkey__public_key=sentry_key
-        ).first()
-        if not project:
-            raise exceptions.PermissionDenied()
-        serializer = self.get_serializer_class(request.data)(data=request.data)
-        if serializer.is_valid():
-            data = serializer.data
-            serializer.create(project, serializer.data)
-            return Response({"id": data["event_id"].replace("-", "")})
-        # TODO {"error": "Invalid api key"}, CSP type, valid json but no type at all
-        return Response()
+    pass
