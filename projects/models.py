@@ -17,7 +17,7 @@ class Project(models.Model):
     slug = AutoSlugField(populate_from=["name", "organization_id"],)
     name = models.CharField(max_length=200)
     organization = models.ForeignKey(
-        "organizations.Organization", on_delete=models.CASCADE
+        "organizations.Organization", on_delete=models.CASCADE, related_name="projects"
     )
     created = models.DateTimeField(auto_now_add=True, db_index=True)
     platform = models.CharField(max_length=64, blank=True, null=True)

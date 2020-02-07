@@ -1,6 +1,9 @@
 from rest_framework import serializers
-from organizations_ext.serializers import OrganizationSerializer
-from .models import Project, ProjectKey
+from organizations_ext.serializers.base_serializers import (
+    OrganizationReferenceSerializer,
+)
+from .base_serializers import ProjectReferenceSerializer
+from ..models import ProjectKey
 
 
 class ProjectKeySerializer(serializers.ModelSerializer):
@@ -18,12 +21,6 @@ class ProjectKeySerializer(serializers.ModelSerializer):
         return {"public": obj.get_dsn()}
 
 
-class ProjectReferenceSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Project
-        fields = ("platform", "slug", "id", "name")
-
-
 class ProjectSerializer(ProjectReferenceSerializer):
     avatar = serializers.SerializerMethodField()
     color = serializers.SerializerMethodField()
@@ -35,7 +32,7 @@ class ProjectSerializer(ProjectReferenceSerializer):
     isInternal = serializers.SerializerMethodField()
     isMember = serializers.SerializerMethodField()
     isPublic = serializers.SerializerMethodField()
-    organization = OrganizationSerializer(read_only=True)
+    organization = OrganizationReferenceSerializer(read_only=True)
 
     class Meta(ProjectReferenceSerializer.Meta):
         fields = (

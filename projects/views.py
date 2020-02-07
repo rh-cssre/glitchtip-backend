@@ -1,7 +1,7 @@
 from rest_framework import viewsets
 from django.shortcuts import get_object_or_404
 from .models import Project, ProjectKey
-from .serializers import ProjectSerializer, ProjectKeySerializer
+from .serializers.serializers import ProjectSerializer, ProjectKeySerializer
 
 
 class ProjectViewSet(viewsets.ModelViewSet):

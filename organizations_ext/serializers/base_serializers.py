@@ -2,7 +2,7 @@ from rest_framework import serializers
 from organizations.models import Organization
 
 
-class OrganizationSerializer(serializers.ModelSerializer):
+class OrganizationReferenceSerializer(serializers.ModelSerializer):
     dateCreated = serializers.DateTimeField(source="created", read_only=True)
     status = serializers.SerializerMethodField()
     avatar = serializers.SerializerMethodField()
@@ -34,3 +34,4 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
     def get_require2FA(self, obj):
         return False
+

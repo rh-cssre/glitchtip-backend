@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from projects.serializers import ProjectReferenceSerializer
+from projects.serializers.base_serializers import ProjectReferenceSerializer
 from .models import Issue, Event
 
 
