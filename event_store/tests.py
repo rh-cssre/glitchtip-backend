@@ -4,6 +4,7 @@ from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip.test_utils import generators
 from issues.models import Issue, Event
+from .test_data.csp import mdn_sample_csp
 
 
 class EventStoreTestCase(APITestCase):
@@ -34,15 +35,7 @@ class EventStoreTestCase(APITestCase):
 
     def test_csp_event(self):
         url = reverse("csp_store", args=[self.project.id]) + self.params
-        data = {
-            "csp-report": {
-                "document-uri": "http://example.com/signup.html",
-                "referrer": "",
-                "blocked-uri": "http://example.com/css/style.css",
-                "violated-directive": "style-src cdn.example.com",
-                "original-policy": "default-src 'none'; style-src cdn.example.com; report-uri /_/csp-reports",
-            }
-        }
+        data = mdn_sample_csp
         res = self.client.post(url, data, format="json")
         self.assertEqual(res.status_code, 200)
         expected_title = "Blocked 'style' from 'example.com'"

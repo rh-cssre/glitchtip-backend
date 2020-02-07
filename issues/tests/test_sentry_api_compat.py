@@ -5,6 +5,7 @@ from rest_framework.test import APITestCase
 from model_bakery import baker
 from event_store.test_data.django_error_factory import template_error
 from event_store.test_data.js_error_factory import throw_error
+from event_store.test_data.csp import mdn_sample_csp
 from issues.models import Event
 
 
@@ -106,15 +107,7 @@ class SentryAPICompatTestCase(APITestCase):
         self.assertEqual(res.data["metadata"]["function"], data["metadata"]["function"])
 
     def test_csp_event(self):
-        data = {
-            "csp-report": {
-                "document-uri": "http://example.com/signup.html",
-                "referrer": "",
-                "blocked-uri": "http://example.com/css/style.css",
-                "violated-directive": "style-src cdn.example.com",
-                "original-policy": "default-src 'none'; style-src cdn.example.com; report-uri /_/csp-reports",
-            }
-        }
+        data = mdn_sample_csp
         res = self.client.post(self.csp_store_url, data, format="json")
         self.assertEqual(res.status_code, 200)
 

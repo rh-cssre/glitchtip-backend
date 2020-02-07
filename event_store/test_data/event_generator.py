@@ -1,6 +1,7 @@
 import uuid
 import random
 from . import django_error_factory
+from .csp import mdn_sample_csp
 
 
 def make_event_unique(event):
@@ -11,5 +12,7 @@ def make_event_unique(event):
 
 def generate_random_event():
     """ Return a random event from library of samples with unique event id """
-    event = random.choice(django_error_factory.all_django_events)
+    events = django_error_factory.all_django_events
+    events.append(mdn_sample_csp)
+    event = random.choice(events)
     return make_event_unique(event)

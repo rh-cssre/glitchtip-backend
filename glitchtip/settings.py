@@ -144,7 +144,20 @@ GLITCHTIP_VERSION = env.str("GLITCHTIP_VERSION", "dev")
 
 DATABASES = {"default": env.db(default="postgres://postgres:postgres@db:5432/postgres")}
 
-REDIS_URL = env.str("REDIS_URL", "redis://redis:6379/0")
+# We need to support both url and broken out host to support helm redis chart
+REDIS_HOST = env.str("REDIS_HOST", None)
+if REDIS_HOST:
+    REDIS_PORT = env.str("REDIS_PORT", "6379")
+    REDIS_DATABASE = env.str("REDIS_DATABASE", "0")
+    REDIS_PASSWORD = env.str("REDIS_PASSWORD", None)
+    if REDIS_PASSWORD:
+        REDIS_URL = (
+            f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DATABASE}"
+        )
+    else:
+        REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DATABASE}"
+else:
+    REDIS_URL = env.str("REDIS_URL", "redis://redis:6379/0")
 CELERY_BROKER_URL = REDIS_URL
 CELERY_BROKER_TRANSPORT_OPTIONS = {
     "fanout_prefix": True,
