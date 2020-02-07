@@ -20,6 +20,18 @@ We are not a Sentry fork. The older open source Sentry project had a vast code b
 - Prefer simple over complex - it's better to have less features that are more reliable and easier to maintain. We do not wish to build a custom search engine.
 - Economical over completeness - the vast number of use cases do not require storing each and every event a high load usage. We'd rather figure out how to throttle and sample events well over sharding our Database to an extreme scale. Make running GlitchTip as easy and simple as possible, especially for small and medium sized projects. Be wary of introducing additional external dependencies.
 
+### Serializers
+
+GlitchTip django app serializers need to refer to each other. For example a project detail view will need to refer to an organization.
+
+base_serializers.py can be shared apps. All other serializers should be internal to their app only. This avoids the need for circular imports.
+
+The following naming conventions are applied:
+
+- FooReferenceSerializer - smallest serializer that can be shared between Django apps. Often avoids relations to avoid circular dependencies.
+- FooSerializer - Serializer used for List views. Maybe use some "cheap" relations that are appropiate with many rows of data.
+- FooDetailSerializer - Serializer used for Retrieve views - the most detailed serializer that may have many relations.
+
 ### Porting Sentry Code to GlitchTip
 
 GlitchTip has a "sentry" module for code ported from open source Sentry. Run it through `2to3` to make it Python 3 compatible and use it only as needed. Keeping the sentry module namespace makes porting easier.
