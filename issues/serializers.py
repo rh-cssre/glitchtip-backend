@@ -31,6 +31,7 @@ class EventSerializer(serializers.ModelSerializer):
             "sdk",
             "tags",
             "title",
+            "type",
             # "user",
         )
 

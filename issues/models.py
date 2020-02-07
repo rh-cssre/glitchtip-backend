@@ -113,6 +113,7 @@ class Event(models.Model):
     @property
     def entries(self):
         entries = []
+
         exception = self.data.get("exception")
         if exception:
             # Some, but not all, keys are made more JS camel case like
@@ -138,9 +139,19 @@ class Event(models.Model):
                         frame["context"] = context
 
             entries.append({"type": "exception", "data": exception})
+
         breadcrumbs = self.data.get("breadcrumbs")
         if breadcrumbs:
             entries.append({"type": "breadcrumbs", "data": {"values": breadcrumbs}})
+
+        message = self.data.get("message")
+        if message:
+            entries.append({"type": "message", "data": {"formatted": message}})
+
+        csp = self.data.get("csp")
+        if csp:
+            entries.append({"type": EventType.CSP.label, "data": csp})
+
         return entries
 
     def _build_context(self, context: list, base_line_no: int, is_pre: bool):
@@ -175,6 +186,10 @@ class Event(models.Model):
     @property
     def title(self):
         return self.data.get("title")
+
+    @property
+    def type(self):
+        return self.data.get("type")
 
     def next(self, *args, **kwargs):
         try:
