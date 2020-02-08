@@ -7,7 +7,7 @@ from issues.urls import router as issuesRouter
 from projects.urls import router as projectsRouter
 from organizations_ext.urls import router as organizationsRouter
 from . import social
-from .views import SettingsView
+from .views import SettingsView, health
 
 
 router = routers.DefaultRouter()
@@ -16,6 +16,7 @@ router.registry.extend(issuesRouter.registry)
 router.registry.extend(organizationsRouter.registry)
 
 urlpatterns = [
+    path("_health/", health),
     path("admin/", admin.site.urls),
     path("api/0/", include(router.urls)),
     path("api/0/", include("projects.urls")),
