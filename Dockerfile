@@ -11,7 +11,7 @@ WORKDIR /code
 RUN apt-get update && apt-get install -y gcc
 RUN pip install "poetry==$POETRY_VERSION"
 COPY poetry.lock pyproject.toml /code/
-RUN poetry install --no-interaction --no-ansi $(test "$IS_CI" == True && echo "--no-dev")
+RUN poetry install --no-interaction --no-ansi $(test "$IS_CI" == "True" && echo "--no-dev")
 
 EXPOSE 8080
 
