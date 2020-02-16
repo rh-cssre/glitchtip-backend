@@ -11,8 +11,7 @@ test:
   variables:
     SECRET_KEY: testing
   services:
-    - name: postgres:10-alpine
-      alias: db
+    - postgres
   script:
     - apt-get update && apt-get install -y gcc
     - pip install "poetry==$POETRY_VERSION"
@@ -22,7 +21,7 @@ test:
 build:
   image: docker:stable
   services:
-    - docker:dind
+    - docker:19.03.5-dind
   script:
     - apk add --no-cache py-pip python-dev libffi-dev openssl-dev gcc libc-dev make
     - pip install docker-compose

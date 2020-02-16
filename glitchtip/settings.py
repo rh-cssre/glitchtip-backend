@@ -142,7 +142,7 @@ GLITCHTIP_VERSION = env.str("GLITCHTIP_VERSION", "dev")
 # Database
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
 
-DATABASES = {"default": env.db(default="postgres://postgres:postgres@db:5432/postgres")}
+DATABASES = {"default": env.db(default="postgres://postgres:postgres@postgres:5432/postgres")}
 
 # We need to support both url and broken out host to support helm redis chart
 REDIS_HOST = env.str("REDIS_HOST", None)

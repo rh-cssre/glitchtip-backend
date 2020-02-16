@@ -1,15 +1,15 @@
 version: "3.4"
 x-environment: &default-environment
-  DATABASE_URL: postgres://postgres:postgres@db:5432/postgres
+  DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
   SECRET_KEY: change_me
   ENABLE_SOCIAL_AUTH: "true"
 x-depends_on: &default-depends_on
-  - db
+  - postgres
   - redis
 x-volumes: &default-volumes
   - .:/code
 services:
-  db:
+  postgres:
     image: postgres
   redis:
     image: redis
