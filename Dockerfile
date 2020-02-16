@@ -1,4 +1,5 @@
 FROM python:3.8-slim
+ARG IS_CI
 ENV PYTHONUNBUFFERED=1 \
   PORT=8080 \
   POETRY_VERSION=1.0.3 \
@@ -10,7 +11,7 @@ WORKDIR /code
 RUN apt-get update && apt-get install -y gcc
 RUN pip install "poetry==$POETRY_VERSION"
 COPY poetry.lock pyproject.toml /code/
-RUN poetry install --no-interaction --no-ansi
+RUN poetry install --no-interaction --no-ansi $(test "$IS_CI" == True && echo "--no-dev")
 
 EXPOSE 8080
 

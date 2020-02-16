@@ -33,3 +33,12 @@ VS Code can do type checking and type inference. However, it requires setting up
 3. Create Python virtual environment `python3 -m venv env`
 4. Activate environment `source env/bin/activate`
 5. Install packages `poetry install`
+
+### Load testing
+
+Locust is built into the dev dependencies. To run with locus run
+`docker-compose -f docker-compose.yml -f docker-compose.locust.yml up`
+
+Now go to localhost:8089 to run the test.
+
+Locust will not be intalled to production docker images and cannot be run from them.

@@ -1,0 +1,10 @@
+version: "3.4"
+services:
+  locust:
+    build: .
+    command: locust --host http://web:8000
+    working_dir: /code/locust
+    volumes:
+      - .:/code
+    ports:
+      - "8089:8089"

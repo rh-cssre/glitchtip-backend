@@ -27,7 +27,7 @@ build:
     - apk add --no-cache py-pip python-dev libffi-dev openssl-dev gcc libc-dev make
     - pip install docker-compose
     - docker pull $IMAGE_NAME:latest || true
-    - $COMPOSE build
+    - $COMPOSE build --build-arg IS_CI="True"
     - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN registry.gitlab.com
     - docker tag ${PROJECT_NAME}_web ${IMAGE_NAME}:$CI_BUILD_REF_NAME
     - docker push $CONTAINER_TEST_IMAGE
