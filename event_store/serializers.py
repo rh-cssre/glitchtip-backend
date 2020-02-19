@@ -45,10 +45,13 @@ class StoreErrorSerializer(StoreDefaultSerializer):
 
         # level_tag, _ = EventTag.objects.get_or_create(key="level", value=data["level"])
         # release tag
-        entries = []
-        breadcrumbs = data.get("breadcrumbs")
-        if breadcrumbs:
-            entries.append({"type": "breadcrumbs", "data": {"values": breadcrumbs}})
+        # entries = []
+        # breadcrumbs = data.get("breadcrumbs")
+        # if breadcrumbs:
+        #     entries.append({"type": "breadcrumbs", "data": {"values": breadcrumbs}})
+        request = data.get("request")
+        request["headers"] = sorted([pair for pair in request["headers"].items()])
+        request["inferred_content_type"] = ""  # Ex: "text/plain"
 
         params = {
             "event_id": data["event_id"],
@@ -61,6 +64,7 @@ class StoreErrorSerializer(StoreDefaultSerializer):
                 "metadata": metadata,
                 "packages": data.get("modules"),
                 "platform": data["platform"],
+                "request": request,
                 "sdk": data["sdk"],
                 "title": title,
             },
