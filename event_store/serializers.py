@@ -50,8 +50,10 @@ class StoreErrorSerializer(StoreDefaultSerializer):
         # if breadcrumbs:
         #     entries.append({"type": "breadcrumbs", "data": {"values": breadcrumbs}})
         request = data.get("request")
-        request["headers"] = sorted([pair for pair in request["headers"].items()])
-        request["inferred_content_type"] = ""  # Ex: "text/plain"
+        headers = request.get("headers")
+        if headers:
+            request["inferred_content_type"] = headers.get("Content-Type")
+            request["headers"] = sorted([pair for pair in headers.items()])
 
         params = {
             "event_id": data["event_id"],

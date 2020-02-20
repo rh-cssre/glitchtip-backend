@@ -73,7 +73,7 @@ class SentryAPICompatTestCase(APITestCase):
         self.assertCompareData(
             res.data["entries"][1]["data"],
             data["entries"][1]["data"],
-            ["env", "headers", "url", "method"],
+            ["env", "headers", "url", "method", "inferredContentType"],
         )
 
         url = reverse("issue-detail", kwargs={"pk": issue.pk})

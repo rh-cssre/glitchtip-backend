@@ -142,6 +142,7 @@ class Event(models.Model):
 
         request = self.data.get("request")
         if request:
+            request["inferredContentType"] = request.pop("inferred_content_type")
             entries.append({"type": "request", "data": request})
 
         breadcrumbs = self.data.get("breadcrumbs")
