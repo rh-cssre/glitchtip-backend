@@ -1,6 +1,6 @@
 from sentry.utils.safe import truncatechars, get_path, trim
-from stacktraces.processing import get_crash_frame_from_event_data
-from stacktraces.functions import get_function_name_for_frame
+from sentry.stacktraces.processing import get_crash_frame_from_event_data
+from sentry.stacktraces.functions import get_function_name_for_frame
 from .base import BaseEvent
 
 
