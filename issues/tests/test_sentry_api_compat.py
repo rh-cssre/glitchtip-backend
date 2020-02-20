@@ -70,6 +70,12 @@ class SentryAPICompatTestCase(APITestCase):
                         frame["vars"]["get_response"][:-16],
                     )
 
+        self.assertCompareData(
+            res.data["entries"][1]["data"],
+            data["entries"][1]["data"],
+            ["env", "headers", "url", "method"],
+        )
+
         url = reverse("issue-detail", kwargs={"pk": issue.pk})
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)

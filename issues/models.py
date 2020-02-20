@@ -140,6 +140,10 @@ class Event(models.Model):
 
             entries.append({"type": "exception", "data": exception})
 
+        request = self.data.get("request")
+        if request:
+            entries.append({"type": "request", "data": request})
+
         breadcrumbs = self.data.get("breadcrumbs")
         if breadcrumbs:
             entries.append({"type": "breadcrumbs", "data": {"values": breadcrumbs}})
