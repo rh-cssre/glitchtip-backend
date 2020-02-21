@@ -56,7 +56,8 @@ urlpatterns = [
     # These routes belong to the Angular single page app
     re_path(r"^$", TemplateView.as_view(template_name="index.html")),
     re_path(
-        r"^(login|issues|settings).*$", TemplateView.as_view(template_name="index.html")
+        r"^(login|issues|settings|organizations).*$",
+        TemplateView.as_view(template_name="index.html"),
     ),
 ]
 if settings.DEBUG:
