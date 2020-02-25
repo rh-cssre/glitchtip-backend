@@ -25,6 +25,7 @@ urlpatterns = [
     path("api/", include("event_store.urls")),
     path("api/settings/", SettingsView.as_view(), name="settings"),
     path("rest-auth/", include("rest_auth.urls")),
+    path("rest-auth/registration/", include("rest_auth.registration.urls")),
     path("api/api-auth/", include("rest_framework.urls", namespace="rest_framework")),
     path("rest-auth/gitlab/", social.GitlabLogin.as_view(), name="gitlab_login"),
     path(

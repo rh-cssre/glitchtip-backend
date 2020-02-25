@@ -87,6 +87,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "rest_auth",
+    "rest_auth.registration",
     "storages",
     "organizations",
     "event_store",
@@ -142,7 +143,9 @@ GLITCHTIP_VERSION = env.str("GLITCHTIP_VERSION", "dev")
 # Database
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
 
-DATABASES = {"default": env.db(default="postgres://postgres:postgres@postgres:5432/postgres")}
+DATABASES = {
+    "default": env.db(default="postgres://postgres:postgres@postgres:5432/postgres")
+}
 
 # We need to support both url and broken out host to support helm redis chart
 REDIS_HOST = env.str("REDIS_HOST", None)
@@ -216,7 +219,7 @@ AUTH_USER_MODEL = "users.User"
 ACCOUNT_AUTHENTICATION_METHOD = "email"
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_USER_MODEL_USERNAME_FIELD = "email"
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 
 # Show/Hide social auth. All or nothing at this time.
 ENABLE_SOCIAL_AUTH = env.bool("ENABLE_SOCIAL_AUTH", False)
