@@ -1,10 +1,12 @@
-from rest_framework import viewsets
+from rest_framework import viewsets, exceptions
 from django.shortcuts import get_object_or_404
+from teams.models import Team
+from organizations_ext.models import Organization, OrganizationUserRole
 from .models import Project, ProjectKey
 from .serializers.serializers import ProjectSerializer, ProjectKeySerializer
 
 
-class ProjectViewSet(viewsets.ModelViewSet):
+class NestedProjectViewSet(viewsets.ModelViewSet):
     """
     Detail view is under /api/0/projects/{organization_slug}/{project_slug}/
 
@@ -13,7 +15,6 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
-    lookup_value_regex = r"(?P<organization_slug>[^/.]+)/(?P<project_slug>[-\w]+)"
 
     def get_object(self):
         queryset = self.filter_queryset(self.get_queryset())
@@ -31,9 +32,29 @@ class ProjectViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return self.queryset.filter(organization__users=self.request.user)
 
-    # def perform_create(self, serializer):
-    # Set org/team
-    # serializer.save(user=self.request.user)
+    def perform_create(self, serializer):
+        try:
+            team = Team.objects.get(
+                slug=self.kwargs.get("team_slug"),
+                organization__slug=self.kwargs.get("organization_slug"),
+                organization__users=self.request.user,
+                organization__organization_users__role__gte=OrganizationUserRole.ADMIN,
+            )
+        except Team.DoesNotExist:
+            raise exceptions.ValidationError("Team not found")
+        try:
+            organization = Organization.objects.get(
+                slug=self.kwargs.get("organization_slug"),
+                users=self.request.user,
+                organization_users__role__gte=OrganizationUserRole.ADMIN,
+            )
+        except Organization.DoesNotExist:
+            raise exceptions.ValidationError("Organization not found")
+        serializer.save(team=team, organization=organization)
+
+
+class ProjectViewSet(NestedProjectViewSet):
+    lookup_value_regex = r"(?P<organization_slug>[^/.]+)/(?P<project_slug>[-\w]+)"
 
 
 class ProjectKeyViewSet(viewsets.ModelViewSet):

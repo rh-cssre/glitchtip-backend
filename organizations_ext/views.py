@@ -16,6 +16,9 @@ class OrganizationViewSet(viewsets.ModelViewSet):
             return OrganizationDetailSerializer
         return super().get_serializer_class()
 
+    def get_queryset(self):
+        return self.queryset.filter(users=self.request.user)
+
     def perform_create(self, serializer):
         """ Create organization with current user as owner """
         organization = serializer.save()

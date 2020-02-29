@@ -4,7 +4,9 @@ from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
 
 
-class TeamTestCase(APITestCase):
+class OrgTeamTestCase(APITestCase):
+    """ Tests nested under /organizations/ """
+
     def setUp(self):
         self.user = baker.make("users.user")
         self.organization = baker.make("organizations_ext.Organization")
@@ -45,3 +47,35 @@ class TeamTestCase(APITestCase):
         data = {"slug": "team"}
         res = self.client.post(url, data)
         self.assertEqual(res.status_code, 400)
+
+
+class TeamTestCase(APITestCase):
+    def setUp(self):
+        self.user = baker.make("users.user")
+        self.organization = baker.make("organizations_ext.Organization")
+        self.organization.add_user(self.user)
+        self.client.force_login(self.user)
+        self.url = reverse("team-list")
+
+    def test_list(self):
+        team = baker.make("teams.Team", organization=self.organization)
+        other_team = baker.make("teams.Team")
+        res = self.client.get(self.url)
+        self.assertContains(res, team.slug)
+        self.assertNotContains(res, other_team.slug)
+
+    def test_retrieve(self):
+        team = baker.make("teams.Team", organization=self.organization)
+        url = reverse(
+            "team-detail", kwargs={"pk": f"{self.organization.slug}/{team.slug}",},
+        )
+        res = self.client.get(url)
+        self.assertContains(res, team.slug)
+
+    def test_invalid_retrieve(self):
+        team = baker.make("teams.Team")
+        url = reverse(
+            "team-detail", kwargs={"pk": f"{self.organization.slug}/{team.slug}",},
+        )
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 404)

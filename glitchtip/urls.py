@@ -5,6 +5,7 @@ from django.views.generic import TemplateView
 from rest_framework_nested import routers
 from issues.urls import router as issuesRouter
 from projects.urls import router as projectsRouter
+from teams.urls import router as teamsRouter
 from organizations_ext.urls import router as organizationsRouter
 from . import social
 from .views import SettingsView, health
@@ -14,6 +15,7 @@ router = routers.DefaultRouter()
 router.registry.extend(projectsRouter.registry)
 router.registry.extend(issuesRouter.registry)
 router.registry.extend(organizationsRouter.registry)
+router.registry.extend(teamsRouter.registry)
 
 urlpatterns = [
     path("_health/", health),
@@ -22,6 +24,7 @@ urlpatterns = [
     path("api/0/", include("projects.urls")),
     path("api/0/", include("issues.urls")),
     path("api/0/", include("organizations_ext.urls")),
+    path("api/0/", include("teams.urls")),
     path("api/", include("event_store.urls")),
     path("api/settings/", SettingsView.as_view(), name="settings"),
     path("rest-auth/", include("rest_auth.urls")),

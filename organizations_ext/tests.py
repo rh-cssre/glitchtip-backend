@@ -9,7 +9,15 @@ class OrganizationsAPITestCase(APITestCase):
     def setUp(self):
         self.user = baker.make("users.user")
         self.organization = baker.make("organizations_ext.Organization")
+        self.organization.add_user(self.user)
         self.client.force_login(self.user)
+        self.url = reverse("organization-list")
+
+    def test_organizations_list(self):
+        not_my_organization = baker.make("organizations_ext.Organization")
+        res = self.client.get(self.url)
+        self.assertContains(res, self.organization.slug)
+        self.assertNotContains(res, not_my_organization.slug)
 
     def test_organizations_retrieve(self):
         project = baker.make("projects.Project", organization=self.organization)
@@ -19,8 +27,9 @@ class OrganizationsAPITestCase(APITestCase):
         self.assertContains(res, project.name)
 
     def test_organizations_create(self):
-        url = reverse("organization-list")
         data = {"name": "test"}
-        res = self.client.post(url, data)
+        res = self.client.post(self.url, data)
         self.assertContains(res, data["name"], status_code=201)
-        self.assertEqual(OrganizationUser.objects.all().count(), 1)
+        self.assertEqual(
+            OrganizationUser.objects.filter(organization__name=data["name"]).count(), 1
+        )
