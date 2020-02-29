@@ -1,6 +1,6 @@
 from django.shortcuts import reverse
 from rest_framework.test import APITestCase
-from organizations.models import OrganizationUser
+from organizations_ext.models import OrganizationUser
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
 
@@ -8,7 +8,7 @@ from glitchtip import test_utils  # pylint: disable=unused-import
 class OrganizationsAPITestCase(APITestCase):
     def setUp(self):
         self.user = baker.make("users.user")
-        self.organization = baker.make("organizations.Organization")
+        self.organization = baker.make("organizations_ext.Organization")
         self.client.force_login(self.user)
 
     def test_organizations_retrieve(self):

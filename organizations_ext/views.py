@@ -1,5 +1,5 @@
 from rest_framework import viewsets
-from organizations.models import Organization
+from .models import Organization, OrganizationUserRole
 from .serializers.serializers import (
     OrganizationSerializer,
     OrganizationDetailSerializer,
@@ -15,3 +15,8 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         if self.action in ["retrieve"]:
             return OrganizationDetailSerializer
         return super().get_serializer_class()
+
+    def perform_create(self, serializer):
+        """ Create organization with current user as owner """
+        organization = serializer.save()
+        organization.add_user(self.request.user, role=OrganizationUserRole.OWNER)

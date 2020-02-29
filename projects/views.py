@@ -28,6 +28,13 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
         return obj
 
+    def get_queryset(self):
+        return self.queryset.filter(organization__users=self.request.user)
+
+    # def perform_create(self, serializer):
+    # Set org/team
+    # serializer.save(user=self.request.user)
+
 
 class ProjectKeyViewSet(viewsets.ModelViewSet):
     queryset = ProjectKey.objects.all()
@@ -41,5 +48,6 @@ class ProjectKeyViewSet(viewsets.ModelViewSet):
             .filter(
                 project__slug=self.kwargs["project_slug"],
                 project__organization__slug=self.kwargs["organization_slug"],
+                project__organization__users=self.request.user,
             )
         )
