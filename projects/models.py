@@ -5,7 +5,7 @@ from django.conf import settings
 from django.db import models
 from django.utils.text import slugify
 from django_extensions.db.fields import AutoSlugField
-from organizations.models import Organization
+from organizations_ext.models import Organization
 
 
 class Project(models.Model):
@@ -17,7 +17,9 @@ class Project(models.Model):
     slug = AutoSlugField(populate_from=["name", "organization_id"],)
     name = models.CharField(max_length=200)
     organization = models.ForeignKey(
-        "organizations.Organization", on_delete=models.CASCADE, related_name="projects"
+        "organizations_ext.Organization",
+        on_delete=models.CASCADE,
+        related_name="projects",
     )
     created = models.DateTimeField(auto_now_add=True, db_index=True)
     platform = models.CharField(max_length=64, blank=True, null=True)
@@ -29,10 +31,14 @@ class Project(models.Model):
         return self.name
 
     def save(self, *args, **kwargs):
+        first = False
+        if not self.pk:
+            first = True
         if not self.organization_id:  # Temp thing
             self.organization = Organization.objects.get_or_create(name="test org")[0]
         super().save(*args, **kwargs)
-        ProjectKey.objects.create(project=self)
+        if first:
+            ProjectKey.objects.create(project=self)
 
     def slugify_function(self, content):
         """
@@ -56,7 +62,7 @@ class ProjectKey(models.Model):
     data = JSONField(blank=True, null=True)
 
     def __str__(self):
-        return self.public_key
+        return str(self.public_key)
 
     @classmethod
     def from_dsn(cls, dsn):
