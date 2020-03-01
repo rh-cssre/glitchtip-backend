@@ -11,7 +11,7 @@ class ProjectsAPITestCase(APITestCase):
     def setUp(self):
         self.user = baker.make("users.user")
         self.client.force_login(self.user)
-        self.url = "/api/0/projects/"
+        self.url = reverse("projects-list")
 
     def test_projects_api_create(self):
         """ This endpoint can't be used to create """
@@ -58,7 +58,29 @@ class ProjectsAPITestCase(APITestCase):
         self.assertContains(res, project1.name)
         self.assertNotContains(res, project2.name)
 
-        # self.assertEqual(self.client.get(self.url + project1.slug), 404)
+    def test_project_delete(self):
+        organization = baker.make("organizations_ext.Organization")
+        organization.add_user(self.user, OrganizationUserRole.ADMIN)
+        team = baker.make("teams.Team", organization=organization)
+        project = baker.make("projects.Project", organization=organization, team=team)
+
+        url = reverse(
+            "projects-detail", kwargs={"pk": f"{organization.slug}/{project.slug}"}
+        )
+        res = self.client.delete(url)
+        self.assertEqual(res.status_code, 204)
+        self.assertEqual(Project.objects.all().count(), 0)
+
+    def test_project_invalid_delete(self):
+        """ Cannot delete projects that are not in the organization the user is an admin of """
+        organization = baker.make("organizations_ext.Organization")
+        organization.add_user(self.user, OrganizationUserRole.ADMIN)
+        project = baker.make("projects.Project")
+        url = reverse(
+            "projects-detail", kwargs={"pk": f"{organization.slug}/{project.slug}"}
+        )
+        res = self.client.delete(url)
+        self.assertEqual(res.status_code, 404)
 
 
 class TeamProjectsAPITestCase(APITestCase):
