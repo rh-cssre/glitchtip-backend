@@ -6,14 +6,20 @@ from model_bakery import baker
 from event_store.test_data.django_error_factory import template_error
 from event_store.test_data.js_error_factory import throw_error
 from event_store.test_data.csp import mdn_sample_csp
+from organizations_ext.models import OrganizationUserRole
 from issues.models import Event
 
 
 class SentryAPICompatTestCase(APITestCase):
     def setUp(self):
         self.user = baker.make("users.user")
+        self.organization = baker.make("organizations_ext.Organization")
+        self.organization.add_user(self.user, OrganizationUserRole.ADMIN)
+        self.team = baker.make("teams.Team", organization=self.organization)
+        self.team.members.add(self.user)
+        self.project = baker.make("projects.Project", organization=self.organization)
+        self.project.team_set.add(self.team)
         self.client.force_login(self.user)
-        self.project = baker.make("projects.Project")
         key = self.project.projectkey_set.first().public_key
         self.event_store_url = (
             reverse("event_store", args=[self.project.id]) + "?sentry_key=" + key.hex
@@ -76,7 +82,7 @@ class SentryAPICompatTestCase(APITestCase):
             ["env", "headers", "url", "method", "inferredContentType"],
         )
 
-        url = reverse("issue-detail", kwargs={"pk": issue.pk})
+        url = reverse("issues-detail", kwargs={"pk": issue.pk})
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
 
@@ -104,7 +110,7 @@ class SentryAPICompatTestCase(APITestCase):
         )
         self.assertEqual(res.data["metadata"]["function"], data["metadata"]["function"])
 
-        url = reverse("issue-detail", kwargs={"pk": issue.pk})
+        url = reverse("issues-detail", kwargs={"pk": issue.pk})
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
 

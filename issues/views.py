@@ -29,7 +29,15 @@ class IssueViewSet(viewsets.ModelViewSet):
     filterset_fields = ["project"]
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = (
+            super()
+            .get_queryset()
+            .filter(
+                project__organization__users=self.request.user,
+                project__team__members=self.request.user,
+            )
+        )
+
         if "organization_slug" in self.kwargs:
             qs = qs.filter(
                 project__organization__slug=self.kwargs["organization_slug"],
