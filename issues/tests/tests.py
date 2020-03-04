@@ -8,20 +8,33 @@ from issues.models import Issue, EventStatus
 class EventTestCase(APITestCase):
     def setUp(self):
         self.user = baker.make("users.user")
+        self.organization = baker.make("organizations_ext.Organization")
+        self.organization.add_user(self.user, OrganizationUserRole.ADMIN)
+        self.team = baker.make("teams.Team", organization=self.organization)
+        self.team.members.add(self.user)
+        self.project = baker.make("projects.Project", organization=self.organization)
+        self.project.team_set.add(self.team)
         self.client.force_login(self.user)
+        self.url = reverse(
+            "project-events-list",
+            kwargs={
+                "project_pk": f"{self.project.organization.slug}/{self.project.slug}"
+            },
+        )
 
-    def test_project_events(self):
-        project = baker.make("projects.Project")
-        event = baker.make("issues.Event", issue__project=project)
-        url = f"/api/0/projects/{project.organization.slug}/{project.slug}/events/"
-        res = self.client.get(url)
+    def test_project_events_list(self):
+        event = baker.make("issues.Event", issue__project=self.project)
+        not_my_event = baker.make("issues.Event")
+
+        res = self.client.get(self.url)
         self.assertContains(res, event.pk.hex)
+        self.assertNotContains(res, not_my_event.pk.hex)
 
     def test_events_latest(self):
         """
         Should show more recent event with previousEventID of previous/first event
         """
-        event = baker.make("issues.Event")
+        event = baker.make("issues.Event", issue__project=self.project)
         event2 = baker.make("issues.Event", issue=event.issue)
         url = f"/api/0/issues/{event.issue.id}/events/latest/"
         res = self.client.get(url)
@@ -30,13 +43,15 @@ class EventTestCase(APITestCase):
         self.assertEqual(res.data["nextEventID"], None)
 
     def test_next_prev_event(self):
-        issue1 = baker.make("issues.Issue")
-        issue2 = baker.make("issues.Issue")
+        """ Get next and previous event IDs that belong to same issue """
+        issue1 = baker.make("issues.Issue", project=self.project)
+        issue2 = baker.make("issues.Issue", project=self.project)
+        baker.make("issues.Event")
         issue1_event1 = baker.make("issues.Event", issue=issue1)
         issue2_event1 = baker.make("issues.Event", issue=issue2)
         issue1_event2 = baker.make("issues.Event", issue=issue1)
 
-        url = f"/api/0/issues/{issue1.id}/events/latest/"
+        url = reverse("event-issues-latest", args=[issue1.id])
         res = self.client.get(url)
         self.assertContains(res, issue1_event2.pk.hex)
         self.assertEqual(res.data["previousEventID"], issue1_event1.pk.hex)

@@ -80,7 +80,14 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
         return super().get_serializer_class()
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = (
+            super()
+            .get_queryset()
+            .filter(
+                issue__project__organization__users=self.request.user,
+                issue__project__team__members=self.request.user,
+            )
+        )
         if "issue_pk" in self.kwargs:
             qs = qs.filter(issue=self.kwargs["issue_pk"])
         if "organization_slug" in self.kwargs:
