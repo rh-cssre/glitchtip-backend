@@ -140,6 +140,22 @@ class IssuesAPITestCase(APITestCase):
         self.assertEqual(len(res.data), 1)
         self.assertContains(res, issue.id)
 
+    def test_issue_list_filter(self):
+        project1 = self.project
+        project2 = baker.make("projects.Project", organization=self.organization)
+        project2.team_set.add(self.team)
+        project3 = baker.make("projects.Project", organization=self.organization)
+        project3.team_set.add(self.team)
+
+        issue1 = baker.make("issues.Issue", project=project1)
+        issue2 = baker.make("issues.Issue", project=project2)
+        issue3 = baker.make("issues.Issue", project=project3)
+
+        res = self.client.get(self.url + f"?project={project1.id},{project2.id}")
+        self.assertContains(res, issue1.title)
+        self.assertContains(res, issue2.title)
+        self.assertNotContains(res, issue3.title)
+
     def test_filter_is_status(self):
         """ Match sentry's usage of "is" for status filtering """
         resolved_issue = baker.make(

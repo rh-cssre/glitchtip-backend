@@ -8,6 +8,7 @@ from .serializers import (
     EventSerializer,
     EventDetailSerializer,
 )
+from .filters import IssueFilter
 
 
 class IssueViewSet(viewsets.ModelViewSet):
@@ -26,7 +27,7 @@ class IssueViewSet(viewsets.ModelViewSet):
 
     queryset = Issue.objects.all()
     serializer_class = IssueSerializer
-    filterset_fields = ["project"]
+    filter_class = IssueFilter
 
     def get_queryset(self):
         qs = (
