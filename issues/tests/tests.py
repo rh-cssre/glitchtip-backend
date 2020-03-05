@@ -166,6 +166,6 @@ class IssuesAPITestCase(APITestCase):
         )
         res = self.client.get(self.url, {"query": "is:unresolved has:platform"})
         self.assertEqual(len(res.data), 1)
-        self.assertContains(res, unresolved_issue.id)
-        self.assertNotContains(res, resolved_issue.id)
+        self.assertContains(res, unresolved_issue.title)
+        self.assertNotContains(res, resolved_issue.title)
 
