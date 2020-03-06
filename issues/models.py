@@ -56,6 +56,9 @@ class Issue(models.Model):
         choices=EventStatus.choices, default=EventStatus.UNRESOLVED
     )
 
+    class Meta:
+        unique_together = ("title", "culprit", "project", "type")
+
     def event(self):
         return self.event_set.first()
 
