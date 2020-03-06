@@ -151,7 +151,9 @@ class IssuesAPITestCase(APITestCase):
         issue2 = baker.make("issues.Issue", project=project2)
         issue3 = baker.make("issues.Issue", project=project3)
 
-        res = self.client.get(self.url + f"?project={project1.id},{project2.id}")
+        res = self.client.get(
+            self.url + f"?project={project1.id}&project={project2.id}"
+        )
         self.assertContains(res, issue1.title)
         self.assertContains(res, issue2.title)
         self.assertNotContains(res, issue3.title)

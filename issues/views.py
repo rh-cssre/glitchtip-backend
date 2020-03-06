@@ -27,7 +27,7 @@ class IssueViewSet(viewsets.ModelViewSet):
 
     queryset = Issue.objects.all()
     serializer_class = IssueSerializer
-    filter_class = IssueFilter
+    filterset_class = IssueFilter
 
     def get_queryset(self):
         qs = (

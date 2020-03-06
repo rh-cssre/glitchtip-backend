@@ -4,8 +4,7 @@ from .models import Issue
 
 class ListFilter(filters.Filter):
     """
-    Filter that accepts multiple
-    https://stackoverflow.com/a/31086033/443457
+    Filter that accepts multiple in format of ?foo=1&foo=2
     """
 
     def filter(self, qs, value):
@@ -13,8 +12,9 @@ class ListFilter(filters.Filter):
             return qs
 
         self.lookup_expr = "in"
-        values = value.split(",")
-        return super(ListFilter, self).filter(qs, values)
+        # getlist is necessary to get all values from the query dict
+        values = self.parent.data.getlist(self.field_name)
+        return super().filter(qs, values)
 
 
 class IssueFilter(filters.FilterSet):
