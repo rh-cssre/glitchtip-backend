@@ -89,7 +89,7 @@ class ProjectKey(models.Model):
 
     def get_dsn(self):
         key = self.public_key_hex
-        urlparts = settings.GLITCHTIP_ENDPOINT
+        urlparts = settings.GLITCHTIP_DOMAIN
 
         # If we do not have a scheme or domain/hostname, dsn is never valid
         if not urlparts.netloc or not urlparts.scheme:

@@ -92,7 +92,6 @@ INSTALLED_APPS = [
     "rest_auth",
     "rest_auth.registration",
     "storages",
-    # "organizations",
     "organizations_ext",
     "event_store",
     "issues",
