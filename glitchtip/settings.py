@@ -16,6 +16,7 @@ import sentry_sdk
 from sentry_sdk.integrations.django import DjangoIntegration
 
 env = environ.Env(
+    ALLOWED_HOSTS=(list, ["*"]),
     DEBUG=(bool, True),
     DEBUG_TOOLBAR=(bool, False),
     AWS_ACCESS_KEY_ID=(str, None),
@@ -44,8 +45,10 @@ SECRET_KEY = env("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
 
-ALLOWED_HOSTS = ["*"]
-GLITCHTIP_ENDPOINT = env.url("GLITCHTIP_ENDPOINT", default="http://localhost:8000")
+ALLOWED_HOSTS = env("ALLOWED_HOSTS")
+
+# Used in email and DSN generation. Set to full domain such as https://glitchtip.example.com
+GLITCHTIP_DOMAIN = env.url("GLITCHTIP_ENDPOINT", default="http://localhost:8000")
 
 # For development purposes only, prints out inbound event store json
 EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
@@ -102,6 +105,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    "csp.middleware.CSPMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "debug_toolbar.middleware.DebugToolbarMiddleware",
@@ -135,9 +139,7 @@ WSGI_APPLICATION = "glitchtip.wsgi.application"
 
 CORS_ORIGIN_ALLOW_ALL = env.bool("CORS_ORIGIN_ALLOW_ALL", True)
 CORS_ORIGIN_WHITELIST = env.tuple("CORS_ORIGIN_WHITELIST", str, default=())
-X_FRAME_OPTIONS = "DENY"
 SECURE_BROWSER_XSS_FILTER = True
-SECURE_CONTENT_TYPE_NOSNIFF = True
 
 ENVIRONMENT = env.str("ENVIRONMENT", None)
 GLITCHTIP_VERSION = env.str("GLITCHTIP_VERSION", "dev")
