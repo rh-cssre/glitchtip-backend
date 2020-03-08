@@ -46,9 +46,13 @@ SECRET_KEY = env("SECRET_KEY")
 DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
+# Necessary for kubernetes health checks
+POD_IP = env.str("POD_IP", default=None)
+if POD_IP:
+    ALLOWED_HOSTS.append(POD_IP)
 
 # Used in email and DSN generation. Set to full domain such as https://glitchtip.example.com
-GLITCHTIP_DOMAIN = env.url("GLITCHTIP_ENDPOINT", default="http://localhost:8000")
+GLITCHTIP_DOMAIN = env.url("GLITCHTIP_DOMAIN", default="http://localhost:8000")
 
 # For development purposes only, prints out inbound event store json
 EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
