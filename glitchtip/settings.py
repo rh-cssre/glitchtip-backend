@@ -143,7 +143,7 @@ WSGI_APPLICATION = "glitchtip.wsgi.application"
 CORS_ORIGIN_ALLOW_ALL = env.bool("CORS_ORIGIN_ALLOW_ALL", True)
 CORS_ORIGIN_WHITELIST = env.tuple("CORS_ORIGIN_WHITELIST", str, default=())
 SECURE_BROWSER_XSS_FILTER = True
-CSP_STYLE_SRC = ["'self'", "'unsafe-inline'"]
+CSP_STYLE_SRC = ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]
 CSP_STYLE_SRC_ELEM = ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]
 CSP_FONT_SRC = ["'self'", "https://fonts.gstatic.com"]
 SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", 0)
