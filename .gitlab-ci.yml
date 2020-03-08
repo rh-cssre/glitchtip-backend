@@ -3,8 +3,8 @@ variables:
   COMPOSE: docker-compose -p glitchtip
   IMAGE_NAME: registry.gitlab.com/glitchtip/glitchtip-backend
   CONTAINER_TEST_IMAGE: registry.gitlab.com/glitchtip/glitchtip-backend:$CI_BUILD_REF_NAME
-  POETRY_VERSION: 1.0.0
-  POETRY_VIRTUALENVS_CREATE: 'false'
+  POETRY_VERSION: 1.0.5
+  PIP_DISABLE_PIP_VERSION_CHECK: "on"
   POSTGRES_HOST_AUTH_METHOD: "trust"
 
 test:
@@ -13,6 +13,10 @@ test:
     SECRET_KEY: testing
   services:
     - postgres
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - .cache/pip
   script:
     - apt-get update && apt-get install -y gcc
     - pip install "poetry==$POETRY_VERSION"
