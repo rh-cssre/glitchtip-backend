@@ -1,12 +1,15 @@
 from urllib.parse import urlparse
-from django.utils.encoding import force_text
 from rest_framework import serializers
 from sentry.eventtypes.error import ErrorEvent
+from sentry.eventtypes.base import DefaultEvent
 from issues.models import EventType, Event, Issue
-from sentry.culprit import generate_culprit
 
 
 class StoreDefaultSerializer(serializers.Serializer):
+    """
+    Default serializer. Used as both a base class and for default error types
+    """
+
     type = EventType.DEFAULT
     breadcrumbs = serializers.JSONField()
     contexts = serializers.JSONField(required=False)
@@ -16,52 +19,43 @@ class StoreDefaultSerializer(serializers.Serializer):
     message = serializers.CharField(required=False)
     platform = serializers.CharField()
     release = serializers.CharField(required=False)
+    request = serializers.JSONField(required=False)
     sdk = serializers.JSONField()
     timestamp = serializers.DateTimeField(required=False)
+    transaction = serializers.CharField(required=False)
     modules = serializers.JSONField(required=False)
 
-    def create(self, project, data):
-        error = ErrorEvent()
-
-
-class StoreErrorSerializer(StoreDefaultSerializer):
-    type = EventType.ERROR
-    exception = serializers.JSONField(required=False)
-    request = serializers.JSONField(required=False)
-    transaction = serializers.CharField(required=False)
-    timestamp = serializers.DateTimeField(required=False)
+    def get_eventtype(self):
+        """ Get event type class from self.type """
+        if self.type is EventType.DEFAULT:
+            return DefaultEvent()
+        if self.type is EventType.ERROR:
+            return ErrorEvent()
 
     def create(self, project, data):
-        error = ErrorEvent()
-        metadata = error.get_metadata(data)
-        title = error.get_title(metadata)
+        eventtype = self.get_eventtype()
+        metadata = eventtype.get_metadata(data)
+        title = eventtype.get_title(metadata)
+        culprit = eventtype.get_location(data)
         issue, _ = Issue.objects.get_or_create(
             title=title,
-            culprit=error.get_location(metadata),
+            culprit=culprit,
             project=project,
-            type=EventType.ERROR,
+            type=self.type,
             defaults={"metadata": metadata},
         )
-
-        # level_tag, _ = EventTag.objects.get_or_create(key="level", value=data["level"])
-        # release tag
-        # entries = []
-        # breadcrumbs = data.get("breadcrumbs")
-        # if breadcrumbs:
-        #     entries.append({"type": "breadcrumbs", "data": {"values": breadcrumbs}})
         request = data.get("request")
         headers = request.get("headers")
         if headers:
             request["inferred_content_type"] = headers.get("Content-Type")
             request["headers"] = sorted([pair for pair in headers.items()])
-
         params = {
             "event_id": data["event_id"],
             "issue": issue,
             "timestamp": data.get("timestamp"),
             "data": {
                 "contexts": data.get("contexts"),
-                "culprit": self.get_culprit(data),
+                "culprit": culprit,
                 "exception": data.get("exception"),
                 "metadata": metadata,
                 "packages": data.get("modules"),
@@ -69,27 +63,26 @@ class StoreErrorSerializer(StoreDefaultSerializer):
                 "request": request,
                 "sdk": data["sdk"],
                 "title": title,
+                "type": self.type.label,
             },
         }
-        # if data.get("context"):
-        #     params["context"] = data["extra"]
-
         event = Event.objects.create(**params)
         return event
-        # event.tags.add(level_tag)
 
-    def get_culprit(self, data):
-        """Helper to calculate the default culprit"""
-        return force_text(
-            data.get("culprit")
-            or data.get("transaction")
-            or generate_culprit(data)
-            or ""
-        )
+
+class StoreErrorSerializer(StoreDefaultSerializer):
+    """ Primary difference is the presense of exception attribute """
+
+    type = EventType.ERROR
+    exception = serializers.JSONField(required=False)
 
 
 class StoreCSPReportSerializer(serializers.Serializer):
-    """ Very different format from others """
+    """
+    CSP Report Serializer
+    Very different format from others Store serializers.
+    Does not extend base class due to differences.
+    """
 
     type = EventType.CSP
 

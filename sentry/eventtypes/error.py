@@ -1,3 +1,5 @@
+from django.utils.encoding import force_text
+from sentry.culprit import generate_culprit
 from sentry.utils.safe import truncatechars, get_path, trim
 from sentry.stacktraces.processing import get_crash_frame_from_event_data
 from sentry.stacktraces.functions import get_function_name_for_frame
@@ -49,5 +51,10 @@ class ErrorEvent(BaseEvent):
             return ty
         return u"{}: {}".format(ty, truncatechars(metadata["value"].splitlines()[0]))
 
-    def get_location(self, metadata):
-        return metadata.get("filename")
+    def get_location(self, data):
+        return force_text(
+            data.get("culprit")
+            or data.get("transaction")
+            or generate_culprit(data)
+            or ""
+        )

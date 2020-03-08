@@ -3,7 +3,7 @@ from typing import List, Dict
 from django.urls import reverse
 from rest_framework.test import APITestCase
 from model_bakery import baker
-from event_store.test_data.django_error_factory import template_error
+from event_store.test_data.django_error_factory import template_error, message
 from event_store.test_data.js_error_factory import throw_error
 from event_store.test_data.csp import mdn_sample_csp
 from organizations_ext.models import OrganizationUserRole
@@ -39,12 +39,21 @@ class SentryAPICompatTestCase(APITestCase):
         with open(path) as json_file:
             return json.load(json_file)
 
+    def get_project_events_detail(self, event_id):
+        return reverse(
+            "project-events-detail",
+            kwargs={
+                "project_pk": f"{self.project.organization.slug}/{self.project.slug}",
+                "pk": event_id,
+            },
+        )
+
     def test_template_error(self):
         res = self.client.post(self.event_store_url, template_error, format="json")
         self.assertEqual(res.status_code, 200)
 
         event_id = res.data["id"]
-        url = f"/api/0/projects/{self.project.organization.slug}/{self.project.slug}/events/{event_id}/"
+        url = self.get_project_events_detail(event_id)
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
         issue = Event.objects.get(event_id=event_id).issue
@@ -96,7 +105,7 @@ class SentryAPICompatTestCase(APITestCase):
         self.assertEqual(res.status_code, 200)
 
         event_id = res.data["id"]
-        url = f"/api/0/projects/{self.project.organization.slug}/{self.project.slug}/events/{event_id}/"
+        url = self.get_project_events_detail(event_id)
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
         issue = Event.objects.get(event_id=event_id).issue
@@ -124,7 +133,7 @@ class SentryAPICompatTestCase(APITestCase):
         self.assertEqual(res.status_code, 200)
 
         event_id = res.data["id"]
-        url = f"/api/0/projects/{self.project.organization.slug}/{self.project.slug}/events/{event_id}/"
+        url = self.get_project_events_detail(event_id)
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
         data = self.get_json_data("event_store/test_data/csp_event.json")
@@ -132,3 +141,18 @@ class SentryAPICompatTestCase(APITestCase):
         self.assertEqual(res.data["entries"][0], data["entries"][0])
         self.assertEqual(res.data["entries"][1], data["entries"][1])
 
+    def test_message_event(self):
+        """ A generic message made with the Sentry SDK. Generally has less data than exceptions. """
+        res = self.client.post(self.event_store_url, message, format="json")
+        self.assertEqual(res.status_code, 200)
+
+        event_id = res.data["id"]
+        url = self.get_project_events_detail(event_id)
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        data = self.get_json_data("event_store/test_data/django_message_event.json")
+        self.assertCompareData(
+            res.data,
+            data,
+            ["title", "culprit", "type", "metadata", "platform", "packages"],
+        )
