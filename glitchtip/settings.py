@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/dev/ref/settings/
 """
 
 import os
+import sys
 import environ
 import sentry_sdk
 from sentry_sdk.integrations.django import DjangoIntegration
@@ -250,3 +251,37 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 50,
     "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
 }
+
+
+def organization_request_callback(request):
+    """ Gets an organization instance from the id passed through ``request``"""
+    user = request.user
+    if user:
+        return user.organizations_ext_organization.filter(
+            owner__organization_user__user=user
+        ).first()
+
+
+# Is running unit test
+TESTING = len(sys.argv) > 1 and sys.argv[1] == "test"
+
+DJSTRIPE_SUBSCRIBER_MODEL = "organizations_ext.Organization"
+DJSTRIPE_SUBSCRIBER_MODEL_REQUEST_CALLBACK = organization_request_callback
+DJSTRIPE_USE_NATIVE_JSONFIELD = True
+BILLING_ENABLED = False
+STRIPE_LIVE_MODE = False
+if env.str("STRIPE_TEST_PUBLIC_KEY", None):
+    BILLING_ENABLED = True
+    INSTALLED_APPS.append("djstripe")
+    INSTALLED_APPS.append("djstripe_ext")
+    STRIPE_TEST_PUBLIC_KEY = env.str("STRIPE_TEST_PUBLIC_KEY", None)
+    STRIPE_TEST_SECRET_KEY = env.str("STRIPE_TEST_SECRET_KEY", None)
+    DJSTRIPE_WEBHOOK_SECRET = env.str("DJSTRIPE_WEBHOOK_SECRET", None)
+elif TESTING:
+    # Must run tests with djstripe enabled
+    BILLING_ENABLED = True
+    INSTALLED_APPS.append("djstripe")
+    INSTALLED_APPS.append("djstripe_ext")
+    STRIPE_TEST_PUBLIC_KEY = "fake"
+    STRIPE_TEST_SECRET_KEY = "sk_test_fake"
+    DJSTRIPE_WEBHOOK_SECRET = "whsec_fake"

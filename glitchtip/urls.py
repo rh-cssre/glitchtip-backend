@@ -17,6 +17,11 @@ router.registry.extend(issuesRouter.registry)
 router.registry.extend(organizationsRouter.registry)
 router.registry.extend(teamsRouter.registry)
 
+if settings.BILLING_ENABLED:
+    from djstripe_ext.urls import router as djstripeRouter
+
+    router.registry.extend(djstripeRouter.registry)
+
 urlpatterns = [
     path("_health/", health),
     path("admin/", admin.site.urls),
@@ -64,6 +69,8 @@ urlpatterns = [
         TemplateView.as_view(template_name="index.html"),
     ),
 ]
+if settings.BILLING_ENABLED:
+    urlpatterns.append(path("stripe/", include("djstripe.urls", namespace="djstripe")))
 if settings.DEBUG:
     import debug_toolbar
 

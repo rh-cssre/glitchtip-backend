@@ -91,7 +91,7 @@ class SentryAPICompatTestCase(APITestCase):
             ["env", "headers", "url", "method", "inferredContentType"],
         )
 
-        url = reverse("issues-detail", kwargs={"pk": issue.pk})
+        url = reverse("issue-detail", kwargs={"pk": issue.pk})
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
 
@@ -119,7 +119,7 @@ class SentryAPICompatTestCase(APITestCase):
         )
         self.assertEqual(res.data["metadata"]["function"], data["metadata"]["function"])
 
-        url = reverse("issues-detail", kwargs={"pk": issue.pk})
+        url = reverse("issue-detail", kwargs={"pk": issue.pk})
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
 
