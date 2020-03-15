@@ -4,7 +4,7 @@ from glitchtip.routers import BulkSimpleRouter
 from .views import IssueViewSet, EventViewSet
 
 router = BulkSimpleRouter()
-router.register(r"issues", IssueViewSet, basename="issues")
+router.register(r"issues", IssueViewSet)
 
 issues_router = routers.NestedSimpleRouter(router, r"issues", lookup="issue")
 issues_router.register(r"events", EventViewSet, basename="event-issues")

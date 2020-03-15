@@ -1,8 +1,40 @@
+from django.conf import settings
 from django.shortcuts import reverse
+from django.test import TestCase, RequestFactory
 from rest_framework.test import APITestCase
 from organizations_ext.models import OrganizationUser
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
+
+
+class OrganizationModelTestCase(TestCase):
+    def test_email(self):
+        """ Billing email address """
+        user = baker.make("users.user")
+        organization = baker.make("organizations_ext.Organization")
+        organization.add_user(user)
+
+        # Org 1 has two users and only one of which is an owner
+        user2 = baker.make("users.user")
+        organization2 = baker.make("organizations_ext.Organization")
+        organization2.add_user(user2)
+        organization.add_user(user2)
+
+        self.assertEqual(organization.email, user.email)
+        self.assertEqual(organization.users.count(), 2)
+        self.assertEqual(organization.owners.count(), 1)
+
+    def test_organization_request_callback(self):
+        user = baker.make("users.user")
+        organization = baker.make("organizations_ext.Organization")
+        organization.add_user(user)
+
+        factory = RequestFactory()
+        request = factory.get("/")
+        request.user = user
+
+        callback = settings.DJSTRIPE_SUBSCRIBER_MODEL_REQUEST_CALLBACK
+        self.assertEqual(callback(request), organization)
 
 
 class OrganizationsAPITestCase(APITestCase):

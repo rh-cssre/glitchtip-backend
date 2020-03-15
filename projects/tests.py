@@ -11,7 +11,7 @@ class ProjectsAPITestCase(APITestCase):
     def setUp(self):
         self.user = baker.make("users.user")
         self.client.force_login(self.user)
-        self.url = reverse("projects-list")
+        self.url = reverse("project-list")
 
     def test_projects_api_create(self):
         """ This endpoint can't be used to create """
@@ -65,7 +65,7 @@ class ProjectsAPITestCase(APITestCase):
         project = baker.make("projects.Project", organization=organization, team=team)
 
         url = reverse(
-            "projects-detail", kwargs={"pk": f"{organization.slug}/{project.slug}"}
+            "project-detail", kwargs={"pk": f"{organization.slug}/{project.slug}"}
         )
         res = self.client.delete(url)
         self.assertEqual(res.status_code, 204)
@@ -77,7 +77,7 @@ class ProjectsAPITestCase(APITestCase):
         organization.add_user(self.user, OrganizationUserRole.ADMIN)
         project = baker.make("projects.Project")
         url = reverse(
-            "projects-detail", kwargs={"pk": f"{organization.slug}/{project.slug}"}
+            "project-detail", kwargs={"pk": f"{organization.slug}/{project.slug}"}
         )
         res = self.client.delete(url)
         self.assertEqual(res.status_code, 404)

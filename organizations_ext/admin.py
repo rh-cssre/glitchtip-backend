@@ -1,8 +1,8 @@
 from django.contrib import admin
 from organizations.base_admin import (
-    BaseOwnerInline,
     BaseOrganizationAdmin,
     BaseOrganizationUserAdmin,
+    BaseOwnerInline,
 )
 from .models import Organization, OrganizationUser, OrganizationOwner
 
@@ -11,8 +11,14 @@ class OwnerInline(BaseOwnerInline):
     model = OrganizationOwner
 
 
+class OrganizationUserInline(admin.StackedInline):
+    raw_id_fields = ("user",)
+    model = OrganizationUser
+    extra = 0
+
+
 class OrganizationAdmin(BaseOrganizationAdmin):
-    inlines = [OwnerInline]
+    inlines = [OrganizationUserInline, OwnerInline]
 
 
 class OrganizationUserAdmin(BaseOrganizationUserAdmin):

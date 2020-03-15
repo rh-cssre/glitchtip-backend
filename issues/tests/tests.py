@@ -67,7 +67,7 @@ class IssuesAPITestCase(APITestCase):
         self.project = baker.make("projects.Project", organization=self.organization)
         self.project.team_set.add(self.team)
         self.client.force_login(self.user)
-        self.url = reverse("issues-list")
+        self.url = reverse("issue-list")
 
     def test_issue_list(self):
         issue = baker.make("issues.Issue", project=self.project)
@@ -81,11 +81,11 @@ class IssuesAPITestCase(APITestCase):
         issue = baker.make("issues.Issue", project=self.project)
         not_my_issue = baker.make("issues.Issue")
 
-        url = reverse("issues-detail", args=[issue.id])
+        url = reverse("issue-detail", args=[issue.id])
         res = self.client.get(url)
         self.assertContains(res, issue.title)
 
-        url = reverse("issues-detail", args=[not_my_issue.id])
+        url = reverse("issue-detail", args=[not_my_issue.id])
         res = self.client.get(url)
         self.assertEqual(res.status_code, 404)
 
@@ -93,11 +93,11 @@ class IssuesAPITestCase(APITestCase):
         issue = baker.make("issues.Issue", project=self.project)
         not_my_issue = baker.make("issues.Issue")
 
-        url = reverse("issues-detail", args=[issue.id])
+        url = reverse("issue-detail", args=[issue.id])
         res = self.client.delete(url)
         self.assertEqual(res.status_code, 204)
 
-        url = reverse("issues-detail", args=[not_my_issue.id])
+        url = reverse("issue-detail", args=[not_my_issue.id])
         res = self.client.delete(url)
         self.assertEqual(res.status_code, 404)
 
@@ -106,7 +106,7 @@ class IssuesAPITestCase(APITestCase):
     #     issue = baker.make("issues.Issue", project=self.project)
     #     not_my_issue = baker.make("issues.Issue")
 
-    #     url = reverse("issues-detail", args=[issue.id])
+    #     url = reverse("issue-detail", args=[issue.id])
     #     status_to_set = EventStatus.RESOLVED
     #     data = {"status": status_to_set.label}
     #     res = self.client.put(url, data)
@@ -114,7 +114,7 @@ class IssuesAPITestCase(APITestCase):
     #     issue = Issue.objects.all().first()
     #     self.assertEqual(issue.status, status_to_set)
 
-    #     url = reverse("issues-detail", args=[not_my_issue.id])
+    #     url = reverse("issue-detail", args=[not_my_issue.id])
     #     res = self.client.put(url, data)
     #     self.assertEqual(res.status_code, 404)
 

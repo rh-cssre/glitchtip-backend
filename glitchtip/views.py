@@ -12,7 +12,8 @@ class SettingsView(APIView):
 
     def get(self, request, format=None):
         social_auth = settings.ENABLE_SOCIAL_AUTH
-        return Response({"socialAuth": social_auth})
+        billing_enabled = settings.BILLING_ENABLED
+        return Response({"socialAuth": social_auth, "billingEnabled": billing_enabled})
 
 
 def health(request):

@@ -14,7 +14,7 @@ class OrganizationUserRole(models.IntegerChoices):
     MEMBER = 0, "Member"
     ADMIN = 1, "Admin"
     MANAGER = 2, "Manager"
-    OWNER = 3, "Owner"
+    OWNER = 3, "Owner"  # Many users can be owner but only one primary owner
 
 
 class Organization(SharedBaseModel, OrganizationBase):
@@ -47,10 +47,22 @@ class Organization(SharedBaseModel, OrganizationBase):
         user_added.send(sender=self, user=user)
         return org_user
 
+    @property
+    def owners(self):
+        return self.users.filter(
+            organizations_ext_organizationuser__role=OrganizationUserRole.OWNER
+        )
+
+    @property
+    def email(self):
+        """ Used to identify billing contact for stripe. """
+        billing_contact = self.owner.organization_user.user
+        return billing_contact.email
+
 
 class OrganizationUser(SharedBaseModel, OrganizationUserBase):
     role = models.PositiveSmallIntegerField(choices=OrganizationUserRole.choices)
 
 
 class OrganizationOwner(OrganizationOwnerBase):
-    pass
+    """ Only usage is for billing contact currently """
