@@ -11,32 +11,46 @@ class Command(BaseCommand):
     help = "Create sample issues and events for dev and demonstration purposes"
 
     def add_arguments(self, parser):
-        parser.add_argument("quantity", nargs="+", type=int)
+        parser.add_argument("quantity", nargs="?", type=int)
         parser.add_argument(
-            "--include_real", action="store_true", help="Include real sample events",
+            "--only-real", action="store_true", help="Only include real sample events",
         )
+        parser.add_argument(
+            "--only-fake",
+            action="store_true",
+            help="Only include faked generated events",
+        )
+
+    def generate_real_event(self, project):
+        """ Generate an event based on real sample data """
+        data = event_generator.generate_random_event()
+        serializer = EventStoreAPIView().get_serializer_class(data)(data=data)
+        serializer.is_valid()
+        serializer.create(project, serializer.data)
 
     def handle(self, *args, **options):
         project = Project.objects.first()
         if not project:
             project = baker.make("projects.Project")
-        quantity = options["quantity"][0]
+        if options["quantity"] is None:
+            options["quantity"] = 1
+        quantity = options["quantity"]
 
-        if options["include_real"]:
+        only_real = options["only_real"]
+        only_fake = options["only_fake"]
+
+        if only_real:
+            for _ in range(quantity):
+                self.generate_real_event(project)
+        elif only_fake:
+            baker.make("issues.Event", issue__project=project, _quantity=quantity)
+        else:
             for _ in range(quantity):
                 if random.choice([0, 1]):
                     baker.make("issues.Event", issue__project=project)
                 else:
-                    data = event_generator.generate_random_event()
-                    serializer = EventStoreAPIView().get_serializer_class(data)(
-                        data=data
-                    )
-                    serializer.is_valid()
-                    serializer.create(project, serializer.data)
-        else:
-            baker.make("issues.Event", issue__project=project, _quantity=quantity)
+                    self.generate_real_event(project)
 
         self.stdout.write(
             self.style.SUCCESS('Successfully created "%s" events' % quantity)
         )
-
