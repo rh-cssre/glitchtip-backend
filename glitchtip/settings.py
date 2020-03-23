@@ -58,7 +58,7 @@ GLITCHTIP_DOMAIN = env.url("GLITCHTIP_DOMAIN", default="http://localhost:8000")
 # For development purposes only, prints out inbound event store json
 EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
 
-# GlitchTip can track GlichTip's own errors.
+# GlitchTip can track GlitchTip's own errors.
 # If enabling this, use a different server to avoid infinite loops.
 sentry_sdk.init(
     dsn=env.str("SENTRY_DSN", None), integrations=[DjangoIntegration()],
@@ -269,13 +269,15 @@ DJSTRIPE_SUBSCRIBER_MODEL = "organizations_ext.Organization"
 DJSTRIPE_SUBSCRIBER_MODEL_REQUEST_CALLBACK = organization_request_callback
 DJSTRIPE_USE_NATIVE_JSONFIELD = True
 BILLING_ENABLED = False
-STRIPE_LIVE_MODE = False
-if env.str("STRIPE_TEST_PUBLIC_KEY", None):
+STRIPE_LIVE_MODE = env.bool("STRIPE_LIVE_MODE", False)
+if env.str("STRIPE_TEST_PUBLIC_KEY", None) or env.str("STRIPE_LIVE_PUBLIC_KEY", None):
     BILLING_ENABLED = True
     INSTALLED_APPS.append("djstripe")
     INSTALLED_APPS.append("djstripe_ext")
     STRIPE_TEST_PUBLIC_KEY = env.str("STRIPE_TEST_PUBLIC_KEY", None)
     STRIPE_TEST_SECRET_KEY = env.str("STRIPE_TEST_SECRET_KEY", None)
+    STRIPE_LIVE_PUBLIC_KEY = env.str("STRIPE_LIVE_PUBLIC_KEY", None)
+    STRIPE_LIVE_SECRET_KEY = env.str("STRIPE_LIVE_SECRET_KEY", None)
     DJSTRIPE_WEBHOOK_SECRET = env.str("DJSTRIPE_WEBHOOK_SECRET", None)
 elif TESTING:
     # Must run tests with djstripe enabled
