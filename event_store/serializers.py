@@ -45,10 +45,11 @@ class StoreDefaultSerializer(serializers.Serializer):
             defaults={"metadata": metadata},
         )
         request = data.get("request")
-        headers = request.get("headers")
-        if headers:
-            request["inferred_content_type"] = headers.get("Content-Type")
-            request["headers"] = sorted([pair for pair in headers.items()])
+        if request:
+            headers = request.get("headers")
+            if headers:
+                request["inferred_content_type"] = headers.get("Content-Type")
+                request["headers"] = sorted([pair for pair in headers.items()])
         params = {
             "event_id": data["event_id"],
             "issue": issue,
