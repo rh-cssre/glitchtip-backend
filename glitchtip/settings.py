@@ -253,6 +253,16 @@ REST_FRAMEWORK = {
 }
 
 
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"null": {"class": "logging.NullHandler",},},
+    "loggers": {
+        "django.security.DisallowedHost": {"handlers": ["null"], "propagate": False,},
+    },
+}
+
+
 def organization_request_callback(request):
     """ Gets an organization instance from the id passed through ``request``"""
     user = request.user
