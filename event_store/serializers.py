@@ -1,4 +1,5 @@
 from urllib.parse import urlparse
+from django.db import transaction
 from rest_framework import serializers
 from sentry.eventtypes.error import ErrorEvent
 from sentry.eventtypes.base import DefaultEvent
@@ -37,37 +38,38 @@ class StoreDefaultSerializer(serializers.Serializer):
         metadata = eventtype.get_metadata(data)
         title = eventtype.get_title(metadata)
         culprit = eventtype.get_location(data)
-        issue, _ = Issue.objects.get_or_create(
-            title=title,
-            culprit=culprit,
-            project=project,
-            type=self.type,
-            defaults={"metadata": metadata},
-        )
         request = data.get("request")
         if request:
             headers = request.get("headers")
             if headers:
                 request["inferred_content_type"] = headers.get("Content-Type")
                 request["headers"] = sorted([pair for pair in headers.items()])
-        params = {
-            "event_id": data["event_id"],
-            "issue": issue,
-            "timestamp": data.get("timestamp"),
-            "data": {
-                "contexts": data.get("contexts"),
-                "culprit": culprit,
-                "exception": data.get("exception"),
-                "metadata": metadata,
-                "packages": data.get("modules"),
-                "platform": data["platform"],
-                "request": request,
-                "sdk": data["sdk"],
-                "title": title,
-                "type": self.type.label,
-            },
-        }
-        event = Event.objects.create(**params)
+        with transaction.atomic():
+            issue, _ = Issue.objects.get_or_create(
+                title=title,
+                culprit=culprit,
+                project=project,
+                type=self.type,
+                defaults={"metadata": metadata},
+            )
+            params = {
+                "event_id": data["event_id"],
+                "issue": issue,
+                "timestamp": data.get("timestamp"),
+                "data": {
+                    "contexts": data.get("contexts"),
+                    "culprit": culprit,
+                    "exception": data.get("exception"),
+                    "metadata": metadata,
+                    "packages": data.get("modules"),
+                    "platform": data["platform"],
+                    "request": request,
+                    "sdk": data["sdk"],
+                    "title": title,
+                    "type": self.type.label,
+                },
+            }
+            event = Event.objects.create(**params)
         return event
 
 
