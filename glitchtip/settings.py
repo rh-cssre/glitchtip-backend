@@ -58,10 +58,22 @@ GLITCHTIP_DOMAIN = env.url("GLITCHTIP_DOMAIN", default="http://localhost:8000")
 # For development purposes only, prints out inbound event store json
 EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
 
+
 # GlitchTip can track GlitchTip's own errors.
 # If enabling this, use a different server to avoid infinite loops.
+def before_send(event, hint):
+    """Don't log django.DisallowedHost errors in Sentry."""
+    if "log_record" in hint:
+        if hint["log_record"].name == "django.security.DisallowedHost":
+            return None
+
+    return event
+
+
 sentry_sdk.init(
-    dsn=env.str("SENTRY_DSN", None), integrations=[DjangoIntegration()],
+    dsn=env.str("SENTRY_DSN", None),
+    integrations=[DjangoIntegration()],
+    before_send=before_send,
 )
 
 
