@@ -37,7 +37,17 @@ class SubscriptionAPITestCase(APITestCase):
     def test_detail(self):
         customer = baker.make("djstripe.Customer", subscriber=self.organization)
         subscription = baker.make(
-            "djstripe.Subscription", customer=customer, livemode=False
+            "djstripe.Subscription",
+            customer=customer,
+            livemode=False,
+            created="2020-01-02",
+        )
+        # Should only get most recent
+        baker.make(
+            "djstripe.Subscription",
+            customer=customer,
+            livemode=False,
+            created="2020-01-01",
         )
         baker.make("djstripe.Subscription")
         url = reverse("subscription-detail", args=[self.organization.slug])
