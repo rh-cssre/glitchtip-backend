@@ -13,7 +13,7 @@ class UserManager(BaseUserManager):
     instead of usernames. The default that's used is "UserManager"
     """
 
-    def _create_user(self, email, password, **extra_fields):
+    def create_user(self, email, password, **extra_fields):
         """
         Creates and saves a User with the given email and password.
         """

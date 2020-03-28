@@ -3,6 +3,7 @@ x-environment: &default-environment
   DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
   SECRET_KEY: change_me
   ENABLE_SOCIAL_AUTH: "true"
+  ENABLE_TEST_API: "true"
 x-depends_on: &default-depends_on
   - postgres
   - redis

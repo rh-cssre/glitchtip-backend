@@ -13,6 +13,7 @@ test:
   image: python:3.8-slim
   variables:
     SECRET_KEY: testing
+    ENABLE_TEST_API: "true"
   services:
     - postgres
   cache:
