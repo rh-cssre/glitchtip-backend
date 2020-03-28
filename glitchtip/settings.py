@@ -46,6 +46,11 @@ SECRET_KEY = env("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
 
+# Enable only for running end to end testing. Debug must be True to use.
+ENABLE_TEST_API = env.bool("ENABLE_TEST_API", False)
+if DEBUG is False:
+    ENABLE_TEST_API = False
+
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 # Necessary for kubernetes health checks
 POD_IP = env.str("POD_IP", default=None)

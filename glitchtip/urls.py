@@ -69,8 +69,13 @@ urlpatterns = [
         TemplateView.as_view(template_name="index.html"),
     ),
 ]
+
 if settings.BILLING_ENABLED:
     urlpatterns.append(path("stripe/", include("djstripe.urls", namespace="djstripe")))
+
+if settings.ENABLE_TEST_API:
+    urlpatterns.append(path("api/test/", include("test_api.urls")))
+
 if settings.DEBUG:
     import debug_toolbar
 
@@ -79,4 +84,3 @@ if settings.DEBUG:
         # For django versions before 2.0:
         # url(r'^__debug__/', include(debug_toolbar.urls)),
     ] + urlpatterns
-
