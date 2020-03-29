@@ -251,6 +251,9 @@ ACCOUNT_AUTHENTICATION_METHOD = "email"
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+REST_AUTH_SERIALIZERS = {
+    "USER_DETAILS_SERIALIZER": "users.serializers.UserDetailsSerializer"
+}
 
 # Show/Hide social auth. All or nothing at this time.
 ENABLE_SOCIAL_AUTH = env.bool("ENABLE_SOCIAL_AUTH", False)
