@@ -101,23 +101,6 @@ class IssuesAPITestCase(APITestCase):
         res = self.client.delete(url)
         self.assertEqual(res.status_code, 404)
 
-    # TODO, make status updatable
-    # def test_issue_update(self):
-    #     issue = baker.make("issues.Issue", project=self.project)
-    #     not_my_issue = baker.make("issues.Issue")
-
-    #     url = reverse("issue-detail", args=[issue.id])
-    #     status_to_set = EventStatus.RESOLVED
-    #     data = {"status": status_to_set.label}
-    #     res = self.client.put(url, data)
-    #     self.assertEqual(res.status_code, 200)
-    #     issue = Issue.objects.all().first()
-    #     self.assertEqual(issue.status, status_to_set)
-
-    #     url = reverse("issue-detail", args=[not_my_issue.id])
-    #     res = self.client.put(url, data)
-    #     self.assertEqual(res.status_code, 404)
-
     def test_bulk_update(self):
         """ Bulk update only supports Issue status """
         issues = baker.make(Issue, project=self.project, _quantity=2)
@@ -171,3 +154,13 @@ class IssuesAPITestCase(APITestCase):
         self.assertContains(res, unresolved_issue.title)
         self.assertNotContains(res, resolved_issue.title)
 
+    def test_issue_serializer_type(self):
+        """
+        Ensure type field is show in serializer
+        https://gitlab.com/glitchtip/glitchtip-backend/-/issues/9
+        """
+        issue = baker.make("issues.Issue", project=self.project)
+
+        url = reverse("issue-detail", args=[issue.id])
+        res = self.client.get(url)
+        self.assertContains(res, issue.get_type_display())

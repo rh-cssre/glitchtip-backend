@@ -143,3 +143,9 @@ class IssueSerializer(serializers.ModelSerializer):
             "type",
             "userCount",
         )
+
+    def to_representation(self, obj):
+        """ Workaround for a field called "type" """
+        primitive_repr = super().to_representation(obj)
+        primitive_repr["type"] = obj.get_type_display()
+        return primitive_repr
