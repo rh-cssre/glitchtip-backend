@@ -13,7 +13,14 @@ class SettingsView(APIView):
     def get(self, request, format=None):
         social_auth = settings.ENABLE_SOCIAL_AUTH
         billing_enabled = settings.BILLING_ENABLED
-        return Response({"socialAuth": social_auth, "billingEnabled": billing_enabled})
+        return Response(
+            {
+                "socialAuth": social_auth,
+                "billingEnabled": billing_enabled,
+                "matomoURL": settings.MATOMO_URL,
+                "matomoSiteId": settings.MATOMO_SITE_ID,
+            }
+        )
 
 
 def health(request):

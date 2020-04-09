@@ -292,6 +292,10 @@ def organization_request_callback(request):
         ).first()
 
 
+# Set to track activity with Matomo
+MATOMO_URL = env.str("MATOMO_URL", default=None)
+MATOMO_SITE_ID = env.str("MATOMO_SITE_ID", default=None)
+
 # Is running unit test
 TESTING = len(sys.argv) > 1 and sys.argv[1] == "test"
 
