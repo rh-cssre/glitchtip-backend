@@ -164,6 +164,7 @@ SECURE_BROWSER_XSS_FILTER = True
 CSP_STYLE_SRC = ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]
 CSP_STYLE_SRC_ELEM = ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]
 CSP_FONT_SRC = ["'self'", "https://fonts.gstatic.com"]
+CSP_SCRIPT_SRC = ["'self'", "https://matomo.glitchtip.com"]
 SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", 0)
 SECURE_HSTS_PRELOAD = env.bool("SECURE_HSTS_PRELOAD", False)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", False)
