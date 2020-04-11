@@ -19,6 +19,7 @@ class SettingsView(APIView):
                 "billingEnabled": billing_enabled,
                 "matomoURL": settings.MATOMO_URL,
                 "matomoSiteId": settings.MATOMO_SITE_ID,
+                "sentryDSN": settings.SENTRY_FRONTEND_DSN,
             }
         )
 

@@ -2,6 +2,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.generic import TemplateView
+from rest_auth.registration.views import SocialAccountDisconnectView
 from rest_framework_nested import routers
 from issues.urls import router as issuesRouter
 from projects.urls import router as projectsRouter
@@ -35,6 +36,11 @@ urlpatterns = [
     path("rest-auth/", include("rest_auth.urls")),
     path("rest-auth/registration/", include("rest_auth.registration.urls")),
     path("api/api-auth/", include("rest_framework.urls", namespace="rest_framework")),
+    re_path(
+        r"^socialaccounts/(?P<pk>\d+)/disconnect/$",
+        SocialAccountDisconnectView.as_view(),
+        name="social_account_disconnect",
+    ),
     path("rest-auth/gitlab/", social.GitlabLogin.as_view(), name="gitlab_login"),
     path(
         "rest-auth/gitlab/connect/",

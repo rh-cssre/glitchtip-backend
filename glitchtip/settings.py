@@ -75,11 +75,13 @@ def before_send(event, hint):
     return event
 
 
-sentry_sdk.init(
-    dsn=env.str("SENTRY_DSN", None),
-    integrations=[DjangoIntegration()],
-    before_send=before_send,
-)
+SENTRY_DSN = env.str("SENTRY_DSN", None)
+# Optionally allow a different DSN for the frontend
+SENTRY_FRONTEND_DSN = env.str("SENTRY_FRONTEND_DSN", SENTRY_DSN)
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN, integrations=[DjangoIntegration()], before_send=before_send,
+    )
 
 
 def show_toolbar(request):
