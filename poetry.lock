@@ -493,6 +493,18 @@ dotenv = ["python-dotenv"]
 
 [[package]]
 category = "dev"
+description = "Let your Python tests travel through time"
+name = "freezegun"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
+version = "0.3.15"
+
+[package.dependencies]
+python-dateutil = ">=1.0,<2.0 || >2.0"
+six = "*"
+
+[[package]]
+category = "dev"
 description = "Coroutine-based network library"
 name = "gevent"
 optional = false
@@ -1255,7 +1267,7 @@ docs = ["sphinx", "jaraco.packaging (>=3.2)", "rst.linker (>=1.9)"]
 testing = ["jaraco.itertools"]
 
 [metadata]
-content-hash = "82d5a7d7de6481c7b723ff91dcaad2a81e41e020a0c8ef2ce5632434c494c9bd"
+content-hash = "d21e1950497db27ec2862734171276a891fbcbaed145fc8db76940ac7da4f1e8"
 python-versions = "^3.6"
 
 [metadata.files]
@@ -1434,6 +1446,10 @@ drf-nested-routers = [
 flask = [
     {file = "Flask-1.1.1-py2.py3-none-any.whl", hash = "sha256:45eb5a6fd193d6cf7e0cf5d8a5b31f83d5faae0293695626f539a823e93b13f6"},
     {file = "Flask-1.1.1.tar.gz", hash = "sha256:13f9f196f330c7c2c5d7a5cf91af894110ca0215ac051b5844701f2bfd934d52"},
+]
+freezegun = [
+    {file = "freezegun-0.3.15-py2.py3-none-any.whl", hash = "sha256:82c757a05b7c7ca3e176bfebd7d6779fd9139c7cb4ef969c38a28d74deef89b2"},
+    {file = "freezegun-0.3.15.tar.gz", hash = "sha256:e2062f2c7f95cc276a834c22f1a17179467176b624cc6f936e8bc3be5535ad1b"},
 ]
 gevent = [
     {file = "gevent-1.5a2-cp27-cp27m-macosx_10_9_x86_64.whl", hash = "sha256:4bb0a53c56041727c7c3e08f2c40af3b5ac6668b8a7a1f34b52488492a6cbd2f"},
