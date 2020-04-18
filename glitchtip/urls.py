@@ -8,6 +8,7 @@ from issues.urls import router as issuesRouter
 from projects.urls import router as projectsRouter
 from teams.urls import router as teamsRouter
 from organizations_ext.urls import router as organizationsRouter
+from users.urls import router as usersRouter
 from . import social
 from .views import SettingsView, health
 
@@ -17,6 +18,7 @@ router.registry.extend(projectsRouter.registry)
 router.registry.extend(issuesRouter.registry)
 router.registry.extend(organizationsRouter.registry)
 router.registry.extend(teamsRouter.registry)
+router.registry.extend(usersRouter.registry)
 
 if settings.BILLING_ENABLED:
     from djstripe_ext.urls import router as djstripeRouter

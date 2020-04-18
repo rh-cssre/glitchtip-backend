@@ -5,7 +5,6 @@ from django.conf import settings
 from django.db import models
 from django.utils.text import slugify
 from django_extensions.db.fields import AutoSlugField
-from organizations_ext.models import Organization
 
 
 class Project(models.Model):
@@ -34,8 +33,6 @@ class Project(models.Model):
         first = False
         if not self.pk:
             first = True
-        if not self.organization_id:  # Temp thing
-            self.organization = Organization.objects.get_or_create(name="test org")[0]
         super().save(*args, **kwargs)
         if first:
             ProjectKey.objects.create(project=self)

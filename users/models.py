@@ -54,6 +54,11 @@ class User(AbstractBaseUser, PermissionsMixin):
             "Unselect this instead of deleting accounts."
         ),
     )
+    created = models.DateTimeField(auto_now_add=True)
+    subscribe_by_default = models.BooleanField(
+        default=True,
+        help_text="Subscribe to project notifications by default. Overrides project settings",
+    )
     USERNAME_FIELD = "email"
     objects = UserManager()
 
@@ -69,3 +74,22 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def username(self):
         return self.email
+
+
+class ProjectAlertStatus(models.IntegerChoices):
+    OFF = 0, "off"
+    ON = 1, "on"
+
+
+class UserProjectAlerts(models.Model):
+    """
+    Determine if user alert notifications should always happen, never, or defer to default
+    Default is stored as the lack of record.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
+    status = models.PositiveSmallIntegerField(choices=ProjectAlertStatus.choices)
+
+    class Meta:
+        unique_together = ("user", "project")

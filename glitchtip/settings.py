@@ -116,6 +116,7 @@ INSTALLED_APPS = [
     "rest_auth",
     "rest_auth.registration",
     "storages",
+    "alerts",
     "organizations_ext",
     "event_store",
     "issues",
@@ -177,6 +178,8 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", Fals
 
 ENVIRONMENT = env.str("ENVIRONMENT", None)
 GLITCHTIP_VERSION = env.str("GLITCHTIP_VERSION", "dev")
+
+DEFAULT_FROM_EMAIL = env.str("DEFAULT_FROM_EMAIL", "webmaster@localhost")
 
 # Database
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
@@ -328,3 +331,6 @@ elif TESTING:
     STRIPE_TEST_PUBLIC_KEY = "fake"
     STRIPE_TEST_SECRET_KEY = "sk_test_fake"
     DJSTRIPE_WEBHOOK_SECRET = "whsec_fake"
+
+if TESTING:
+    CELERY_TASK_ALWAYS_EAGER = True

@@ -1,6 +1,7 @@
 from django.urls import path, include
 from rest_framework_nested import routers
 from issues.views import IssueViewSet, EventViewSet
+from alerts.views import ProjectAlertViewSet
 from .views import ProjectViewSet, ProjectKeyViewSet
 
 router = routers.SimpleRouter()
@@ -10,6 +11,9 @@ projects_router = routers.NestedSimpleRouter(router, r"projects", lookup="projec
 projects_router.register(r"keys", ProjectKeyViewSet, basename="project-keys")
 projects_router.register(r"issues", IssueViewSet, basename="project-issues")
 projects_router.register(r"events", EventViewSet, basename="project-events")
+projects_router.register(r"alerts", ProjectAlertViewSet, basename="project-alerts")
 
-urlpatterns = [path("", include(router.urls)), path("", include(projects_router.urls))]
-
+urlpatterns = [
+    path("", include(router.urls)),
+    path("", include(projects_router.urls)),
+]
