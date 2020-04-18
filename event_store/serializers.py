@@ -12,7 +12,7 @@ class StoreDefaultSerializer(serializers.Serializer):
     """
 
     type = EventType.DEFAULT
-    breadcrumbs = serializers.JSONField()
+    breadcrumbs = serializers.JSONField(required=False)
     contexts = serializers.JSONField(required=False)
     event_id = serializers.UUIDField()
     extra = serializers.JSONField(required=False)

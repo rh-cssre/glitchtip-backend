@@ -127,6 +127,27 @@ class SentryAPICompatTestCase(APITestCase):
         self.assertCompareData(res.data, data, ["title"])
         self.assertEqual(res.data["metadata"]["function"], data["metadata"]["function"])
 
+    def test_dotnet_error(self):
+        sdk_error = self.get_json_data(
+            "event_store/test_data/incoming_events/dotnet_error.json"
+        )
+        res = self.client.post(self.event_store_url, sdk_error, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(Event.objects.count(), 1)
+        event_id = res.data["id"]
+
+        sentry_data = self.get_json_data(
+            "event_store/test_data/oss_sentry_events/dotnet_error.json"
+        )
+        url = self.get_project_events_detail(event_id)
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        self.assertCompareData(
+            res.data,
+            sentry_data,
+            ["eventID", "title", "culprit", "platform", "type", "metadata"],
+        )
+
     def test_csp_event(self):
         data = mdn_sample_csp
         res = self.client.post(self.csp_store_url, data, format="json")

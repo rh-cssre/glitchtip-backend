@@ -1,3 +1,4 @@
+import json
 from django.core.exceptions import SuspiciousOperation
 from django.conf import settings
 from rest_framework import permissions, exceptions
@@ -48,7 +49,7 @@ class EventStoreAPIView(APIView):
 
     def post(self, request, *args, **kwargs):
         if settings.EVENT_STORE_DEBUG:
-            print(request.data)
+            print(json.dumps(request.data))
         sentry_key = EventStoreAPIView.auth_from_request(request)
         project = Project.objects.filter(
             id=kwargs.get("id"), projectkey__public_key=sentry_key
