@@ -34,6 +34,7 @@ class IgnoreClientContentNegotiation(BaseContentNegotiation):
 
 class EventStoreAPIView(APIView):
     permission_classes = [permissions.AllowAny]
+    authentication_classes = []
     content_negotiation_class = IgnoreClientContentNegotiation
     http_method_names = ["post"]
 
