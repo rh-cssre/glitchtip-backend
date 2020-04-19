@@ -126,18 +126,19 @@ class AlertAPITestCase(APITestCase):
         self.assertEqual(project_alert.timespan_minutes, data["timespan_minutes"])
         self.assertEqual(project_alert.project, self.project)
 
-    # def test_project_alerts_update(self):
-    #     alert = baker.make(
-    #         "alerts.ProjectAlert", project=self.project, timespan_minutes=60
-    #     )
-    #     url = reverse(
-    #         "project-alerts-detail",
-    #         kwargs={
-    #             "project_pk": f"{self.organization.slug}/{self.project.slug}",
-    #             "pk": alert.pk,
-    #         },
-    #     )
-    #     data = {"timespan_minutes": 500, "quantity": 2}
-    #     res = self.client.post(url, data)
-    #     project_alert = ProjectAlert.objects.all().first()
-    #     self.assertEqual(project_alert.timespan_minutes, data["timespan_minutes"])
+    def test_project_alerts_update(self):
+        alert = baker.make(
+            "alerts.ProjectAlert", project=self.project, timespan_minutes=60
+        )
+        url = reverse(
+            "project-alerts-detail",
+            kwargs={
+                "project_pk": f"{self.organization.slug}/{self.project.slug}",
+                "pk": alert.pk,
+            },
+        )
+        data = {"timespan_minutes": 500, "quantity": 2}
+        res = self.client.put(url, data)
+        self.assertEqual(res.status_code, 200)
+        project_alert = ProjectAlert.objects.all().first()
+        self.assertEqual(project_alert.timespan_minutes, data["timespan_minutes"])

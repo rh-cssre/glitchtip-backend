@@ -30,9 +30,6 @@ class ProjectAlertViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         try:
-            import ipdb
-
-            ipdb.set_trace()
             project = Project.objects.get(
                 slug=self.kwargs.get("project_slug"),
                 organization__users=self.request.user,
