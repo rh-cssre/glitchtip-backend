@@ -3,7 +3,10 @@ from .models import Team
 
 
 class TeamAdmin(admin.ModelAdmin):
-    pass
+    search_fields = ("slug",)
+    list_display = ("slug", "organization")
+    raw_id_fields = ("organization",)
+    filter_horizontal = ("members", "projects")
 
 
 admin.site.register(Team, TeamAdmin)

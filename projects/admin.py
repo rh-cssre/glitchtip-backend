@@ -9,6 +9,9 @@ class ProjectKeyInline(admin.StackedInline):
 
 
 class ProjectAdmin(admin.ModelAdmin):
+    search_fields = ("name",)
+    list_display = ("name", "organization")
+    raw_id_fields = ("organization",)
     inlines = [ProjectKeyInline]
 
 
