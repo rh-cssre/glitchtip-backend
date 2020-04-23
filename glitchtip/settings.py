@@ -107,6 +107,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.github",
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.microsoft",
+    "anymail",
     "corsheaders",
     "django_celery_results",
     "django_filters",
@@ -180,6 +181,10 @@ ENVIRONMENT = env.str("ENVIRONMENT", None)
 GLITCHTIP_VERSION = env.str("GLITCHTIP_VERSION", "dev")
 
 DEFAULT_FROM_EMAIL = env.str("DEFAULT_FROM_EMAIL", "webmaster@localhost")
+ANYMAIL = {
+    "MAILGUN_API_KEY": env.str("MAILGUN_API_KEY", None),
+    "MAILGUN_SENDER_DOMAIN": env.str("MAILGUN_SENDER_DOMAIN", None),
+}
 
 # Database
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases

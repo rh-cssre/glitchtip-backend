@@ -306,6 +306,23 @@ requests-oauthlib = ">=0.3.0"
 
 [[package]]
 category = "main"
+description = "Django email integration for Amazon SES, Mailgun, Mailjet, Postmark, SendGrid, SendinBlue, SparkPost and other transactional ESPs"
+name = "django-anymail"
+optional = false
+python-versions = "*"
+version = "7.1.0"
+
+[package.dependencies]
+django = ">=1.11"
+requests = ">=2.4.3"
+six = "*"
+
+[package.extras]
+amazon_ses = ["boto3"]
+sparkpost = ["sparkpost"]
+
+[[package]]
+category = "main"
 description = "Celery result backends for Django."
 name = "django-celery-results"
 optional = false
@@ -1266,7 +1283,7 @@ docs = ["sphinx", "jaraco.packaging (>=3.2)", "rst.linker (>=1.9)"]
 testing = ["jaraco.itertools", "func-timeout"]
 
 [metadata]
-content-hash = "d21e1950497db27ec2862734171276a891fbcbaed145fc8db76940ac7da4f1e8"
+content-hash = "f4e51a06be12738ce2394314959f9c4620b9dfe798b685fc1ab2b483b2b605d3"
 python-versions = "^3.6"
 
 [metadata.files]
@@ -1385,6 +1402,10 @@ django = [
 ]
 django-allauth = [
     {file = "django-allauth-0.41.0.tar.gz", hash = "sha256:7ab91485b80d231da191d5c7999ba93170ef1bf14ab6487d886598a1ad03e1d8"},
+]
+django-anymail = [
+    {file = "django-anymail-7.1.0.tar.gz", hash = "sha256:a2bd7a40aa91a1033892630652d3ca8148de70fa2927eb4eebde239fe705f0f4"},
+    {file = "django_anymail-7.1.0-py2.py3-none-any.whl", hash = "sha256:7af1076f383fb3b62b301949ea8f7d87a41376015309ffc35a246a1726060429"},
 ]
 django-celery-results = [
     {file = "django_celery_results-1.2.1-py2.py3-none-any.whl", hash = "sha256:a29ab580f0e38c66c39f51cc426bbdbb2a391b8cc0867df9dea748db2c961db2"},
