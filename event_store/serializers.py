@@ -17,6 +17,7 @@ class StoreDefaultSerializer(serializers.Serializer):
     event_id = serializers.UUIDField()
     extra = serializers.JSONField(required=False)
     level = serializers.CharField()
+    logentry = serializers.JSONField(required=False)
     message = serializers.CharField(required=False)
     platform = serializers.CharField()
     release = serializers.CharField(required=False)

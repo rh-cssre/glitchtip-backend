@@ -1,0 +1,120 @@
+{
+  "eventID": "78d24ed7495c46fc8dbde72c1f20679b",
+  "dist": null,
+  "userReport": null,
+  "projectID": "1",
+  "previousEventID": null,
+  "message": "This is a warning",
+  "id": "2087",
+  "size": 2436,
+  "errors": [],
+  "culprit": "/warning/",
+  "title": "This is a warning",
+  "platform": "python",
+  "location": null,
+  "nextEventID": null,
+  "type": "default",
+  "metadata": { "title": "This is a warning" },
+  "groupingConfig": { "id": "legacy:2019-03-12" },
+  "crashFile": null,
+  "tags": [
+    { "value": "Firefox 75.0", "key": "browser", "_meta": null },
+    { "value": "Firefox", "key": "browser.name", "_meta": null },
+    { "value": "warning", "key": "level", "_meta": null },
+    { "value": "errors.views", "key": "logger", "_meta": null },
+    { "value": "Ubuntu", "key": "os.name", "_meta": null },
+    { "value": "CPython 3.8.2", "key": "runtime", "_meta": null },
+    { "value": "CPython", "key": "runtime.name", "_meta": null },
+    { "value": "5949a3cc0cd4", "key": "server_name", "_meta": null },
+    { "value": "/warning/", "key": "transaction", "_meta": null },
+    { "value": "http://localhost:8001/warning/", "key": "url", "_meta": null }
+  ],
+  "dateCreated": "2020-04-24T18:23:02.951Z",
+  "dateReceived": "2020-04-24T18:25:05.149Z",
+  "user": null,
+  "entries": [
+    { "type": "message", "data": { "formatted": "This is a warning" } },
+    {
+      "type": "request",
+      "data": {
+        "fragment": "",
+        "cookies": [],
+        "inferredContentType": "text/plain",
+        "env": { "SERVER_NAME": "5949a3cc0cd4", "SERVER_PORT": "8001" },
+        "headers": [
+          [
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+          ],
+          ["Accept-Encoding", "gzip, deflate"],
+          ["Accept-Language", "en-US,en;q=0.5"],
+          ["Cache-Control", "max-age=0"],
+          ["Connection", "keep-alive"],
+          ["Content-Length", ""],
+          ["Content-Type", "text/plain"],
+          ["Host", "localhost:8001"],
+          ["Referer", "http://localhost:8001/"],
+          ["Upgrade-Insecure-Requests", "1"],
+          [
+            "User-Agent",
+            "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:75.0) Gecko/20100101 Firefox/75.0"
+          ]
+        ],
+        "url": "http://localhost:8001/warning/",
+        "query": [],
+        "data": null,
+        "method": "GET"
+      }
+    }
+  ],
+  "packages": {
+    "wheel": "0.34.2",
+    "sqlparse": "0.3.1",
+    "typed-ast": "1.4.1",
+    "six": "1.14.0",
+    "urllib3": "1.25.8",
+    "wcwidth": "0.1.8",
+    "traitlets": "4.3.3",
+    "toml": "0.10.0",
+    "webencodings": "0.5.1",
+    "tomlkit": "0.5.11",
+    "appdirs": "1.4.3"
+  },
+  "sdk": {
+    "version": "0.14.2",
+    "name": "sentry.python",
+    "upstream": { "url": null, "isNewer": false, "name": "sentry.python" }
+  },
+  "_meta": {
+    "user": null,
+    "context": null,
+    "entries": {},
+    "contexts": null,
+    "message": null,
+    "packages": null,
+    "tags": {},
+    "sdk": null
+  },
+  "contexts": {
+    "runtime": {
+      "version": "3.8.2",
+      "type": "runtime",
+      "build": "3.8.2 (default, Feb 26 2020, 15:09:34) \n[GCC 8.3.0]",
+      "name": "CPython"
+    },
+    "os": { "type": "os", "name": "Ubuntu" },
+    "trace": {
+      "description": "django.middleware.clickjacking.XFrameOptionsMiddleware.__call__",
+      "parent_span_id": "b18a82b300d6699d",
+      "trace_id": "1022e5e9d8e44d2ebafddfa839b58c5f",
+      "span_id": "9d329137b651e5ce",
+      "type": "default",
+      "op": "django.middleware"
+    },
+    "browser": { "version": "75.0", "type": "browser", "name": "Firefox" }
+  },
+  "fingerprints": ["6f8498b9fd52b3c93a8a4672aac43e76"],
+  "context": { "sys.argv": ["./manage.py", "runserver", "0.0.0.0:8001"] },
+  "release": null,
+  "groupID": "56"
+}

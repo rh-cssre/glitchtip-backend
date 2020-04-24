@@ -21,7 +21,11 @@ class DefaultEvent(BaseEvent):
     key = "default"
 
     def get_metadata(self, data):
-        message = strip(get_path(data, "message"))
+        message = strip(
+            get_path(data, "logentry", "formatted")
+            or get_path(data, "logentry", "message")
+            or get_path(data, "message")
+        )
 
         if message:
             title = truncatechars(message.splitlines()[0], 100)
