@@ -259,7 +259,9 @@ STATICFILES_DIRS = [
 ]
 STATIC_ROOT = path("static/")
 STATICFILES_STORAGE = env("STATICFILES_STORAGE")
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = env.str(
+    "EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend"
+)
 
 AUTH_USER_MODEL = "users.User"
 ACCOUNT_AUTHENTICATION_METHOD = "email"
