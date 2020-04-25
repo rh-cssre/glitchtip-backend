@@ -199,3 +199,22 @@ class SentryAPICompatTestCase(APITestCase):
             sentry_data,
             ["title", "culprit", "type", "metadata", "platform", "packages"],
         )
+
+    def test_go_file_not_found(self):
+        sdk_error = self.get_json_data(
+            "event_store/test_data/incoming_events/go_file_not_found.json"
+        )
+        res = self.client.post(self.event_store_url, sdk_error, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(Event.objects.count(), 1)
+        event_id = res.data["id"]
+
+        sentry_data = self.get_json_data(
+            "event_store/test_data/oss_sentry_events/go_file_not_found.json"
+        )
+        url = self.get_project_events_detail(event_id)
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        self.assertCompareData(
+            res.data, sentry_data, ["title", "culprit", "type", "metadata", "platform"],
+        )

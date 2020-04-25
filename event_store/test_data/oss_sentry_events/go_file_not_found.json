@@ -1,0 +1,123 @@
+{
+  "eventID": "af536c31b68a473f97e579507ce155e3",
+  "dist": null,
+  "userReport": null,
+  "projectID": "1",
+  "previousEventID": null,
+  "message": "main *os.PathError open ./test.txt: no such file or directory file-not-found.go main in main",
+  "id": "2109",
+  "size": 1711,
+  "errors": [],
+  "culprit": "main in main",
+  "title": "*os.PathError: open ./test.txt: no such file or directory",
+  "platform": "go",
+  "location": "file-not-found.go",
+  "nextEventID": null,
+  "type": "error",
+  "metadata": {
+    "function": "main",
+    "type": "*os.PathError",
+    "value": "open ./test.txt: no such file or directory",
+    "filename": "file-not-found.go"
+  },
+  "groupingConfig": { "id": "legacy:2019-03-12" },
+  "crashFile": null,
+  "tags": [
+    { "value": "error", "key": "level", "_meta": null },
+    { "value": "linux", "key": "os.name", "_meta": null },
+    { "value": "go go1.12.17", "key": "runtime", "_meta": null },
+    { "value": "go", "key": "runtime.name", "_meta": null },
+    { "value": "7337a9a27ac6", "key": "server_name", "_meta": null }
+  ],
+  "dateCreated": "2020-04-25T19:36:56.585Z",
+  "dateReceived": "2020-04-25T19:37:18.738Z",
+  "user": null,
+  "entries": [
+    {
+      "type": "exception",
+      "data": {
+        "values": [
+          {
+            "stacktrace": {
+              "frames": [
+                {
+                  "function": "main",
+                  "colNo": null,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "main",
+                  "lineNo": 25,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "/app/file-not-found/file-not-found.go",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "file-not-found.go",
+                  "platform": null,
+                  "context": [
+                    [20, ""],
+                    [21, "\tdefer sentry.Flush(2 * time.Second)"],
+                    [22, ""],
+                    [23, "\tf, err := os.Open(\"./test.txt\")"],
+                    [24, "\tif err != nil {"],
+                    [25, "\t\tsentry.CaptureException(err)"],
+                    [26, "\t\tlog.Printf(\"reported to Sentry: %s\", err)"],
+                    [27, "\t\treturn"],
+                    [28, "\t}"],
+                    [29, "\tfmt.Println(f.Name(), \"opened successfully\")"],
+                    [30, "}"]
+                  ],
+                  "symbolAddr": null
+                }
+              ],
+              "framesOmitted": null,
+              "registers": null,
+              "hasSystemFrames": false
+            },
+            "module": null,
+            "rawStacktrace": null,
+            "mechanism": null,
+            "threadId": null,
+            "value": "open ./test.txt: no such file or directory",
+            "type": "*os.PathError"
+          }
+        ],
+        "excOmitted": null,
+        "hasSystemFrames": false
+      }
+    }
+  ],
+  "packages": {},
+  "sdk": {
+    "version": "0.6.0",
+    "name": "sentry.go",
+    "upstream": { "url": null, "isNewer": false, "name": "sentry.go" }
+  },
+  "_meta": {
+    "user": null,
+    "context": null,
+    "entries": {},
+    "contexts": null,
+    "message": null,
+    "packages": null,
+    "tags": {},
+    "sdk": null
+  },
+  "contexts": {
+    "device": { "arch": "amd64", "num_cpu": 8, "type": "device" },
+    "runtime": {
+      "name": "go",
+      "go_numcgocalls": 1,
+      "go_numroutines": 2,
+      "version": "go1.12.17",
+      "go_maxprocs": 8,
+      "type": "runtime"
+    },
+    "os": { "type": "os", "name": "linux" }
+  },
+  "fingerprints": ["2681fe170890b8ab286bb30696e5bc0f"],
+  "context": {},
+  "release": null,
+  "groupID": "58"
+}
