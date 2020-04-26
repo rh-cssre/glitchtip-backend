@@ -3,7 +3,7 @@ from django.db import transaction
 from rest_framework import serializers
 from sentry.eventtypes.error import ErrorEvent
 from sentry.eventtypes.base import DefaultEvent
-from issues.models import EventType, Event, Issue
+from issues.models import EventType, Event, Issue, EventStatus
 
 
 class StoreDefaultSerializer(serializers.Serializer):
@@ -71,6 +71,7 @@ class StoreDefaultSerializer(serializers.Serializer):
                 },
             }
             event = Event.objects.create(**params)
+            issue.check_for_status_update()
         return event
 
 

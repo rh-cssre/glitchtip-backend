@@ -65,6 +65,15 @@ class Issue(models.Model):
     def __str__(self):
         return self.title
 
+    def check_for_status_update(self):
+        """
+        Determine if issue should regress back to unresolved
+        Typically run when processing a new event related to the issue
+        """
+        if self.status == EventStatus.RESOLVED:
+            self.status = EventStatus.UNRESOLVED
+            self.save()
+
 
 class EventTag(models.Model):
     key = models.CharField(max_length=255)
