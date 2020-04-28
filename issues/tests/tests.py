@@ -56,6 +56,45 @@ class EventTestCase(APITestCase):
         self.assertContains(res, issue1_event2.pk.hex)
         self.assertEqual(res.data["previousEventID"], issue1_event1.pk.hex)
 
+    def test_entries_emtpy(self):
+        """ A minimal or incomplete data set should result in an empty entries array """
+        data = {
+            "sdk": {
+                "name": "sentry",
+                "version": "5",
+                "packages": [],
+                "integrations": [],
+            },
+            "type": "error",
+            "title": "<unknown>",
+            "culprit": "",
+            "request": {
+                "url": "http://localhost",
+                "headers": [],
+                "inferred_content_type": None,
+            },
+            "contexts": None,
+            "metadata": {"value": "Non-Error exception"},
+            "packages": None,
+            "platform": "javascript",
+            "exception": {
+                "values": [
+                    {
+                        "type": "Error",
+                        "value": "Non-Error exception",
+                        "mechanism": {
+                            "data": {"function": "<anonymous>"},
+                            "type": "instrument",
+                            "handled": True,
+                        },
+                    }
+                ]
+            },
+        }
+        event = baker.make("issues.Event", issue__project=self.project, data=data)
+        res = self.client.get(self.url)
+        self.assertTrue("entries" in res.data[0])
+
 
 class IssuesAPITestCase(APITestCase):
     def setUp(self):

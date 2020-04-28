@@ -127,28 +127,29 @@ class Event(models.Model):
         entries = []
 
         exception = self.data.get("exception")
-        if exception:
+        if exception and exception.get("values"):
             # Some, but not all, keys are made more JS camel case like
             for value in exception["values"]:
-                for frame in value["stacktrace"]["frames"]:
-                    if "abs_path" in frame:
-                        frame["absPath"] = frame.pop("abs_path")
-                    if "lineno" in frame:
-                        frame["lineNo"] = frame.pop("lineno")
-                        base_line_no = frame["lineNo"]
-                        context = []
-                        pre_context = frame.pop("pre_context", None)
-                        if pre_context:
-                            context += self._build_context(
-                                pre_context, base_line_no, True
-                            )
-                        context.append([base_line_no, frame.get("context_line")])
-                        post_context = frame.pop("post_context", None)
-                        if post_context:
-                            context += self._build_context(
-                                post_context, base_line_no, False
-                            )
-                        frame["context"] = context
+                if "stacktrace" in value and "frames" in value["stacktrace"]:
+                    for frame in value["stacktrace"]["frames"]:
+                        if "abs_path" in frame:
+                            frame["absPath"] = frame.pop("abs_path")
+                        if "lineno" in frame:
+                            frame["lineNo"] = frame.pop("lineno")
+                            base_line_no = frame["lineNo"]
+                            context = []
+                            pre_context = frame.pop("pre_context", None)
+                            if pre_context:
+                                context += self._build_context(
+                                    pre_context, base_line_no, True
+                                )
+                            context.append([base_line_no, frame.get("context_line")])
+                            post_context = frame.pop("post_context", None)
+                            if post_context:
+                                context += self._build_context(
+                                    post_context, base_line_no, False
+                                )
+                            frame["context"] = context
 
             entries.append({"type": "exception", "data": exception})
 
