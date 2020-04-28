@@ -31,6 +31,7 @@ class EventStoreTestCase(APITestCase):
         with open("event_store/test_data/py_error.json") as json_file:
             data = json.load(json_file)
         res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
 
     def test_csp_event(self):
         url = reverse("csp_store", args=[self.project.id]) + self.params

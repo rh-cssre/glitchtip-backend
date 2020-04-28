@@ -1,0 +1,49 @@
+{
+  "eventID": "df536c31b68a473f97e579507ce155e3",
+  "dist": null,
+  "userReport": null,
+  "projectID": "1",
+  "previousEventID": null,
+  "message": "<unlabeled event>",
+  "id": "2116",
+  "size": 585,
+  "errors": [],
+  "culprit": "",
+  "title": "<unlabeled event>",
+  "platform": "go",
+  "location": null,
+  "nextEventID": null,
+  "type": "default",
+  "metadata": { "title": "<unlabeled event>" },
+  "groupingConfig": { "id": "legacy:2019-03-12" },
+  "crashFile": null,
+  "tags": [
+    { "value": "error", "key": "level", "_meta": null },
+    { "value": "7", "key": "server_name", "_meta": null }
+  ],
+  "dateCreated": "2020-04-25T19:36:56.585Z",
+  "dateReceived": "2020-04-28T01:51:50.687Z",
+  "user": null,
+  "entries": [],
+  "packages": {},
+  "sdk": {
+    "version": "0.0.1",
+    "name": "s",
+    "upstream": { "url": null, "isNewer": false, "name": "s" }
+  },
+  "_meta": {
+    "user": null,
+    "context": null,
+    "entries": {},
+    "contexts": null,
+    "message": null,
+    "packages": null,
+    "tags": {},
+    "sdk": null
+  },
+  "contexts": {},
+  "fingerprints": ["d41d8cd98f00b204e9800998ecf8427e"],
+  "context": {},
+  "release": null,
+  "groupID": "59"
+}

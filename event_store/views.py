@@ -41,7 +41,7 @@ class EventStoreAPIView(APIView):
 
     def get_serializer_class(self, data=[]):
         """ Determine event type and return serializer """
-        if "exception" in data:
+        if "exception" in data and data["exception"]:
             return StoreErrorSerializer
         if "platform" not in data:
             return StoreCSPReportSerializer

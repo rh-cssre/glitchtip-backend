@@ -1,0 +1,16 @@
+{
+  "contexts": {},
+  "event_id": "cf536c31b68a473f97e579507ce155e3",
+  "level": "error",
+  "platform": "go",
+  "sdk": {
+    "name": "s",
+    "version": "0.0.1",
+    "integrations": [],
+    "packages": [{ "name": "s", "version": "0" }]
+  },
+  "server_name": "7",
+  "timestamp": "2020-04-25T19:36:56.584908333Z",
+  "user": {},
+  "exception": []
+}

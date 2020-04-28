@@ -218,3 +218,25 @@ class SentryAPICompatTestCase(APITestCase):
         self.assertCompareData(
             res.data, sentry_data, ["title", "culprit", "type", "metadata", "platform"],
         )
+
+    def test_very_small_event(self):
+        """
+        Shows a very minimalist event example. Good for seeing what data is null
+        """
+        sdk_error = self.get_json_data(
+            "event_store/test_data/incoming_events/very_small_event.json"
+        )
+        res = self.client.post(self.event_store_url, sdk_error, format="json")
+        event_id = res.data["id"]
+
+        sentry_data = self.get_json_data(
+            "event_store/test_data/oss_sentry_events/very_small_event.json"
+        )
+        url = self.get_project_events_detail(event_id)
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        self.assertCompareData(
+            res.data,
+            sentry_data,
+            ["title", "culprit", "type", "metadata", "platform", "entries"],
+        )
