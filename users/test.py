@@ -3,7 +3,7 @@ from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
 from organizations_ext.models import OrganizationUserRole
-from .models import UserProjectAlerts
+from .models import UserProjectAlert
 
 
 class OrganizationsAPITestCase(APITestCase):
@@ -68,7 +68,7 @@ class UsersTestCase(APITestCase):
     def test_alerts_retrieve(self):
         url = reverse("user-detail", args=["me"]) + "notifications/alerts/"
         alert = baker.make(
-            "users.UserProjectAlerts", user=self.user, project=self.project
+            "users.UserProjectAlert", user=self.user, project=self.project
         )
         res = self.client.get(url)
         self.assertContains(res, self.project.id)
@@ -81,18 +81,18 @@ class UsersTestCase(APITestCase):
         data = '{"' + str(self.project.id) + '":1}'
         res = self.client.put(url, data, content_type="application/json")
         self.assertEqual(res.status_code, 204)
-        self.assertEqual(UserProjectAlerts.objects.all().count(), 1)
-        self.assertEqual(UserProjectAlerts.objects.first().status, 1)
+        self.assertEqual(UserProjectAlert.objects.all().count(), 1)
+        self.assertEqual(UserProjectAlert.objects.first().status, 1)
 
         # Set to alert to Off
         data = '{"' + str(self.project.id) + '":0}'
         res = self.client.put(url, data, content_type="application/json")
         self.assertEqual(res.status_code, 204)
-        self.assertEqual(UserProjectAlerts.objects.first().status, 0)
+        self.assertEqual(UserProjectAlert.objects.first().status, 0)
 
         # Set to alert to "default"
         data = '{"' + str(self.project.id) + '":-1}'
         res = self.client.put(url, data, content_type="application/json")
         self.assertEqual(res.status_code, 204)
         # Default deletes the row
-        self.assertEqual(UserProjectAlerts.objects.all().count(), 0)
+        self.assertEqual(UserProjectAlert.objects.all().count(), 0)

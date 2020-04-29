@@ -2,7 +2,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
-from .models import User, UserProjectAlerts
+from .models import User, UserProjectAlert
 from .serializers import UserSerializer, UserNotificationsSerializer
 
 
@@ -44,7 +44,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
         To update, submit `{project_id: status}` where status is -1 (default), 0, or 1
         """
         user = self.get_object()
-        alerts = user.userprojectalerts_set.all()
+        alerts = user.userprojectalert_set.all()
 
         if request.method == "GET":
             data = {}
@@ -66,7 +66,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
         if alert and alert_status == -1:
             alert.delete()
         else:
-            UserProjectAlerts.objects.update_or_create(
+            UserProjectAlert.objects.update_or_create(
                 user=user, project_id=project_id, defaults={"status": alert_status}
             )
         return Response(status=204)

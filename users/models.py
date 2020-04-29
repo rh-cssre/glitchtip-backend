@@ -81,7 +81,7 @@ class ProjectAlertStatus(models.IntegerChoices):
     ON = 1, "on"
 
 
-class UserProjectAlerts(models.Model):
+class UserProjectAlert(models.Model):
     """
     Determine if user alert notifications should always happen, never, or defer to default
     Default is stored as the lack of record.
