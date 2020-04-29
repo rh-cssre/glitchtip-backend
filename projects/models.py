@@ -13,8 +13,8 @@ class Project(models.Model):
     are the top level entry point for all data.
     """
 
-    slug = AutoSlugField(populate_from=["name", "organization_id"],)
-    name = models.CharField(max_length=200)
+    slug = AutoSlugField(populate_from=["name", "organization_id"], max_length=50)
+    name = models.CharField(max_length=64)
     organization = models.ForeignKey(
         "organizations_ext.Organization",
         on_delete=models.CASCADE,
