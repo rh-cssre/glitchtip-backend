@@ -142,6 +142,8 @@ class Event(models.Model):
                     for frame in value["stacktrace"]["frames"]:
                         if frame.get("in_app") == True:
                             exception["hasSystemFrames"] = True
+                        if "in_app" in frame:
+                            frame["inApp"] = frame.pop("in_app")
                         if "abs_path" in frame:
                             frame["absPath"] = frame.pop("abs_path")
                         if "lineno" in frame:
