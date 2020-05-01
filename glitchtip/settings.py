@@ -214,6 +214,9 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {
 }
 CELERY_RESULT_BACKEND = "django-db"
 CELERY_CACHE_BACKEND = "django-cache"
+CELERY_BEAT_SCHEDULE = {
+    "send-alert-notifications": {"task": "alerts.tasks.process_alerts", "schedule": 60,}
+}
 CACHES = {"default": {"BACKEND": "redis_cache.RedisCache", "LOCATION": REDIS_URL}}
 
 # Password validation
