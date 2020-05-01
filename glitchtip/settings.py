@@ -15,6 +15,7 @@ import sys
 import environ
 import sentry_sdk
 from sentry_sdk.integrations.django import DjangoIntegration
+from celery.schedules import crontab
 
 env = environ.Env(
     ALLOWED_HOSTS=(list, ["*"]),
@@ -59,6 +60,9 @@ if POD_IP:
 
 # Used in email and DSN generation. Set to full domain such as https://glitchtip.example.com
 GLITCHTIP_DOMAIN = env.url("GLITCHTIP_DOMAIN", default="http://localhost:8000")
+
+# Events and associated data older than this will be deleted from the database
+GLITCHTIP_MAX_EVENT_LIFE_DAYS = env.int("GLITCHTIP_MAX_EVENT_LIFE_DAYS", default=90)
 
 # For development purposes only, prints out inbound event store json
 EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
@@ -215,7 +219,14 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {
 CELERY_RESULT_BACKEND = "django-db"
 CELERY_CACHE_BACKEND = "django-cache"
 CELERY_BEAT_SCHEDULE = {
-    "send-alert-notifications": {"task": "alerts.tasks.process_alerts", "schedule": 60,}
+    "send-alert-notifications": {
+        "task": "alerts.tasks.process_alerts",
+        "schedule": 60,
+    },
+    "cleanup-old-events": {
+        "task": "issues.tasks.cleanup_old_events",
+        "schedule": crontab(hour=7),
+    },
 }
 CACHES = {"default": {"BACKEND": "redis_cache.RedisCache", "LOCATION": REDIS_URL}}
 
