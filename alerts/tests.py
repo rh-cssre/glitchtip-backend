@@ -1,17 +1,18 @@
+import json
 from datetime import timedelta
 from django.core import mail
-from django.test import TestCase
 from django.utils import timezone
 from django.shortcuts import reverse
 from rest_framework.test import APITestCase
 from model_bakery import baker
 from freezegun import freeze_time
 from glitchtip import test_utils  # pylint: disable=unused-import
+from issues.models import EventStatus, Issue
 from .tasks import process_alerts
 from .models import Notification, ProjectAlert
 
 
-class AlertTestCase(TestCase):
+class AlertTestCase(APITestCase):
     def setUp(self):
         self.now = timezone.now()
         user = baker.make("users.user")
@@ -91,6 +92,36 @@ class AlertTestCase(TestCase):
         baker.make("issues.Event", issue=issue)
         process_alerts()
         self.assertEqual(Notification.objects.count(), 1)
+
+    def test_alert_on_regression(self):
+        baker.make(
+            "alerts.ProjectAlert", project=self.project, timespan_minutes=1, quantity=1,
+        )
+
+        # Make event
+        with open(
+            "event_store/test_data/incoming_events/very_small_event.json"
+        ) as json_file:
+            data = json.load(json_file)
+        projectkey = self.project.projectkey_set.first()
+        params = f"?sentry_key={projectkey.public_key}"
+        url = reverse("event_store", args=[self.project.id]) + params
+        self.client.post(url, data, format="json")
+
+        # First alert
+        process_alerts()
+        self.assertEqual(len(mail.outbox), 1)
+
+        # Mark resolved
+        issue = Issue.objects.first()
+        issue.status = EventStatus.RESOLVED
+        issue.save()
+
+        # Send a second event
+        data["event_id"] = "cf536c31b68a473f97e579507ce155e4"
+        self.client.post(url, data, format="json")
+        process_alerts()
+        self.assertEqual(len(mail.outbox), 2)
 
 
 class AlertAPITestCase(APITestCase):

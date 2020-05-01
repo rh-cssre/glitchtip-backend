@@ -73,6 +73,8 @@ class Issue(models.Model):
         if self.status == EventStatus.RESOLVED:
             self.status = EventStatus.UNRESOLVED
             self.save()
+            # Delete notifications so that new alerts are sent for regressions
+            self.notification_set.all().delete()
 
 
 class EventTag(models.Model):
