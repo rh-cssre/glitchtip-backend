@@ -8,6 +8,7 @@ from .models import Notification
 
 @shared_task
 def process_alerts():
+    """ Inspect alerts and determine if new notifications need sent """
     now = timezone.now()
     for project in Project.objects.all():
         for alert in project.projectalert_set.all():

@@ -22,12 +22,12 @@ psycopg2-binary = "^2.8.4"
 uWSGI = "^2.0.18"
 whitenoise = "^5.0.1"
 boto3 = "^1.10.44"
-sentry-sdk = "^0.13.5"
+sentry-sdk = "^0.14.3"
 django-filter = "^2.2.0"
 celery = {extras = ["redis"], version = "^4.4.0"}
 django-celery-results = "^1.2.0"
 django-redis-cache = "^2.1.0"
-redis = "3.3.11"
+redis = "^3.3.11"
 jsonschema = "^3.2.0"
 simplejson = "^3.17.0"
 django-csp = "^3.6"
@@ -36,7 +36,7 @@ django-anymail = {extras = ["mailgun"], version = "^7.1.0"}
 
 [tool.poetry.dev-dependencies]
 black = "^19.10b0"
-ipdb = "^0.12.3"
+ipdb = "^0.13.2"
 pylint = "^2.4.4"
 pylint-django = "^2.0.13"
 model_bakery = "^1.0.2"

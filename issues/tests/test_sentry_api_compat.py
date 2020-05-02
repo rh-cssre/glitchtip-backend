@@ -147,6 +147,13 @@ class SentryAPICompatTestCase(APITestCase):
             sentry_data,
             ["eventID", "title", "culprit", "platform", "type", "metadata"],
         )
+        is_exception = lambda v: v.get("type") == "exception"
+        res_exception = next(filter(is_exception, res.data["entries"]), None)
+        sentry_exception = next(filter(is_exception, sentry_data["entries"]), None)
+        self.assertEqual(
+            res_exception["data"].get("hasSystemFrames"),
+            sentry_exception["data"].get("hasSystemFrames"),
+        )
 
     def test_csp_event(self):
         data = mdn_sample_csp

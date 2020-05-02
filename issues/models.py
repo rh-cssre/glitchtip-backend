@@ -126,14 +126,24 @@ class Event(models.Model):
 
     @property
     def entries(self):
+        def get_has_system_frames(frames):
+            return any(frame.in_app for frame in frames)
+
         entries = []
 
         exception = self.data.get("exception")
+        # Some, but not all, keys are made more JS camel case like
         if exception and exception.get("values"):
-            # Some, but not all, keys are made more JS camel case like
+            # https://gitlab.com/glitchtip/sentry-open-source/sentry/-/blob/master/src/sentry/interfaces/stacktrace.py#L487
+            # if any frame is "in_app" set this to True
+            exception["hasSystemFrames"] = False
             for value in exception["values"]:
                 if "stacktrace" in value and "frames" in value["stacktrace"]:
                     for frame in value["stacktrace"]["frames"]:
+                        if frame.get("in_app") == True:
+                            exception["hasSystemFrames"] = True
+                        if "in_app" in frame:
+                            frame["inApp"] = frame.pop("in_app")
                         if "abs_path" in frame:
                             frame["absPath"] = frame.pop("abs_path")
                         if "lineno" in frame:
