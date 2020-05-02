@@ -10,6 +10,9 @@ from organizations_ext.models import OrganizationUserRole
 from issues.models import Event
 
 
+TEST_DATA_DIR = "event_store/test_data"
+
+
 class SentryAPICompatTestCase(APITestCase):
     def setUp(self):
         self.user = baker.make("users.user")
@@ -34,6 +37,17 @@ class SentryAPICompatTestCase(APITestCase):
             self.assertEqual(
                 data1.get(field), data2.get(field), f"Failed for field '{field}'",
             )
+
+    def get_json_test_data(self, name: str):
+        """ Get incoming event, sentry json, sentry api event """
+        event = self.get_json_data(f"{TEST_DATA_DIR}/incoming_events/{name}.json")
+        sentry_json = self.get_json_data(f"{TEST_DATA_DIR}/oss_sentry_json/{name}.json")
+        # Force captured test data to match test generated data
+        sentry_json["project"] = self.project.id
+        api_sentry_event = self.get_json_data(
+            f"{TEST_DATA_DIR}/oss_sentry_events/{name}.json"
+        )
+        return event, sentry_json, api_sentry_event
 
     def get_json_data(self, path: str):
         with open(path) as json_file:
@@ -246,4 +260,32 @@ class SentryAPICompatTestCase(APITestCase):
             res.data,
             sentry_data,
             ["title", "culprit", "type", "metadata", "platform", "entries"],
+        )
+
+    def test_python_zero_division(self):
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+            "python_zero_division"
+        )
+        res = self.client.post(self.event_store_url, sdk_error, format="json")
+        event = Event.objects.get(pk=res.data["id"])
+        self.assertCompareData(
+            event.event_json(),
+            sentry_json,
+            [
+                "event_id",
+                "project",
+                "release",
+                "dist",
+                "platform",
+                "time_spent",
+                "sdk",
+                "type",
+                "title",
+                "culprit",
+            ],
+        )
+        self.assertEqual(
+            event.event_json()["datetime"][:22],
+            sentry_json["datetime"][:22],
+            "Compare if datetime is almost the same",
         )

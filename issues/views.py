@@ -1,5 +1,6 @@
 from django.db.models import Count, Min, Max
-from rest_framework import viewsets
+from django.shortcuts import get_object_or_404
+from rest_framework import viewsets, views
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Issue, Event, EventStatus
@@ -104,3 +105,21 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
         instance = self.get_queryset().first()
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
+
+
+class EventJsonView(views.APIView):
+    """
+    Represents a "raw" view of the event
+    Not significantly different from event API view in usage but format is very different.
+    Exists mainly for Sentry API compatibility
+    """
+
+    def get(self, request, org, issue, event, format=None):
+        event = get_object_or_404(
+            Event,
+            pk=event,
+            issue__project__organization__slug=org,
+            issue__project__organization__users=self.request.user,
+            issue__project__team__members=self.request.user,
+        )
+        return Response(event.event_json())

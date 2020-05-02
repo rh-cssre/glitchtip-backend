@@ -95,6 +95,19 @@ class EventTestCase(APITestCase):
         res = self.client.get(self.url)
         self.assertTrue("entries" in res.data[0])
 
+    def test_event_json(self):
+        event = baker.make("issues.Event", issue__project=self.project)
+        url = reverse(
+            "event_json",
+            kwargs={
+                "org": self.organization.slug,
+                "issue": event.issue.id,
+                "event": event.event_id_hex,
+            },
+        )
+        res = self.client.get(url)
+        self.assertContains(res, event.event_id_hex)
+
 
 class IssuesAPITestCase(APITestCase):
     def setUp(self):

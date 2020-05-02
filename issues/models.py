@@ -1,4 +1,5 @@
 import uuid
+import json
 from django.contrib.postgres.fields import JSONField
 from django.db import models
 
@@ -115,6 +116,18 @@ class Event(models.Model):
             if isinstance(self.event_id, str):
                 return self.event_id
             return self.event_id.hex
+
+    def event_json(self):
+        """
+        OSS Sentry Compatible raw event JSON
+        Effectively this combines data and relational data
+        """
+        event = self.data
+        event["event_id"] = self.event_id_hex
+        event["project"] = self.issue.project_id
+        if self.timestamp:
+            event["datetime"] = self.timestamp.isoformat().replace("+00:00", "Z")
+        return event
 
     @property
     def contexts(self):

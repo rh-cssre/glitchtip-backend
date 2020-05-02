@@ -1,0 +1,270 @@
+{
+  "level": "error",
+  "exception": {
+    "values": [
+      {
+        "module": null,
+        "type": "ZeroDivisionError",
+        "value": "division by zero",
+        "mechanism": { "type": "django", "handled": false },
+        "stacktrace": {
+          "frames": [
+            {
+              "filename": "django/core/handlers/exception.py",
+              "abs_path": "/usr/local/lib/python3.8/site-packages/django/core/handlers/exception.py",
+              "function": "inner",
+              "module": "django.core.handlers.exception",
+              "lineno": 34,
+              "pre_context": [
+                "    can rely on getting a response instead of an exception.",
+                "    \"\"\"",
+                "    @wraps(get_response)",
+                "    def inner(request):",
+                "        try:"
+              ],
+              "context_line": "            response = get_response(request)",
+              "post_context": [
+                "        except Exception as exc:",
+                "            response = response_for_exception(request, exc)",
+                "        return response",
+                "    return inner",
+                ""
+              ],
+              "vars": {
+                "request": "<WSGIRequest: GET '/divide-zero/'>",
+                "exc": "ZeroDivisionError('division by zero')",
+                "get_response": "<bound method BaseHandler._get_response of <django.core.handlers.wsgi.WSGIHandler object at 0x7f181f5b9fa0>>"
+              },
+              "in_app": true
+            },
+            {
+              "filename": "django/core/handlers/base.py",
+              "abs_path": "/usr/local/lib/python3.8/site-packages/django/core/handlers/base.py",
+              "function": "_get_response",
+              "module": "django.core.handlers.base",
+              "lineno": 115,
+              "pre_context": [
+                "        if response is None:",
+                "            wrapped_callback = self.make_view_atomic(callback)",
+                "            try:",
+                "                response = wrapped_callback(request, *callback_args, **callback_kwargs)",
+                "            except Exception as e:"
+              ],
+              "context_line": "                response = self.process_exception_by_middleware(e, request)",
+              "post_context": [
+                "",
+                "        # Complain if the view returned None (a common error).",
+                "        if response is None:",
+                "            if isinstance(callback, types.FunctionType):    # FBV",
+                "                view_name = callback.__name__"
+              ],
+              "vars": {
+                "self": "<django.core.handlers.wsgi.WSGIHandler object at 0x7f181f5b9fa0>",
+                "request": "<WSGIRequest: GET '/divide-zero/'>",
+                "response": "None",
+                "resolver": "<URLResolver 'django_error_factory.urls' (None:None) '^/'>",
+                "resolver_match": "ResolverMatch(func=errors.views.DivideZeroView, args=(), kwargs={}, url_name=divide_zero, app_names=[], namespaces=[], route=divide-zero/)",
+                "callback": "<function DivideZeroView at 0x7f181e818d30>",
+                "callback_args": [],
+                "callback_kwargs": {},
+                "middleware_method": "<function CsrfViewMiddleware.process_view at 0x7f181e7299d0>",
+                "wrapped_callback": "<function DivideZeroView at 0x7f181e818d30>"
+              },
+              "in_app": true
+            },
+            {
+              "filename": "django/core/handlers/base.py",
+              "abs_path": "/usr/local/lib/python3.8/site-packages/django/core/handlers/base.py",
+              "function": "_get_response",
+              "module": "django.core.handlers.base",
+              "lineno": 113,
+              "pre_context": [
+                "                break",
+                "",
+                "        if response is None:",
+                "            wrapped_callback = self.make_view_atomic(callback)",
+                "            try:"
+              ],
+              "context_line": "                response = wrapped_callback(request, *callback_args, **callback_kwargs)",
+              "post_context": [
+                "            except Exception as e:",
+                "                response = self.process_exception_by_middleware(e, request)",
+                "",
+                "        # Complain if the view returned None (a common error).",
+                "        if response is None:"
+              ],
+              "vars": {
+                "self": "<django.core.handlers.wsgi.WSGIHandler object at 0x7f181f5b9fa0>",
+                "request": "<WSGIRequest: GET '/divide-zero/'>",
+                "response": "None",
+                "resolver": "<URLResolver 'django_error_factory.urls' (None:None) '^/'>",
+                "resolver_match": "ResolverMatch(func=errors.views.DivideZeroView, args=(), kwargs={}, url_name=divide_zero, app_names=[], namespaces=[], route=divide-zero/)",
+                "callback": "<function DivideZeroView at 0x7f181e818d30>",
+                "callback_args": [],
+                "callback_kwargs": {},
+                "middleware_method": "<function CsrfViewMiddleware.process_view at 0x7f181e7299d0>",
+                "wrapped_callback": "<function DivideZeroView at 0x7f181e818d30>"
+              },
+              "in_app": true
+            },
+            {
+              "filename": "django/views/generic/base.py",
+              "abs_path": "/usr/local/lib/python3.8/site-packages/django/views/generic/base.py",
+              "function": "view",
+              "module": "django.views.generic.base",
+              "lineno": 71,
+              "pre_context": [
+                "            if not hasattr(self, 'request'):",
+                "                raise AttributeError(",
+                "                    \"%s instance has no 'request' attribute. Did you override \"",
+                "                    \"setup() and forget to call super()?\" % cls.__name__",
+                "                )"
+              ],
+              "context_line": "            return self.dispatch(request, *args, **kwargs)",
+              "post_context": [
+                "        view.view_class = cls",
+                "        view.view_initkwargs = initkwargs",
+                "",
+                "        # take name and docstring from class",
+                "        update_wrapper(view, cls, updated=())"
+              ],
+              "vars": {
+                "request": "<WSGIRequest: GET '/divide-zero/'>",
+                "args": [],
+                "kwargs": {},
+                "self": "<errors.views.DivideZeroView object at 0x7f181e6651f0>",
+                "cls": "<class 'errors.views.DivideZeroView'>",
+                "initkwargs": {}
+              },
+              "in_app": true
+            },
+            {
+              "filename": "django/views/generic/base.py",
+              "abs_path": "/usr/local/lib/python3.8/site-packages/django/views/generic/base.py",
+              "function": "dispatch",
+              "module": "django.views.generic.base",
+              "lineno": 97,
+              "pre_context": [
+                "        # request method isn't on the approved list.",
+                "        if request.method.lower() in self.http_method_names:",
+                "            handler = getattr(self, request.method.lower(), self.http_method_not_allowed)",
+                "        else:",
+                "            handler = self.http_method_not_allowed"
+              ],
+              "context_line": "        return handler(request, *args, **kwargs)",
+              "post_context": [
+                "",
+                "    def http_method_not_allowed(self, request, *args, **kwargs):",
+                "        logger.warning(",
+                "            'Method Not Allowed (%s): %s', request.method, request.path,",
+                "            extra={'status_code': 405, 'request': request}"
+              ],
+              "vars": {
+                "self": "<errors.views.DivideZeroView object at 0x7f181e6651f0>",
+                "request": "<WSGIRequest: GET '/divide-zero/'>",
+                "args": [],
+                "kwargs": {},
+                "handler": "<bound method DivideZeroView.get of <errors.views.DivideZeroView object at 0x7f181e6651f0>>"
+              },
+              "in_app": true
+            },
+            {
+              "filename": "errors/views.py",
+              "abs_path": "/code/errors/views.py",
+              "function": "get",
+              "module": "errors.views",
+              "lineno": 18,
+              "pre_context": [
+                "    template_name = \"home.html\"",
+                "",
+                "",
+                "class DivideZeroView(View):",
+                "    def get(self, request, *args, **kwargs):"
+              ],
+              "context_line": "        0/0",
+              "post_context": [
+                "",
+                "",
+                "class DatabaseErrorView(View):",
+                "    def get(self, request, *args, **kwargs):",
+                "        User.objects.get(id=\"9999999\")"
+              ],
+              "vars": {
+                "self": "<errors.views.DivideZeroView object at 0x7f181e6651f0>",
+                "request": "<WSGIRequest: GET '/divide-zero/'>",
+                "args": [],
+                "kwargs": {}
+              },
+              "in_app": true
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "event_id": "dd9e1afb828a44d5b4df0183adaee5d8",
+  "timestamp": "2020-05-02T16:54:20.487733Z",
+  "breadcrumbs": [],
+  "transaction": "/divide-zero/",
+  "contexts": {
+    "trace": {
+      "trace_id": "9aaeffa209dd4e2d85a084826e8ef964",
+      "span_id": "a8483a699fbe8ac6",
+      "parent_span_id": "a3a4374fe17c42a0",
+      "op": "django.middleware",
+      "description": "django.middleware.clickjacking.XFrameOptionsMiddleware.__call__"
+    },
+    "runtime": {
+      "name": "CPython",
+      "version": "3.8.2",
+      "build": "3.8.2 (default, Apr 23 2020, 14:32:57) \n[GCC 8.3.0]"
+    }
+  },
+  "modules": {
+    "wheel": "0.34.2",
+    "appdirs": "1.4.3"
+  },
+  "extra": { "sys.argv": ["./manage.py", "runserver", "0.0.0.0:8001"] },
+  "request": {
+    "url": "http://localhost:8001/divide-zero/",
+    "query_string": "",
+    "method": "GET",
+    "env": { "SERVER_NAME": "2f96b0310f37", "SERVER_PORT": "8001" },
+    "headers": {
+      "Content-Length": "",
+      "Content-Type": "text/plain",
+      "Host": "localhost:8001",
+      "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:75.0) Gecko/20100101 Firefox/75.0",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.5",
+      "Accept-Encoding": "gzip, deflate",
+      "Connection": "keep-alive",
+      "Referer": "http://localhost:8001/",
+      "Cookie": "",
+      "Upgrade-Insecure-Requests": "1"
+    }
+  },
+  "server_name": "2f96b0310f37",
+  "sdk": {
+    "name": "sentry.python",
+    "version": "0.14.3",
+    "packages": [{ "name": "pypi:sentry-sdk", "version": "0.14.3" }],
+    "integrations": [
+      "argv",
+      "atexit",
+      "dedupe",
+      "django",
+      "excepthook",
+      "logging",
+      "modules",
+      "stdlib",
+      "threading"
+    ]
+  },
+  "platform": "python",
+  "_meta": {
+    "request": {
+      "headers": { "Cookie": { "": { "rem": [["!config", "x", 0, 1078]] } } }
+    }
+  }
+}

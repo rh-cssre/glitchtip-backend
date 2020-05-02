@@ -5,6 +5,7 @@ from django.views.generic import TemplateView
 from rest_auth.registration.views import SocialAccountDisconnectView
 from rest_framework_nested import routers
 from issues.urls import router as issuesRouter
+from issues.views import EventJsonView
 from projects.urls import router as projectsRouter
 from teams.urls import router as teamsRouter
 from organizations_ext.urls import router as organizationsRouter
@@ -34,6 +35,12 @@ urlpatterns = [
     path("api/0/", include("organizations_ext.urls")),
     path("api/0/", include("teams.urls")),
     path("api/", include("event_store.urls")),
+    # What an oddball API endpoint
+    path(
+        "organizations/<slug:org>/issues/<int:issue>/events/<str:event>/json/",
+        EventJsonView.as_view(),
+        name="event_json",
+    ),
     path("api/settings/", SettingsView.as_view(), name="settings"),
     path("rest-auth/", include("rest_auth.urls")),
     path("rest-auth/registration/", include("rest_auth.registration.urls")),
