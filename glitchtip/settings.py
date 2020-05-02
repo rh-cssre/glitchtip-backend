@@ -258,6 +258,7 @@ AWS_S3_ENDPOINT_URL = env("AWS_S3_ENDPOINT_URL")
 AWS_LOCATION = env("AWS_LOCATION")
 
 STATICFILES_DIRS = [
+    "assets",
     "dist",
 ]
 STATIC_ROOT = path("static/")
