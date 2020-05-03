@@ -4,10 +4,11 @@ variables:
   IMAGE_NAME: registry.gitlab.com/glitchtip/glitchtip-backend
   CONTAINER_TEST_IMAGE: registry.gitlab.com/glitchtip/glitchtip-backend:$CI_BUILD_REF_NAME
   POETRY_VERSION: 1.0.5
-  POETRY_VIRTUALENVS_CREATE: 'false'
+  POETRY_VIRTUALENVS_CREATE: "false"
   PIP_DISABLE_PIP_VERSION_CHECK: "on"
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
   POSTGRES_HOST_AUTH_METHOD: "trust"
+  DEBUG: "true"
 
 test:
   image: python:3.8-slim
@@ -37,4 +38,3 @@ build:
     - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN registry.gitlab.com
     - docker tag ${PROJECT_NAME}_web ${IMAGE_NAME}:$CI_BUILD_REF_NAME
     - docker push $CONTAINER_TEST_IMAGE
-
