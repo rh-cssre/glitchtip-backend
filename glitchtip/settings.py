@@ -26,7 +26,7 @@ env = environ.Env(
     AWS_STORAGE_BUCKET_NAME=(str, None),
     AWS_S3_ENDPOINT_URL=(str, None),
     AWS_LOCATION=(str, None),
-    STATIC_URL=(str, "/static/"),
+    STATIC_URL=(str, "/"),
     STATICFILES_STORAGE=(
         str,
         "whitenoise.storage.CompressedManifestStaticFilesStorage",
