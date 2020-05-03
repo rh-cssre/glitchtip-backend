@@ -216,7 +216,7 @@ class Event(models.Model):
 
     @property
     def packages(self):
-        return self.data.get("packages")
+        return self.data.get("modules")
 
     @property
     def platform(self):

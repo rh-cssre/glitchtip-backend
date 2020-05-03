@@ -34,12 +34,26 @@ class StoreDefaultSerializer(serializers.Serializer):
         if self.type is EventType.ERROR:
             return ErrorEvent()
 
+    def modify_exception(self, exception):
+        """ OSS Sentry does this, I have no idea why """
+        if exception:
+            for value in exception.get("values", []):
+                value.pop("module", None)
+                if value.get("stacktrace") and value["stacktrace"].get("frames"):
+                    frames = value["stacktrace"]["frames"]
+                    # If in_app is always true, make it false ¯\_(ツ)_/¯
+                    if all(x.get("in_app") for x in frames):
+                        for frame in frames:
+                            frame["in_app"] = False
+        return exception
+
     def create(self, project, data):
         eventtype = self.get_eventtype()
         metadata = eventtype.get_metadata(data)
         title = eventtype.get_title(metadata)
         culprit = eventtype.get_location(data)
         request = data.get("request")
+        exception = self.modify_exception(data.get("exception"))
         if request:
             headers = request.get("headers")
             if headers:
@@ -60,9 +74,9 @@ class StoreDefaultSerializer(serializers.Serializer):
                 "data": {
                     "contexts": data.get("contexts"),
                     "culprit": culprit,
-                    "exception": data.get("exception"),
+                    "exception": exception,
                     "metadata": metadata,
-                    "packages": data.get("modules"),
+                    "modules": data.get("modules"),
                     "platform": data["platform"],
                     "request": request,
                     "sdk": data["sdk"],

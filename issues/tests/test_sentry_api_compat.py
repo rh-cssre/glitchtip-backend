@@ -268,8 +268,9 @@ class SentryAPICompatTestCase(APITestCase):
         )
         res = self.client.post(self.event_store_url, sdk_error, format="json")
         event = Event.objects.get(pk=res.data["id"])
+        event_json = event.event_json()
         self.assertCompareData(
-            event.event_json(),
+            event_json,
             sentry_json,
             [
                 "event_id",
@@ -277,6 +278,8 @@ class SentryAPICompatTestCase(APITestCase):
                 "release",
                 "dist",
                 "platform",
+                "exception",
+                "modules",
                 "time_spent",
                 "sdk",
                 "type",
@@ -285,7 +288,16 @@ class SentryAPICompatTestCase(APITestCase):
             ],
         )
         self.assertEqual(
-            event.event_json()["datetime"][:22],
+            event_json["datetime"][:22],
             sentry_json["datetime"][:22],
             "Compare if datetime is almost the same",
+        )
+
+        url = self.get_project_events_detail(event.pk)
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        self.assertCompareData(
+            res.data,
+            sentry_data,
+            ["title", "culprit", "type", "metadata", "platform", "packages"],
         )
