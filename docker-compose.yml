@@ -4,7 +4,7 @@ x-environment: &default-environment
   SECRET_KEY: change_me
   ENABLE_SOCIAL_AUTH: "true"
   ENABLE_TEST_API: "true"
-  DEBUG: "false"
+  DEBUG: "true"
 x-depends_on: &default-depends_on
   - postgres
   - redis

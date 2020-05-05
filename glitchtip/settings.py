@@ -260,7 +260,11 @@ SITE_ID = 1
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/dev/howto/static-files/
-STATIC_URL = env("STATIC_URL")
+if DEBUG:
+    STATIC_URL = '/static/'
+else: # This is needed for angular cli
+    STATIC_URL = '/'
+
 
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
