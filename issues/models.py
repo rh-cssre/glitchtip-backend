@@ -159,6 +159,8 @@ class Event(models.Model):
                             frame["inApp"] = frame.pop("in_app")
                         if "abs_path" in frame:
                             frame["absPath"] = frame.pop("abs_path")
+                        if "colno" in frame:
+                            frame["colNo"] = frame.pop("colno")
                         if "lineno" in frame:
                             frame["lineNo"] = frame.pop("lineno")
                             base_line_no = frame["lineNo"]
