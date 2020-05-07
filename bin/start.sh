@@ -2,6 +2,12 @@
 set -e
 
 SERVER_ROLE="${SERVER_ROLE:-web}"
+HEROKU_DYNO="${DYNO:-no}"
+
+case "$HEROKU_DYNO" in
+    web*) ./manage.py migrate ;;
+    worker*) SERVER_ROLE=worker_with_beat ;;
+esac
 
 case $SERVER_ROLE in
     web)
@@ -12,6 +18,9 @@ case $SERVER_ROLE in
         ;;
     beat)
         SCRIPT="./bin/run-beat.sh"
+        ;;
+    worker_with_beat)
+        SCRIPT="./bin/run-celery-with-beat.sh"
         ;;
     *)
         echo "Unknown server role provided: $SERVER_ROLE. Should be web|worker|beat."
