@@ -18,9 +18,10 @@ class ListFilter(filters.Filter):
 
 
 class IssueFilter(filters.FilterSet):
+    start = filters.IsoDateTimeFilter(field_name="created", lookup_expr="gte")
+    end = filters.IsoDateTimeFilter(field_name="created", lookup_expr="lte")
     project = ListFilter()
 
     class Meta:
         model = Issue
-        fields = ["project"]
-
+        fields = ["project", "start", "end"]
