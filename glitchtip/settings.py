@@ -20,7 +20,7 @@ from celery.schedules import crontab
 env = environ.Env(
     ALLOWED_HOSTS=(list, ["*"]),
     DEBUG=(bool, False),
-    DEBUG_TOOLBAR=(bool, False),
+    DEBUG_TOOLBAR=(bool, True),
     AWS_ACCESS_KEY_ID=(str, None),
     AWS_SECRET_ACCESS_KEY=(str, None),
     AWS_STORAGE_BUCKET_NAME=(str, None),
@@ -93,6 +93,14 @@ def show_toolbar(request):
 
 
 DEBUG_TOOLBAR_CONFIG = {"SHOW_TOOLBAR_CALLBACK": show_toolbar}
+DEBUG_TOOLBAR_PANELS = [
+    "debug_toolbar.panels.versions.VersionsPanel",
+    "debug_toolbar.panels.timer.TimerPanel",
+    "debug_toolbar.panels.settings.SettingsPanel",
+    "debug_toolbar.panels.headers.HeadersPanel",
+    "debug_toolbar.panels.request.RequestPanel",
+    "debug_toolbar.panels.sql.SQLPanel",
+]
 
 # Application definition
 
@@ -104,6 +112,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.sites",
+    "django.contrib.postgres",
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
@@ -261,9 +270,9 @@ SITE_ID = 1
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/dev/howto/static-files/
 if DEBUG:
-    STATIC_URL = '/static/'
-else: # This is needed for angular cli
-    STATIC_URL = '/'
+    STATIC_URL = "/static/"
+else:  # This is needed for angular cli
+    STATIC_URL = "/"
 
 
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")

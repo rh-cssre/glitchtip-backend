@@ -32,3 +32,25 @@ class FilterTestCase(APITestCase):
         self.assertContains(res, event2.issue.title)
         self.assertNotContains(res, event1.issue.title)
         self.assertNotContains(res, event3.issue.title)
+
+
+class SearchTestCase(APITestCase):
+    def setUp(self):
+        self.user = baker.make("users.user")
+        self.organization = baker.make("organizations_ext.Organization")
+        self.organization.add_user(self.user, OrganizationUserRole.ADMIN)
+        self.team = baker.make("teams.Team", organization=self.organization)
+        self.team.members.add(self.user)
+        self.project = baker.make("projects.Project", organization=self.organization)
+        self.project.team_set.add(self.team)
+        self.client.force_login(self.user)
+        self.url = reverse("issue-list")
+
+    def test_search(self):
+        event = baker.make(
+            "issues.Event", issue__project=self.project, data={"name": "apple sauce"}
+        )
+        other_event = baker.make("issues.Event", issue__project=self.project)
+        res = self.client.get(self.url + "?query=is:unresolved apple sauce")
+        self.assertContains(res, event.issue.title)
+        self.assertNotContains(res, other_event.issue.title)

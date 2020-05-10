@@ -3,6 +3,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, views
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from projects.models import Project
 from .models import Issue, Event, EventStatus
 from .serializers import (
     IssueSerializer,
@@ -31,14 +32,11 @@ class IssueViewSet(viewsets.ModelViewSet):
     filterset_class = IssueFilter
 
     def get_queryset(self):
-        qs = (
-            super()
-            .get_queryset()
-            .filter(
-                project__organization__users=self.request.user,
-                project__team__members=self.request.user,
-            )
+        # Optimization, doing this in one query (instead of 2) will result in not using gin index
+        projects = Project.objects.filter(
+            organization__users=self.request.user, team__members=self.request.user,
         )
+        qs = super().get_queryset().filter(project__in=projects)
 
         if "organization_slug" in self.kwargs:
             qs = qs.filter(
@@ -49,18 +47,29 @@ class IssueViewSet(viewsets.ModelViewSet):
 
         queries = self.request.GET.get("query")
         if queries:
+            # First look for structured queries
             for query in queries.split():
                 query_part = query.split(":", 1)
                 if len(query_part) == 2:
+                    # Remove query from queries
+                    queries = queries.replace(query, "").strip()
+
                     query_name, query_value = query_part
                     if query_name == "is":
                         qs = qs.filter(status=EventStatus.from_string(query_value))
+
+        if queries:
+            # Anything left is full text search
+            qs = qs.filter(event__search_vector=queries).distinct()
 
         qs = qs.annotate(
             count=Count("event"),
             firstSeen=Min("event__created"),
             lastSeen=Max("event__created"),
         )
+
+        qs = qs.select_related("project")
+
         return qs
 
     def bulk_update(self, request, *args, **kwargs):

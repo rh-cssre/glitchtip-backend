@@ -1,6 +1,7 @@
 import uuid
-import json
 from django.contrib.postgres.fields import JSONField
+from django.contrib.postgres.search import SearchVectorField
+from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 
 
@@ -102,9 +103,12 @@ class Event(models.Model):
 
     created = models.DateTimeField(auto_now_add=True, db_index=True)
     data = JSONField()
+    # See migration 0003 for trigger to update
+    search_vector = SearchVectorField(null=True, editable=False)
 
     class Meta:
         ordering = ["-created"]
+        indexes = [GinIndex(fields=["search_vector"], name="search_vector_idx")]
 
     def __str__(self):
         return self.event_id_hex
