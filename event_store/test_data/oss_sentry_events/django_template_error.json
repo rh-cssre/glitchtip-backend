@@ -1,0 +1,650 @@
+{
+    "eventID": "3e7c1345914d4924926d795ade8240cb",
+    "dist": null,
+    "userReport": null,
+    "projectID": "7",
+    "previousEventID": null,
+    "message": "_reverse_with_prefix NoReverseMatch Reverse for 'nope' not found. 'nope' is not a valid view function or pattern name. django/urls/resolvers.py /template-error/",
+    "id": "2171",
+    "size": 8801,
+    "errors": [],
+    "culprit": "/template-error/",
+    "title": "NoReverseMatch: Reverse for 'nope' not found. 'nope' is not a valid view function or pattern name.",
+    "platform": "python",
+    "location": "django/urls/resolvers.py",
+    "nextEventID": null,
+    "type": "error",
+    "metadata": {
+        "function": "_reverse_with_prefix",
+        "type": "NoReverseMatch",
+        "value": "Reverse for 'nope' not found. 'nope' is not a valid view function or pattern name.",
+        "filename": "django/urls/resolvers.py"
+    },
+    "groupingConfig": {
+        "id": "legacy:2019-03-12"
+    },
+    "crashFile": null,
+    "tags": [
+        {
+            "value": "Firefox 76.0",
+            "key": "browser",
+            "_meta": null
+        },
+        {
+            "value": "Firefox",
+            "key": "browser.name",
+            "_meta": null
+        },
+        {
+            "value": "no",
+            "key": "handled",
+            "_meta": null
+        },
+        {
+            "value": "error",
+            "key": "level",
+            "_meta": null
+        },
+        {
+            "value": "django",
+            "key": "mechanism",
+            "_meta": null
+        },
+        {
+            "value": "Ubuntu",
+            "key": "os.name",
+            "_meta": null
+        },
+        {
+            "value": "CPython 3.8.2",
+            "key": "runtime",
+            "_meta": null
+        },
+        {
+            "value": "CPython",
+            "key": "runtime.name",
+            "_meta": null
+        },
+        {
+            "value": "4c55e9e8d666",
+            "key": "server_name",
+            "_meta": null
+        },
+        {
+            "value": "/template-error/",
+            "key": "transaction",
+            "_meta": null
+        },
+        {
+            "value": "http://localhost:8001/template-error/",
+            "key": "url",
+            "_meta": null
+        }
+    ],
+    "dateCreated": "2020-05-13T00:37:49.130Z",
+    "dateReceived": "2020-05-13T00:41:37.905Z",
+    "user": null,
+    "entries": [
+        {
+            "type": "exception",
+            "data": {
+                "values": [
+                    {
+                        "stacktrace": {
+                            "frames": [
+                                {
+                                    "function": "inner",
+                                    "colNo": null,
+                                    "vars": {
+                                        "get_response": "<bound method BaseHandler._get_response of <django.core.handlers.wsgi.WSGIHandler object at 0x7fc14cb6efa0>>",
+                                        "request": "<WSGIRequest: GET '/template-error/'>",
+                                        "exc": "NoReverseMatch(\"Reverse for 'nope' not found. 'nope' is not a valid view function or pattern name.\")"
+                                    },
+                                    "symbol": null,
+                                    "module": "django.core.handlers.exception",
+                                    "lineNo": 34,
+                                    "trust": null,
+                                    "errors": null,
+                                    "package": null,
+                                    "absPath": "/usr/local/lib/python3.8/site-packages/django/core/handlers/exception.py",
+                                    "inApp": false,
+                                    "instructionAddr": null,
+                                    "filename": "django/core/handlers/exception.py",
+                                    "platform": null,
+                                    "context": [
+                                        [
+                                            29,
+                                            "    can rely on getting a response instead of an exception."
+                                        ],
+                                        [
+                                            30,
+                                            "    \"\"\""
+                                        ],
+                                        [
+                                            31,
+                                            "    @wraps(get_response)"
+                                        ],
+                                        [
+                                            32,
+                                            "    def inner(request):"
+                                        ],
+                                        [
+                                            33,
+                                            "        try:"
+                                        ],
+                                        [
+                                            34,
+                                            "            response = get_response(request)"
+                                        ],
+                                        [
+                                            35,
+                                            "        except Exception as exc:"
+                                        ],
+                                        [
+                                            36,
+                                            "            response = response_for_exception(request, exc)"
+                                        ],
+                                        [
+                                            37,
+                                            "        return response"
+                                        ],
+                                        [
+                                            38,
+                                            "    return inner"
+                                        ],
+                                        [
+                                            39,
+                                            ""
+                                        ]
+                                    ],
+                                    "symbolAddr": null
+                                },
+                                {
+                                    "function": "_get_response",
+                                    "colNo": null,
+                                    "vars": {
+                                        "resolver_match": "ResolverMatch(func=errors.views.TemplateErrorView, args=(), kwargs={}, url_name=template_error, app_names=[], namespaces=[], route=template-error/)",
+                                        "callback_args": [],
+                                        "middleware_method": "<function CsrfViewMiddleware.process_view at 0x7fc14bc8ce50>",
+                                        "self": "<django.core.handlers.wsgi.WSGIHandler object at 0x7fc14cb6efa0>",
+                                        "request": "<WSGIRequest: GET '/template-error/'>",
+                                        "callback": "<function TemplateErrorView at 0x7fc14c63f940>",
+                                        "wrapped_callback": "<function TemplateErrorView at 0x7fc14c63f940>",
+                                        "resolver": "<URLResolver 'django_error_factory.urls' (None:None) '^/'>",
+                                        "callback_kwargs": {},
+                                        "response": "<TemplateResponse status_code=200, \"text/html; charset=utf-8\">"
+                                    },
+                                    "symbol": null,
+                                    "module": "django.core.handlers.base",
+                                    "lineNo": 145,
+                                    "trust": null,
+                                    "errors": null,
+                                    "package": null,
+                                    "absPath": "/usr/local/lib/python3.8/site-packages/django/core/handlers/base.py",
+                                    "inApp": false,
+                                    "instructionAddr": null,
+                                    "filename": "django/core/handlers/base.py",
+                                    "platform": null,
+                                    "context": [
+                                        [
+                                            140,
+                                            "                    )"
+                                        ],
+                                        [
+                                            141,
+                                            ""
+                                        ],
+                                        [
+                                            142,
+                                            "            try:"
+                                        ],
+                                        [
+                                            143,
+                                            "                response = response.render()"
+                                        ],
+                                        [
+                                            144,
+                                            "            except Exception as e:"
+                                        ],
+                                        [
+                                            145,
+                                            "                response = self.process_exception_by_middleware(e, request)"
+                                        ],
+                                        [
+                                            146,
+                                            ""
+                                        ],
+                                        [
+                                            147,
+                                            "        return response"
+                                        ],
+                                        [
+                                            148,
+                                            ""
+                                        ],
+                                        [
+                                            149,
+                                            "    def process_exception_by_middleware(self, exception, request):"
+                                        ],
+                                        [
+                                            150,
+                                            "        \"\"\""
+                                        ]
+                                    ],
+                                    "symbolAddr": null
+                                },
+                                {
+                                    "function": "_get_response",
+                                    "colNo": null,
+                                    "vars": {
+                                        "resolver_match": "ResolverMatch(func=errors.views.TemplateErrorView, args=(), kwargs={}, url_name=template_error, app_names=[], namespaces=[], route=template-error/)",
+                                        "callback_args": [],
+                                        "middleware_method": "<function CsrfViewMiddleware.process_view at 0x7fc14bc8ce50>",
+                                        "self": "<django.core.handlers.wsgi.WSGIHandler object at 0x7fc14cb6efa0>",
+                                        "request": "<WSGIRequest: GET '/template-error/'>",
+                                        "callback": "<function TemplateErrorView at 0x7fc14c63f940>",
+                                        "wrapped_callback": "<function TemplateErrorView at 0x7fc14c63f940>",
+                                        "resolver": "<URLResolver 'django_error_factory.urls' (None:None) '^/'>",
+                                        "callback_kwargs": {},
+                                        "response": "<TemplateResponse status_code=200, \"text/html; charset=utf-8\">"
+                                    },
+                                    "symbol": null,
+                                    "module": "django.core.handlers.base",
+                                    "lineNo": 143,
+                                    "trust": null,
+                                    "errors": null,
+                                    "package": null,
+                                    "absPath": "/usr/local/lib/python3.8/site-packages/django/core/handlers/base.py",
+                                    "inApp": false,
+                                    "instructionAddr": null,
+                                    "filename": "django/core/handlers/base.py",
+                                    "platform": null,
+                                    "context": [
+                                        [
+                                            138,
+                                            "                        \"HttpResponse object. It returned None instead.\""
+                                        ],
+                                        [
+                                            139,
+                                            "                        % (middleware_method.__self__.__class__.__name__)"
+                                        ],
+                                        [
+                                            140,
+                                            "                    )"
+                                        ],
+                                        [
+                                            141,
+                                            ""
+                                        ],
+                                        [
+                                            142,
+                                            "            try:"
+                                        ],
+                                        [
+                                            143,
+                                            "                response = response.render()"
+                                        ],
+                                        [
+                                            144,
+                                            "            except Exception as e:"
+                                        ],
+                                        [
+                                            145,
+                                            "                response = self.process_exception_by_middleware(e, request)"
+                                        ],
+                                        [
+                                            146,
+                                            ""
+                                        ],
+                                        [
+                                            147,
+                                            "        return response"
+                                        ],
+                                        [
+                                            148,
+                                            ""
+                                        ]
+                                    ],
+                                    "symbolAddr": null
+                                },
+                                {
+                                    "function": "render",
+                                    "colNo": null,
+                                    "vars": {
+                                        "self": "<TemplateResponse status_code=200, \"text/html; charset=utf-8\">",
+                                        "retval": "<TemplateResponse status_code=200, \"text/html; charset=utf-8\">"
+                                    },
+                                    "symbol": null,
+                                    "module": "django.template.response",
+                                    "lineNo": 105,
+                                    "trust": null,
+                                    "errors": null,
+                                    "package": null,
+                                    "absPath": "/usr/local/lib/python3.8/site-packages/django/template/response.py",
+                                    "inApp": false,
+                                    "instructionAddr": null,
+                                    "filename": "django/template/response.py",
+                                    "platform": null,
+                                    "context": [
+                                        [
+                                            100,
+                                            ""
+                                        ],
+                                        [
+                                            101,
+                                            "        Return the baked response instance."
+                                        ],
+                                        [
+                                            102,
+                                            "        \"\"\""
+                                        ],
+                                        [
+                                            103,
+                                            "        retval = self"
+                                        ],
+                                        [
+                                            104,
+                                            "        if not self._is_rendered:"
+                                        ],
+                                        [
+                                            105,
+                                            "            self.content = self.rendered_content"
+                                        ],
+                                        [
+                                            106,
+                                            "            for post_callback in self._post_render_callbacks:"
+                                        ],
+                                        [
+                                            107,
+                                            "                newretval = post_callback(retval)"
+                                        ],
+                                        [
+                                            108,
+                                            "                if newretval is not None:"
+                                        ],
+                                        [
+                                            109,
+                                            "                    retval = newretval"
+                                        ],
+                                        [
+                                            110,
+                                            "        return retval"
+                                        ]
+                                    ],
+                                    "symbolAddr": null
+                                },
+                                {
+                                    "function": "reverse",
+                                    "colNo": null,
+                                    "vars": {
+                                        "current_path": "None",
+                                        "viewname": "'nope'",
+                                        "args": [],
+                                        "current_app": "''",
+                                        "prefix": "'/'",
+                                        "resolver": "<URLResolver 'django_error_factory.urls' (None:None) '^/'>",
+                                        "kwargs": {},
+                                        "path": [],
+                                        "urlconf": "'django_error_factory.urls'",
+                                        "view": "'nope'"
+                                    },
+                                    "symbol": null,
+                                    "module": "django.urls.base",
+                                    "lineNo": 87,
+                                    "trust": null,
+                                    "errors": null,
+                                    "package": null,
+                                    "absPath": "/usr/local/lib/python3.8/site-packages/django/urls/base.py",
+                                    "inApp": false,
+                                    "instructionAddr": null,
+                                    "filename": "django/urls/base.py",
+                                    "platform": null,
+                                    "context": [
+                                        [
+                                            82,
+                                            "                else:"
+                                        ],
+                                        [
+                                            83,
+                                            "                    raise NoReverseMatch(\"%s is not a registered namespace\" % key)"
+                                        ],
+                                        [
+                                            84,
+                                            "        if ns_pattern:"
+                                        ],
+                                        [
+                                            85,
+                                            "            resolver = get_ns_resolver(ns_pattern, resolver, tuple(ns_converters.items()))"
+                                        ],
+                                        [
+                                            86,
+                                            ""
+                                        ],
+                                        [
+                                            87,
+                                            "    return iri_to_uri(resolver._reverse_with_prefix(view, prefix, *args, **kwargs))"
+                                        ],
+                                        [
+                                            88,
+                                            ""
+                                        ],
+                                        [
+                                            89,
+                                            ""
+                                        ],
+                                        [
+                                            90,
+                                            "reverse_lazy = lazy(reverse, str)"
+                                        ],
+                                        [
+                                            91,
+                                            ""
+                                        ],
+                                        [
+                                            92,
+                                            ""
+                                        ]
+                                    ],
+                                    "symbolAddr": null
+                                },
+                                {
+                                    "function": "_reverse_with_prefix",
+                                    "colNo": null,
+                                    "vars": {
+                                        "lookup_view": "'nope'",
+                                        "m": "None",
+                                        "self": "<URLResolver 'django_error_factory.urls' (None:None) '^/'>",
+                                        "args": [],
+                                        "_prefix": "'/'",
+                                        "lookup_view_s": "'nope'",
+                                        "n": "None",
+                                        "possibilities": [],
+                                        "patterns": [],
+                                        "msg": "\"Reverse for 'nope' not found. 'nope' is not a valid view function or pattern name.\""
+                                    },
+                                    "symbol": null,
+                                    "module": "django.urls.resolvers",
+                                    "lineNo": 677,
+                                    "trust": null,
+                                    "errors": null,
+                                    "package": null,
+                                    "absPath": "/usr/local/lib/python3.8/site-packages/django/urls/resolvers.py",
+                                    "inApp": false,
+                                    "instructionAddr": null,
+                                    "filename": "django/urls/resolvers.py",
+                                    "platform": null,
+                                    "context": [
+                                        [
+                                            672,
+                                            "        else:"
+                                        ],
+                                        [
+                                            673,
+                                            "            msg = ("
+                                        ],
+                                        [
+                                            674,
+                                            "                \"Reverse for '%(view)s' not found. '%(view)s' is not \""
+                                        ],
+                                        [
+                                            675,
+                                            "                \"a valid view function or pattern name.\" % {'view': lookup_view_s}"
+                                        ],
+                                        [
+                                            676,
+                                            "            )"
+                                        ],
+                                        [
+                                            677,
+                                            "        raise NoReverseMatch(msg)"
+                                        ]
+                                    ],
+                                    "symbolAddr": null
+                                }
+                            ],
+                            "framesOmitted": null,
+                            "registers": null,
+                            "hasSystemFrames": false
+                        },
+                        "module": "django.urls.exceptions",
+                        "rawStacktrace": null,
+                        "mechanism": {
+                            "type": "django",
+                            "handled": false
+                        },
+                        "threadId": null,
+                        "value": "Reverse for 'nope' not found. 'nope' is not a valid view function or pattern name.",
+                        "type": "NoReverseMatch"
+                    }
+                ],
+                "excOmitted": null,
+                "hasSystemFrames": false
+            }
+        },
+        {
+            "type": "request",
+            "data": {
+                "fragment": "",
+                "cookies": [],
+                "inferredContentType": "text/plain",
+                "env": {
+                    "SERVER_NAME": "4c55e9e8d666",
+                    "SERVER_PORT": "8001"
+                },
+                "headers": [
+                    [
+                        "Accept",
+                        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+                    ],
+                    [
+                        "Accept-Encoding",
+                        "gzip, deflate"
+                    ],
+                    [
+                        "Accept-Language",
+                        "en-US,en;q=0.5"
+                    ],
+                    [
+                        "Connection",
+                        "keep-alive"
+                    ],
+                    [
+                        "Content-Length",
+                        ""
+                    ],
+                    [
+                        "Content-Type",
+                        "text/plain"
+                    ],
+                    [
+                        "Dnt",
+                        "1"
+                    ],
+                    [
+                        "Host",
+                        "localhost:8001"
+                    ],
+                    [
+                        "Referer",
+                        "http://localhost:8001/"
+                    ],
+                    [
+                        "Upgrade-Insecure-Requests",
+                        "1"
+                    ],
+                    [
+                        "User-Agent",
+                        "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:76.0) Gecko/20100101 Firefox/76.0"
+                    ]
+                ],
+                "url": "http://localhost:8001/template-error/",
+                "query": [],
+                "data": null,
+                "method": "GET"
+            }
+        }
+    ],
+    "packages": {
+        "webencodings": "0.5.1",
+        "wheel": "0.34.2",
+        "asgiref": "3.2.7",
+        "attrs": "19.3.0",
+        "appdirs": "1.4.3"
+    },
+    "sdk": {
+        "version": "0.14.3",
+        "name": "sentry.python",
+        "upstream": {
+            "url": null,
+            "isNewer": false,
+            "name": "sentry.python"
+        }
+    },
+    "_meta": {
+        "user": null,
+        "context": null,
+        "entries": {},
+        "contexts": null,
+        "message": null,
+        "packages": null,
+        "tags": {},
+        "sdk": null
+    },
+    "contexts": {
+        "runtime": {
+            "version": "3.8.2",
+            "type": "runtime",
+            "build": "3.8.2 (default, Apr 23 2020, 14:32:57) \n[GCC 8.3.0]",
+            "name": "CPython"
+        },
+        "os": {
+            "type": "os",
+            "name": "Ubuntu"
+        },
+        "trace": {
+            "description": "django.middleware.clickjacking.XFrameOptionsMiddleware.__call__",
+            "parent_span_id": "be0f515132150c50",
+            "trace_id": "7f6b76eac5d042b78752db640a848008",
+            "span_id": "802ffce6fe075f40",
+            "type": "default",
+            "op": "django.middleware"
+        },
+        "browser": {
+            "version": "76.0",
+            "type": "browser",
+            "name": "Firefox"
+        }
+    },
+    "fingerprints": [
+        "f5f84fe90def35006ba620e9ca39ef31"
+    ],
+    "context": {
+        "sys.argv": [
+            "./manage.py",
+            "runserver",
+            "0.0.0.0:8001"
+        ]
+    },
+    "release": null,
+    "groupID": "72"
+}

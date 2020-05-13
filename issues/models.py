@@ -3,6 +3,7 @@ from django.contrib.postgres.fields import JSONField
 from django.contrib.postgres.search import SearchVectorField
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
+from sentry.interfaces.stacktrace import get_context
 
 
 class EventType(models.IntegerChoices):
@@ -167,20 +168,14 @@ class Event(models.Model):
                             frame["colNo"] = frame.pop("colno")
                         if "lineno" in frame:
                             frame["lineNo"] = frame.pop("lineno")
-                            base_line_no = frame["lineNo"]
-                            context = []
                             pre_context = frame.pop("pre_context", None)
-                            if pre_context:
-                                context += self._build_context(
-                                    pre_context, base_line_no, True
-                                )
-                            context.append([base_line_no, frame.get("context_line")])
                             post_context = frame.pop("post_context", None)
-                            if post_context:
-                                context += self._build_context(
-                                    post_context, base_line_no, False
-                                )
-                            frame["context"] = context
+                            frame["context"] = get_context(
+                                frame["lineNo"],
+                                frame.get("context_line"),
+                                pre_context,
+                                post_context,
+                            )
 
             entries.append({"type": "exception", "data": exception})
 

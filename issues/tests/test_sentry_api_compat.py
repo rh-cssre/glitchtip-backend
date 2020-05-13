@@ -3,7 +3,7 @@ from typing import List, Dict
 from django.urls import reverse
 from rest_framework.test import APITestCase
 from model_bakery import baker
-from event_store.test_data.django_error_factory import template_error, message
+from event_store.test_data.django_error_factory import message
 from event_store.test_data.js_error_factory import throw_error
 from event_store.test_data.csp import mdn_sample_csp
 from organizations_ext.models import OrganizationUserRole
@@ -11,6 +11,8 @@ from issues.models import Event
 
 
 TEST_DATA_DIR = "event_store/test_data"
+
+is_exception = lambda v: v.get("type") == "exception"
 
 
 class SentryAPICompatTestCase(APITestCase):
@@ -63,23 +65,21 @@ class SentryAPICompatTestCase(APITestCase):
         )
 
     def test_template_error(self):
-        res = self.client.post(self.event_store_url, template_error, format="json")
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+            "django_template_error"
+        )
+        res = self.client.post(self.event_store_url, sdk_error, format="json")
         self.assertEqual(res.status_code, 200)
+        event = Event.objects.get(pk=res.data["id"])
 
-        event_id = res.data["id"]
-        url = self.get_project_events_detail(event_id)
+        url = self.get_project_events_detail(event.pk)
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
-        issue = Event.objects.get(event_id=event_id).issue
-
-        data = self.get_json_data(
-            "event_store/test_data/django_template_error_event.json"
-        )
-        self.assertCompareData(res.data, data, ["culprit", "title", "metadata"])
+        self.assertCompareData(res.data, sentry_data, ["culprit", "title", "metadata"])
         res_frames = res.data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"]
-        frames = data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"]
+        frames = sentry_data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"]
 
-        for i in range(9):
+        for i in range(6):
             # absPath don't always match - needs fixed
             self.assertCompareData(res_frames[i], frames[i], ["absPath"])
         for res_frame, frame in zip(res_frames, frames):
@@ -100,12 +100,12 @@ class SentryAPICompatTestCase(APITestCase):
                     )
 
         self.assertCompareData(
-            res.data["entries"][1]["data"],
-            data["entries"][1]["data"],
+            res.data["entries"][0]["data"],
+            sentry_data["entries"][0]["data"],
             ["env", "headers", "url", "method", "inferredContentType"],
         )
 
-        url = reverse("issue-detail", kwargs={"pk": issue.pk})
+        url = reverse("issue-detail", kwargs={"pk": event.issue.pk})
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
 
@@ -161,7 +161,6 @@ class SentryAPICompatTestCase(APITestCase):
             sentry_data,
             ["eventID", "title", "culprit", "platform", "type", "metadata"],
         )
-        is_exception = lambda v: v.get("type") == "exception"
         res_exception = next(filter(is_exception, res.data["entries"]), None)
         sentry_exception = next(filter(is_exception, sentry_data["entries"]), None)
         self.assertEqual(
@@ -300,4 +299,24 @@ class SentryAPICompatTestCase(APITestCase):
             res.data,
             sentry_data,
             ["title", "culprit", "type", "metadata", "platform", "packages"],
+        )
+
+    def test_dotnet_zero_division(self):
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+            "dotnet_divide_zero"
+        )
+        res = self.client.post(self.event_store_url, sdk_error, format="json")
+        event = Event.objects.get(pk=res.data["id"])
+        url = self.get_project_events_detail(event.pk)
+        res = self.client.get(url)
+        self.assertCompareData(
+            res.data,
+            sentry_data,
+            ["eventID", "title", "culprit", "platform", "type", "metadata"],
+        )
+        res_exception = next(filter(is_exception, res.data["entries"]), None)
+        sentry_exception = next(filter(is_exception, sentry_data["entries"]), None)
+        self.assertEqual(
+            res_exception["data"]["values"][0]["stacktrace"]["frames"][4]["context"],
+            sentry_exception["data"]["values"][0]["stacktrace"]["frames"][4]["context"],
         )
