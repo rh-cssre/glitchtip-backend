@@ -47,7 +47,7 @@ class StoreDefaultSerializer(serializers.Serializer):
                             frame["in_app"] = False
         return exception
 
-    def create(self, project, data):
+    def create(self, project_id: int, data):
         eventtype = self.get_eventtype()
         metadata = eventtype.get_metadata(data)
         title = eventtype.get_title(metadata)
@@ -63,7 +63,7 @@ class StoreDefaultSerializer(serializers.Serializer):
             issue, _ = Issue.objects.get_or_create(
                 title=title,
                 culprit=culprit,
-                project=project,
+                project_id=project_id,
                 type=self.type,
                 defaults={"metadata": metadata},
             )
@@ -110,7 +110,7 @@ class StoreCSPReportSerializer(serializers.Serializer):
         # This is done to support the hyphen
         self.fields.update({"csp-report": serializers.JSONField()})
 
-    def create(self, project, data):
+    def create(self, project_id: int, data):
         csp = data["csp-report"]
         title = self.get_title(csp)
         culprit = self.get_culprit(csp)
@@ -124,7 +124,7 @@ class StoreCSPReportSerializer(serializers.Serializer):
         issue, _ = Issue.objects.get_or_create(
             title=title,
             culprit=culprit,
-            project=project,
+            project_id=project_id,
             type=EventType.CSP,
             defaults={"metadata": metadata},
         )

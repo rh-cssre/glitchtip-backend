@@ -55,3 +55,19 @@ class EventStoreTestCase(APITestCase):
         self.client.post(self.url, data, format="json")
         issue.refresh_from_db()
         self.assertEqual(issue.status, EventStatus.UNRESOLVED)
+
+    def test_performance(self):
+        with open("event_store/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        with self.assertNumQueries(8):
+            res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+
+    def test_throttle_organization(self):
+        organization = self.project.organization
+        organization.is_accepting_events = False
+        organization.save()
+        with open("event_store/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 429)

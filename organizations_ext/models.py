@@ -26,6 +26,9 @@ class Organization(SharedBaseModel, OrganizationBase):
         unique=True,
         help_text=_("The name in all lowercase, suitable for URL identification"),
     )
+    is_accepting_events = models.BooleanField(
+        default=True, help_text="Used for throttling at org level"
+    )
 
     def add_user(self, user, role=OrganizationUserRole.MEMBER):
         """

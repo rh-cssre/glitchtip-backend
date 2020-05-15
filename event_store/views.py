@@ -1,6 +1,11 @@
 import json
+import uuid
+import string
+import random
 from django.core.exceptions import SuspiciousOperation
 from django.conf import settings
+from django.http import HttpResponse
+from django.test import RequestFactory
 from rest_framework import permissions, exceptions
 from rest_framework.negotiation import BaseContentNegotiation
 from rest_framework.response import Response
@@ -33,6 +38,27 @@ class IgnoreClientContentNegotiation(BaseContentNegotiation):
         return (renderers[0], renderers[0].media_type)
 
 
+def test_event_view(request):
+    """
+    This view is used only to test event store performance
+    It requires DEBUG to be True
+    """
+    factory = RequestFactory()
+    request = request = factory.get(
+        "/api/6/store/?sentry_key=244703e8083f4b16988c376ea46e9a08"
+    )
+    with open("event_store/test_data/py_hi_event.json") as json_file:
+        data = json.load(json_file)
+    data["event_id"] = uuid.uuid4()
+    data["message"] = "".join(
+        random.choices(string.ascii_uppercase + string.digits, k=8)
+    )
+    request.data = data
+    EventStoreAPIView().post(request, id=6)
+
+    return HttpResponse("<html><body></body></html>")
+
+
 class EventStoreAPIView(APIView):
     permission_classes = [permissions.AllowAny]
     authentication_classes = []
@@ -51,14 +77,21 @@ class EventStoreAPIView(APIView):
         if settings.EVENT_STORE_DEBUG:
             print(json.dumps(request.data))
         sentry_key = EventStoreAPIView.auth_from_request(request)
-        project = Project.objects.filter(
-            id=kwargs.get("id"), projectkey__public_key=sentry_key
-        ).first()
+        project = (
+            Project.objects.filter(
+                id=kwargs.get("id"), projectkey__public_key=sentry_key
+            )
+            .select_related("organization")
+            .only("id", "organization__is_accepting_events")
+            .first()
+        )
+        if not project.organization.is_accepting_events:
+            raise exceptions.Throttled(detail="event rejected due to rate limit")
         if not project:
             raise exceptions.PermissionDenied()
         serializer = self.get_serializer_class(request.data)(data=request.data)
         if serializer.is_valid():
-            event = serializer.create(project, serializer.data)
+            event = serializer.create(project.id, serializer.data)
             return Response({"id": event.event_id_hex})
         # TODO {"error": "Invalid api key"}, CSP type, valid json but no type at all
         return Response()
