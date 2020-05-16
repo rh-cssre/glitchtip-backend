@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
         CREATE FUNCTION data_to_search_vector() RETURNS trigger AS $$
         begin
         new.search_vector :=
-            jsonb_to_tsvector('english', new.data, '["string","numeric","key"]');
+            strip(jsonb_to_tsvector('english', new.data, '["string"]'));
         return new;
         end
         $$ LANGUAGE plpgsql;;
