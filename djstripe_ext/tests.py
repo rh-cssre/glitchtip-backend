@@ -1,4 +1,5 @@
 from django.shortcuts import reverse
+from django.utils import timezone
 from rest_framework.test import APITestCase
 from model_bakery import baker
 from model_bakery.random_gen import gen_slug, gen_datetime, gen_integer
@@ -40,14 +41,14 @@ class SubscriptionAPITestCase(APITestCase):
             "djstripe.Subscription",
             customer=customer,
             livemode=False,
-            created="2020-01-02",
+            created=timezone.make_aware(timezone.datetime(2020, 1, 2)),
         )
         # Should only get most recent
         baker.make(
             "djstripe.Subscription",
             customer=customer,
             livemode=False,
-            created="2020-01-01",
+            created=timezone.make_aware(timezone.datetime(2020, 1, 1)),
         )
         baker.make("djstripe.Subscription")
         url = reverse("subscription-detail", args=[self.organization.slug])

@@ -234,6 +234,10 @@ CELERY_BEAT_SCHEDULE = {
     },
     "cleanup-old-events": {
         "task": "issues.tasks.cleanup_old_events",
+        "schedule": crontab(hour=6),
+    },
+    "set-organization-throttle": {
+        "task": "organizations_ext.tasks.set_organization_throttle",
         "schedule": crontab(hour=7),
     },
 }
@@ -344,6 +348,8 @@ MATOMO_SITE_ID = env.str("MATOMO_SITE_ID", default=None)
 # Is running unit test
 TESTING = len(sys.argv) > 1 and sys.argv[1] == "test"
 
+# Max events per month for free tier
+BILLING_FREE_TIER_EVENTS = env.int("BILLING_FREE_TIER_EVENTS", 1000)
 DJSTRIPE_SUBSCRIBER_MODEL = "organizations_ext.Organization"
 DJSTRIPE_SUBSCRIBER_MODEL_REQUEST_CALLBACK = organization_request_callback
 DJSTRIPE_USE_NATIVE_JSONFIELD = True
