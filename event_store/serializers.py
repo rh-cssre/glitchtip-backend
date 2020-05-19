@@ -24,7 +24,7 @@ class StoreDefaultSerializer(serializers.Serializer):
     request = serializers.JSONField(required=False)
     sdk = serializers.JSONField()
     timestamp = serializers.DateTimeField(required=False)
-    transaction = serializers.CharField(required=False)
+    transaction = serializers.CharField(required=False, allow_null=True)
     modules = serializers.JSONField(required=False)
 
     def get_eventtype(self):
