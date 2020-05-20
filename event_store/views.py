@@ -85,10 +85,10 @@ class EventStoreAPIView(APIView):
             .only("id", "organization__is_accepting_events")
             .first()
         )
-        if not project.organization.is_accepting_events:
-            raise exceptions.Throttled(detail="event rejected due to rate limit")
         if not project:
             raise exceptions.PermissionDenied()
+        if not project.organization.is_accepting_events:
+            raise exceptions.Throttled(detail="event rejected due to rate limit")
         serializer = self.get_serializer_class(request.data)(data=request.data)
         if serializer.is_valid():
             event = serializer.create(project.id, serializer.data)
