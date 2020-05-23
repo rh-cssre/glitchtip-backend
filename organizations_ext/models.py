@@ -1,5 +1,4 @@
 from django.db import models
-from django.utils import timezone
 from django.utils.translation import ugettext_lazy as _
 from organizations.base import (
     OrganizationBase,
@@ -29,10 +28,6 @@ class Organization(SharedBaseModel, OrganizationBase):
     )
     is_accepting_events = models.BooleanField(
         default=True, help_text="Used for throttling at org level"
-    )
-    throttling_cycle_anchor = models.DateTimeField(
-        default=timezone.now,
-        help_text="Useful for organization level throttling or free tier usage plans",
     )
 
     def add_user(self, user, role=OrganizationUserRole.MEMBER):
