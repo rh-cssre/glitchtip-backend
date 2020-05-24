@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/dev/ref/settings/
 
 import os
 import sys
+import warnings
 import environ
 import sentry_sdk
 from sentry_sdk.integrations.django import DjangoIntegration
@@ -380,3 +381,7 @@ elif TESTING:
 if TESTING:
     CELERY_TASK_ALWAYS_EAGER = True
     STATICFILES_STORAGE = None
+    # https://github.com/evansd/whitenoise/issues/215
+    warnings.filterwarnings(
+        "ignore", message="No directory at", module="whitenoise.base"
+    )

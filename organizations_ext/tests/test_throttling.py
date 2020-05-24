@@ -9,8 +9,20 @@ from ..tasks import set_organization_throttle
 class OrganizationThrottlingTestCase(TestCase):
     @override_settings(BILLING_FREE_TIER_EVENTS=10)
     def test_non_subscriber_throttling(self):
+        plan = baker.make("djstripe.Plan", active=True, amount=0)
+
         with freeze_time(timezone.datetime(2000, 1, 1)):
             organization = baker.make("organizations_ext.Organization")
+            customer = baker.make(
+                "djstripe.Customer", subscriber=organization, livemode=False
+            )
+            subscription = baker.make(
+                "djstripe.Subscription",
+                customer=customer,
+                livemode=False,
+                plan=plan,
+                status="active",
+            )
             baker.make(
                 "issues.Event", issue__project__organization=organization, _quantity=3
             )
@@ -27,6 +39,10 @@ class OrganizationThrottlingTestCase(TestCase):
 
         with freeze_time(timezone.datetime(2000, 2, 1)):
             # Month should reset throttle
+            subscription.current_period_start = timezone.make_aware(
+                timezone.datetime(2000, 2, 1)
+            )
+            subscription.save()
             set_organization_throttle()
             organization.refresh_from_db()
             self.assertTrue(organization.is_accepting_events)
@@ -37,4 +53,4 @@ class OrganizationThrottlingTestCase(TestCase):
             )
             set_organization_throttle()
             organization.refresh_from_db()
-            self.assertTrue(organization.is_accepting_events)
+            self.assertFalse(organization.is_accepting_events)
