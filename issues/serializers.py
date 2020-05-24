@@ -79,7 +79,7 @@ class IssueSerializer(serializers.ModelSerializer):
     permalink = serializers.CharField(default="Not implemented", read_only=True)
     project = ProjectReferenceSerializer(read_only=True)
     shareId = serializers.IntegerField(default=None, read_only=True)
-    shortId = serializers.CharField(default="Not implemented", read_only=True)
+    shortId = serializers.CharField(default=" ", read_only=True)
     stats = serializers.JSONField(default=dict, read_only=True)
     status = serializers.CharField(source="get_status_display")
     statusDetails = serializers.JSONField(default=dict, read_only=True)
