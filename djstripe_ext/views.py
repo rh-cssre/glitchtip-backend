@@ -2,10 +2,10 @@ from django.conf import settings
 from django.http import Http404
 from rest_framework import viewsets
 from djstripe.models import Subscription
-from .serializers import SubscriptionSerializer
+from .serializers import SubscriptionSerializer, CreateSubscriptionSerializer
 
 
-class SubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
+class SubscriptionViewSet(viewsets.ModelViewSet):
     """
     View subscription status
 
@@ -15,6 +15,11 @@ class SubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Subscription.objects.all()
     serializer_class = SubscriptionSerializer
     lookup_field = "customer__subscriber__slug"
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return CreateSubscriptionSerializer
+        return super().get_serializer_class()
 
     def get_queryset(self):
         """ Any user in an org may view subscription data """
