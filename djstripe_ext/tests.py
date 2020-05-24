@@ -58,7 +58,9 @@ class SubscriptionAPITestCase(APITestCase):
 
     @patch("djstripe.models.Customer.subscribe")
     def test_create(self, djstripe_customer_subscribe_mock):
-        customer = baker.make("djstripe.Customer", subscriber=self.organization)
+        customer = baker.make(
+            "djstripe.Customer", subscriber=self.organization, livemode=False
+        )
         plan = baker.make("djstripe.Plan", amount=0)
         subscription = baker.make(
             "djstripe.Subscription", customer=customer, livemode=False,
@@ -86,7 +88,9 @@ class SubscriptionIntegrationTestCase(APITestCase):
         self.organization.add_user(self.user)
         # Make these in this manner to avoid syncing data to stripe actual
         self.plan = baker.make("djstripe.Plan", active=True, amount=0)
-        self.customer = baker.make("djstripe.Customer", subscriber=self.organization)
+        self.customer = baker.make(
+            "djstripe.Customer", subscriber=self.organization, livemode=False
+        )
         self.client.force_login(self.user)
         self.list_url = reverse("subscription-list")
         self.detail_url = reverse("subscription-detail", args=[self.organization.slug])
