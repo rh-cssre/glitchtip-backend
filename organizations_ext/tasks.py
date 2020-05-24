@@ -1,7 +1,5 @@
 from django.conf import settings
-from django.utils import timezone
-from django.db.models import Count, Q
-from dateutil.relativedelta import relativedelta
+from django.db.models import Count, Q, F
 from celery import shared_task
 from .models import Organization
 
@@ -9,25 +7,33 @@ from .models import Organization
 @shared_task
 def set_organization_throttle():
     """ Determine if organization should be throttled """
-    # Currently throttling only happens if billing is enabled and user has no stripe account.
+    # Currently throttling only happens if billing is enabled and user has free plan.
     if settings.BILLING_ENABLED:
-        # Throttle range is 1 month (not 30 days)
-        month_ago = timezone.now() + relativedelta(months=-1)
         events_max = settings.BILLING_FREE_TIER_EVENTS
-        non_subscriber_organizations = Organization.objects.filter(
-            djstripe_customers__isnull=True,
+        free_tier_organizations = Organization.objects.filter(
+            djstripe_customers__subscriptions__plan__amount=0,
+            djstripe_customers__subscriptions__status="active",
         ).annotate(
-            event_count=Count("projects__issue__event", filter=Q(created__gt=month_ago))
+            event_count=Count(
+                "projects__issue__event",
+                filter=Q(
+                    projects__issue__event__created__gte=F(
+                        "djstripe_customers__subscriptions__current_period_start"
+                    )
+                ),
+            )
         )
 
-        non_subscriber_organizations.filter(
+        free_tier_organizations.filter(
             is_accepting_events=True, event_count__gt=events_max
         ).update(is_accepting_events=False)
-        non_subscriber_organizations.filter(
+        free_tier_organizations.filter(
             is_accepting_events=False, event_count__lte=events_max
         ).update(is_accepting_events=True)
 
-        # is_accepting_events is essentially cache and cache invalidation is hard
+        # paid accounts should always be active at this time
         Organization.objects.filter(
-            is_accepting_events=False, djstripe_customers__isnull=False
+            is_accepting_events=False,
+            djstripe_customers__subscriptions__plan__amount__gt=0,
+            djstripe_customers__subscriptions__status="active",
         ).update(is_accepting_events=True)

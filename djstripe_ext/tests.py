@@ -3,13 +3,7 @@ from django.shortcuts import reverse
 from django.utils import timezone
 from rest_framework.test import APITestCase
 from model_bakery import baker
-from model_bakery.random_gen import gen_slug, gen_datetime, gen_integer
 from glitchtip import test_utils  # pylint: disable=unused-import
-
-
-baker.generators.add("djstripe.fields.StripeIdField", gen_slug)
-baker.generators.add("djstripe.fields.StripeDateTimeField", gen_datetime)
-baker.generators.add("djstripe.fields.StripeQuantumCurrencyAmountField", gen_integer)
 
 
 class SubscriptionAPITestCase(APITestCase):
