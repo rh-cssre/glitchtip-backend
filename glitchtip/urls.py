@@ -26,10 +26,19 @@ if settings.BILLING_ENABLED:
 
     router.registry.extend(djstripeRouter.registry)
 
+
 urlpatterns = [
     path("_health/", health),
     path("admin/", admin.site.urls),
     path("api/0/", include(router.urls)),
+]
+
+if settings.BILLING_ENABLED:
+    urlpatterns += [
+        path("api/0/", include("djstripe_ext.urls")),
+    ]
+
+urlpatterns += [
     path("api/0/", include("projects.urls")),
     path("api/0/", include("issues.urls")),
     path("api/0/", include("organizations_ext.urls")),

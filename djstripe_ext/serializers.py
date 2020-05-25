@@ -11,7 +11,7 @@ from organizations_ext.models import OrganizationUserRole
 class PlanSerializer(ModelSerializer):
     class Meta:
         model = Plan
-        fields = ("id", "nickname", "amount")
+        fields = ("id", "nickname", "amount", "metadata")
 
 
 class SubscriptionSerializer(BaseSubscriptionSerializer):
@@ -26,11 +26,19 @@ class OrganizationPrimaryKeySerializer(serializers.PrimaryKeyRelatedField):
         )
 
 
-class CreateSubscriptionSerializer(serializers.Serializer):
+class OrganizationSerializer(serializers.Serializer):
+    """ Organization in which user is owner of """
+
+    organization = OrganizationPrimaryKeySerializer()
+
+
+class PlanForOrganizationSerializer(OrganizationSerializer):
+    plan = serializers.SlugRelatedField(queryset=Plan.objects.all(), slug_field="id")
+
+
+class CreateSubscriptionSerializer(PlanForOrganizationSerializer):
     """A serializer used to create a Subscription. Only works with free plans. """
 
-    plan = serializers.SlugRelatedField(queryset=Plan.objects.all(), slug_field="id")
-    organization = OrganizationPrimaryKeySerializer()
     subscription = SubscriptionSerializer(read_only=True)
 
     def create(self, data):
