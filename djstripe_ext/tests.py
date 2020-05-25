@@ -1,5 +1,7 @@
 from unittest.mock import patch
+from unittest import skipIf
 from django.shortcuts import reverse
+from django.conf import settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 from model_bakery import baker
@@ -75,7 +77,57 @@ class SubscriptionAPITestCase(APITestCase):
         self.assertEqual(res.status_code, 400)
 
 
-class SubscriptionIntegrationTestCase(APITestCase):
+class PlanAPITestCase(APITestCase):
+    def test_plan_list(self):
+        plan = baker.make("djstripe.Plan", amount=0, livemode=False, active=True)
+        inactive_plan = baker.make(
+            "djstripe.Plan", amount=0, livemode=False, active=False
+        )
+        user = baker.make("users.user")
+        self.client.force_login(user)
+        res = self.client.get(reverse("plan-list"))
+        self.assertContains(res, plan.id)
+        self.assertNotContains(res, inactive_plan.id)
+
+
+class StripeAPITestCase(APITestCase):
+    @skipIf(
+        settings.STRIPE_TEST_PUBLIC_KEY == "fake", "requires real Stripe test API key"
+    )
+    def test_create_checkout(self):
+        url = reverse("create-stripe-subscription-checkout")
+        plan = baker.make(
+            "djstripe.Plan",
+            amount=1,
+            livemode=False,
+            active=True,
+            id="plan_GuB1PFhW5NKkfo",
+            description="Small - 100k events",
+        )
+        user = baker.make("users.user")
+        organization = baker.make("organizations_ext.Organization")
+        organization.add_user(user)
+        self.client.force_login(user)
+        data = {"plan": plan.id, "organization": organization.id}
+
+        res = self.client.post(url, data)
+        self.assertEqual(res.status_code, 200)
+
+    @skipIf(
+        settings.STRIPE_TEST_PUBLIC_KEY == "fake", "requires real Stripe test API key"
+    )
+    def test_manage_billing(self):
+        url = reverse("create-billing-portal")
+        user = baker.make("users.user")
+        organization = baker.make("organizations_ext.Organization")
+        organization.add_user(user)
+        self.client.force_login(user)
+        data = {"organization": organization.id}
+        res = self.client.post(url, data)
+        self.assertEqual(res.status_code, 200)
+
+
+class SubscriptionIntegrationAPITestCase(APITestCase):
     def setUp(self):
         self.user = baker.make("users.user")
         self.organization = baker.make("organizations_ext.Organization")
