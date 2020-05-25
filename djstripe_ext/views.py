@@ -61,9 +61,8 @@ class CreateStripeSubscriptionCheckout(views.APIView):
             data=request.data, context={"request": request}
         )
         if serializer.is_valid():
-            customer, _ = Customer.get_or_create(
-                subscriber=serializer.validated_data["organization"]
-            )
+            organization = serializer.validated_data["organization"]
+            customer, _ = Customer.get_or_create(subscriber=organization)
             domain = settings.GLITCHTIP_DOMAIN.geturl()
             session = stripe.checkout.Session.create(
                 api_key=STRIPE_SECRET_KEY,
@@ -77,8 +76,11 @@ class CreateStripeSubscriptionCheckout(views.APIView):
                 ],
                 mode="subscription",
                 customer=customer.id,
-                success_url=domain + "/success?session_id={CHECKOUT_SESSION_ID}",
-                cancel_url=domain + "/cancel",
+                success_url=domain
+                + "/settings/"
+                + organization.slug
+                + "/subscription?session_id={CHECKOUT_SESSION_ID}",
+                cancel_url=domain + "",
             )
 
             return Response(session)
@@ -93,14 +95,13 @@ class StripeBillingPortal(views.APIView):
             data=request.data, context={"request": request}
         )
         if serializer.is_valid():
-            customer, _ = Customer.get_or_create(
-                subscriber=serializer.validated_data["organization"],
-            )
+            organization = serializer.validated_data["organization"]
+            customer, _ = Customer.get_or_create(subscriber=organization)
             domain = settings.GLITCHTIP_DOMAIN.geturl()
             session = stripe.billing_portal.Session.create(
                 api_key=STRIPE_SECRET_KEY,
                 customer=customer.id,
-                return_url=domain + "/account",
+                return_url=domain + "/settings/" + organization.slug + "/subscription",
             )
             return Response(session)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
