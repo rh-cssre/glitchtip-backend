@@ -40,7 +40,7 @@ ipdb = "^0.13.2"
 pylint = "^2.4.4"
 pylint-django = "^2.0.13"
 model_bakery = "^1.0.2"
-locust = "^0.0"
+locust = "^1.0.2"
 freezegun = "^0.3.15"
 
 [build-system]
