@@ -32,10 +32,12 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """ Any user in an org may view subscription data """
-        return self.queryset.filter(
-            livemode=settings.STRIPE_LIVE_MODE,
-            customer__subscriber__users=self.request.user,
-        )
+        if self.request.user.is_authenticated:
+            return self.queryset.filter(
+                livemode=settings.STRIPE_LIVE_MODE,
+                customer__subscriber__users=self.request.user,
+            )
+        return self.queryset.none()
 
     def get_object(self):
         """ Get most recent by slug """

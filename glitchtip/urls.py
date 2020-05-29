@@ -2,8 +2,11 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.generic import TemplateView
-from rest_auth.registration.views import SocialAccountDisconnectView
+from dj_rest_auth.registration.views import SocialAccountDisconnectView
+from rest_framework import permissions
 from rest_framework_nested import routers
+from drf_yasg.views import get_schema_view
+from drf_yasg import openapi
 from issues.urls import router as issuesRouter
 from issues.views import EventJsonView
 from projects.urls import router as projectsRouter
@@ -11,6 +14,7 @@ from teams.urls import router as teamsRouter
 from organizations_ext.urls import router as organizationsRouter
 from users.urls import router as usersRouter
 from . import social
+from .yasg import CustomOpenAPISchemaGenerator
 from .views import SettingsView, health
 
 
@@ -25,6 +29,21 @@ if settings.BILLING_ENABLED:
     from djstripe_ext.urls import router as djstripeRouter
 
     router.registry.extend(djstripeRouter.registry)
+
+
+schema_view = get_schema_view(
+    openapi.Info(
+        title="GlitchTip API",
+        default_version="v1",
+        description="GlitchTip Backend API",
+        terms_of_service="https://glitchtip.com",
+        contact=openapi.Contact(email="info@burkesoftware.com"),
+        license=openapi.License(name="MIT License"),
+    ),
+    public=True,
+    permission_classes=(permissions.AllowAny,),
+    generator_class=CustomOpenAPISchemaGenerator,
+)
 
 
 urlpatterns = [
@@ -51,8 +70,8 @@ urlpatterns += [
         name="event_json",
     ),
     path("api/settings/", SettingsView.as_view(), name="settings"),
-    path("rest-auth/", include("rest_auth.urls")),
-    path("rest-auth/registration/", include("rest_auth.registration.urls")),
+    path("rest-auth/", include("dj_rest_auth.urls")),
+    path("rest-auth/registration/", include("dj_rest_auth.registration.urls")),
     path("api/api-auth/", include("rest_framework.urls", namespace="rest_framework")),
     re_path(
         r"^socialaccounts/(?P<pk>\d+)/disconnect/$",
@@ -85,11 +104,12 @@ urlpatterns += [
         social.MicrosoftConnect.as_view(),
         name="microsoft_connect",
     ),
+    path("docs/", schema_view.with_ui("redoc", cache_timeout=0), name="schema-redoc"),
     path("accounts/", include("allauth.urls")),  # Required for allauth
     # These routes belong to the Angular single page app
     re_path(r"^$", TemplateView.as_view(template_name="index.html")),
     re_path(
-        r"^(login|issues|settings|organizations).*$",
+        r"^(login|issues|settings|organizations|profile).*$",
         TemplateView.as_view(template_name="index.html"),
     ),
 ]

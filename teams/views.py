@@ -12,7 +12,9 @@ class NestedTeamViewSet(viewsets.ModelViewSet):
     serializer_class = TeamSerializer
 
     def get_queryset(self):
-        return self.queryset.filter(organization__users=self.request.user)
+        if self.request.user.is_authenticated:
+            return self.queryset.filter(organization__users=self.request.user)
+        return self.queryset.none()
 
     def perform_create(self, serializer):
         try:
