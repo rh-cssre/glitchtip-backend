@@ -21,7 +21,7 @@ from celery.schedules import crontab
 env = environ.Env(
     ALLOWED_HOSTS=(list, ["*"]),
     DEBUG=(bool, False),
-    DEBUG_TOOLBAR=(bool, False),
+    DEBUG_TOOLBAR=(bool, True),
     AWS_ACCESS_KEY_ID=(str, None),
     AWS_SECRET_ACCESS_KEY=(str, None),
     AWS_STORAGE_BUCKET_NAME=(str, None),

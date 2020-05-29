@@ -19,7 +19,9 @@ class OrganizationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if not self.request.user.is_authenticated:
             return self.queryset.none()
-        return self.queryset.filter(users=self.request.user)
+        return self.queryset.filter(users=self.request.user).prefetch_related(
+            "projects__team_set__members",
+        )
 
     def perform_create(self, serializer):
         """ Create organization with current user as owner """

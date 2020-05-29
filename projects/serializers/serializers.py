@@ -30,7 +30,6 @@ class ProjectSerializer(ProjectReferenceSerializer):
     hasAccess = serializers.SerializerMethodField()
     isBookmarked = serializers.SerializerMethodField()
     isInternal = serializers.SerializerMethodField()
-    isMember = serializers.SerializerMethodField()
     isPublic = serializers.SerializerMethodField()
     organization = OrganizationReferenceSerializer(read_only=True)
 
@@ -74,9 +73,6 @@ class ProjectSerializer(ProjectReferenceSerializer):
 
     def get_isInternal(self, obj):
         return False
-
-    def get_isMember(self, obj):
-        return True
 
     def get_isPublic(self, obj):
         return False

@@ -1,6 +1,5 @@
 {
   "python.formatting.provider": "black",
-  "python.pythonPath": "env/bin/python",
   "python.linting.pylintArgs": [
     "--enable=W0614",
     "--load-plugins",
