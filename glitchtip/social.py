@@ -1,4 +1,4 @@
-from rest_auth.registration.views import SocialConnectView, SocialLoginView
+from dj_rest_auth.registration.views import SocialConnectView, SocialLoginView
 from allauth.socialaccount.providers.gitlab.views import GitLabOAuth2Adapter
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.microsoft.views import MicrosoftGraphOAuth2Adapter

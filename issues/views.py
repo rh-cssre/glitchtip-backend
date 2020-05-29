@@ -33,6 +33,8 @@ class IssueViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # Optimization, doing this in one query (instead of 2) will result in not using gin index
+        if not self.request.user.is_authenticated:
+            return self.queryset.none()
         projects = Project.objects.filter(
             organization__users=self.request.user, team__members=self.request.user,
         )
@@ -91,6 +93,8 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
         return super().get_serializer_class()
 
     def get_queryset(self):
+        if not self.request.user.is_authenticated:
+            return self.queryset.none()
         qs = (
             super()
             .get_queryset()

@@ -30,7 +30,9 @@ class NestedProjectViewSet(viewsets.ModelViewSet):
         return obj
 
     def get_queryset(self):
-        return self.queryset.filter(organization__users=self.request.user)
+        if self.request.user.is_authenticated:
+            return self.queryset.filter(organization__users=self.request.user)
+        return self.queryset.none()
 
     def perform_create(self, serializer):
         try:
@@ -63,6 +65,8 @@ class ProjectKeyViewSet(viewsets.ModelViewSet):
     lookup_field = "public_key"
 
     def get_queryset(self):
+        if not self.request.user.is_authenticated:
+            return self.queryset.none()
         return (
             super()
             .get_queryset()

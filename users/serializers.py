@@ -1,6 +1,6 @@
 from rest_framework import serializers
-from rest_auth.serializers import UserDetailsSerializer as BaseUserDetailsSerializer
-from rest_auth.registration.serializers import SocialAccountSerializer
+from dj_rest_auth.serializers import UserDetailsSerializer as BaseUserDetailsSerializer
+from dj_rest_auth.registration.serializers import SocialAccountSerializer
 from .models import User
 
 

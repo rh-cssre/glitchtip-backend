@@ -128,8 +128,9 @@ INSTALLED_APPS = [
     "debug_toolbar",
     "rest_framework",
     "rest_framework.authtoken",
-    "rest_auth",
-    "rest_auth.registration",
+    "drf_yasg",
+    "dj_rest_auth",
+    "dj_rest_auth.registration",
     "storages",
     "alerts",
     "organizations_ext",
@@ -324,6 +325,13 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "glitchtip.pagination.LinkHeaderPagination",
     "PAGE_SIZE": 50,
     "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
+}
+
+DRF_YASG_EXCLUDE_VIEWS = [
+    "dj_rest_auth.registration.views.SocialAccountDisconnectView",
+]
+SWAGGER_SETTINGS = {
+    "DEFAULT_AUTO_SCHEMA_CLASS": "glitchtip.yasg.SquadSwaggerAutoSchema",
 }
 
 

@@ -9,6 +9,8 @@ class ProjectAlertViewSet(viewsets.ModelViewSet):
     serializer_class = ProjectAlertSerializer
 
     def get_queryset(self):
+        if not self.request.user.is_authenticated:
+            return self.queryset.none()
         return self.queryset.filter(
             project__slug=self.kwargs.get("project_slug"),
             project__organization__users=self.request.user,

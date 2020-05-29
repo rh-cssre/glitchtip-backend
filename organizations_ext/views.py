@@ -17,6 +17,8 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         return super().get_serializer_class()
 
     def get_queryset(self):
+        if not self.request.user.is_authenticated:
+            return self.queryset.none()
         return self.queryset.filter(users=self.request.user)
 
     def perform_create(self, serializer):
