@@ -3,7 +3,7 @@ from django.http import Http404
 from rest_framework import viewsets, views, status
 from rest_framework.response import Response
 from drf_yasg.utils import swagger_auto_schema
-from djstripe.models import Subscription, Plan, Customer
+from djstripe.models import Subscription, Customer, Product
 from djstripe.settings import STRIPE_SECRET_KEY
 import stripe
 from .serializers import (
@@ -11,7 +11,7 @@ from .serializers import (
     CreateSubscriptionSerializer,
     PlanForOrganizationSerializer,
     OrganizationSelectSerializer,
-    PlanSerializer,
+    ProductSerializer,
 )
 
 
@@ -50,9 +50,11 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
             raise Http404
 
 
-class PlanViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Plan.objects.filter(active=True, livemode=settings.STRIPE_LIVE_MODE)
-    serializer_class = PlanSerializer
+class ProductViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Product.objects.filter(
+        active=True, livemode=settings.STRIPE_LIVE_MODE, plan__active=True
+    ).prefetch_related("plan_set")
+    serializer_class = ProductSerializer
 
 
 class CreateStripeSubscriptionCheckout(views.APIView):
@@ -77,11 +79,7 @@ class CreateStripeSubscriptionCheckout(views.APIView):
                 api_key=STRIPE_SECRET_KEY,
                 payment_method_types=["card"],
                 line_items=[
-                    {
-                        "price": serializer.validated_data["plan"].id,
-                        "quantity": 1,
-                        "description": serializer.validated_data["plan"].description,
-                    }
+                    {"price": serializer.validated_data["plan"].id, "quantity": 1,}
                 ],
                 mode="subscription",
                 customer=customer.id,

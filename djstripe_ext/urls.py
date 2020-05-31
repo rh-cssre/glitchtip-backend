@@ -2,14 +2,14 @@ from django.urls import path, include
 from rest_framework_nested import routers
 from .views import (
     SubscriptionViewSet,
-    PlanViewSet,
+    ProductViewSet,
     CreateStripeSubscriptionCheckout,
     StripeBillingPortal,
 )
 
 router = routers.SimpleRouter()
 router.register(r"subscriptions", SubscriptionViewSet)
-router.register(r"plans", PlanViewSet)
+router.register(r"products", ProductViewSet)
 
 urlpatterns = [
     path("", include(router.urls)),

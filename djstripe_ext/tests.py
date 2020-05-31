@@ -77,15 +77,27 @@ class SubscriptionAPITestCase(APITestCase):
         self.assertEqual(res.status_code, 400)
 
 
-class PlanAPITestCase(APITestCase):
-    def test_plan_list(self):
-        plan = baker.make("djstripe.Plan", amount=0, livemode=False, active=True)
+class ProductAPITestCase(APITestCase):
+    def test_product_list(self):
+        plan = baker.make(
+            "djstripe.Plan",
+            amount=0,
+            livemode=False,
+            active=True,
+            product__active=True,
+            product__livemode=False,
+        )
         inactive_plan = baker.make(
-            "djstripe.Plan", amount=0, livemode=False, active=False
+            "djstripe.Plan",
+            amount=0,
+            livemode=False,
+            active=False,
+            product__active=False,
+            product__livemode=False,
         )
         user = baker.make("users.user")
         self.client.force_login(user)
-        res = self.client.get(reverse("plan-list"))
+        res = self.client.get(reverse("product-list"))
         self.assertContains(res, plan.id)
         self.assertNotContains(res, inactive_plan.id)
 
@@ -101,8 +113,10 @@ class StripeAPITestCase(APITestCase):
             amount=1,
             livemode=False,
             active=True,
-            id="plan_GuB1PFhW5NKkfo",
+            id="price_HNfVNr3ohLWkmv",
             description="Small - 100k events",
+            product__active=True,
+            product__livemode=False,
         )
         user = baker.make("users.user")
         organization = baker.make("organizations_ext.Organization")
