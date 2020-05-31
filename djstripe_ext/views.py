@@ -2,6 +2,7 @@ from django.conf import settings
 from django.http import Http404
 from rest_framework import viewsets, views, status
 from rest_framework.response import Response
+from drf_yasg.utils import swagger_auto_schema
 from djstripe.models import Subscription, Plan, Customer
 from djstripe.settings import STRIPE_SECRET_KEY
 import stripe
@@ -9,14 +10,14 @@ from .serializers import (
     SubscriptionSerializer,
     CreateSubscriptionSerializer,
     PlanForOrganizationSerializer,
-    OrganizationSerializer,
+    OrganizationSelectSerializer,
     PlanSerializer,
 )
 
 
 class SubscriptionViewSet(viewsets.ModelViewSet):
     """
-    View subscription status
+    View subscription status and create new free tier subscriptions
 
     Use organization slug for detail view. Ex: /subscriptions/my-cool-org/
     """
@@ -57,11 +58,17 @@ class PlanViewSet(viewsets.ReadOnlyModelViewSet):
 class CreateStripeSubscriptionCheckout(views.APIView):
     """ Create Stripe Checkout, send to client for redirecting to Stripe """
 
+    def get_serializer(self, *args, **kwargs):
+        return PlanForOrganizationSerializer(
+            data=self.request.data, context={"request": self.request}
+        )
+
+    @swagger_auto_schema(
+        responses={200: str(stripe.api_resources.checkout.session.Session)}
+    )
     def post(self, request):
         """ See https://stripe.com/docs/api/checkout/sessions/create """
-        serializer = PlanForOrganizationSerializer(
-            data=request.data, context={"request": request}
-        )
+        serializer = self.get_serializer()
         if serializer.is_valid():
             organization = serializer.validated_data["organization"]
             customer, _ = Customer.get_or_create(subscriber=organization)
@@ -91,11 +98,17 @@ class CreateStripeSubscriptionCheckout(views.APIView):
 
 
 class StripeBillingPortal(views.APIView):
+    def get_serializer(self, *args, **kwargs):
+        return OrganizationSelectSerializer(
+            data=self.request.data, context={"request": self.request}
+        )
+
+    @swagger_auto_schema(
+        responses={200: str(stripe.api_resources.billing_portal.Session)}
+    )
     def post(self, request):
         """ See https://stripe.com/docs/billing/subscriptions/integrating-self-serve-portal """
-        serializer = OrganizationSerializer(
-            data=request.data, context={"request": request}
-        )
+        serializer = self.get_serializer()
         if serializer.is_valid():
             organization = serializer.validated_data["organization"]
             customer, _ = Customer.get_or_create(subscriber=organization)

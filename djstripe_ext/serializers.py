@@ -26,13 +26,13 @@ class OrganizationPrimaryKeySerializer(serializers.PrimaryKeyRelatedField):
         )
 
 
-class OrganizationSerializer(serializers.Serializer):
+class OrganizationSelectSerializer(serializers.Serializer):
     """ Organization in which user is owner of """
 
     organization = OrganizationPrimaryKeySerializer()
 
 
-class PlanForOrganizationSerializer(OrganizationSerializer):
+class PlanForOrganizationSerializer(OrganizationSelectSerializer):
     plan = serializers.SlugRelatedField(queryset=Plan.objects.all(), slug_field="id")
 
 

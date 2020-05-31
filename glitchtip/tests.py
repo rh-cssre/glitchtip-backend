@@ -7,3 +7,8 @@ class DocsTestCase(TestCase):
         url = reverse("schema-redoc")
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
+
+    def test_openapi(self):
+        url = reverse("schema-redoc") + "?format=openapi"
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
