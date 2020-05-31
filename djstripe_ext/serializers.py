@@ -15,11 +15,11 @@ class PlanSerializer(ModelSerializer):
 
 
 class ProductSerializer(ModelSerializer):
-    plan_set = PlanSerializer(many=True)
+    plans = PlanSerializer(many=True, source="plan_set")
 
     class Meta:
         model = Product
-        fields = ("id", "name", "description", "type", "plan_set", "metadata")
+        fields = ("id", "name", "description", "type", "plans", "metadata")
 
 
 class SubscriptionSerializer(BaseSubscriptionSerializer):
