@@ -30,7 +30,7 @@ test:
 build:
   image: docker:stable
   services:
-    - docker:19.03.5-dind
+    - docker
   script:
     - apk add --no-cache docker-compose
     - docker pull $IMAGE_NAME:latest || true
