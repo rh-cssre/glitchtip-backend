@@ -28,7 +28,7 @@ test:
     - ./manage.py test
 
 build:
-  image: docker:stable
+  image: docker
   services:
     - docker
   script:
