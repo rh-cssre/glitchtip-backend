@@ -5,14 +5,16 @@ from .models import User
 
 
 class UserSerializer(serializers.ModelSerializer):
-    lastLogin = serializers.DateTimeField(source="last_login")
+    lastLogin = serializers.DateTimeField(source="last_login", read_only=True)
     isSuperuser = serializers.BooleanField(source="is_superuser")
     identities = SocialAccountSerializer(
         source="socialaccount_set", many=True, read_only=True
     )
     isActive = serializers.BooleanField(source="is_active")
-    dateJoined = serializers.DateTimeField(source="created")
-    hasPasswordAuth = serializers.BooleanField(source="has_usable_password")
+    dateJoined = serializers.DateTimeField(source="created", read_only=True)
+    hasPasswordAuth = serializers.BooleanField(
+        source="has_usable_password", read_only=True
+    )
 
     class Meta:
         model = User

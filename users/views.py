@@ -2,22 +2,42 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
+from organizations_ext.models import Organization
 from .models import User, UserProjectAlert
 from .serializers import UserSerializer, UserNotificationsSerializer
 
 
-class UserViewSet(viewsets.ReadOnlyModelViewSet):
+class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
     def get_queryset(self):
-        return super().get_queryset().filter(id=self.request.user.id)
+        queryset = super().get_queryset()
+        organization_slug = self.kwargs.get("organization_slug")
+        if organization_slug:
+            queryset = queryset.filter(
+                organizations_ext_organization__slug=organization_slug,
+                organizations_ext_organization__users=self.request.user,
+            )
+        else:
+            queryset = queryset.filter(id=self.request.user.id)
+        return queryset
 
     def get_object(self):
         pk = self.kwargs.get("pk")
         if pk == "me":
             return self.request.user
         return super().get_object()
+
+    def perform_create(self, serializer):
+        organization_slug = self.kwargs.get("organization_slug")
+        try:
+            organization = Organization.objects.get(slug=organization_slug)
+        except Organization.DoesNotExist:
+            raise ValidationError("Organization does not exist")
+        # TODO deal with organization and users who aren't set up yet
+        user = serializer.save()
+        return user
 
     @action(detail=True, methods=["get", "post", "put"])
     def notifications(self, request, pk=None):

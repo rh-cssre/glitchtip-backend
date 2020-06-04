@@ -3,7 +3,7 @@ from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
 from organizations_ext.models import OrganizationUserRole
-from .models import UserProjectAlert
+from .models import UserProjectAlert, User
 
 
 class OrganizationsAPITestCase(APITestCase):
@@ -51,6 +51,37 @@ class UsersTestCase(APITestCase):
         url = reverse("user-detail", args=["me"])
         res = self.client.get(url)
         self.assertContains(res, self.user.email)
+
+    def test_organization_members_list(self):
+        other_user = baker.make("users.user")
+        other_organization = baker.make("organizations_ext.Organization")
+        other_organization.add_user(other_user, OrganizationUserRole.ADMIN)
+
+        user2 = baker.make("users.User")
+        self.organization.add_user(user2, OrganizationUserRole.MEMBER)
+        url = reverse("organization-members-list", args=[self.organization.slug])
+        res = self.client.get(url)
+        self.assertContains(res, user2.email)
+        self.assertNotContains(res, other_user.email)
+
+        # Can't view members of groups you don't belong to
+        url = reverse("organization-members-list", args=[other_organization.slug])
+        res = self.client.get(url)
+        self.assertNotContains(res, other_user.email)
+
+    def test_organization_members_create(self):
+        url = reverse("organization-members-list", args=[self.organization.slug])
+        data = {
+            "email": "new@example.com",
+            "role": "member",
+            "teams": [],
+            "user": "new@example.com",
+        }
+        res = self.client.post(url, data)
+        self.assertEqual(res.status_code, 201)
+        # TODO pending functionality
+        # self.assertTrue(res.data["pending"])
+        User.objects.get(pk=res.data["id"])
 
     def test_notifications_retrieve(self):
         url = reverse("user-detail", args=["me"]) + "notifications/"
