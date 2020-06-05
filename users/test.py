@@ -1,3 +1,4 @@
+from django.core import mail
 from django.shortcuts import reverse
 from rest_framework.test import APITestCase
 from model_bakery import baker
@@ -95,7 +96,34 @@ class UsersTestCase(APITestCase):
         data = {"email": new_email}
         res = self.client.post(url, data)
         self.assertContains(res, new_email, status_code=201)
-        self.assertTrue(self.user.emailaddress_set.filter(email=new_email).exists())
+        self.assertTrue(
+            self.user.emailaddress_set.filter(email=new_email, verified=False).exists()
+        )
+        self.assertEqual(len(mail.outbox), 1)
+
+        # Ensure token is valid and can verify email
+        body = mail.outbox[0].body
+        key = body[body.find("confirm-email") :].split("/")[1]
+        url = reverse("rest_verify_email")
+        data = {"key": key}
+        res = self.client.post(url, data)
+        self.assertTrue(
+            self.user.emailaddress_set.filter(email=new_email, verified=True).exists()
+        )
+
+    def test_emails_create_dupe_email(self):
+        url = reverse("user-detail", args=["me"]) + "emails/"
+        email_address = baker.make("account.EmailAddress", user=self.user)
+        data = {"email": email_address.email}
+        res = self.client.post(url, data)
+        self.assertContains(res, "this account", status_code=400)
+
+    def test_emails_create_dupe_email_other_user(self):
+        url = reverse("user-detail", args=["me"]) + "emails/"
+        email_address = baker.make("account.EmailAddress")
+        data = {"email": email_address.email}
+        res = self.client.post(url, data)
+        self.assertContains(res, "another account", status_code=400)
 
     def test_notifications_retrieve(self):
         url = reverse("user-detail", args=["me"]) + "notifications/"
