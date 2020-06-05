@@ -16,7 +16,9 @@ class OrgTeamTestCase(APITestCase):
 
     def test_list(self):
         team = baker.make("teams.Team", organization=self.organization)
-        other_team = baker.make("teams.Team")
+        other_organization = baker.make("organizations_ext.Organization")
+        other_organization.add_user(self.user)
+        other_team = baker.make("teams.Team", organization=other_organization)
         res = self.client.get(self.url)
         self.assertContains(res, team.slug)
         self.assertNotContains(res, other_team.slug)
