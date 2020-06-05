@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework.exceptions import NotFound
 from users.models import User
+from organizations_ext.models import Organization
 
 
 class SeedDataAPIView(APIView):
@@ -18,13 +19,15 @@ class SeedDataAPIView(APIView):
         if settings.ENABLE_TEST_API is not True:
             raise NotFound("Enable Test API is not enabled")
 
-        try:
-            test_user = User.objects.get(email="cypresstest@example.com")
-        except User.DoesNotExist:
-            test_user = None
+        user_email = "cypresstest@example.com"
+        user_password = "hunter22"
+        organization_name = "coolbeans"
 
-        if test_user:
-            test_user.delete()
+        User.objects.filter(email=user_email).delete()
+        Organization.objects.filter(name=organization_name).delete()
 
-        User.objects.create_user(email="cypresstest@example.com", password="hunter22")
+        user = User.objects.create_user(email=user_email, password=user_password)
+        organization = Organization.objects.create(name=organization_name)
+        organization.add_user(user=user)
+        
         return Response()
