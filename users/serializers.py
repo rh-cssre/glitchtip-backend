@@ -9,7 +9,7 @@ from allauth.account.models import EmailAddress
 from .models import User
 
 
-class EmailSerializer(serializers.ModelSerializer):
+class EmailAddressSerializer(serializers.ModelSerializer):
     isPrimary = serializers.BooleanField(source="primary", read_only=True)
     email = serializers.EmailField()  # Remove default unique validation
     isVerified = serializers.BooleanField(source="verified", read_only=True)
@@ -41,15 +41,22 @@ class EmailSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
-        self.user = self.context["request"].user
-        self.cleaned_data = data
-        data["email"] = self.clean_email()
+        if self.context["request"].method == "POST":
+            # Run extra validation on create
+            self.user = self.context["request"].user
+            self.cleaned_data = data
+            data["email"] = self.clean_email()
         return data
 
-    def create(self, data):
+    def create(self, validated_data):
         return EmailAddress.objects.add_email(
-            self.context["request"], self.user, data["email"], confirm=True
+            self.context["request"], self.user, validated_data["email"], confirm=True
         )
+
+    def update(self, instance, validated_data):
+        instance.primary = True
+        instance.save()
+        return instance
 
 
 class UserSerializer(serializers.ModelSerializer):

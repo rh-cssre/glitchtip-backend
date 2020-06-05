@@ -86,12 +86,12 @@ class UsersTestCase(APITestCase):
 
     def test_emails_retrieve(self):
         email_address = baker.make("account.EmailAddress", user=self.user)
-        url = reverse("user-detail", args=["me"]) + "emails/"
+        url = reverse("user-emails-list", args=["me"])
         res = self.client.get(url)
         self.assertContains(res, email_address.email)
 
     def test_emails_create(self):
-        url = reverse("user-detail", args=["me"]) + "emails/"
+        url = reverse("user-emails-list", args=["me"])
         new_email = "new@exmaple.com"
         data = {"email": new_email}
         res = self.client.post(url, data)
@@ -112,18 +112,44 @@ class UsersTestCase(APITestCase):
         )
 
     def test_emails_create_dupe_email(self):
-        url = reverse("user-detail", args=["me"]) + "emails/"
+        url = reverse("user-emails-list", args=["me"])
         email_address = baker.make("account.EmailAddress", user=self.user)
         data = {"email": email_address.email}
         res = self.client.post(url, data)
         self.assertContains(res, "this account", status_code=400)
 
     def test_emails_create_dupe_email_other_user(self):
-        url = reverse("user-detail", args=["me"]) + "emails/"
+        url = reverse("user-emails-list", args=["me"])
         email_address = baker.make("account.EmailAddress")
         data = {"email": email_address.email}
         res = self.client.post(url, data)
         self.assertContains(res, "another account", status_code=400)
+
+    def test_emails_set_primary(self):
+        url = reverse("user-emails-list", args=["me"])
+        email_address = baker.make(
+            "account.EmailAddress", verified=True, user=self.user
+        )
+        data = {"email": email_address.email}
+        res = self.client.put(url, data)
+        self.assertContains(res, email_address.email, status_code=200)
+        self.assertTrue(
+            self.user.emailaddress_set.filter(
+                email=email_address.email, primary=True
+            ).exists()
+        )
+
+    def test_emails_destroy(self):
+        url = reverse("user-emails-list", args=["me"])
+        email_address = baker.make(
+            "account.EmailAddress", verified=True, primary=False, user=self.user
+        )
+        data = {"email": email_address.email}
+        res = self.client.delete(url, data)
+        self.assertEqual(res.status_code, 204)
+        self.assertFalse(
+            self.user.emailaddress_set.filter(email=email_address.email).exists()
+        )
 
     def test_notifications_retrieve(self):
         url = reverse("user-detail", args=["me"]) + "notifications/"

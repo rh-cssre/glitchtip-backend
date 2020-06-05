@@ -1,12 +1,17 @@
-from rest_framework import status, viewsets
+from django.core.exceptions import ObjectDoesNotExist
+from django.http import Http404
+from rest_framework import status, viewsets, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
-from drf_yasg.utils import swagger_auto_schema
+from allauth.account.models import EmailAddress
 from organizations_ext.models import Organization
-from allauth.account import signals
 from .models import User, UserProjectAlert
-from .serializers import UserSerializer, UserNotificationsSerializer, EmailSerializer
+from .serializers import (
+    UserSerializer,
+    UserNotificationsSerializer,
+    EmailAddressSerializer,
+)
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -40,31 +45,6 @@ class UserViewSet(viewsets.ModelViewSet):
         # TODO deal with organization and users who aren't set up yet
         user = serializer.save()
         return user
-
-    @swagger_auto_schema(method="get", responses={200: EmailSerializer(many=True)})
-    @swagger_auto_schema(method="post", responses={201: EmailSerializer()})
-    @action(detail=True, methods=["get", "post"])
-    def emails(self, request, pk=None):
-        """ User emails """
-        serializer_class = EmailSerializer
-        user = self.get_object()
-
-        if request.method == "GET":
-            serializer = serializer_class(user.emailaddress_set.all(), many=True)
-            return Response(serializer.data)
-
-        serializer = serializer_class(data=request.data, context={"request": request})
-        if serializer.is_valid():
-            serializer.save(user=user)
-            signals.email_added.send(
-                sender=self.request.user.__class__,
-                request=self.request,
-                user=self.request.user,
-                email_address=serializer.validated_data["email"],
-            )
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        else:
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["get", "post", "put"])
     def notifications(self, request, pk=None):
@@ -117,3 +97,46 @@ class UserViewSet(viewsets.ModelViewSet):
                 user=user, project_id=project_id, defaults={"status": alert_status}
             )
         return Response(status=204)
+
+
+class EmailAddressViewSet(
+    mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet,
+):
+    queryset = EmailAddress.objects.all()
+    serializer_class = EmailAddressSerializer
+    pagination_class = None
+
+    def get_user(self, user_pk):
+        if user_pk == "me":
+            return self.request.user
+        raise ValidationError("Can only change primary email address on own account")
+
+    def put(self, request, user_pk, format=None):
+        """
+        Set a new primary email (must be verified) this will also set the email used when a user logs in.
+        """
+        user = self.get_user(user_pk)
+        try:
+            email_address = user.emailaddress_set.get(
+                email=request.data.get("email"), verified=True
+            )
+        except ObjectDoesNotExist:
+            raise Http404
+        serializer = self.serializer_class(
+            instance=email_address, data=request.data, context={"request": request}
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, user_pk, format=None):
+        user = self.get_user(user_pk)
+        try:
+            email_address = user.emailaddress_set.get(
+                email=request.data.get("email"), primary=False
+            )
+        except ObjectDoesNotExist:
+            raise Http404
+        email_address.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

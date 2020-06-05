@@ -60,6 +60,7 @@ if settings.BILLING_ENABLED:
 urlpatterns += [
     path("api/0/", include("projects.urls")),
     path("api/0/", include("issues.urls")),
+    path("api/0/", include("users.urls")),
     path("api/0/", include("organizations_ext.urls")),
     path("api/0/", include("teams.urls")),
     path("api/", include("event_store.urls")),
