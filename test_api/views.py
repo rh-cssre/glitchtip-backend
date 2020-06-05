@@ -3,8 +3,11 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework.exceptions import NotFound
+from djstripe.models import Subscription
+from model_bakery import baker
 from users.models import User
 from organizations_ext.models import Organization
+from glitchtip import test_utils  # pylint: disable=unused-import
 
 
 class SeedDataAPIView(APIView):
@@ -29,5 +32,10 @@ class SeedDataAPIView(APIView):
         user = User.objects.create_user(email=user_email, password=user_password)
         organization = Organization.objects.create(name=organization_name)
         organization.add_user(user=user)
+
+        # org needs a subscription in order to have full access to frontend
+        subscription = baker.make(
+            "djstripe.Subscription", customer__subscriber=organization, livemode=False, status="active"
+        )
         
         return Response()
