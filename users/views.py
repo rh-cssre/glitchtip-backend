@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from drf_yasg.utils import swagger_auto_schema
 from organizations_ext.models import Organization
+from allauth.account import signals
 from .models import User, UserProjectAlert
 from .serializers import UserSerializer, UserNotificationsSerializer, EmailSerializer
 
@@ -52,9 +53,15 @@ class UserViewSet(viewsets.ModelViewSet):
             serializer = serializer_class(user.emailaddress_set.all(), many=True)
             return Response(serializer.data)
 
-        serializer = serializer_class(data=request.data)
+        serializer = serializer_class(data=request.data, context={"request": request})
         if serializer.is_valid():
             serializer.save(user=user)
+            signals.email_added.send(
+                sender=self.request.user.__class__,
+                request=self.request,
+                user=self.request.user,
+                email_address=serializer.validated_data["email"],
+            )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
