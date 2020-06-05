@@ -83,6 +83,20 @@ class UsersTestCase(APITestCase):
         # self.assertTrue(res.data["pending"])
         User.objects.get(pk=res.data["id"])
 
+    def test_emails_retrieve(self):
+        email_address = baker.make("account.EmailAddress", user=self.user)
+        url = reverse("user-detail", args=["me"]) + "emails/"
+        res = self.client.get(url)
+        self.assertContains(res, email_address.email)
+
+    def test_emails_create(self):
+        url = reverse("user-detail", args=["me"]) + "emails/"
+        new_email = "new@exmaple.com"
+        data = {"email": new_email}
+        res = self.client.post(url, data)
+        self.assertContains(res, new_email, status_code=201)
+        self.assertTrue(self.user.emailaddress_set.filter(email=new_email).exists())
+
     def test_notifications_retrieve(self):
         url = reverse("user-detail", args=["me"]) + "notifications/"
         res = self.client.get(url)

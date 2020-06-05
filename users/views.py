@@ -2,9 +2,10 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
+from drf_yasg.utils import swagger_auto_schema
 from organizations_ext.models import Organization
 from .models import User, UserProjectAlert
-from .serializers import UserSerializer, UserNotificationsSerializer
+from .serializers import UserSerializer, UserNotificationsSerializer, EmailSerializer
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -38,6 +39,25 @@ class UserViewSet(viewsets.ModelViewSet):
         # TODO deal with organization and users who aren't set up yet
         user = serializer.save()
         return user
+
+    @swagger_auto_schema(method="get", responses={200: EmailSerializer(many=True)})
+    @swagger_auto_schema(method="post", responses={201: EmailSerializer()})
+    @action(detail=True, methods=["get", "post"])
+    def emails(self, request, pk=None):
+        """ User emails """
+        serializer_class = EmailSerializer
+        user = self.get_object()
+
+        if request.method == "GET":
+            serializer = serializer_class(user.emailaddress_set.all(), many=True)
+            return Response(serializer.data)
+
+        serializer = serializer_class(data=request.data)
+        if serializer.is_valid():
+            serializer.save(user=user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["get", "post", "put"])
     def notifications(self, request, pk=None):

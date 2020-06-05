@@ -1,7 +1,17 @@
 from rest_framework import serializers
 from dj_rest_auth.serializers import UserDetailsSerializer as BaseUserDetailsSerializer
 from dj_rest_auth.registration.serializers import SocialAccountSerializer
+from allauth.account.models import EmailAddress
 from .models import User
+
+
+class EmailSerializer(serializers.ModelSerializer):
+    isPrimary = serializers.BooleanField(source="primary", read_only=True)
+    isVerified = serializers.BooleanField(source="verified", read_only=True)
+
+    class Meta:
+        model = EmailAddress
+        fields = ("isPrimary", "email", "isVerified")
 
 
 class UserSerializer(serializers.ModelSerializer):
