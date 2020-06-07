@@ -25,17 +25,23 @@ class SeedDataAPIView(APIView):
         user_email = "cypresstest@example.com"
         user_password = "hunter22"
         organization_name = "coolbeans"
+        subscription_id = "test_sub_id"
 
         User.objects.filter(email=user_email).delete()
-        Organization.objects.filter(name=organization_name).delete()
-
         user = User.objects.create_user(email=user_email, password=user_password)
+
+        Organization.objects.filter(name=organization_name).delete()
         organization = Organization.objects.create(name=organization_name)
         organization.add_user(user=user)
 
         # org needs a subscription in order to have full access to frontend
+        Subscription.objects.filter(id=subscription_id).delete()
         subscription = baker.make(
-            "djstripe.Subscription", customer__subscriber=organization, livemode=False, status="active"
+            "djstripe.Subscription",
+            id=subscription_id,
+            customer__subscriber=organization,
+            livemode=False,
+            status="active",
         )
-        
+
         return Response()
