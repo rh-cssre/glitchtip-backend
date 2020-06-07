@@ -5,7 +5,6 @@ from rest_framework.permissions import AllowAny
 from rest_framework.exceptions import NotFound
 from users.models import User
 from organizations_ext.models import Organization
-from glitchtip import test_utils  # pylint: disable=unused-import
 
 
 class SeedDataAPIView(APIView):
