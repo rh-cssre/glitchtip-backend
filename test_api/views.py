@@ -36,7 +36,7 @@ class SeedDataAPIView(APIView):
 
         # org needs a subscription in order to have full access to frontend
         Subscription.objects.filter(id=subscription_id).delete()
-        subscription = baker.make(
+        baker.make(
             "djstripe.Subscription",
             id=subscription_id,
             customer__subscriber=organization,
