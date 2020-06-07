@@ -3,11 +3,16 @@ from ..models import Project
 
 
 class ProjectReferenceSerializer(serializers.ModelSerializer):
-    isMember = serializers.SerializerMethodField()
-
     class Meta:
         model = Project
-        fields = ("platform", "slug", "id", "name", "isMember")
+        fields = ("platform", "slug", "id", "name")
+
+
+class ProjectReferenceWithMemberSerializer(ProjectReferenceSerializer):
+    isMember = serializers.SerializerMethodField()
+
+    class Meta(ProjectReferenceSerializer.Meta):
+        fields = ProjectReferenceSerializer.Meta.fields + ("isMember",)
 
     def get_isMember(self, obj):
         user_id = self.context["request"].user.id

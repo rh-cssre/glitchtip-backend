@@ -2,7 +2,7 @@ from rest_framework import serializers
 from organizations_ext.serializers.base_serializers import (
     OrganizationReferenceSerializer,
 )
-from .base_serializers import ProjectReferenceSerializer
+from .base_serializers import ProjectReferenceWithMemberSerializer
 from ..models import ProjectKey
 
 
@@ -21,7 +21,7 @@ class ProjectKeySerializer(serializers.ModelSerializer):
         return {"public": obj.get_dsn()}
 
 
-class ProjectSerializer(ProjectReferenceSerializer):
+class ProjectSerializer(ProjectReferenceWithMemberSerializer):
     avatar = serializers.SerializerMethodField()
     color = serializers.SerializerMethodField()
     dateCreated = serializers.DateTimeField(source="created", read_only=True)
@@ -33,7 +33,7 @@ class ProjectSerializer(ProjectReferenceSerializer):
     isPublic = serializers.SerializerMethodField()
     organization = OrganizationReferenceSerializer(read_only=True)
 
-    class Meta(ProjectReferenceSerializer.Meta):
+    class Meta(ProjectReferenceWithMemberSerializer.Meta):
         fields = (
             "avatar",
             "color",

@@ -1,4 +1,4 @@
-from projects.serializers.base_serializers import ProjectReferenceSerializer
+from projects.serializers.base_serializers import ProjectReferenceWithMemberSerializer
 from .base_serializers import OrganizationReferenceSerializer
 
 
@@ -12,7 +12,7 @@ class OrganizationSerializer(OrganizationReferenceSerializer):
 
 
 class OrganizationDetailSerializer(OrganizationSerializer):
-    projects = ProjectReferenceSerializer(many=True)
+    projects = ProjectReferenceWithMemberSerializer(many=True)
 
     class Meta(OrganizationSerializer.Meta):
         fields = OrganizationSerializer.Meta.fields + ("projects",)
