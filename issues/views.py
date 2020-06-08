@@ -1,4 +1,4 @@
-from django.db.models import Count, Min, Max
+from django.db.models import Count, Max
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, views
 from rest_framework.decorators import action
@@ -64,11 +64,7 @@ class IssueViewSet(viewsets.ModelViewSet):
             # Anything left is full text search
             qs = qs.filter(event__search_vector=queries).distinct()
 
-        qs = qs.annotate(
-            count=Count("event"),
-            firstSeen=Min("event__created"),
-            lastSeen=Max("event__created"),
-        )
+        qs = qs.annotate(count=Count("event"), lastSeen=Max("event__created"),)
 
         qs = qs.select_related("project")
 

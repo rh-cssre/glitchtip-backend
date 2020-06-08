@@ -66,7 +66,7 @@ class IssueSerializer(serializers.ModelSerializer):
     annotations = serializers.JSONField(default=list, read_only=True)
     assignedTo = serializers.CharField(default=None, read_only=True)
     count = serializers.IntegerField(read_only=True)
-    firstSeen = serializers.DateTimeField(read_only=True)
+    firstSeen = serializers.DateTimeField(source="created", read_only=True)
     hasSeen = serializers.BooleanField(source="has_seen", read_only=True)
     isBookmarked = serializers.BooleanField(default=False, read_only=True)
     isPublic = serializers.BooleanField(source="is_public", read_only=True)
