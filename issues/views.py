@@ -64,9 +64,10 @@ class IssueViewSet(viewsets.ModelViewSet):
             # Anything left is full text search
             qs = qs.filter(event__search_vector=queries).distinct()
 
-        qs = qs.annotate(count=Count("event"), lastSeen=Max("event__created"),)
+        # TODO see if annotate can be used without major performance hits?
+        # qs = qs.annotate(count=Count("event"), lastSeen=Max("event__created"),)
 
-        qs = qs.select_related("project")
+        qs = qs.select_related("project",).prefetch_related("event_set")
 
         return qs
 
