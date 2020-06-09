@@ -5,6 +5,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.exceptions import NotFound
 from users.models import User
 from organizations_ext.models import Organization
+from teams.models import Team
+from projects.models import Project
 
 
 class SeedDataAPIView(APIView):
@@ -21,7 +23,9 @@ class SeedDataAPIView(APIView):
 
         user_email = "cypresstest@example.com"
         user_password = "hunter22"
-        organization_name = "coolbeans"
+        organization_name = "cypresstestorg"
+        team_slug = "cypresstestteam"
+        project_name = "cypresstestproject"
 
         User.objects.filter(email=user_email).delete()
         user = User.objects.create_user(email=user_email, password=user_password)
@@ -29,5 +33,11 @@ class SeedDataAPIView(APIView):
         Organization.objects.filter(name=organization_name).delete()
         organization = Organization.objects.create(name=organization_name)
         organization.add_user(user=user)
+
+        Team.objects.filter(slug=team_slug).delete()
+        Team.objects.create(slug=team_slug, organization=organization)
+
+        Project.objects.filter(name=project_name).delete()
+        Project.objects.create(name=project_name, organization=organization)
 
         return Response()
