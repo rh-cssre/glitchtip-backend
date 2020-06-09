@@ -150,9 +150,10 @@ class IssueSerializer(serializers.ModelSerializer):
         return obj.event_set.all().count()
 
     def get_lastSeen(self, obj):
-        last = obj.event_set.values("created").last()
-        if last:
-            return last["created"]
+        """ This works because of the sort applied to events and works well with Django's prefetch related """
+        events = obj.event_set.all()
+        if events:
+            return events[0].created
 
     def to_representation(self, obj):
         """ Workaround for a field called "type" """

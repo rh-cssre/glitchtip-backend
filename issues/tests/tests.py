@@ -143,6 +143,12 @@ class IssuesAPITestCase(APITestCase):
         res = self.client.get(url)
         self.assertEqual(res.status_code, 404)
 
+    def test_issue_last_seen(self):
+        issue = baker.make("issues.Issue", project=self.project)
+        events = baker.make("issues.Event", issue=issue, _quantity=2)
+        res = self.client.get(self.url)
+        self.assertEqual(res.data[0]["lastSeen"], events[1].created)
+
     def test_issue_delete(self):
         issue = baker.make("issues.Issue", project=self.project)
         not_my_issue = baker.make("issues.Issue")

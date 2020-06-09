@@ -1,5 +1,5 @@
-from django.db.models import Count, Max
 from django.shortcuts import get_object_or_404
+from django.db.models import Prefetch
 from rest_framework import viewsets, views
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -64,10 +64,14 @@ class IssueViewSet(viewsets.ModelViewSet):
             # Anything left is full text search
             qs = qs.filter(event__search_vector=queries).distinct()
 
-        # TODO see if annotate can be used without major performance hits?
-        # qs = qs.annotate(count=Count("event"), lastSeen=Max("event__created"),)
-
-        qs = qs.select_related("project",).prefetch_related("event_set")
+        qs = qs.select_related("project").prefetch_related(
+            Prefetch(
+                "event_set",
+                queryset=Event.objects.all().defer(
+                    "timestamp", "search_vector", "data"
+                ),
+            )
+        )
 
         return qs
 
