@@ -56,7 +56,10 @@ class NestedProjectViewSet(viewsets.ModelViewSet):
             )
         except Organization.DoesNotExist:
             raise exceptions.ValidationError("Organization not found")
-        serializer.save(team=team, organization=organization)
+
+        new_project = serializer.save(team=team, organization=organization)
+        if new_project:
+            new_project.team_set.add(team)
 
 
 class ProjectViewSet(NestedProjectViewSet):
