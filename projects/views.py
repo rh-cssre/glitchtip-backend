@@ -31,7 +31,11 @@ class NestedProjectViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         if self.request.user.is_authenticated:
-            return self.queryset.filter(organization__users=self.request.user)
+            queryset = self.queryset.filter(organization__users=self.request.user)
+            organization_slug = self.kwargs.get("organization_slug")
+            if organization_slug:
+                queryset = queryset.filter(organization__slug=organization_slug)
+            return queryset
         return self.queryset.none()
 
     def perform_create(self, serializer):
