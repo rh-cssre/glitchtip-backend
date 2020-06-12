@@ -1,6 +1,5 @@
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
-from dj_rest_auth.serializers import UserDetailsSerializer as BaseUserDetailsSerializer
 from dj_rest_auth.registration.serializers import SocialAccountSerializer
 from allauth.account.adapter import get_adapter
 from allauth.account import app_settings
@@ -92,18 +91,3 @@ class UserNotificationsSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ("subscribeByDefault",)
-
-
-# class UserDetailsSerializer(BaseUserDetailsSerializer):
-#     """ Extended UserDetailsSerializer with social account set data """
-
-#     socialaccount_set = SocialAccountSerializer(many=True, read_only=True)
-
-#     class Meta(BaseUserDetailsSerializer.Meta):
-#         fields = (
-#             "pk",
-#             "email",
-#             "name",
-#             "socialaccount_set",
-#         )
-#         read_only_fields = ("email",)

@@ -71,7 +71,7 @@ class OrganizationUsersAPITestCase(APITestCase):
     def setUp(self):
         self.user = baker.make("users.user")
         self.organization = baker.make("organizations_ext.Organization")
-        self.organization.add_user(self.user)
+        self.org_user = self.organization.add_user(self.user)
         self.client.force_login(self.user)
         self.users_url = reverse(
             "organization-users-list",
@@ -85,3 +85,31 @@ class OrganizationUsersAPITestCase(APITestCase):
     def test_organization_users_list(self):
         res = self.client.get(self.users_url)
         self.assertContains(res, self.user.email)
+        res = self.client.get(self.members_url)
+        self.assertContains(res, self.user.email)
+
+    def test_organization_users_detail(self):
+        other_user = baker.make("users.user")
+        other_organization = baker.make("organizations_ext.Organization")
+        other_org_user = other_organization.add_user(other_user)
+
+        url = reverse(
+            "organization-members-detail",
+            kwargs={
+                "organization_slug": self.organization.slug,
+                "pk": self.org_user.pk,
+            },
+        )
+        res = self.client.get(url)
+        self.assertContains(res, self.user.email)
+        self.assertNotContains(res, other_user.email)
+
+        url = reverse(
+            "organization-members-detail",
+            kwargs={
+                "organization_slug": other_organization.slug,
+                "pk": other_org_user.pk,
+            },
+        )
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 404)

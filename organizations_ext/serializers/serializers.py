@@ -21,10 +21,26 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
     roleName = serializers.CharField(source="get_role_display")
     dateCreated = serializers.DateTimeField(source="created")
+    email = serializers.SerializerMethodField()
 
     class Meta:
         model = OrganizationUser
-        fields = ("role", "id", "user", "roleName", "dateCreated")
+        fields = ("role", "id", "user", "roleName", "dateCreated", "email")
 
     def get_role(self, obj):
         return obj.get_role_display().lower()
+
+    def get_email(self, obj):
+        return obj.user.email
+
+
+class OrganizationUserProjectsSerializer(OrganizationUserSerializer):
+    projects = serializers.SerializerMethodField()
+
+    class Meta(OrganizationUserSerializer.Meta):
+        fields = OrganizationUserSerializer.Meta.fields + ("projects",)
+
+    def get_projects(self, obj):
+        return obj.organization.projects.filter(team__members=obj.user).values_list(
+            "slug", flat=True
+        )

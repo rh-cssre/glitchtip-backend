@@ -4,6 +4,7 @@ from .serializers.serializers import (
     OrganizationSerializer,
     OrganizationDetailSerializer,
     OrganizationUserSerializer,
+    OrganizationUserProjectsSerializer,
 )
 
 
@@ -31,7 +32,9 @@ class OrganizationViewSet(viewsets.ModelViewSet):
 
 
 class OrganizationMemberViewSet(viewsets.ReadOnlyModelViewSet):
-    """ All Organization Users including pending """
+    """
+    API compatible with undocumented Sentry endpoint `/api/organizations/<slug>/members/`
+    """
 
     queryset = OrganizationUser.objects.all()
     serializer_class = OrganizationUserSerializer
@@ -43,11 +46,19 @@ class OrganizationMemberViewSet(viewsets.ReadOnlyModelViewSet):
         organization_slug = self.kwargs.get("organization_slug")
         if organization_slug:
             queryset = queryset.filter(organization__slug=organization_slug)
-        return queryset
+        team_slug = self.kwargs.get("team_slug")
+        if team_slug:
+            queryset = queryset.filter(organization__teams__slug=team_slug)
+        return queryset.select_related("organization", "user").prefetch_related(
+            "user__socialaccount_set"
+        )
 
 
 class OrganizationUserViewSet(OrganizationMemberViewSet):
-    """ Organization users - excluding pending invites """
+    """
+    Extension of OrganizationMemberViewSet that adds projects the user has access to
 
-    # def get_queryset(self):
-    # TODO add pending filter
+    API compatible with [get-organization-users](https://docs.sentry.io/api/organizations/get-organization-users/)
+    """
+
+    serializer_class = OrganizationUserProjectsSerializer
