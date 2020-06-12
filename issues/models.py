@@ -58,9 +58,14 @@ class Issue(models.Model):
     status = models.PositiveSmallIntegerField(
         choices=EventStatus.choices, default=EventStatus.UNRESOLVED
     )
+    # See migration 0004 for trigger that sets search_vector, count, last_seen
+    search_vector = SearchVectorField(null=True, editable=False)
+    count = models.PositiveIntegerField(default=1, editable=False)
+    last_seen = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ("title", "culprit", "project", "type")
+        indexes = [GinIndex(fields=["search_vector"], name="search_vector_idx")]
 
     def event(self):
         return self.event_set.first()
@@ -104,12 +109,9 @@ class Event(models.Model):
 
     created = models.DateTimeField(auto_now_add=True, db_index=True)
     data = JSONField()
-    # See migration 0003 for trigger to update
-    search_vector = SearchVectorField(null=True, editable=False)
 
     class Meta:
         ordering = ["-created"]
-        indexes = [GinIndex(fields=["search_vector"], name="search_vector_idx")]
 
     def __str__(self):
         return self.event_id_hex

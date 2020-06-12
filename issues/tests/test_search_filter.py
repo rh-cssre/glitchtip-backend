@@ -50,6 +50,9 @@ class SearchTestCase(APITestCase):
         event = baker.make(
             "issues.Event", issue__project=self.project, data={"name": "apple sauce"}
         )
+        event2 = baker.make(
+            "issues.Event", issue=event.issue, data={"name": "apple sauce"}
+        )
         other_event = baker.make("issues.Event", issue__project=self.project)
         res = self.client.get(self.url + "?query=is:unresolved apple sauce")
         self.assertContains(res, event.issue.title)

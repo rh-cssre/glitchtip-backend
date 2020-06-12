@@ -147,7 +147,9 @@ class IssuesAPITestCase(APITestCase):
         issue = baker.make("issues.Issue", project=self.project)
         events = baker.make("issues.Event", issue=issue, _quantity=2)
         res = self.client.get(self.url)
-        self.assertEqual(res.data[0]["lastSeen"], events[1].created)
+        self.assertEqual(
+            res.data[0]["lastSeen"][:25], events[1].created.isoformat()[:25]
+        )
 
     def test_issue_delete(self):
         issue = baker.make("issues.Issue", project=self.project)

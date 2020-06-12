@@ -1,5 +1,4 @@
 from django.shortcuts import get_object_or_404
-from django.db.models import Prefetch
 from rest_framework import viewsets, views
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -62,16 +61,9 @@ class IssueViewSet(viewsets.ModelViewSet):
 
         if queries:
             # Anything left is full text search
-            qs = qs.filter(event__search_vector=queries).distinct()
+            qs = qs.filter(search_vector=queries)
 
-        qs = qs.select_related("project").prefetch_related(
-            Prefetch(
-                "event_set",
-                queryset=Event.objects.all().defer(
-                    "timestamp", "search_vector", "data"
-                ),
-            )
-        )
+        qs = qs.select_related("project").defer("search_vector")
 
         return qs
 

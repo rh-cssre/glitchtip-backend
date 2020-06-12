@@ -65,15 +65,12 @@ class EventDetailSerializer(EventSerializer):
 class IssueSerializer(serializers.ModelSerializer):
     annotations = serializers.JSONField(default=list, read_only=True)
     assignedTo = serializers.CharField(default=None, read_only=True)
-    # count = serializers.IntegerField(read_only=True)
-    count = serializers.SerializerMethodField()
     firstSeen = serializers.DateTimeField(source="created", read_only=True)
     hasSeen = serializers.BooleanField(source="has_seen", read_only=True)
     isBookmarked = serializers.BooleanField(default=False, read_only=True)
     isPublic = serializers.BooleanField(source="is_public", read_only=True)
     isSubscribed = serializers.BooleanField(default=False, read_only=True)
-    # lastSeen = serializers.DateTimeField(read_only=True)
-    lastSeen = serializers.SerializerMethodField()
+    lastSeen = serializers.DateTimeField(source="last_seen", read_only=True)
     level = serializers.CharField(source="get_level_display", read_only=True)
     logger = serializers.CharField(default=None, read_only=True)
     metadata = serializers.JSONField(default=dict, read_only=True)
@@ -145,15 +142,6 @@ class IssueSerializer(serializers.ModelSerializer):
             "type",
             "userCount",
         )
-
-    def get_count(self, obj):
-        return obj.event_set.all().count()
-
-    def get_lastSeen(self, obj):
-        """ This works because of the sort applied to events and works well with Django's prefetch related """
-        events = obj.event_set.all()
-        if events:
-            return events[0].created
 
     def to_representation(self, obj):
         """ Workaround for a field called "type" """
