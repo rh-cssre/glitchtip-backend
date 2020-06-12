@@ -111,6 +111,11 @@ class EmailAddressViewSet(
             return self.request.user
         raise ValidationError("Can only change primary email address on own account")
 
+    def get_queryset(self):
+        user = self.get_user(self.kwargs.get("user_pk"))
+        queryset = super().get_queryset().filter(user=user)
+        return queryset
+
     def put(self, request, user_pk, format=None):
         """
         Set a new primary email (must be verified) this will also set the email used when a user logs in.

@@ -86,9 +86,12 @@ class UsersTestCase(APITestCase):
 
     def test_emails_retrieve(self):
         email_address = baker.make("account.EmailAddress", user=self.user)
+        another_user= baker.make("users.user")
+        another_email_address = baker.make("account.EmailAddress", user=another_user)
         url = reverse("user-emails-list", args=["me"])
         res = self.client.get(url)
         self.assertContains(res, email_address.email)
+        self.assertNotContains(res, another_email_address.email)
 
     def test_emails_create(self):
         url = reverse("user-emails-list", args=["me"])
