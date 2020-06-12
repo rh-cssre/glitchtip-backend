@@ -96,11 +96,36 @@ class TeamProjectsAPITestCase(APITestCase):
         )
 
     def test_list(self):
-        project = baker.make("projects.Project", organization=self.organization)
+        project = baker.make(
+            "projects.Project", organization=self.organization
+        )
+        project.team_set.add(self.team)
         not_my_project = baker.make("projects.Project")
         res = self.client.get(self.url)
         self.assertContains(res, project.name)
         self.assertNotContains(res, not_my_project.name)
+
+        """
+        If a user is in multiple orgs, that user will have multiple org users.
+        Make sure endpoint doesn't show projects from other orgs
+        """
+        second_org = baker.make("organizations_ext.Organization")
+        second_org.add_user(self.user, OrganizationUserRole.ADMIN)
+        project_in_second_org = baker.make(
+            "projects.Project", organization=second_org
+        )
+        res = self.client.get(self.url)
+        self.assertNotContains(res, project_in_second_org.name)
+
+        """
+        Only show projects that are associated with the team in the URL.
+        If a project is on another team in the same org, it should not show
+        """
+        project_teamless = baker.make(
+            "projects.Project", organization=self.organization
+        )
+        res = self.client.get(self.url)
+        self.assertNotContains(res, project_teamless)
 
     def test_create(self):
         data = {"name": "test-team"}
@@ -126,6 +151,10 @@ class TeamProjectsAPITestCase(APITestCase):
         # The same slug can exist between multiple organizations
         self.assertEqual(projects[0].slug, org2_project.slug)
 
+    """
+    The frontend UI requires you to assign a new project to a team, so make sure
+    that the new project has a team associated with it
+    """
     def test_projects_api_project_has_team(self):
         name = "test project"
         data = {"name": name}
