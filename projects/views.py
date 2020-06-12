@@ -35,6 +35,9 @@ class NestedProjectViewSet(viewsets.ModelViewSet):
             organization_slug = self.kwargs.get("organization_slug")
             if organization_slug:
                 queryset = queryset.filter(organization__slug=organization_slug)
+            team_slug = self.kwargs.get("team_slug")
+            if team_slug:
+                queryset = queryset.filter(team__slug=team_slug)
             return queryset
         return self.queryset.none()
 
