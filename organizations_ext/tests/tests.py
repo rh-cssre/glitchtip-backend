@@ -65,3 +65,23 @@ class OrganizationsAPITestCase(APITestCase):
         self.assertEqual(
             OrganizationUser.objects.filter(organization__name=data["name"]).count(), 1
         )
+
+
+class OrganizationUsersAPITestCase(APITestCase):
+    def setUp(self):
+        self.user = baker.make("users.user")
+        self.organization = baker.make("organizations_ext.Organization")
+        self.organization.add_user(self.user)
+        self.client.force_login(self.user)
+        self.users_url = reverse(
+            "organization-users-list",
+            kwargs={"organization_slug": self.organization.slug},
+        )
+        self.members_url = reverse(
+            "organization-members-list",
+            kwargs={"organization_slug": self.organization.slug},
+        )
+
+    def test_organization_users_list(self):
+        res = self.client.get(self.users_url)
+        self.assertContains(res, self.user.email)

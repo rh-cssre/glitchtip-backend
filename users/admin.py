@@ -6,12 +6,10 @@ from .models import User, UserProjectAlert
 
 class UserAdmin(BaseUserAdmin):
     ordering = ("email",)
+    list_display = ("email", "name")
     fieldsets = (
         (None, {"fields": ("email", "password")}),
-        (
-            _("Personal info"),
-            {"fields": ("first_name", "last_name", "subscribe_by_default")},
-        ),
+        (_("Personal info"), {"fields": ("name", "subscribe_by_default")},),
         (
             _("Permissions"),
             {

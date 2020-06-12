@@ -1,8 +1,9 @@
 from rest_framework import viewsets
-from .models import Organization, OrganizationUserRole
+from .models import Organization, OrganizationUserRole, OrganizationUser
 from .serializers.serializers import (
     OrganizationSerializer,
     OrganizationDetailSerializer,
+    OrganizationUserSerializer,
 )
 
 
@@ -27,3 +28,26 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         """ Create organization with current user as owner """
         organization = serializer.save()
         organization.add_user(self.request.user, role=OrganizationUserRole.OWNER)
+
+
+class OrganizationMemberViewSet(viewsets.ReadOnlyModelViewSet):
+    """ All Organization Users including pending """
+
+    queryset = OrganizationUser.objects.all()
+    serializer_class = OrganizationUserSerializer
+
+    def get_queryset(self):
+        if not self.request.user.is_authenticated:
+            return self.queryset.none()
+        queryset = self.queryset.filter(organization__users=self.request.user)
+        organization_slug = self.kwargs.get("organization_slug")
+        if organization_slug:
+            queryset = queryset.filter(organization__slug=organization_slug)
+        return queryset
+
+
+class OrganizationUserViewSet(OrganizationMemberViewSet):
+    """ Organization users - excluding pending invites """
+
+    # def get_queryset(self):
+    # TODO add pending filter

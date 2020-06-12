@@ -4,7 +4,7 @@ from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
 from organizations_ext.models import OrganizationUserRole
-from .models import UserProjectAlert, User
+from .models import UserProjectAlert
 
 
 class OrganizationsAPITestCase(APITestCase):
@@ -17,19 +17,6 @@ class OrganizationsAPITestCase(APITestCase):
         }
         res = self.client.post(url, data)
         self.assertContains(res, "key", status_code=201)
-
-
-class UserDetailsTestCase(APITestCase):
-    def test_user_details(self):
-        """ User details should have email and associated social account providers """
-        user = baker.make("users.user")
-        socialaccount = baker.make("socialaccount.SocialAccount", user=user)
-        self.client.force_login(user)
-        url = reverse("rest_user_details")
-
-        res = self.client.get(url)
-        self.assertContains(res, user.email)
-        self.assertContains(res, socialaccount.provider)
 
 
 class UsersTestCase(APITestCase):
@@ -70,19 +57,19 @@ class UsersTestCase(APITestCase):
         res = self.client.get(url)
         self.assertNotContains(res, other_user.email)
 
-    def test_organization_members_create(self):
-        url = reverse("organization-members-list", args=[self.organization.slug])
-        data = {
-            "email": "new@example.com",
-            "role": "member",
-            "teams": [],
-            "user": "new@example.com",
-        }
-        res = self.client.post(url, data)
-        self.assertEqual(res.status_code, 201)
-        # TODO pending functionality
-        # self.assertTrue(res.data["pending"])
-        User.objects.get(pk=res.data["id"])
+    # def test_organization_members_create(self):
+    #     url = reverse("organization-members-list", args=[self.organization.slug])
+    #     data = {
+    #         "email": "new@example.com",
+    #         "role": "member",
+    #         "teams": [],
+    #         "user": "new@example.com",
+    #     }
+    #     res = self.client.post(url, data)
+    #     self.assertEqual(res.status_code, 201)
+    #     # TODO pending functionality
+    #     # self.assertTrue(res.data["pending"])
+    #     User.objects.get(pk=res.data["id"])
 
     def test_emails_retrieve(self):
         email_address = baker.make("account.EmailAddress", user=self.user)

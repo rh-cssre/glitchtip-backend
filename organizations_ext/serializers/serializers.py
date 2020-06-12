@@ -1,14 +1,12 @@
+from rest_framework import serializers
 from projects.serializers.base_serializers import ProjectReferenceWithMemberSerializer
+from users.serializers import UserSerializer
 from .base_serializers import OrganizationReferenceSerializer
+from ..models import OrganizationUser
 
 
 class OrganizationSerializer(OrganizationReferenceSerializer):
     pass
-    # def create(self, validated_data):
-    #     user = self.context["request"].user
-    #     return create_organization(
-    #         user, validated_data["name"], validated_data.get("slug"),
-    #     )
 
 
 class OrganizationDetailSerializer(OrganizationSerializer):
@@ -16,3 +14,17 @@ class OrganizationDetailSerializer(OrganizationSerializer):
 
     class Meta(OrganizationSerializer.Meta):
         fields = OrganizationSerializer.Meta.fields + ("projects",)
+
+
+class OrganizationUserSerializer(serializers.ModelSerializer):
+    user = UserSerializer()
+    role = serializers.SerializerMethodField()
+    roleName = serializers.CharField(source="get_role_display")
+    dateCreated = serializers.DateTimeField(source="created")
+
+    class Meta:
+        model = OrganizationUser
+        fields = ("role", "id", "user", "roleName", "dateCreated")
+
+    def get_role(self, obj):
+        return obj.get_role_display().lower()
