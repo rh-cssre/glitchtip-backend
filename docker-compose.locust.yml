@@ -1,4 +1,4 @@
-version: "3.4"
+version: "3.7"
 services:
   locust:
     build: .
@@ -10,3 +10,8 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: glitchtip.settings
       SECRET_KEY: nope
+    deploy:
+      resources:
+        limits:
+          cpus: "5.0"
+          memory: 8000M
