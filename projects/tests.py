@@ -125,3 +125,10 @@ class TeamProjectsAPITestCase(APITestCase):
         org2_project = Project.objects.create(name=name, organization=org2)
         # The same slug can exist between multiple organizations
         self.assertEqual(projects[0].slug, org2_project.slug)
+
+    def test_projects_api_project_has_team(self):
+        name = "test project"
+        data = {"name": name}
+        res = self.client.post(self.url, data)
+        project = Project.objects.first()
+        self.assertEqual(project.team_set.all().count(), 1)
