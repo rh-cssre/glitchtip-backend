@@ -1,21 +1,13 @@
 from django.urls import reverse
 from django.utils import timezone
-from rest_framework.test import APITestCase
 from freezegun import freeze_time
 from model_bakery import baker
-from organizations_ext.models import OrganizationUserRole
+from glitchtip.test_utils.test_case import GlitchTipTestCase
 
 
-class FilterTestCase(APITestCase):
+class FilterTestCase(GlitchTipTestCase):
     def setUp(self):
-        self.user = baker.make("users.user")
-        self.organization = baker.make("organizations_ext.Organization")
-        self.organization.add_user(self.user, OrganizationUserRole.ADMIN)
-        self.team = baker.make("teams.Team", organization=self.organization)
-        self.team.members.add(self.user)
-        self.project = baker.make("projects.Project", organization=self.organization)
-        self.project.team_set.add(self.team)
-        self.client.force_login(self.user)
+        self.create_user_and_project()
         self.url = reverse("issue-list")
 
     def test_filter_by_date(self):
@@ -34,16 +26,9 @@ class FilterTestCase(APITestCase):
         self.assertNotContains(res, event3.issue.title)
 
 
-class SearchTestCase(APITestCase):
+class SearchTestCase(GlitchTipTestCase):
     def setUp(self):
-        self.user = baker.make("users.user")
-        self.organization = baker.make("organizations_ext.Organization")
-        self.organization.add_user(self.user, OrganizationUserRole.ADMIN)
-        self.team = baker.make("teams.Team", organization=self.organization)
-        self.team.members.add(self.user)
-        self.project = baker.make("projects.Project", organization=self.organization)
-        self.project.team_set.add(self.team)
-        self.client.force_login(self.user)
+        self.create_user_and_project()
         self.url = reverse("issue-list")
 
     def test_search(self):

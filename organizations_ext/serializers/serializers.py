@@ -11,9 +11,10 @@ class OrganizationSerializer(OrganizationReferenceSerializer):
 
 class OrganizationDetailSerializer(OrganizationSerializer):
     projects = ProjectReferenceWithMemberSerializer(many=True)
+    openMembership = serializers.BooleanField(source="open_membership")
 
     class Meta(OrganizationSerializer.Meta):
-        fields = OrganizationSerializer.Meta.fields + ("projects",)
+        fields = OrganizationSerializer.Meta.fields + ("projects", "openMembership")
 
 
 class OrganizationUserSerializer(serializers.ModelSerializer):
@@ -41,6 +42,6 @@ class OrganizationUserProjectsSerializer(OrganizationUserSerializer):
         fields = OrganizationUserSerializer.Meta.fields + ("projects",)
 
     def get_projects(self, obj):
-        return obj.organization.projects.filter(team__members=obj.user).values_list(
+        return obj.organization.projects.filter(team__members=obj).values_list(
             "slug", flat=True
         )

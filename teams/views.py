@@ -30,7 +30,10 @@ class NestedTeamViewSet(viewsets.ModelViewSet):
         except Organization.DoesNotExist:
             raise exceptions.ValidationError("Organization does not exist")
         team = serializer.save(organization=organization)
-        team.members.add(self.request.user)
+        org_user = organization.organization_users.filter(
+            user=self.request.user
+        ).first()
+        team.members.add(org_user)
 
 
 class TeamViewSet(NestedTeamViewSet):

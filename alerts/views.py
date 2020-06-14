@@ -13,8 +13,7 @@ class ProjectAlertViewSet(viewsets.ModelViewSet):
             return self.queryset.none()
         return self.queryset.filter(
             project__slug=self.kwargs.get("project_slug"),
-            project__organization__users=self.request.user,
-            project__team__members=self.request.user,
+            project__team__members__user=self.request.user,
             project__organization__slug=self.kwargs.get("organization_slug"),
         )
 
@@ -22,8 +21,7 @@ class ProjectAlertViewSet(viewsets.ModelViewSet):
         try:
             project = Project.objects.get(
                 slug=self.kwargs.get("project_slug"),
-                organization__users=self.request.user,
-                team__members=self.request.user,
+                team__members__user=self.request.user,
                 organization__slug=self.kwargs.get("organization_slug"),
             )
         except Project.DoesNotExist:

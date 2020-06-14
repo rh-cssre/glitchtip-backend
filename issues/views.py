@@ -31,13 +31,13 @@ class IssueViewSet(viewsets.ModelViewSet):
     filterset_class = IssueFilter
 
     def get_queryset(self):
-        # Optimization, doing this in one query (instead of 2) will result in not using gin index
         if not self.request.user.is_authenticated:
             return self.queryset.none()
-        projects = Project.objects.filter(
-            organization__users=self.request.user, team__members=self.request.user,
+        qs = (
+            super()
+            .get_queryset()
+            .filter(project__team__members__user=self.request.user)
         )
-        qs = super().get_queryset().filter(project__in=projects)
 
         if "organization_slug" in self.kwargs:
             qs = qs.filter(
@@ -91,10 +91,7 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
         qs = (
             super()
             .get_queryset()
-            .filter(
-                issue__project__organization__users=self.request.user,
-                issue__project__team__members=self.request.user,
-            )
+            .filter(issue__project__team__members__user=self.request.user)
         )
         if "issue_pk" in self.kwargs:
             qs = qs.filter(issue=self.kwargs["issue_pk"])
@@ -125,7 +122,6 @@ class EventJsonView(views.APIView):
             Event,
             pk=event,
             issue__project__organization__slug=org,
-            issue__project__organization__users=self.request.user,
-            issue__project__team__members=self.request.user,
+            issue__project__team__members__user=self.request.user,
         )
         return Response(event.event_json())

@@ -55,7 +55,9 @@ def send_email_notification(notification):
         )
 
     User = get_user_model()
-    users = User.objects.filter(team__projects__notification=notification)
+    users = User.objects.filter(
+        organizations_ext_organization__projects__notification=notification
+    )
     to = users.values_list("email", flat=True)
     msg = EmailMultiAlternatives(subject, text_content, to=to)
     msg.attach_alternative(html_content, "text/html")
