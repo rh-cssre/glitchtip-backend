@@ -29,6 +29,9 @@ class Organization(SharedBaseModel, OrganizationBase):
     is_accepting_events = models.BooleanField(
         default=True, help_text="Used for throttling at org level"
     )
+    open_membership = models.BooleanField(
+        default=True, help_text="Allow any organization member to join any team"
+    )
 
     def add_user(self, user, role=OrganizationUserRole.MEMBER):
         """

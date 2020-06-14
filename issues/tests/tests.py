@@ -1,20 +1,12 @@
 from django.shortcuts import reverse
-from rest_framework.test import APITestCase
 from model_bakery import baker
-from organizations_ext.models import OrganizationUserRole
+from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.models import Issue, EventStatus
 
 
-class EventTestCase(APITestCase):
+class EventTestCase(GlitchTipTestCase):
     def setUp(self):
-        self.user = baker.make("users.user")
-        self.organization = baker.make("organizations_ext.Organization")
-        self.organization.add_user(self.user, OrganizationUserRole.ADMIN)
-        self.team = baker.make("teams.Team", organization=self.organization)
-        self.team.members.add(self.user)
-        self.project = baker.make("projects.Project", organization=self.organization)
-        self.project.team_set.add(self.team)
-        self.client.force_login(self.user)
+        self.create_user_and_project()
         self.url = reverse(
             "project-events-list",
             kwargs={
@@ -111,16 +103,9 @@ class EventTestCase(APITestCase):
         self.assertContains(res, event.event_id_hex)
 
 
-class IssuesAPITestCase(APITestCase):
+class IssuesAPITestCase(GlitchTipTestCase):
     def setUp(self):
-        self.user = baker.make("users.user")
-        self.organization = baker.make("organizations_ext.Organization")
-        self.organization.add_user(self.user, OrganizationUserRole.ADMIN)
-        self.team = baker.make("teams.Team", organization=self.organization)
-        self.team.members.add(self.user)
-        self.project = baker.make("projects.Project", organization=self.organization)
-        self.project.team_set.add(self.team)
-        self.client.force_login(self.user)
+        self.create_user_and_project()
         self.url = reverse("issue-list")
 
     def test_issue_list(self):

@@ -3,8 +3,9 @@ from django.shortcuts import reverse
 from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
+from glitchtip.test_utils.test_case import GlitchTipTestCase
 from organizations_ext.models import OrganizationUserRole
-from .models import UserProjectAlert, User
+from .models import UserProjectAlert
 
 
 class OrganizationsAPITestCase(APITestCase):
@@ -19,29 +20,9 @@ class OrganizationsAPITestCase(APITestCase):
         self.assertContains(res, "key", status_code=201)
 
 
-class UserDetailsTestCase(APITestCase):
-    def test_user_details(self):
-        """ User details should have email and associated social account providers """
-        user = baker.make("users.user")
-        socialaccount = baker.make("socialaccount.SocialAccount", user=user)
-        self.client.force_login(user)
-        url = reverse("rest_user_details")
-
-        res = self.client.get(url)
-        self.assertContains(res, user.email)
-        self.assertContains(res, socialaccount.provider)
-
-
-class UsersTestCase(APITestCase):
+class UsersTestCase(GlitchTipTestCase):
     def setUp(self):
-        self.user = baker.make("users.user")
-        self.organization = baker.make("organizations_ext.Organization")
-        self.organization.add_user(self.user, OrganizationUserRole.ADMIN)
-        self.team = baker.make("teams.Team", organization=self.organization)
-        self.team.members.add(self.user)
-        self.project = baker.make("projects.Project", organization=self.organization)
-        self.project.team_set.add(self.team)
-        self.client.force_login(self.user)
+        self.create_user_and_project()
 
     def test_list(self):
         url = reverse("user-list")
@@ -70,19 +51,19 @@ class UsersTestCase(APITestCase):
         res = self.client.get(url)
         self.assertNotContains(res, other_user.email)
 
-    def test_organization_members_create(self):
-        url = reverse("organization-members-list", args=[self.organization.slug])
-        data = {
-            "email": "new@example.com",
-            "role": "member",
-            "teams": [],
-            "user": "new@example.com",
-        }
-        res = self.client.post(url, data)
-        self.assertEqual(res.status_code, 201)
-        # TODO pending functionality
-        # self.assertTrue(res.data["pending"])
-        User.objects.get(pk=res.data["id"])
+    # def test_organization_members_create(self):
+    #     url = reverse("organization-members-list", args=[self.organization.slug])
+    #     data = {
+    #         "email": "new@example.com",
+    #         "role": "member",
+    #         "teams": [],
+    #         "user": "new@example.com",
+    #     }
+    #     res = self.client.post(url, data)
+    #     self.assertEqual(res.status_code, 201)
+    #     # TODO pending functionality
+    #     # self.assertTrue(res.data["pending"])
+    #     User.objects.get(pk=res.data["id"])
 
     def test_emails_retrieve(self):
         email_address = baker.make("account.EmailAddress", user=self.user)

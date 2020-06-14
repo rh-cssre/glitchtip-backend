@@ -1,12 +1,10 @@
 import json
 from typing import List, Dict
 from django.urls import reverse
-from rest_framework.test import APITestCase
-from model_bakery import baker
 from event_store.test_data.django_error_factory import message
 from event_store.test_data.js_error_factory import throw_error
 from event_store.test_data.csp import mdn_sample_csp
-from organizations_ext.models import OrganizationUserRole
+from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.models import Event
 
 
@@ -15,16 +13,9 @@ TEST_DATA_DIR = "event_store/test_data"
 is_exception = lambda v: v.get("type") == "exception"
 
 
-class SentryAPICompatTestCase(APITestCase):
+class SentryAPICompatTestCase(GlitchTipTestCase):
     def setUp(self):
-        self.user = baker.make("users.user")
-        self.organization = baker.make("organizations_ext.Organization")
-        self.organization.add_user(self.user, OrganizationUserRole.ADMIN)
-        self.team = baker.make("teams.Team", organization=self.organization)
-        self.team.members.add(self.user)
-        self.project = baker.make("projects.Project", organization=self.organization)
-        self.project.team_set.add(self.team)
-        self.client.force_login(self.user)
+        self.create_user_and_project()
         key = self.project.projectkey_set.first().public_key
         self.event_store_url = (
             reverse("event_store", args=[self.project.id]) + "?sentry_key=" + key.hex

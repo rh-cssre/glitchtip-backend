@@ -2,9 +2,12 @@ from django.urls import path, include
 from rest_framework_nested import routers
 from issues.views import IssueViewSet
 from teams.views import NestedTeamViewSet
-from users.views import UserViewSet
 from glitchtip.routers import BulkSimpleRouter
-from .views import OrganizationViewSet
+from .views import (
+    OrganizationViewSet,
+    OrganizationUserViewSet,
+    OrganizationMemberViewSet,
+)
 
 router = BulkSimpleRouter()
 router.register(r"organizations", OrganizationViewSet)
@@ -16,7 +19,12 @@ organizations_router.register(r"issues", IssueViewSet, basename="organization-is
 organizations_router.register(
     r"teams", NestedTeamViewSet, basename="organization-teams"
 )
-organizations_router.register(r"members", UserViewSet, basename="organization-members")
+organizations_router.register(
+    r"members", OrganizationMemberViewSet, basename="organization-members"
+)
+organizations_router.register(
+    r"users", OrganizationUserViewSet, basename="organization-users"
+)
 
 urlpatterns = [
     path("", include(router.urls)),

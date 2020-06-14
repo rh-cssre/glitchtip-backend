@@ -3,25 +3,19 @@ from datetime import timedelta
 from django.core import mail
 from django.utils import timezone
 from django.shortcuts import reverse
-from rest_framework.test import APITestCase
 from model_bakery import baker
 from freezegun import freeze_time
 from glitchtip import test_utils  # pylint: disable=unused-import
+from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.models import EventStatus, Issue
 from .tasks import process_alerts
 from .models import Notification, ProjectAlert
 
 
-class AlertTestCase(APITestCase):
+class AlertTestCase(GlitchTipTestCase):
     def setUp(self):
+        self.create_user_and_project()
         self.now = timezone.now()
-        user = baker.make("users.user")
-        self.organization = baker.make("organizations_ext.Organization")
-        self.organization.add_user(user)
-        team = baker.make("teams.Team", organization=self.organization)
-        team.members.add(user)
-        self.project = baker.make("projects.Project", organization=self.organization)
-        self.project.team_set.add(team)
 
     def test_alerts(self):
         baker.make(
@@ -124,16 +118,9 @@ class AlertTestCase(APITestCase):
         self.assertEqual(len(mail.outbox), 2)
 
 
-class AlertAPITestCase(APITestCase):
+class AlertAPITestCase(GlitchTipTestCase):
     def setUp(self):
-        user = baker.make("users.user")
-        self.client.force_login(user)
-        self.organization = baker.make("organizations_ext.Organization")
-        self.organization.add_user(user)
-        team = baker.make("teams.Team", organization=self.organization)
-        team.members.add(user)
-        self.project = baker.make("projects.Project", organization=self.organization)
-        self.project.team_set.add(team)
+        self.create_user_and_project()
 
     def test_project_alerts_retrieve(self):
         alert = baker.make(

@@ -306,9 +306,7 @@ ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 OLD_PASSWORD_FIELD_ENABLED = True
 LOGOUT_ON_PASSWORD_CHANGE = False
 
-REST_AUTH_SERIALIZERS = {
-    "USER_DETAILS_SERIALIZER": "users.serializers.UserDetailsSerializer"
-}
+REST_AUTH_SERIALIZERS = {"USER_DETAILS_SERIALIZER": "users.serializers.UserSerializer"}
 
 # Show/Hide social auth. All or nothing at this time.
 ENABLE_SOCIAL_AUTH = env.bool("ENABLE_SOCIAL_AUTH", False)
