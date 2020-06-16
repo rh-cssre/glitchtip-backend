@@ -1,0 +1,13 @@
+{% load account %}{% user_display user as user_display %}{% load i18n %}{% autoescape off %}
+
+Add Email to GlitchTip Account
+
+{{ activate_url }}
+ 
+This email address will be connected to {{ user_display }}'s account when you click the link above.
+
+If you received this email in error, delete it. Your email address won't be added if you don't click the confirmation link.
+
+{% endautoescape %}
+
+

@@ -201,6 +201,8 @@ ANYMAIL = {
     "MAILGUN_SENDER_DOMAIN": env.str("MAILGUN_SENDER_DOMAIN", None),
 }
 
+ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
+
 # Database
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
 
