@@ -123,7 +123,7 @@ class EmailAddressViewSet(
         user = self.get_user(user_pk)
         try:
             email_address = user.emailaddress_set.get(
-                email=request.data.get("email")
+                email=request.data.get("email"), verified=True
             )
             email_address.set_as_primary()
         except ObjectDoesNotExist:
