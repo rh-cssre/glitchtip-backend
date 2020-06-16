@@ -91,6 +91,19 @@ class OrganizationUsersAPITestCase(APITestCase):
         res = self.client.get(self.members_url)
         self.assertContains(res, self.user.email)
 
+    def test_organization_team_members_list(self):
+        team = baker.make("teams.Team", organization=self.organization)
+        url = reverse(
+            "team-members-list",
+            kwargs={"team_pk": f"{self.organization.slug}/{team.slug}"},
+        )
+        res = self.client.get(url)
+        self.assertNotContains(res, self.user.email)
+
+        team.members.add(self.org_user)
+        res = self.client.get(url)
+        self.assertContains(res, self.user.email)
+
     def test_organization_users_detail(self):
         other_user = baker.make("users.user")
         other_organization = baker.make("organizations_ext.Organization")

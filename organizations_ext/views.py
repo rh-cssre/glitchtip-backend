@@ -51,7 +51,7 @@ class OrganizationMemberViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(organization__slug=organization_slug)
         team_slug = self.kwargs.get("team_slug")
         if team_slug:
-            queryset = queryset.filter(organization__teams__slug=team_slug)
+            queryset = queryset.filter(team__slug=team_slug)
         return queryset.select_related("organization", "user").prefetch_related(
             "user__socialaccount_set"
         )
