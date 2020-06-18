@@ -19,7 +19,7 @@ class TeamSerializer(serializers.ModelSerializer):
 
     def get_isMember(self, obj):
         user = self.context["request"].user
-        return obj.members.filter(id=user.id).exists()
+        return obj.members.filter(user=user).exists()
 
     def get_memberCount(self, obj):
         return obj.members.count()

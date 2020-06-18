@@ -55,7 +55,7 @@ class TeamTestCase(APITestCase):
     def setUp(self):
         self.user = baker.make("users.user")
         self.organization = baker.make("organizations_ext.Organization")
-        self.organization.add_user(self.user)
+        self.org_user = self.organization.add_user(self.user)
         self.client.force_login(self.user)
         self.url = reverse("team-list")
 
@@ -68,11 +68,13 @@ class TeamTestCase(APITestCase):
 
     def test_retrieve(self):
         team = baker.make("teams.Team", organization=self.organization)
+        team.members.add(self.org_user)
         url = reverse(
             "team-detail", kwargs={"pk": f"{self.organization.slug}/{team.slug}",},
         )
         res = self.client.get(url)
         self.assertContains(res, team.slug)
+        self.assertTrue(res.data["isMember"])
 
     def test_invalid_retrieve(self):
         team = baker.make("teams.Team")
