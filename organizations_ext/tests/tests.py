@@ -51,6 +51,9 @@ class OrganizationsAPITestCase(APITestCase):
         res = self.client.get(self.url)
         self.assertContains(res, self.organization.slug)
         self.assertNotContains(res, not_my_organization.slug)
+        self.assertFalse(
+            "teams" in res.data[0].keys(), "List view shouldn't contain teams"
+        )
 
     def test_organizations_retrieve(self):
         project = baker.make("projects.Project", organization=self.organization)
@@ -58,6 +61,9 @@ class OrganizationsAPITestCase(APITestCase):
         res = self.client.get(url)
         self.assertContains(res, self.organization.name)
         self.assertContains(res, project.name)
+        self.assertTrue(
+            "teams" in res.data.keys(), "Retrieve view should contain teams"
+        )
 
     def test_organizations_create(self):
         data = {"name": "test"}

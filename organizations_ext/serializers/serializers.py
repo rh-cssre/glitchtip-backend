@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from projects.serializers.base_serializers import ProjectReferenceWithMemberSerializer
 from users.serializers import UserSerializer
+from teams.serializers import TeamSerializer
 from .base_serializers import OrganizationReferenceSerializer
 from ..models import OrganizationUser
 
@@ -11,10 +12,15 @@ class OrganizationSerializer(OrganizationReferenceSerializer):
 
 class OrganizationDetailSerializer(OrganizationSerializer):
     projects = ProjectReferenceWithMemberSerializer(many=True)
+    teams = TeamSerializer(many=True)
     openMembership = serializers.BooleanField(source="open_membership")
 
     class Meta(OrganizationSerializer.Meta):
-        fields = OrganizationSerializer.Meta.fields + ("projects", "openMembership")
+        fields = OrganizationSerializer.Meta.fields + (
+            "projects",
+            "openMembership",
+            "teams",
+        )
 
 
 class OrganizationUserSerializer(serializers.ModelSerializer):
