@@ -16,6 +16,12 @@ class OrganizationUserRole(models.IntegerChoices):
     MANAGER = 2, "Manager"
     OWNER = 3, "Owner"  # Many users can be owner but only one primary owner
 
+    @classmethod
+    def from_string(cls, string: str):
+        for status in cls:
+            if status.label.lower() == string.lower():
+                return status
+
 
 class Organization(SharedBaseModel, OrganizationBase):
     slug = SlugField(
@@ -67,7 +73,29 @@ class Organization(SharedBaseModel, OrganizationBase):
 
 
 class OrganizationUser(SharedBaseModel, OrganizationUserBase):
+    user = models.ForeignKey(
+        "users.User",
+        blank=True,
+        null=True,
+        on_delete=models.CASCADE,
+        related_name="organizations_ext_organizationuser",
+    )
     role = models.PositiveSmallIntegerField(choices=OrganizationUserRole.choices)
+    pending = models.BooleanField(default=True)
+    email = models.EmailField(
+        blank=True, null=True, help_text="Email for pending invite"
+    )
+
+    class Meta(OrganizationOwnerBase.Meta):
+        unique_together = (("user", "organization"), ("email", "organization"))
+
+    def get_email(self):
+        if self.user:
+            return self.user.email
+        return self.email
+
+    def get_role(self):
+        return self.get_role_display().lower()
 
 
 class OrganizationOwner(OrganizationOwnerBase):

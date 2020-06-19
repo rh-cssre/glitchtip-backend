@@ -1,6 +1,9 @@
+from django.core.exceptions import ObjectDoesNotExist
+from django.http import Http404
 from rest_framework import viewsets, exceptions
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied
 from teams.serializers import TeamSerializer
 from .models import Organization, OrganizationUserRole, OrganizationUser
 from .serializers.serializers import (
@@ -34,7 +37,7 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         organization.add_user(self.request.user, role=OrganizationUserRole.OWNER)
 
 
-class OrganizationMemberViewSet(viewsets.ReadOnlyModelViewSet):
+class OrganizationMemberViewSet(viewsets.ModelViewSet):
     """
     API compatible with undocumented Sentry endpoint `/api/organizations/<slug>/members/`
     """
@@ -55,6 +58,23 @@ class OrganizationMemberViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset.select_related("organization", "user").prefetch_related(
             "user__socialaccount_set"
         )
+
+    def perform_create(self, serializer):
+        try:
+            organization = self.request.user.organizations_ext_organization.get(
+                slug=self.kwargs.get("organization_slug")
+            )
+        except ObjectDoesNotExist:
+            raise Http404
+
+        user_org_user = self.request.user.organizations_ext_organizationuser.get(
+            organization=organization
+        )
+        if user_org_user.role < OrganizationUserRole.MANAGER:
+            raise PermissionDenied(
+                "User must be manager or higher to add organization members"
+            )
+        return serializer.save(organization=organization)
 
     def has_team_member_permission(self, org_user, user, team) -> bool:
         open_membership = org_user.organization.open_membership
