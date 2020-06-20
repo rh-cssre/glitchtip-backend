@@ -185,3 +185,93 @@ class OrganizationUsersAPITestCase(APITestCase):
         }
         res = self.client.post(self.members_url, data)
         self.assertEquals(res.status_code, 403)
+
+    def test_organization_users_reinvite(self):
+        other_user = baker.make("users.user")
+        other_org_user = self.organization.add_user(other_user)
+
+        url = reverse(
+            "organization-members-detail",
+            kwargs={
+                "organization_slug": self.organization.slug,
+                "pk": other_org_user.pk,
+            },
+        )
+        data = {"reinvite": 1}
+        res = self.client.put(url, data)
+        self.assertContains(res, other_user.email)
+
+    def test_organization_users_update(self):
+        other_user = baker.make("users.user")
+        other_org_user = self.organization.add_user(other_user)
+
+        url = reverse(
+            "organization-members-detail",
+            kwargs={
+                "organization_slug": self.organization.slug,
+                "pk": other_org_user.pk,
+            },
+        )
+
+        new_role = OrganizationUserRole.ADMIN
+        data = {"role": new_role.label.lower(), "teams": []}
+        res = self.client.put(url, data)
+        self.assertContains(res, other_user.email)
+        self.assertTrue(
+            OrganizationUser.objects.filter(
+                organization=self.organization, role=new_role, user=other_user
+            ).exists()
+        )
+
+    def test_organization_users_update_without_permissions(self):
+        self.org_user.role = OrganizationUserRole.ADMIN
+        self.org_user.save()
+        other_user = baker.make("users.user")
+        other_org_user = self.organization.add_user(other_user)
+
+        url = reverse(
+            "organization-members-detail",
+            kwargs={
+                "organization_slug": self.organization.slug,
+                "pk": other_org_user.pk,
+            },
+        )
+
+        new_role = OrganizationUserRole.ADMIN
+        data = {"role": new_role.label.lower(), "teams": []}
+        res = self.client.put(url, data)
+        self.assertEqual(res.status_code, 403)
+
+    def test_organization_users_delete(self):
+        other_user = baker.make("users.user")
+        other_org_user = self.organization.add_user(other_user)
+
+        url = reverse(
+            "organization-members-detail",
+            kwargs={
+                "organization_slug": self.organization.slug,
+                "pk": other_org_user.pk,
+            },
+        )
+
+        res = self.client.delete(url)
+        self.assertEqual(res.status_code, 204)
+        self.assertEqual(other_user.organizations_ext_organizationuser.count(), 0)
+
+    def test_organization_users_delete_without_permissions(self):
+        self.org_user.role = OrganizationUserRole.ADMIN
+        self.org_user.save()
+        other_user = baker.make("users.user")
+        other_org_user = self.organization.add_user(other_user)
+
+        url = reverse(
+            "organization-members-detail",
+            kwargs={
+                "organization_slug": self.organization.slug,
+                "pk": other_org_user.pk,
+            },
+        )
+
+        res = self.client.delete(url)
+        self.assertEqual(res.status_code, 403)
+        self.assertEqual(other_user.organizations_ext_organizationuser.count(), 1)

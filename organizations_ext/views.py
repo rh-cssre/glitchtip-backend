@@ -11,6 +11,7 @@ from .serializers.serializers import (
     OrganizationDetailSerializer,
     OrganizationUserSerializer,
     OrganizationUserProjectsSerializer,
+    ReinviteSerializer,
 )
 
 
@@ -59,6 +60,42 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
             "user__socialaccount_set"
         )
 
+    def check_permissions(self, request):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            org_slug = self.kwargs.get("organization_slug")
+            user_org_user = self.request.user.organizations_ext_organizationuser.get(
+                organization__slug=org_slug
+            )
+            if user_org_user.role < OrganizationUserRole.MANAGER:
+                raise PermissionDenied(
+                    "User must be manager or higher to add organization members"
+                )
+        return super().check_permissions(request)
+
+    def update(self, request, *args, **kwargs):
+        """
+        Update can both reinvite a user or change the org user which require different request data
+        However it always returns OrganizationUserSerializer regardless
+
+        Updates are always partial. Only teams and role may be edited.
+        """
+        if self.action in ["update"] and self.request.data.get("reinvite"):
+            return self.reinvite(request)
+        kwargs["partial"] = True
+        return super().update(request, *args, **kwargs)
+
+    def reinvite(self, request):
+        """
+        Send additional invitation to user
+        This works more like a rest action, but is embedded within the update view for compatibility
+        """
+        instance = self.get_object()
+        serializer = ReinviteSerializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        serializer = self.serializer_class(instance)
+        return Response(serializer.data)
+
     def perform_create(self, serializer):
         try:
             organization = self.request.user.organizations_ext_organization.get(
@@ -67,21 +104,15 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         except ObjectDoesNotExist:
             raise Http404
 
-        user_org_user = self.request.user.organizations_ext_organizationuser.get(
-            organization=organization
-        )
-        if user_org_user.role < OrganizationUserRole.MANAGER:
-            raise PermissionDenied(
-                "User must be manager or higher to add organization members"
-            )
         return serializer.save(organization=organization)
 
-    def has_team_member_permission(self, org_user, user, team) -> bool:
+    def check_team_member_permission(self, org_user, user, team):
+        """ Check if user has permission to update team members """
         open_membership = org_user.organization.open_membership
         is_self = org_user.user == user
 
         if open_membership and is_self:
-            return True  # Ok to modify yourself in any way with open_membership
+            return  # Ok to modify yourself in any way with open_membership
 
         in_team = team.members.filter(user=user).exists()
         if in_team:
@@ -92,8 +123,7 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         if not self.request.user.organizations_ext_organizationuser.filter(
             organization=org_user.organization, role__gte=required_role
         ).exists():
-            return False
-        return True
+            raise exceptions.PermissionDenied("Must be admin to modify teams")
 
     @action(
         detail=True,
@@ -108,8 +138,7 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         org_user = self.get_object()
         team = org_user.organization.teams.filter(slug=members_team_slug).first()
 
-        if not self.has_team_member_permission(org_user, self.request.user, team):
-            raise exceptions.PermissionDenied("Must be admin to modify teams")
+        self.check_team_member_permission(org_user, self.request.user, team)
 
         if not team:
             raise exceptions.NotFound()
