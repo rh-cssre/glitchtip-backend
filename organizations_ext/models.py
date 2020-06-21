@@ -97,6 +97,11 @@ class OrganizationUser(SharedBaseModel, OrganizationUserBase):
     def get_role(self):
         return self.get_role_display().lower()
 
+    @property
+    def is_active(self):
+        """ Non pending means active """
+        return not self.pending
+
 
 class OrganizationOwner(OrganizationOwnerBase):
     """ Only usage is for billing contact currently """

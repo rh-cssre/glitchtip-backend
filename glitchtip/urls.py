@@ -5,6 +5,7 @@ from django.views.generic import TemplateView
 from dj_rest_auth.registration.views import SocialAccountDisconnectView
 from rest_framework import permissions
 from rest_framework_nested import routers
+from organizations.backends import invitation_backend
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from issues.urls import router as issuesRouter
@@ -113,6 +114,7 @@ urlpatterns += [
         r"^(login|issues|settings|organizations|profile).*$",
         TemplateView.as_view(template_name="index.html"),
     ),
+    path("invitations/", include(invitation_backend().get_urls())),
 ]
 
 if settings.BILLING_ENABLED:

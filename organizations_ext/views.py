@@ -4,6 +4,7 @@ from rest_framework import viewsets, exceptions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
+from organizations.backends import invitation_backend
 from teams.serializers import TeamSerializer
 from .models import Organization, OrganizationUserRole, OrganizationUser
 from .serializers.serializers import (
@@ -104,7 +105,9 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         except ObjectDoesNotExist:
             raise Http404
 
-        return serializer.save(organization=organization)
+        org_user = serializer.save(organization=organization)
+        invitation_backend().send_invitation(org_user)
+        return org_user
 
     def check_team_member_permission(self, org_user, user, team):
         """ Check if user has permission to update team members """

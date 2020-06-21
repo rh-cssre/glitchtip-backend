@@ -1,3 +1,4 @@
+from django.core import mail
 from django.shortcuts import reverse
 from rest_framework.test import APITestCase
 from model_bakery import baker
@@ -172,6 +173,8 @@ class OrganizationUsersAPITestCase(APITestCase):
                 role=OrganizationUserRole.MANAGER,
             ).exists()
         )
+        self.assertEqual(len(mail.outbox), 1)
+        print(mail.outbox[0].body)
 
     def test_organization_users_create_without_permissions(self):
         """ Admin cannot add users to org """
