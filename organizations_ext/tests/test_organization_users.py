@@ -174,7 +174,6 @@ class OrganizationUsersAPITestCase(APITestCase):
             ).exists()
         )
         self.assertEqual(len(mail.outbox), 1)
-        print(mail.outbox[0].body)
 
     def test_organization_users_create_without_permissions(self):
         """ Admin cannot add users to org """
