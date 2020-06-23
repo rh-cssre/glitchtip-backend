@@ -123,6 +123,13 @@ class UsersTestCase(GlitchTipTestCase):
             ).exists()
         )
 
+        extra_email = baker.make(
+            "account.EmailAddress", verified=True, user=self.user
+        )
+        data = {"email": extra_email.email}
+        res = self.client.put(url, data)
+        self.assertEqual(self.user.emailaddress_set.filter(primary=True).count(), 1)
+
     def test_emails_destroy(self):
         url = reverse("user-emails-list", args=["me"])
         email_address = baker.make(

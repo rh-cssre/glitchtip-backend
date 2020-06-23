@@ -125,6 +125,7 @@ class EmailAddressViewSet(
             email_address = user.emailaddress_set.get(
                 email=request.data.get("email"), verified=True
             )
+            email_address.set_as_primary()
         except ObjectDoesNotExist:
             raise Http404
         serializer = self.serializer_class(
