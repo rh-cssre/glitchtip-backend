@@ -9,7 +9,7 @@ class TestAPITestCase(APITestCase):
             url = reverse("seed_data")
             res = self.client.post(url)
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(User.objects.all().count(), 1)
+        self.assertEqual(User.objects.all().count(), 2)
 
     def test_disabled_test_api(self):
         with self.settings(ENABLE_TEST_API=False):
