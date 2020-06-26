@@ -88,3 +88,16 @@ class ReinviteSerializer(serializers.Serializer):
             # Send email
         return instance
 
+
+class OrganizationUserOrganizationSerializer(OrganizationUserSerializer):
+    """ Organization User Serializer with Organization info """
+
+    organization = OrganizationSerializer()
+
+    class Meta(OrganizationUserSerializer.Meta):
+        fields = OrganizationUserSerializer.Meta.fields + ("organization",)
+
+
+class AcceptInviteSerializer(serializers.Serializer):
+    accept_invite = serializers.BooleanField()
+    org_user = OrganizationUserOrganizationSerializer(read_only=True)

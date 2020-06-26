@@ -7,6 +7,7 @@ from .views import (
     OrganizationViewSet,
     OrganizationUserViewSet,
     OrganizationMemberViewSet,
+    AcceptInviteView,
 )
 
 router = BulkSimpleRouter()
@@ -29,4 +30,9 @@ organizations_router.register(
 urlpatterns = [
     path("", include(router.urls)),
     path("", include(organizations_router.urls)),
+    path(
+        "accept/<int:org_user_id>/<token>/",
+        AcceptInviteView.as_view(),
+        name="accept-invite",
+    ),
 ]

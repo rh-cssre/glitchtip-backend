@@ -90,6 +90,38 @@ class OrganizationUsersAPITestCase(APITestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(team.members.count(), 0)
 
+    def test_organization_users_create_and_accept(self):
+        data = {
+            "email": "new@example.com",
+            "role": OrganizationUserRole.MANAGER.label.lower(),
+            "teams": [],
+            "user": "new@example.com",
+        }
+        self.client.post(self.members_url, data)
+        body = mail.outbox[0].body
+        body_split = body[body.find("http://localhost:8000/invitations/") :].split("/")
+        org_user_id = body_split[4]
+        token = body_split[5]
+        url = reverse(
+            "accept-invite", kwargs={"org_user_id": org_user_id, "token": token}
+        )
+
+        # Check that we can determine organization name from GET request to accept invite endpoint
+        self.client.logout()
+        res = self.client.get(url)
+        self.assertContains(res, self.organization.name)
+
+        user = baker.make("users.user")
+        self.client.force_login(user)
+        data = {"accept_invite": True}
+        res = self.client.post(url, data)
+        self.assertContains(res, self.organization.name)
+        self.assertTrue(
+            OrganizationUser.objects.filter(
+                user=user, organization=self.organization
+            ).exists()
+        )
+
     def test_organization_users_add_team_member_permission(self):
         self.org_user.role = OrganizationUserRole.MEMBER
         self.org_user.save()

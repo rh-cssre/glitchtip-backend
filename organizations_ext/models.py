@@ -89,6 +89,11 @@ class OrganizationUser(SharedBaseModel, OrganizationUserBase):
     class Meta(OrganizationOwnerBase.Meta):
         unique_together = (("user", "organization"), ("email", "organization"))
 
+    def __str__(self):
+        if self.user:
+            return super().__str__(self)
+        return self.email
+
     def get_email(self):
         if self.user:
             return self.user.email
