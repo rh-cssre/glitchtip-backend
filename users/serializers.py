@@ -1,10 +1,14 @@
 from django.utils.translation import gettext_lazy as _
-from rest_framework import serializers
-from dj_rest_auth.registration.serializers import SocialAccountSerializer
+from rest_framework import serializers, exceptions
+from dj_rest_auth.registration.serializers import (
+    SocialAccountSerializer,
+    RegisterSerializer as BaseRegisterSerializer,
+)
 from allauth.account.adapter import get_adapter
 from allauth.account import app_settings
 from allauth.account.utils import filter_users_by_email
 from allauth.account.models import EmailAddress
+from .utils import is_user_registration_open
 from .models import User
 
 
@@ -91,3 +95,10 @@ class UserNotificationsSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ("subscribeByDefault",)
+
+
+class RegisterSerializer(BaseRegisterSerializer):
+    def validate(self, data):
+        if not is_user_registration_open():
+            raise exceptions.PermissionDenied("Registration is not open")
+        return super().validate(data)

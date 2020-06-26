@@ -309,10 +309,19 @@ INVITATION_BACKEND = "organizations_ext.invitation_backend.InvitationBackend"
 OLD_PASSWORD_FIELD_ENABLED = True
 LOGOUT_ON_PASSWORD_CHANGE = False
 
-REST_AUTH_SERIALIZERS = {"USER_DETAILS_SERIALIZER": "users.serializers.UserSerializer"}
+REST_AUTH_SERIALIZERS = {
+    "USER_DETAILS_SERIALIZER": "users.serializers.UserSerializer",
+}
+REST_AUTH_REGISTER_SERIALIZERS = {
+    "REGISTER_SERIALIZER": "users.serializers.RegisterSerializer",
+}
 
 # Show/Hide social auth. All or nothing at this time.
 ENABLE_SOCIAL_AUTH = env.bool("ENABLE_SOCIAL_AUTH", False)
+
+# By default (False) only the first user may register and create an organization
+# Other users must be invited. Intended for private instances
+ENABLE_OPEN_USER_REGISTRATION = env.bool("ENABLE_OPEN_USER_REGISTRATION", False)
 
 AUTHENTICATION_BACKENDS = (
     # Needed to login by username in Django admin, regardless of `allauth`

@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from organizations.backends import invitation_backend
 from teams.serializers import TeamSerializer
+from users.utils import is_user_registration_open
 from .invitation_backend import InvitationTokenGenerator
 from .models import Organization, OrganizationUserRole, OrganizationUser
 from .serializers.serializers import (
@@ -39,6 +40,8 @@ class OrganizationViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """ Create organization with current user as owner """
+        if not is_user_registration_open():
+            raise exceptions.PermissionDenied("Registration is not open")
         organization = serializer.save()
         organization.add_user(self.request.user, role=OrganizationUserRole.OWNER)
 

@@ -207,6 +207,17 @@ class OrganizationUsersAPITestCase(APITestCase):
         )
         self.assertEqual(len(mail.outbox), 1)
 
+    def test_organization_users_create_and_accept(self):
+        data = {
+            "email": "new@example.com",
+            "role": OrganizationUserRole.MANAGER.label.lower(),
+            "teams": [],
+            "user": "new@example.com",
+        }
+        self.client.post(self.members_url, data)
+        body = mail.outbox[0].body
+        token = body[body.find("http://localhost:8000/invitations/") :].split("/")[4]
+
     def test_organization_users_create_without_permissions(self):
         """ Admin cannot add users to org """
         self.org_user.role = OrganizationUserRole.ADMIN
