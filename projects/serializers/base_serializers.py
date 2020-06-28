@@ -20,6 +20,6 @@ class ProjectReferenceWithMemberSerializer(ProjectReferenceSerializer):
         # This is actually more performant than:
         # return obj.team_set.filter(members=user).exists()
         for team in teams:
-            if user_id in team.members.all().values_list("id", flat=True):
+            if user_id in team.members.all().values_list("user_id", flat=True):
                 return True
         return False
