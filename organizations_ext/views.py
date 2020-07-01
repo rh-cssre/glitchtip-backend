@@ -68,6 +68,14 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
             "user__socialaccount_set"
         )
 
+    def get_object(self):
+        pk = self.kwargs.get("pk")
+        if pk == "me":
+            obj = get_object_or_404(self.get_queryset(), user=self.request.user)
+            self.check_object_permissions(self.request, obj)
+            return obj
+        return super().get_object()
+
     def check_permissions(self, request):
         if self.action in ["create", "update", "partial_update", "destroy"]:
             org_slug = self.kwargs.get("organization_slug")

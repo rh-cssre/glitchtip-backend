@@ -60,6 +60,14 @@ class OrganizationUsersAPITestCase(APITestCase):
 
         url = reverse(
             "organization-members-detail",
+            kwargs={"organization_slug": self.organization.slug, "pk": "me"},
+        )
+        res = self.client.get(url)
+        self.assertContains(res, self.user.email)
+        self.assertNotContains(res, other_user.email)
+
+        url = reverse(
+            "organization-members-detail",
             kwargs={
                 "organization_slug": other_organization.slug,
                 "pk": other_org_user.pk,
@@ -77,6 +85,25 @@ class OrganizationUsersAPITestCase(APITestCase):
                     "organization_slug": self.organization.slug,
                     "pk": self.org_user.pk,
                 },
+            )
+            + f"teams/{team.slug}/"
+        )
+
+        self.assertEqual(team.members.count(), 0)
+        res = self.client.post(url)
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(team.members.count(), 1)
+
+        res = self.client.delete(url)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(team.members.count(), 0)
+
+    def test_organization_users_add_self_team_member(self):
+        team = baker.make("teams.Team", organization=self.organization)
+        url = (
+            reverse(
+                "organization-members-detail",
+                kwargs={"organization_slug": self.organization.slug, "pk": "me",},
             )
             + f"teams/{team.slug}/"
         )
