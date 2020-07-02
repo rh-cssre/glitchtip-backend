@@ -94,6 +94,14 @@ class UsersTestCase(GlitchTipTestCase):
         self.assertContains(res, email_address.email)
         self.assertNotContains(res, another_email_address.email)
 
+    def test_emails_confirm(self):
+        email_address = baker.make("account.EmailAddress", user=self.user)
+        url = reverse("user-emails-list", args=["me"]) + "confirm/"
+        data = {"email": email_address.email}
+        res = self.client.post(url, data)
+        self.assertEqual(res.status_code, 204)
+        self.assertEqual(len(mail.outbox), 1)
+
     def test_emails_create(self):
         url = reverse("user-emails-list", args=["me"])
         new_email = "new@exmaple.com"

@@ -1,9 +1,11 @@
 from django.core.exceptions import ObjectDoesNotExist
+from django.shortcuts import get_object_or_404
 from django.http import Http404
 from rest_framework import status, viewsets, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
+from drf_yasg.utils import swagger_auto_schema
 from allauth.account.models import EmailAddress
 from organizations_ext.models import Organization
 from .models import User, UserProjectAlert
@@ -11,6 +13,7 @@ from .serializers import (
     UserSerializer,
     UserNotificationsSerializer,
     EmailAddressSerializer,
+    ConfirmEmailAddressSerializer,
 )
 
 
@@ -146,3 +149,14 @@ class EmailAddressViewSet(
             raise Http404
         email_address.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @swagger_auto_schema(responses={204: "No Content"})
+    @action(detail=False, methods=["post"])
+    def confirm(self, request, user_pk):
+        serializer = ConfirmEmailAddressSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email_address = get_object_or_404(
+            self.get_queryset(), email=serializer.validated_data.get("email")
+        )
+        email_address.send_confirmation()
+        return Response(status=204)

@@ -12,6 +12,10 @@ from .utils import is_user_registration_open
 from .models import User
 
 
+class ConfirmEmailAddressSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
 class EmailAddressSerializer(serializers.ModelSerializer):
     isPrimary = serializers.BooleanField(source="primary", read_only=True)
     email = serializers.EmailField()  # Remove default unique validation
