@@ -1,6 +1,9 @@
-from rest_framework import viewsets, exceptions
+from rest_framework import viewsets, exceptions, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from teams.models import Team
+from teams.views import NestedTeamViewSet
 from organizations_ext.models import Organization, OrganizationUserRole
 from .models import Project, ProjectKey
 from .serializers.serializers import ProjectSerializer, ProjectKeySerializer
@@ -86,3 +89,33 @@ class ProjectKeyViewSet(viewsets.ModelViewSet):
                 project__organization__users=self.request.user,
             )
         )
+
+
+class ProjectTeamViewSet(NestedTeamViewSet):
+    @action(
+        methods=["post", "delete"], detail=False, url_path=("(?P<team_slug>[-\w]+)")
+    )
+    def add_remove_project(
+        self,
+        request,
+        project_pk=None,
+        project_slug=None,
+        organization_slug=None,
+        team_slug=None,
+    ):
+        """ Add/remove team to a project """
+        team = get_object_or_404(self.get_queryset(), slug=team_slug)
+        project = get_object_or_404(
+            Project,
+            slug=project_slug,
+            organization__slug=organization_slug,
+            organization__users=self.request.user,
+            organization__organization_users__role__gte=OrganizationUserRole.MANAGER,
+        )
+        serializer = ProjectSerializer(instance=project, context={"request": request})
+        if request.method == "POST":
+            project.team_set.add(team)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        project.team_set.remove(team)
+        return Response(serializer.data)

@@ -4,7 +4,7 @@ from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
 from organizations_ext.models import OrganizationUserRole
-from .models import ProjectKey, Project
+from ..models import ProjectKey, Project
 
 
 class ProjectsAPITestCase(APITestCase):
@@ -96,9 +96,7 @@ class TeamProjectsAPITestCase(APITestCase):
         )
 
     def test_list(self):
-        project = baker.make(
-            "projects.Project", organization=self.organization
-        )
+        project = baker.make("projects.Project", organization=self.organization)
         project.team_set.add(self.team)
         not_my_project = baker.make("projects.Project")
         res = self.client.get(self.url)
@@ -111,9 +109,7 @@ class TeamProjectsAPITestCase(APITestCase):
         """
         second_org = baker.make("organizations_ext.Organization")
         second_org.add_user(self.user, OrganizationUserRole.ADMIN)
-        project_in_second_org = baker.make(
-            "projects.Project", organization=second_org
-        )
+        project_in_second_org = baker.make("projects.Project", organization=second_org)
         res = self.client.get(self.url)
         self.assertNotContains(res, project_in_second_org.name)
 
@@ -155,6 +151,7 @@ class TeamProjectsAPITestCase(APITestCase):
     The frontend UI requires you to assign a new project to a team, so make sure
     that the new project has a team associated with it
     """
+
     def test_projects_api_project_has_team(self):
         name = "test project"
         data = {"name": name}
