@@ -158,5 +158,5 @@ class EmailAddressViewSet(
         email_address = get_object_or_404(
             self.get_queryset(), email=serializer.validated_data.get("email")
         )
-        email_address.send_confirmation()
+        email_address.send_confirmation(request)
         return Response(status=204)
