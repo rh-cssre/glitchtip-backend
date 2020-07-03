@@ -3,6 +3,12 @@ from ..models import Project
 
 
 class ProjectReferenceSerializer(serializers.ModelSerializer):
+    """
+    Non-detailed view used in:
+
+    - /api/0/projects/<org-slug>/project-slug>/issues/
+    """
+
     class Meta:
         model = Project
         fields = ("platform", "slug", "id", "name")

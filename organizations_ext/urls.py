@@ -7,6 +7,7 @@ from .views import (
     OrganizationViewSet,
     OrganizationUserViewSet,
     OrganizationMemberViewSet,
+    OrganizationProjectsViewSet,
     AcceptInviteView,
 )
 
@@ -25,6 +26,9 @@ organizations_router.register(
 )
 organizations_router.register(
     r"users", OrganizationUserViewSet, basename="organization-users"
+)
+organizations_router.register(
+    r"projects", OrganizationProjectsViewSet, basename="organization-projects"
 )
 
 urlpatterns = [

@@ -9,6 +9,7 @@ from rest_framework.exceptions import PermissionDenied
 from organizations.backends import invitation_backend
 from teams.serializers import TeamSerializer
 from users.utils import is_user_registration_open
+from projects.views import NestedProjectViewSet
 from .invitation_backend import InvitationTokenGenerator
 from .models import Organization, OrganizationUserRole, OrganizationUser
 from .serializers.serializers import (
@@ -217,3 +218,20 @@ class AcceptInviteView(views.APIView):
         )
         return Response(serializer.data)
 
+
+class OrganizationProjectsViewSet(NestedProjectViewSet):
+    def get_queryset(self, *args, **kwargs):
+        queryset = super().get_queryset(*args, **kwargs)
+        queries = self.request.GET.get("query")
+        # Pretty simplistic filters that don't match how django-filter works
+        # If this needs used more extensively, it should be abstracted more
+        if queries:
+            for query in queries.split():
+                query_part = query.split(":", 1)
+                if len(query_part) == 2:
+                    query_name, query_value = query_part
+                    if query_name == "team":
+                        queryset = queryset.filter(team__slug=query_value)
+                    if query_name == "!team":
+                        queryset = queryset.exclude(team__slug=query_value)
+        return queryset

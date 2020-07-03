@@ -2,13 +2,23 @@ from rest_framework import serializers
 from .models import Team
 
 
-class TeamSerializer(serializers.ModelSerializer):
+class RelatedTeamSerializer(serializers.ModelSerializer):
+    """ Less detailed team serializer intnded for nested relations """
+
+    class Meta:
+        model = Team
+        fields = (
+            "id",
+            "slug",
+        )
+
+
+class TeamSerializer(RelatedTeamSerializer):
     dateCreated = serializers.DateTimeField(source="created", read_only=True)
     isMember = serializers.SerializerMethodField()
     memberCount = serializers.SerializerMethodField()
 
-    class Meta:
-        model = Team
+    class Meta(RelatedTeamSerializer.Meta):
         fields = (
             "dateCreated",
             "id",

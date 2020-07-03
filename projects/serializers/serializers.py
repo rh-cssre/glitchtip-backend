@@ -2,6 +2,7 @@ from rest_framework import serializers
 from organizations_ext.serializers.base_serializers import (
     OrganizationReferenceSerializer,
 )
+from teams.serializers import RelatedTeamSerializer
 from .base_serializers import ProjectReferenceWithMemberSerializer
 from ..models import ProjectKey
 
@@ -32,6 +33,7 @@ class ProjectSerializer(ProjectReferenceWithMemberSerializer):
     isInternal = serializers.SerializerMethodField()
     isPublic = serializers.SerializerMethodField()
     organization = OrganizationReferenceSerializer(read_only=True)
+    teams = RelatedTeamSerializer(source="team_set", read_only=True, many=True)
 
     class Meta(ProjectReferenceWithMemberSerializer.Meta):
         fields = (
@@ -47,6 +49,7 @@ class ProjectSerializer(ProjectReferenceWithMemberSerializer):
             "isPublic",
             "name",
             "organization",
+            "teams",
             "slug",
             "dateCreated",
             "platform",
