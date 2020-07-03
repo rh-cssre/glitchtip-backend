@@ -8,6 +8,7 @@ class OrganizationReferenceSerializer(serializers.ModelSerializer):
     avatar = serializers.SerializerMethodField()
     isEarlyAdopter = serializers.SerializerMethodField()
     require2FA = serializers.SerializerMethodField()
+    isAcceptingEvents = serializers.SerializerMethodField()
 
     class Meta:
         model = Organization
@@ -20,6 +21,7 @@ class OrganizationReferenceSerializer(serializers.ModelSerializer):
             "avatar",
             "isEarlyAdopter",
             "require2FA",
+            "isAcceptingEvents",
         )
         read_only_fields = ("id", "slug")
 
@@ -34,4 +36,7 @@ class OrganizationReferenceSerializer(serializers.ModelSerializer):
 
     def get_require2FA(self, obj):
         return False
+
+    def get_isAcceptingEvents(self, obj):
+        return obj.is_accepting_events
 
