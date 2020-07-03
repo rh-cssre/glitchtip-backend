@@ -45,7 +45,6 @@ def send_email_notification(notification):
         html_content = render_to_string(
             multiple_template_html,
             {
-                "base_url": base_url,
                 "org_slug": org_slug,
                 "project_notification_settings_link": settings_link,
                 "issues": notification.issues.all(),
