@@ -67,6 +67,12 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
+class OrganizationUserDetailSerializer(OrganizationUserSerializer):
+    teams = serializers.SlugRelatedField(
+        source="team_set", slug_field="slug", read_only=True, many=True
+    )
+
+
 class OrganizationUserProjectsSerializer(OrganizationUserSerializer):
     projects = serializers.SerializerMethodField()
 

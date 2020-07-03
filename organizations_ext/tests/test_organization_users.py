@@ -46,6 +46,8 @@ class OrganizationUsersAPITestCase(APITestCase):
         other_user = baker.make("users.user")
         other_organization = baker.make("organizations_ext.Organization")
         other_org_user = other_organization.add_user(other_user)
+        team = baker.make("teams.Team", organization=self.organization)
+        team.members.add(self.org_user)
 
         url = reverse(
             "organization-members-detail",
@@ -56,6 +58,7 @@ class OrganizationUsersAPITestCase(APITestCase):
         )
         res = self.client.get(url)
         self.assertContains(res, self.user.email)
+        self.assertContains(res, team.slug)
         self.assertNotContains(res, other_user.email)
 
         url = reverse(

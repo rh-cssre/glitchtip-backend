@@ -8,7 +8,9 @@ class OrganizationReferenceSerializer(serializers.ModelSerializer):
     avatar = serializers.SerializerMethodField()
     isEarlyAdopter = serializers.SerializerMethodField()
     require2FA = serializers.SerializerMethodField()
-    isAcceptingEvents = serializers.SerializerMethodField()
+    isAcceptingEvents = (
+        serializers.SerializerMethodField()
+    )  # GlitchTip field, not in Sentry OSS
 
     class Meta:
         model = Organization

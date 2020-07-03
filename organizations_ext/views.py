@@ -16,6 +16,7 @@ from .serializers.serializers import (
     OrganizationSerializer,
     OrganizationDetailSerializer,
     OrganizationUserSerializer,
+    OrganizationUserDetailSerializer,
     OrganizationUserProjectsSerializer,
     AcceptInviteSerializer,
     ReinviteSerializer,
@@ -54,6 +55,11 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
 
     queryset = OrganizationUser.objects.all()
     serializer_class = OrganizationUserSerializer
+
+    def get_serializer_class(self):
+        if self.action in ["retrieve"]:
+            return OrganizationUserDetailSerializer
+        return super().get_serializer_class()
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
