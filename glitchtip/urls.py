@@ -108,6 +108,12 @@ urlpatterns += [
     ),
     path("docs/", schema_view.with_ui("redoc", cache_timeout=0), name="schema-redoc"),
     path("accounts/", include("allauth.urls")),  # Required for allauth
+    # Change the activate_url in the confirm emails
+    re_path(
+        r"^profile/confirm-email/(?P<key>[-:\w]+)/$",
+        TemplateView.as_view(),
+        name="account_confirm_email"
+    ),
     # These routes belong to the Angular single page app
     re_path(r"^$", TemplateView.as_view(template_name="index.html")),
     re_path(
