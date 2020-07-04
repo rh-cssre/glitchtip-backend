@@ -74,6 +74,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     def username(self):
         return self.email
 
+    @property
+    def auth_token(self):
+        return None
+
 
 class ProjectAlertStatus(models.IntegerChoices):
     OFF = 0, "off"

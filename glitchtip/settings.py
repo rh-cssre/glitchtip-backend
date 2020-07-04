@@ -127,7 +127,6 @@ INSTALLED_APPS = [
     "django_filters",
     "debug_toolbar",
     "rest_framework",
-    "rest_framework.authtoken",
     "drf_yasg",
     "dj_rest_auth",
     "dj_rest_auth.registration",
@@ -318,6 +317,7 @@ LOGOUT_ON_PASSWORD_CHANGE = False
 
 REST_AUTH_SERIALIZERS = {
     "USER_DETAILS_SERIALIZER": "users.serializers.UserSerializer",
+    "TOKEN_SERIALIZER": "users.serializers.NoopTokenSerializer",
 }
 REST_AUTH_REGISTER_SERIALIZERS = {
     "REGISTER_SERIALIZER": "users.serializers.RegisterSerializer",

@@ -18,7 +18,7 @@ class UserRegistrationTestCase(APITestCase):
             "password2": "hunter222",
         }
         res = self.client.post(url, data)
-        self.assertContains(res, "key", status_code=201)
+        self.assertEqual(res.status_code, 201)
 
     def test_closed_registration(self):
         """ Only first user/organization may register """

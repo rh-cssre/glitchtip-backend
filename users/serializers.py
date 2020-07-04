@@ -106,3 +106,7 @@ class RegisterSerializer(BaseRegisterSerializer):
         if not is_user_registration_open():
             raise exceptions.PermissionDenied("Registration is not open")
         return super().validate(data)
+
+
+class NoopTokenSerializer(serializers.Serializer):
+    """ dj-rest-auth requires tokens, but we don't use them. """
