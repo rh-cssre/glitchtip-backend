@@ -184,8 +184,12 @@ SECURE_BROWSER_XSS_FILTER = True
 CSP_STYLE_SRC = ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]
 CSP_STYLE_SRC_ELEM = ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]
 CSP_FONT_SRC = ["'self'", "https://fonts.gstatic.com"]
-# Allow Matomo analytics. Note this isn't enabled by default.
-CSP_SCRIPT_SRC = ["'self'", "https://matomo.glitchtip.com", "https://js.stripe.com"]
+# Redoc requires blob
+CSP_WORKER_SRC = ["'self'", "blob:"]
+# GlitchTip can record it's own errors
+CSP_CONNECT_SRC = ["'self'", "https://*.glitchtip.com"]
+# Needed for Matomo and Stripe for SaaS use cases. Both are disabled by default.
+CSP_SCRIPT_SRC = ["'self'", "https://*.glitchtip.com", "https://js.stripe.com"]
 CSP_IMG_SRC = ["'self'", "https://matomo.glitchtip.com"]
 # Consider tracking CSP reports with GlitchTip itself
 CSP_REPORT_URI = env.tuple("CSP_REPORT_URI", str, None)
