@@ -398,8 +398,8 @@ elif TESTING:
     INSTALLED_APPS.append("djstripe")
     INSTALLED_APPS.append("djstripe_ext")
     STRIPE_TEST_PUBLIC_KEY = "fake"
-    STRIPE_TEST_SECRET_KEY = "sk_test_fake"
-    DJSTRIPE_WEBHOOK_SECRET = "whsec_fake"
+    STRIPE_TEST_SECRET_KEY = "sk_test_fake"  # nosec
+    DJSTRIPE_WEBHOOK_SECRET = "whsec_fake"  # nosec
 
 if TESTING:
     CELERY_TASK_ALWAYS_EAGER = True

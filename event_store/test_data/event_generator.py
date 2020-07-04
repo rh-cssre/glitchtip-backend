@@ -19,7 +19,7 @@ def make_event_unique(event):
 
 def generate_random_event():
     """ Return a random event from library of samples with unique event id """
-    event = random.choice(events)
+    event = random.choice(events)  # nosec
     result = make_event_unique(event)
 
     return result

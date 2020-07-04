@@ -3,11 +3,11 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework.exceptions import NotFound
+from allauth.account.models import EmailAddress
 from users.models import User
 from organizations_ext.models import Organization
 from teams.models import Team
 from projects.models import Project
-from allauth.account.models import EmailAddress
 
 
 class SeedDataAPIView(APIView):
@@ -24,7 +24,7 @@ class SeedDataAPIView(APIView):
 
         user_email = "cypresstest@example.com"
         other_user_email = "cypresstest-other@example.com"
-        user_password = "hunter22"
+        user_password = "hunter22"  # nosec
         organization_name = "cypresstestorg"
         team_slug = "cypresstestteam"
         project_name = "cypresstestproject"
@@ -37,7 +37,9 @@ class SeedDataAPIView(APIView):
             email=other_user_email, password=user_password
         )
 
-        EmailAddress.objects.create(user=user, email=user_email, primary=True, verified=False)
+        EmailAddress.objects.create(
+            user=user, email=user_email, primary=True, verified=False
+        )
         EmailAddress.objects.create(
             user=other_user, email=other_user_email, primary=True, verified=False
         )

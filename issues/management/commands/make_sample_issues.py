@@ -46,7 +46,7 @@ class Command(BaseCommand):
             baker.make("issues.Event", issue__project=project, _quantity=quantity)
         else:
             for _ in range(quantity):
-                if random.choice([0, 1]):
+                if random.choice([0, 1]):  # nosec
                     baker.make("issues.Event", issue__project=project)
                 else:
                     self.generate_real_event(project)
