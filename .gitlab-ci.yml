@@ -10,6 +10,11 @@ variables:
   POSTGRES_HOST_AUTH_METHOD: "trust"
   DEBUG: "true"
 
+include:
+  - template: SAST.gitlab-ci.yml
+  - template: Dependency-Scanning.gitlab-ci.yml
+  - template: Secret-Detection.gitlab-ci.yml
+
 test:
   image: python:3.8-slim
   variables:
