@@ -84,7 +84,12 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         return super().get_object()
 
     def check_permissions(self, request):
-        if self.action in ["create", "update", "partial_update", "destroy"]:
+        if self.request.user.is_authenticated and self.action in [
+            "create",
+            "update",
+            "partial_update",
+            "destroy",
+        ]:
             org_slug = self.kwargs.get("organization_slug")
             user_org_user = self.request.user.organizations_ext_organizationuser.get(
                 organization__slug=org_slug
