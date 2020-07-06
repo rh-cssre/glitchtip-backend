@@ -1,3 +1,4 @@
+from django.core import mail
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from model_bakery import baker
@@ -13,6 +14,8 @@ class OrganizationThrottlingTestCase(TestCase):
 
         with freeze_time(timezone.datetime(2000, 1, 1)):
             organization = baker.make("organizations_ext.Organization")
+            user = baker.make("users.user")
+            organization.add_user(user)
             customer = baker.make(
                 "djstripe.Customer", subscriber=organization, livemode=False
             )
@@ -36,6 +39,7 @@ class OrganizationThrottlingTestCase(TestCase):
             set_organization_throttle()
             organization.refresh_from_db()
             self.assertFalse(organization.is_accepting_events)
+            self.assertTrue(mail.outbox[0])
 
         with freeze_time(timezone.datetime(2000, 2, 1)):
             # Month should reset throttle
