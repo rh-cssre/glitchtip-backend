@@ -190,6 +190,7 @@ CSP_CONNECT_SRC = ["'self'", "https://app.glitchtip.com"]
 # Needed for Matomo and Stripe for SaaS use cases. Both are disabled by default.
 CSP_SCRIPT_SRC = ["'self'", "https://matomo.glitchtip.com", "https://js.stripe.com"]
 CSP_IMG_SRC = ["'self'", "https://matomo.glitchtip.com"]
+CSP_FRAME_SRC = ["'self'", "https://js.stripe.com"]
 # Consider tracking CSP reports with GlitchTip itself
 CSP_REPORT_URI = env.tuple("CSP_REPORT_URI", str, None)
 SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", 0)
