@@ -26,7 +26,7 @@ class OrganizationDetailSerializer(OrganizationSerializer):
 
 
 class OrganizationUserSerializer(serializers.ModelSerializer):
-    user = UserSerializer(required=False)
+    user = UserSerializer(required=False, read_only=True)
     role = serializers.CharField(source="get_role")
     roleName = serializers.CharField(source="get_role_display", read_only=True)
     dateCreated = serializers.DateTimeField(source="created", read_only=True)

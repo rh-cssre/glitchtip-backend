@@ -1,3 +1,4 @@
+import json
 from django.core import mail
 from django.shortcuts import reverse
 from rest_framework.test import APITestCase
@@ -223,7 +224,9 @@ class OrganizationUsersAPITestCase(APITestCase):
             "teams": [],
             "user": "new@example.com",
         }
-        res = self.client.post(self.members_url, data)
+        res = self.client.post(
+            self.members_url, json.dumps(data), content_type="application/json"
+        )
         self.assertContains(res, data["email"], status_code=201)
         self.assertEqual(res.data["role"], "manager")
         self.assertTrue(
