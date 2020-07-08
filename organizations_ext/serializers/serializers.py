@@ -38,6 +38,14 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
         model = OrganizationUser
         fields = ("role", "id", "user", "roleName", "dateCreated", "email", "teams")
 
+    def __init__(self, *args, request_user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "request" in self.context:
+            organization_slug = self.context["view"].kwargs.get("organization_slug")
+            self.fields["teams"].child_relation.queryset = Team.objects.filter(
+                organization__slug=organization_slug
+            )
+
     def get_extra_kwargs(self):
         """ email should be read only when updating """
         extra_kwargs = super().get_extra_kwargs()
@@ -55,9 +63,11 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
         user = User.objects.filter(
             emailaddress__email=email, emailaddress__verified=True
         ).first()
-        return super().create(
+        org_user = super().create(
             {"role": role, "user": user, "email": email, "organization": organization}
         )
+        org_user.team_set.add(*teams)
+        return org_user
 
     def update(self, instance, validated_data):
         get_role = validated_data.pop("get_role", None)

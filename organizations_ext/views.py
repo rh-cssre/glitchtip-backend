@@ -91,9 +91,12 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
             "destroy",
         ]:
             org_slug = self.kwargs.get("organization_slug")
-            user_org_user = self.request.user.organizations_ext_organizationuser.get(
-                organization__slug=org_slug
-            )
+            try:
+                user_org_user = self.request.user.organizations_ext_organizationuser.get(
+                    organization__slug=org_slug
+                )
+            except ObjectDoesNotExist:
+                raise PermissionDenied("User is not member of this organization")
             if user_org_user.role < OrganizationUserRole.MANAGER:
                 raise PermissionDenied(
                     "User must be manager or higher to add organization members"

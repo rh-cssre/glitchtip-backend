@@ -218,10 +218,11 @@ class OrganizationUsersAPITestCase(APITestCase):
         self.assertEqual(res.status_code, 201)
 
     def test_organization_users_create(self):
+        team = baker.make("teams.Team", organization=self.organization)
         data = {
             "email": "new@example.com",
             "role": OrganizationUserRole.MANAGER.label.lower(),
-            "teams": [],
+            "teams": [team.slug],
             "user": "new@example.com",
         }
         res = self.client.post(
@@ -238,6 +239,7 @@ class OrganizationUsersAPITestCase(APITestCase):
                 role=OrganizationUserRole.MANAGER,
             ).exists()
         )
+        self.assertTrue(team.members.exists())
         self.assertEqual(len(mail.outbox), 1)
 
     def test_organization_users_create_and_accept(self):
