@@ -25,13 +25,13 @@ def set_organization_throttle():
             )
         )
 
-        orgs_turning_false = free_tier_organizations.filter(
+        orgs_over_quota = free_tier_organizations.filter(
             is_accepting_events=True, event_count__gt=events_max
-        )
-        for org in orgs_turning_false:
-            org.is_accepting_events = False
+        ).select_related("owner__organization_user")
+        for org in orgs_over_quota:
             send_email_met_quota(org)
-            org.save()
+        orgs_over_quota.update(is_accepting_events=False)
+
         free_tier_organizations.filter(
             is_accepting_events=False, event_count__lte=events_max
         ).update(is_accepting_events=True)
