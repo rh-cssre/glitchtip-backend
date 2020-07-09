@@ -61,7 +61,7 @@ class OrganizationThrottlingTestCase(TestCase):
 
     @override_settings(BILLING_FREE_TIER_EVENTS=1)
     def test_non_subscriber_throttling_performance(self):
-        """ Task should take no more than 6 + (1 * orgs) queries """
+        """ Task should take no more than 4 + (1 * orgs) queries """
         for _ in range(2):
             plan = baker.make("djstripe.Plan", active=True, amount=0)
             organization = baker.make("organizations_ext.Organization")
