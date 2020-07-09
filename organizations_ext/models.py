@@ -81,7 +81,6 @@ class OrganizationUser(SharedBaseModel, OrganizationUserBase):
         related_name="organizations_ext_organizationuser",
     )
     role = models.PositiveSmallIntegerField(choices=OrganizationUserRole.choices)
-    pending = models.BooleanField(default=True)
     email = models.EmailField(
         blank=True, null=True, help_text="Email for pending invite"
     )
@@ -101,6 +100,15 @@ class OrganizationUser(SharedBaseModel, OrganizationUserBase):
 
     def get_role(self):
         return self.get_role_display().lower()
+
+    def accept_invite(self, user):
+        self.user = user
+        self.email = None
+        self.save()
+
+    @property
+    def pending(self):
+        return self.user_id is None
 
     @property
     def is_active(self):

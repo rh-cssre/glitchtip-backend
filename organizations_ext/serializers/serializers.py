@@ -36,7 +36,16 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrganizationUser
-        fields = ("role", "id", "user", "roleName", "dateCreated", "email", "teams")
+        fields = (
+            "role",
+            "id",
+            "user",
+            "roleName",
+            "dateCreated",
+            "email",
+            "teams",
+            "pending",
+        )
 
     def __init__(self, *args, request_user=None, **kwargs):
         super().__init__(*args, **kwargs)

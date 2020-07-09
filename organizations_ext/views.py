@@ -222,8 +222,7 @@ class AcceptInviteView(views.APIView):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         if serializer.validated_data["accept_invite"]:
-            org_user.user = request.user
-            org_user.save()
+            org_user.accept_invite(request.user)
         serializer = self.serializer_class(
             {
                 "accept_invite": serializer.validated_data["accept_invite"],
