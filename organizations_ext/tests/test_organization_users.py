@@ -30,6 +30,21 @@ class OrganizationUsersAPITestCase(APITestCase):
         res = self.client.get(self.members_url)
         self.assertContains(res, self.user.email)
 
+    def test_organization_members_email_field(self):
+        """
+        Org Member email should refer to the invited email before acceptance
+        After acceptance, it should refer to the user's primary email address
+        """
+        url = reverse(
+            "organization-members-detail",
+            kwargs={
+                "organization_slug": self.organization.slug,
+                "pk": self.org_user.pk,
+            },
+        )
+        res = self.client.get(url)
+        self.assertEqual(res.data["email"], self.user.email)
+
     def test_organization_team_members_list(self):
         team = baker.make("teams.Team", organization=self.organization)
         url = reverse(
