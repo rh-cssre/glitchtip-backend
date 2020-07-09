@@ -2,6 +2,7 @@ from django.conf import settings
 from django.db.models import Count, Q, F
 from celery import shared_task
 from .models import Organization
+from .email import send_email_met_quota
 
 
 @shared_task
@@ -24,9 +25,13 @@ def set_organization_throttle():
             )
         )
 
-        free_tier_organizations.filter(
+        orgs_over_quota = free_tier_organizations.filter(
             is_accepting_events=True, event_count__gt=events_max
-        ).update(is_accepting_events=False)
+        ).select_related("owner__organization_user")
+        for org in orgs_over_quota:
+            send_email_met_quota(org)
+        orgs_over_quota.update(is_accepting_events=False)
+
         free_tier_organizations.filter(
             is_accepting_events=False, event_count__lte=events_max
         ).update(is_accepting_events=True)
