@@ -13,7 +13,7 @@ x-volumes: &default-volumes
   - .:/code
 services:
   postgres:
-    image: postgres
+    image: postgres:12
     environment:
       POSTGRES_HOST_AUTH_METHOD: "trust"
   redis:
