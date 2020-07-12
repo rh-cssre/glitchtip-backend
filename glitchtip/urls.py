@@ -117,7 +117,7 @@ urlpatterns += [
     # These routes belong to the Angular single page app
     re_path(r"^$", TemplateView.as_view(template_name="index.html")),
     re_path(
-        r"^(login|issues|settings|organizations|profile).*$",
+        r"^(login|issues|settings|organizations|profile|accept).*$",
         TemplateView.as_view(template_name="index.html"),
     ),
     path("accept/", include(invitation_backend().get_urls())),
