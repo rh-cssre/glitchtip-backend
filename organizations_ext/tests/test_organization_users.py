@@ -267,7 +267,7 @@ class OrganizationUsersAPITestCase(APITestCase):
         }
         self.client.post(self.members_url, data)
         body = mail.outbox[0].body
-        token = body[body.find("http://localhost:8000/invitations/") :].split("/")[4]
+        token = body[body.find("http://localhost:8000/accept/") :].split("/")[4]
 
     def test_organization_users_create_without_permissions(self):
         """ Admin cannot add users to org """
