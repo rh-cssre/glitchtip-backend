@@ -112,7 +112,7 @@ urlpatterns += [
     re_path(
         r"^profile/confirm-email/(?P<key>[-:\w]+)/$",
         TemplateView.as_view(),
-        name="account_confirm_email"
+        name="account_confirm_email",
     ),
     # These routes belong to the Angular single page app
     re_path(r"^$", TemplateView.as_view(template_name="index.html")),
@@ -120,7 +120,7 @@ urlpatterns += [
         r"^(login|issues|settings|organizations|profile).*$",
         TemplateView.as_view(template_name="index.html"),
     ),
-    path("invitations/", include(invitation_backend().get_urls())),
+    path("accept/", include(invitation_backend().get_urls())),
 ]
 
 if settings.BILLING_ENABLED:

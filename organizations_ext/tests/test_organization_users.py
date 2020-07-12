@@ -146,7 +146,7 @@ class OrganizationUsersAPITestCase(APITestCase):
         res = self.client.post(self.members_url, data)
         self.assertTrue(res.data["pending"])
         body = mail.outbox[0].body
-        body_split = body[body.find("http://localhost:8000/invitations/") :].split("/")
+        body_split = body[body.find("http://localhost:8000/accept/") :].split("/")
         org_user_id = body_split[4]
         token = body_split[5]
         url = reverse(
