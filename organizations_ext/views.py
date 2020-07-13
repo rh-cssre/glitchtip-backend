@@ -124,6 +124,7 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         serializer = ReinviteSerializer(instance, data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
+        invitation_backend().send_invitation(instance)
         serializer = self.serializer_class(instance)
         return Response(serializer.data)
 

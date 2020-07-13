@@ -284,7 +284,11 @@ class OrganizationUsersAPITestCase(APITestCase):
 
     def test_organization_users_reinvite(self):
         other_user = baker.make("users.user")
-        other_org_user = self.organization.add_user(other_user)
+        other_org_user = baker.make(
+            "organizations_ext.OrganizationUser",
+            email=other_user.email,
+            organization=self.organization,
+        )
 
         url = reverse(
             "organization-members-detail",
@@ -296,6 +300,7 @@ class OrganizationUsersAPITestCase(APITestCase):
         data = {"reinvite": 1}
         res = self.client.put(url, data)
         self.assertContains(res, other_user.email)
+        self.assertTrue(len(mail.outbox))
 
     def test_organization_users_update(self):
         other_user = baker.make("users.user")
