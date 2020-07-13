@@ -26,3 +26,22 @@ def send_email_met_quota(organization):
     msg = EmailMultiAlternatives(subject, text_content, to=to)
     msg.attach_alternative(html_content, "text/html")
     msg.send()
+
+
+def send_invitation_email(self, user, **kwargs):
+    template_html = "organizations/email/invite-user-drip.html"
+    template_txt = "organizations/email/invite-user-drip.txt"
+
+    context = {
+        "token": kwargs["token"],
+        "user": user,
+        "organization": kwargs["organization"],
+    }
+
+    html_content = render_to_string(template_html, context)
+    text_content = render_to_string(template_txt, context)
+    subject = "You are invited to GlitchTip"
+
+    msg = EmailMultiAlternatives(subject, text_content, to=[user])
+    msg.attach_alternative(html_content, "text/html")
+    msg.send()

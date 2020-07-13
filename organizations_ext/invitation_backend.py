@@ -1,8 +1,11 @@
 from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
 from django.urls import re_path
 from organizations.backends.tokens import RegistrationTokenGenerator
 from organizations.backends.defaults import InvitationBackend as BaseInvitationBackend
 from .models import Organization
+from .email import send_invitation_email
 
 
 class InvitationTokenGenerator(RegistrationTokenGenerator):
@@ -32,7 +35,9 @@ class InvitationBackend(BaseInvitationBackend):
         return InvitationTokenGenerator().make_token(org_user)
 
     def send_invitation(self, user, sender=None, **kwargs):
-        kwargs["domain"] = {
-            "domain": settings.GLITCHTIP_DOMAIN.geturl(),
-        }
-        return super().send_invitation(user, sender, **kwargs)
+        kwargs.update({
+            "token": self.get_token(user),
+            "organization": user.organization,
+        })
+        send_invitation_email(self, user, **kwargs)
+        return True
