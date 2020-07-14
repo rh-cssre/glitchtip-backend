@@ -170,6 +170,22 @@ class OrganizationUsersAPITestCase(APITestCase):
             ).exists()
         )
 
+    def test_organization_users_invite_twice(self):
+        """ Don't allow inviting user who is already in the group """
+        data = {
+            "email": "new@example.com",
+            "role": OrganizationUserRole.MANAGER.label.lower(),
+            "teams": [],
+            "user": "new@example.com",
+        }
+        res = self.client.post(self.members_url, data)
+        self.assertEqual(res.status_code, 201)
+        res = self.client.post(self.members_url, data)
+        self.assertEqual(res.status_code, 409)
+        data["email"] = self.user.email
+        res = self.client.post(self.members_url, data)
+        self.assertEqual(res.status_code, 409)
+
     def test_organization_users_add_team_member_permission(self):
         self.org_user.role = OrganizationUserRole.MEMBER
         self.org_user.save()

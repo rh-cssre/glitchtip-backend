@@ -1,7 +1,7 @@
-from rest_framework import serializers
+from rest_framework import serializers, status
+from rest_framework.exceptions import APIException
 from projects.serializers.base_serializers import ProjectReferenceWithMemberSerializer
 from users.serializers import UserSerializer
-from users.models import User
 from teams.serializers import TeamSerializer
 from teams.models import Team
 from .base_serializers import OrganizationReferenceSerializer
@@ -23,6 +23,10 @@ class OrganizationDetailSerializer(OrganizationSerializer):
             "openMembership",
             "teams",
         )
+
+
+class HTTP409APIException(APIException):
+    status_code = status.HTTP_409_CONFLICT
 
 
 class OrganizationUserSerializer(serializers.ModelSerializer):
@@ -69,11 +73,12 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
         email = validated_data.get("email")
         organization = validated_data.get("organization")
         teams = validated_data.get("teams")
-        user = User.objects.filter(
-            emailaddress__email=email, emailaddress__verified=True
-        ).first()
+        if organization.organization_users.filter(email=email).exists():
+            raise HTTP409APIException(f"The user {email} is already invited", "email")
+        if organization.organization_users.filter(user__email=email).exists():
+            raise HTTP409APIException(f"The user {email} is already a member", "email")
         org_user = super().create(
-            {"role": role, "user": user, "email": email, "organization": organization}
+            {"role": role, "email": email, "organization": organization}
         )
         org_user.team_set.add(*teams)
         return org_user
