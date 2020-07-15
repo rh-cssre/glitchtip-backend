@@ -9,5 +9,3 @@ This email address will be connected to {{ user_display }}'s account when you cl
 If you received this email in error, delete it. Your email address won't be added if you don't click the confirmation link.
 
 {% endautoescape %}
-
-

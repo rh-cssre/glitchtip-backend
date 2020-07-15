@@ -1,0 +1,9 @@
+{% load account %}{% user_display user as user_display %}{% load i18n %}{% autoescape off %}
+
+Verify Your GlitchTip Account Email
+
+{{ activate_url }}
+
+If you received this in error, delete it. Your email address won't be confirmed if you don't click the link.
+
+{% endautoescape %}
