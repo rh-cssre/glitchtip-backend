@@ -4,6 +4,7 @@ from django.contrib.postgres.search import SearchVectorField
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 from sentry.interfaces.stacktrace import get_context
+from .utils import base32_encode
 
 
 class EventType(models.IntegerChoices):
@@ -59,12 +60,16 @@ class Issue(models.Model):
         choices=EventStatus.choices, default=EventStatus.UNRESOLVED
     )
     # See migration 0004 for trigger that sets search_vector, count, last_seen
+    short_id = models.PositiveIntegerField(null=True)
     search_vector = SearchVectorField(null=True, editable=False)
     count = models.PositiveIntegerField(default=1, editable=False)
     last_seen = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ("title", "culprit", "project", "type")
+        unique_together = (
+            ("title", "culprit", "project", "type"),
+            ("project", "short_id"),
+        )
         indexes = [GinIndex(fields=["search_vector"], name="search_vector_idx")]
 
     def event(self):
@@ -83,6 +88,15 @@ class Issue(models.Model):
             self.save()
             # Delete notifications so that new alerts are sent for regressions
             self.notification_set.all().delete()
+
+    @property
+    def short_id_display(self):
+        """
+        Short IDs are per project issue counters. They show as PROJECT_SLUG-ID_BASE32
+        The intention is to be human readable identifiers that can reference an issue.
+        """
+        if self.short_id is not None:
+            return f"{self.project.slug.upper()}-{base32_encode(self.short_id)}"
 
 
 class EventTag(models.Model):

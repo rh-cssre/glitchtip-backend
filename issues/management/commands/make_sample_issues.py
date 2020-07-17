@@ -21,9 +21,9 @@ class Command(BaseCommand):
             help="Only include faked generated events",
         )
 
-    def generate_real_event(self, project):
+    def generate_real_event(self, project, unique_issue=False):
         """ Generate an event based on real sample data """
-        data = event_generator.generate_random_event()
+        data = event_generator.generate_random_event(unique_issue)
         serializer = EventStoreAPIView().get_serializer_class(data)(data=data)
         serializer.is_valid()
         serializer.create(project.id, serializer.data)
