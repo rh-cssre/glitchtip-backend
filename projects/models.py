@@ -47,6 +47,18 @@ class Project(models.Model):
         return ""
 
 
+class ProjectCounter(models.Model):
+    """
+    Counter for issue short IDs
+    - Unique per project
+    - Autoincrements on each new issue
+    - Seperate table for performance
+    """
+
+    project = models.OneToOneField(Project, on_delete=models.CASCADE)
+    value = models.PositiveIntegerField()
+
+
 class ProjectKey(models.Model):
     """ Authentication key for a Project """
 
