@@ -1,7 +1,7 @@
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers, exceptions
 from dj_rest_auth.registration.serializers import (
-    SocialAccountSerializer,
+    SocialAccountSerializer as BaseSocialAccountSerializer,
     RegisterSerializer as BaseRegisterSerializer,
 )
 from allauth.account.adapter import get_adapter
@@ -10,6 +10,30 @@ from allauth.account.utils import filter_users_by_email
 from allauth.account.models import EmailAddress
 from .utils import is_user_registration_open
 from .models import User
+
+
+class SocialAccountSerializer(BaseSocialAccountSerializer):
+    email = serializers.SerializerMethodField()
+    username = serializers.SerializerMethodField()
+
+    class Meta(BaseSocialAccountSerializer.Meta):
+        fields = (
+            "id",
+            "provider",
+            "uid",
+            "last_login",
+            "date_joined",
+            "email",
+            "username",
+        )
+
+    def get_email(self, obj):
+        if obj.extra_data:
+            return obj.extra_data.get("email")
+
+    def get_username(self, obj):
+        if obj.extra_data:
+            return obj.extra_data.get("username")
 
 
 class ConfirmEmailAddressSerializer(serializers.Serializer):
