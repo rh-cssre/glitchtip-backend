@@ -4,6 +4,7 @@ from dj_rest_auth.registration.serializers import (
     SocialAccountSerializer as BaseSocialAccountSerializer,
     RegisterSerializer as BaseRegisterSerializer,
 )
+from allauth.socialaccount.models import SocialApp
 from allauth.account.adapter import get_adapter
 from allauth.account import app_settings
 from allauth.account.utils import filter_users_by_email
@@ -29,11 +30,19 @@ class SocialAccountSerializer(BaseSocialAccountSerializer):
 
     def get_email(self, obj):
         if obj.extra_data:
-            return obj.extra_data.get("email")
+            if "email" in obj.extra_data:
+                return obj.extra_data.get("email")
+            return obj.extra_data.get("userPrincipalName")  # MS oauth uses this
 
     def get_username(self, obj):
         if obj.extra_data:
             return obj.extra_data.get("username")
+
+
+class SocialAppSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SocialApp
+        fields = ("provider", "name", "client_id")
 
 
 class ConfirmEmailAddressSerializer(serializers.Serializer):

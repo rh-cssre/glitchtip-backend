@@ -2,7 +2,6 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.generic import TemplateView
-from dj_rest_auth.registration.views import SocialAccountDisconnectView
 from rest_framework import permissions
 from rest_framework_nested import routers
 from organizations.backends import invitation_backend
@@ -14,6 +13,7 @@ from projects.urls import router as projectsRouter
 from teams.urls import router as teamsRouter
 from organizations_ext.urls import router as organizationsRouter
 from users.urls import router as usersRouter
+from users.views import SocialAccountDisconnectView
 from . import social
 from .yasg import CustomOpenAPISchemaGenerator
 from .views import SettingsView, health
@@ -76,7 +76,7 @@ urlpatterns += [
     path("rest-auth/registration/", include("dj_rest_auth.registration.urls")),
     path("api/api-auth/", include("rest_framework.urls", namespace="rest_framework")),
     re_path(
-        r"^socialaccounts/(?P<pk>\d+)/disconnect/$",
+        r"^api/socialaccounts/(?P<pk>\d+)/disconnect/$",
         SocialAccountDisconnectView.as_view(),
         name="social_account_disconnect",
     ),

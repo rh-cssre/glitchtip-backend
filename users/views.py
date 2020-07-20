@@ -1,11 +1,13 @@
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.shortcuts import get_object_or_404
 from django.http import Http404
-from rest_framework import status, viewsets, mixins
+from rest_framework import status, viewsets, mixins, exceptions
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError
 from drf_yasg.utils import swagger_auto_schema
+from dj_rest_auth.registration.views import (
+    SocialAccountDisconnectView as BaseSocialAccountDisconnectView,
+)
 from allauth.account.models import EmailAddress
 from organizations_ext.models import Organization
 from .models import User, UserProjectAlert
@@ -44,7 +46,7 @@ class UserViewSet(viewsets.ModelViewSet):
         try:
             organization = Organization.objects.get(slug=organization_slug)
         except Organization.DoesNotExist:
-            raise ValidationError("Organization does not exist")
+            raise exceptions.ValidationError("Organization does not exist")
         # TODO deal with organization and users who aren't set up yet
         user = serializer.save()
         return user
@@ -86,12 +88,14 @@ class UserViewSet(viewsets.ModelViewSet):
         try:
             items = [x for x in data.items()]
         except AttributeError:
-            raise ValidationError("Invalid alert format, expected dictionary")
+            raise exceptions.ValidationError(
+                "Invalid alert format, expected dictionary"
+            )
         if len(data) != 1:
-            raise ValidationError("Invalid alert format, expected one value")
+            raise exceptions.ValidationError("Invalid alert format, expected one value")
         project_id, alert_status = items[0]
         if alert_status not in [1, 0, -1]:
-            raise ValidationError("Invalid status, must be -1, 0, or 1")
+            raise exceptions.ValidationError("Invalid status, must be -1, 0, or 1")
         alert = alerts.filter(project_id=project_id).first()
         if alert and alert_status == -1:
             alert.delete()
@@ -112,7 +116,9 @@ class EmailAddressViewSet(
     def get_user(self, user_pk):
         if user_pk == "me":
             return self.request.user
-        raise ValidationError("Can only change primary email address on own account")
+        raise exceptions.ValidationError(
+            "Can only change primary email address on own account"
+        )
 
     def get_queryset(self):
         user = self.get_user(self.kwargs.get("user_pk"))
@@ -160,3 +166,11 @@ class EmailAddressViewSet(
         )
         email_address.send_confirmation(request)
         return Response(status=204)
+
+
+class SocialAccountDisconnectView(BaseSocialAccountDisconnectView):
+    def post(self, request, *args, **kwargs):
+        try:
+            return super().post(request, *args, **kwargs)
+        except ValidationError as e:
+            raise exceptions.ValidationError(e.message)
