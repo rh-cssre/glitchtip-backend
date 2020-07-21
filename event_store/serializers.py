@@ -23,7 +23,7 @@ class StoreDefaultSerializer(serializers.Serializer):
     release = serializers.CharField(required=False)
     request = serializers.JSONField(required=False)
     sdk = serializers.JSONField()
-    timestamp = serializers.DateTimeField(required=False)
+    timestamp = serializers.CharField(required=False)
     transaction = serializers.CharField(required=False, allow_null=True)
     modules = serializers.JSONField(required=False)
 
@@ -33,6 +33,17 @@ class StoreDefaultSerializer(serializers.Serializer):
             return DefaultEvent()
         if self.type is EventType.ERROR:
             return ErrorEvent()
+    
+    def get_timestamp(self, timestamp):
+        # move these up once we know we'll use them
+        from django.utils.dateparse import parse_date
+        from datetime import datetime
+        if timestamp is None:
+            return None
+        try:
+            return datetime.fromtimestamp(float(timestamp))
+        except:
+            return parse_date(timestamp)
 
     def modify_exception(self, exception):
         """ OSS Sentry does this, I have no idea why """
@@ -54,6 +65,8 @@ class StoreDefaultSerializer(serializers.Serializer):
         culprit = eventtype.get_location(data)
         request = data.get("request")
         exception = self.modify_exception(data.get("exception"))
+        # timestamp = self.get_timestamp(data.get("timestamp"))
+        timestamp = data.get("timestamp")
         if request:
             headers = request.get("headers")
             if headers:
@@ -70,7 +83,7 @@ class StoreDefaultSerializer(serializers.Serializer):
             params = {
                 "event_id": data["event_id"],
                 "issue": issue,
-                "timestamp": data.get("timestamp"),
+                "timestamp": timestamp,
                 "data": {
                     "contexts": data.get("contexts"),
                     "culprit": culprit,
