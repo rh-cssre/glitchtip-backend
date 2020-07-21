@@ -2,7 +2,7 @@ import json
 from typing import List, Dict
 from django.urls import reverse
 from event_store.test_data.django_error_factory import message
-from event_store.test_data.js_error_factory import throw_error, sentry_browser_js_data, sentry_browser_js_data_old
+from event_store.test_data.js_error_factory import throw_error
 from event_store.test_data.csp import mdn_sample_csp
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.models import Event
@@ -132,11 +132,13 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         self.assertCompareData(res.data, data, ["title"])
         self.assertEqual(res.data["metadata"]["function"], data["metadata"]["function"])
 
-    def test_updated_js_sdk(self):
-        # sentry_browser_js_data_old works, sentry_browser_js_data doesn't
-        res = self.client.post(self.event_store_url, sentry_browser_js_data_old, format="json")
-        # not exactly sure what to test here but a validationerror makes this
-        # test work at the moment
+    def test_js_sdk_with_unix_timestamp(self):
+        sdk_error = self.get_json_data(
+            "event_store/test_data/incoming_events/js_event_with_unix_timestamp.json"
+        )
+        res = self.client.post(self.event_store_url, sdk_error, format="json")
+        self.assertIsNotNone(Event.objects.first().timestamp)
+        self.assertNotEqual(Event.objects.first().timestamp, sdk_error["timestamp"])
 
 
     def test_dotnet_error(self):
