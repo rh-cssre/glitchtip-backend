@@ -120,6 +120,12 @@ urlpatterns += [
         TemplateView.as_view(),
         name="account_confirm_email",
     ),
+    # Change the password_reset_confirm in the reset password emails
+    re_path(
+        r"^reset-password/set-new-password/(?P<uidb64>[0-9A-Za-z_\-]+)/(?P<token>[0-9A-Za-z]{1,13}-[0-9A-Za-z]{1,20})/$",
+        TemplateView.as_view(),
+        name="password_reset_confirm",
+    ),
     path("accept/", include(invitation_backend().get_urls())),
 ]
 
