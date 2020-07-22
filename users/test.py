@@ -212,3 +212,23 @@ class UsersTestCase(GlitchTipTestCase):
         self.assertEqual(res.status_code, 204)
         # Default deletes the row
         self.assertEqual(UserProjectAlert.objects.all().count(), 0)
+    
+    def test_reset_password(self):
+        url = reverse("rest_password_reset")
+
+        # Normal behavior
+        res = self.client.post(url, {"email": self.user.email})
+        self.assertEqual(len(mail.outbox), 1)
+
+        """
+        Social accounts weren't getting reset password emails. This
+        approximates the issue by testing an account that has an
+        unusable password.
+        """
+        user_without_password = baker.make("users.User")
+        user_without_password.set_unusable_password()
+        user_without_password.save()
+        self.assertFalse(user_without_password.has_usable_password())
+        res = self.client.post(url, {"email": user_without_password.email})
+        print(mail.outbox[1].body)
+        self.assertEqual(len(mail.outbox), 2)
