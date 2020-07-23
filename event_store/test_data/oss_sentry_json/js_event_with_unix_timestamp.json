@@ -1,0 +1,254 @@
+{
+  "event_id": "0deedc6e122944f093c29d6e6182fce9",
+  "project": 8,
+  "release": null,
+  "dist": null,
+  "platform": "javascript",
+  "message": "",
+  "datetime": "2020-07-23T02:54:40.109000Z",
+  "time_spent": null,
+  "tags": [
+    ["browser", "Firefox 78.0"],
+    ["browser.name", "Firefox"],
+    ["handled", "yes"],
+    ["level", "error"],
+    ["mechanism", "generic"],
+    ["os.name", "Ubuntu"],
+    ["user", "ip:75.88.94.240"],
+    ["url", "http://localhost:4201/"]
+  ],
+  "breadcrumbs": {
+    "values": [
+      {
+        "category": "console",
+        "level": "info",
+        "timestamp": 1595472877.277,
+        "type": "default",
+        "message": "Angular is running in the development mode. Call enableProdMode() to enable the production mode.",
+        "data": {
+          "logger": "console",
+          "arguments": [
+            "Angular is running in the development mode. Call enableProdMode() to enable the production mode."
+          ]
+        }
+      },
+      {
+        "category": "ui.click",
+        "timestamp": 1595472877.344,
+        "message": "body > app-root > ol > li > button",
+        "type": "default",
+        "level": "info"
+      },
+      {
+        "category": "xhr",
+        "timestamp": 1595472877.823,
+        "level": "info",
+        "type": "http",
+        "data": {
+          "url": "http://localhost:4201/sockjs-node/info?t=1595472877347",
+          "status_code": 200,
+          "method": "GET"
+        }
+      }
+    ]
+  },
+  "contexts": {
+    "os": { "version": null, "name": "Ubuntu" },
+    "browser": { "version": "78.0", "name": "Firefox" }
+  },
+  "culprit": "viewWrappedDebugError(/vendor.js)",
+  "errors": [
+    {
+      "url": "http://localhost:4201/polyfills.js",
+      "type": "fetch_generic_error",
+      "value": "<class 'requests.exceptions.ConnectionError'>"
+    },
+    {
+      "url": "http://localhost:4201/vendor.js",
+      "type": "fetch_generic_error",
+      "value": "<class 'requests.exceptions.ConnectionError'>"
+    }
+  ],
+  "exception": {
+    "values": [
+      {
+        "stacktrace": {
+          "frames": [
+            {
+              "function": "globalZoneAwareCallback",
+              "abs_path": "http://localhost:4201/polyfills.js",
+              "module": "polyfills",
+              "in_app": false,
+              "lineno": 4864,
+              "colno": 27,
+              "filename": "/polyfills.js"
+            },
+            {
+              "function": "invokeTask",
+              "abs_path": "http://localhost:4201/polyfills.js",
+              "module": "polyfills",
+              "in_app": false,
+              "lineno": 4838,
+              "colno": 14,
+              "filename": "/polyfills.js"
+            },
+            {
+              "function": "invokeTask",
+              "abs_path": "http://localhost:4201/polyfills.js",
+              "module": "polyfills",
+              "in_app": false,
+              "lineno": 3700,
+              "colno": 34,
+              "filename": "/polyfills.js"
+            },
+            {
+              "function": "runTask",
+              "abs_path": "http://localhost:4201/polyfills.js",
+              "module": "polyfills",
+              "in_app": false,
+              "lineno": 3403,
+              "colno": 47,
+              "filename": "/polyfills.js"
+            },
+            {
+              "function": "invokeTask",
+              "abs_path": "http://localhost:4201/polyfills.js",
+              "module": "polyfills",
+              "in_app": false,
+              "lineno": 3625,
+              "colno": 60,
+              "filename": "/polyfills.js"
+            },
+            {
+              "function": "onInvokeTask",
+              "abs_path": "http://localhost:4201/vendor.js",
+              "module": "vendor",
+              "in_app": false,
+              "lineno": 73280,
+              "colno": 33,
+              "filename": "/vendor.js"
+            },
+            {
+              "function": "invokeTask",
+              "abs_path": "http://localhost:4201/polyfills.js",
+              "module": "polyfills",
+              "in_app": false,
+              "lineno": 3626,
+              "colno": 31,
+              "filename": "/polyfills.js"
+            },
+            {
+              "function": "sentryWrapped",
+              "abs_path": "http://localhost:4201/vendor.js",
+              "module": "vendor",
+              "in_app": false,
+              "lineno": 84611,
+              "colno": 23,
+              "filename": "/vendor.js"
+            },
+            {
+              "function": "decoratePreventDefault/<",
+              "abs_path": "http://localhost:4201/vendor.js",
+              "module": "vendor",
+              "in_app": false,
+              "lineno": 81955,
+              "colno": 50,
+              "filename": "/vendor.js"
+            },
+            {
+              "function": "renderEventHandlerClosure/<",
+              "abs_path": "http://localhost:4201/vendor.js",
+              "module": "vendor",
+              "in_app": false,
+              "lineno": 76209,
+              "colno": 29,
+              "filename": "/vendor.js"
+            },
+            {
+              "function": "dispatchEvent",
+              "abs_path": "http://localhost:4201/vendor.js",
+              "module": "vendor",
+              "in_app": false,
+              "lineno": 64364,
+              "colno": 25,
+              "filename": "/vendor.js"
+            },
+            {
+              "function": "debugHandleEvent",
+              "abs_path": "http://localhost:4201/vendor.js",
+              "module": "vendor",
+              "in_app": false,
+              "lineno": 78531,
+              "colno": 12,
+              "filename": "/vendor.js"
+            },
+            {
+              "function": "callWithDebugContext",
+              "abs_path": "http://localhost:4201/vendor.js",
+              "module": "vendor",
+              "in_app": false,
+              "lineno": 78906,
+              "colno": 15,
+              "filename": "/vendor.js"
+            },
+            {
+              "function": "viewWrappedDebugError",
+              "abs_path": "http://localhost:4201/vendor.js",
+              "module": "vendor",
+              "in_app": false,
+              "lineno": 63709,
+              "colno": 15,
+              "filename": "/vendor.js"
+            }
+          ]
+        },
+        "type": "Error",
+        "value": "A Generic Error 9371d7",
+        "mechanism": { "type": "generic", "handled": true }
+      }
+    ]
+  },
+  "fingerprint": ["{{ default }}"],
+  "grouping_config": { "id": "legacy:2019-03-12" },
+  "hashes": ["cd05695f108567c9cd4e56c8945ade8b"],
+  "key_id": "8",
+  "level": "error",
+  "location": "/vendor.js",
+  "logger": "",
+  "metadata": {
+    "function": "viewWrappedDebugError",
+    "type": "Error",
+    "value": "A Generic Error 9371d7",
+    "filename": "/vendor.js"
+  },
+  "received": 1595473063.061,
+  "request": {
+    "url": "http://localhost:4201/",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:78.0) Gecko/20100101 Firefox/78.0"
+      ]
+    ]
+  },
+  "sdk": {
+    "version": "5.20.0",
+    "name": "sentry.javascript.browser",
+    "packages": [{ "version": "5.20.0", "name": "npm:@sentry/browser" }],
+    "integrations": [
+      "InboundFilters",
+      "FunctionToString",
+      "TryCatch",
+      "Breadcrumbs",
+      "GlobalHandlers",
+      "LinkedErrors",
+      "UserAgent"
+    ]
+  },
+  "timestamp": 1595472880.109,
+  "title": "Error: A Generic Error 9371d7",
+  "type": "error",
+  "use_rust_normalize": true,
+  "user": { "ip_address": "75.88.94.240" },
+  "version": "7"
+}

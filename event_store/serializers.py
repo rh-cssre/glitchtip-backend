@@ -1,9 +1,19 @@
 from urllib.parse import urlparse
+from datetime import datetime
 from django.db import transaction
 from rest_framework import serializers
 from sentry.eventtypes.error import ErrorEvent
 from sentry.eventtypes.base import DefaultEvent
 from issues.models import EventType, Event, Issue
+
+
+class FlexibleDateTimeField(serializers.DateTimeField):
+    """ Supports both DateTime and unix epoch timestamp """
+    def to_internal_value(self, timestamp):
+        try:
+            return datetime.fromtimestamp(float(timestamp))
+        except ValueError:
+            return super().to_internal_value(timestamp)
 
 
 class StoreDefaultSerializer(serializers.Serializer):
@@ -23,7 +33,7 @@ class StoreDefaultSerializer(serializers.Serializer):
     release = serializers.CharField(required=False)
     request = serializers.JSONField(required=False)
     sdk = serializers.JSONField()
-    timestamp = serializers.DateTimeField(required=False)
+    timestamp = FlexibleDateTimeField(required=False)
     transaction = serializers.CharField(required=False, allow_null=True)
     modules = serializers.JSONField(required=False)
 

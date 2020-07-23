@@ -1,0 +1,166 @@
+{
+  "exception": {
+    "values": [
+      {
+        "type": "Error",
+        "value": "A Generic Error 9371d7",
+        "stacktrace": {
+          "frames": [
+            {
+              "colno": 27,
+              "filename": "http://localhost:4201/polyfills.js",
+              "function": "globalZoneAwareCallback",
+              "in_app": true,
+              "lineno": 4864
+            },
+            {
+              "colno": 14,
+              "filename": "http://localhost:4201/polyfills.js",
+              "function": "invokeTask",
+              "in_app": true,
+              "lineno": 4838
+            },
+            {
+              "colno": 34,
+              "filename": "http://localhost:4201/polyfills.js",
+              "function": "invokeTask",
+              "in_app": true,
+              "lineno": 3700
+            },
+            {
+              "colno": 47,
+              "filename": "http://localhost:4201/polyfills.js",
+              "function": "runTask",
+              "in_app": true,
+              "lineno": 3403
+            },
+            {
+              "colno": 60,
+              "filename": "http://localhost:4201/polyfills.js",
+              "function": "invokeTask",
+              "in_app": true,
+              "lineno": 3625
+            },
+            {
+              "colno": 33,
+              "filename": "http://localhost:4201/vendor.js",
+              "function": "onInvokeTask",
+              "in_app": true,
+              "lineno": 73280
+            },
+            {
+              "colno": 31,
+              "filename": "http://localhost:4201/polyfills.js",
+              "function": "invokeTask",
+              "in_app": true,
+              "lineno": 3626
+            },
+            {
+              "colno": 23,
+              "filename": "http://localhost:4201/vendor.js",
+              "function": "sentryWrapped",
+              "in_app": true,
+              "lineno": 84611
+            },
+            {
+              "colno": 50,
+              "filename": "http://localhost:4201/vendor.js",
+              "function": "decoratePreventDefault/<",
+              "in_app": true,
+              "lineno": 81955
+            },
+            {
+              "colno": 29,
+              "filename": "http://localhost:4201/vendor.js",
+              "function": "renderEventHandlerClosure/<",
+              "in_app": true,
+              "lineno": 76209
+            },
+            {
+              "colno": 25,
+              "filename": "http://localhost:4201/vendor.js",
+              "function": "dispatchEvent",
+              "in_app": true,
+              "lineno": 64364
+            },
+            {
+              "colno": 12,
+              "filename": "http://localhost:4201/vendor.js",
+              "function": "debugHandleEvent",
+              "in_app": true,
+              "lineno": 78531
+            },
+            {
+              "colno": 15,
+              "filename": "http://localhost:4201/vendor.js",
+              "function": "callWithDebugContext",
+              "in_app": true,
+              "lineno": 78906
+            },
+            {
+              "colno": 15,
+              "filename": "http://localhost:4201/vendor.js",
+              "function": "viewWrappedDebugError",
+              "in_app": true,
+              "lineno": 63709
+            }
+          ]
+        },
+        "mechanism": { "handled": true, "type": "generic" }
+      }
+    ]
+  },
+  "level": "error",
+  "event_id": "0deedc6e122944f093c29d6e6182fce9",
+  "platform": "javascript",
+  "sdk": {
+    "name": "sentry.javascript.browser",
+    "packages": [{ "name": "npm:@sentry/browser", "version": "5.20.0" }],
+    "version": "5.20.0",
+    "integrations": [
+      "InboundFilters",
+      "FunctionToString",
+      "TryCatch",
+      "Breadcrumbs",
+      "GlobalHandlers",
+      "LinkedErrors",
+      "UserAgent"
+    ]
+  },
+  "timestamp": 1595472880.109,
+  "breadcrumbs": [
+    {
+      "timestamp": 1595472877.277,
+      "category": "console",
+      "data": {
+        "arguments": [
+          "Angular is running in the development mode. Call enableProdMode() to enable the production mode."
+        ],
+        "logger": "console"
+      },
+      "level": "log",
+      "message": "Angular is running in the development mode. Call enableProdMode() to enable the production mode."
+    },
+    {
+      "timestamp": 1595472877.344,
+      "category": "ui.click",
+      "message": "body > app-root > ol > li > button"
+    },
+    {
+      "timestamp": 1595472877.823,
+      "category": "xhr",
+      "data": {
+        "method": "GET",
+        "url": "http://localhost:4201/sockjs-node/info?t=1595472877347",
+        "status_code": 200
+      },
+      "type": "http"
+    }
+  ],
+  "request": {
+    "url": "http://localhost:4201/",
+    "headers": {
+      "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:78.0) Gecko/20100101 Firefox/78.0"
+    }
+  }
+}
