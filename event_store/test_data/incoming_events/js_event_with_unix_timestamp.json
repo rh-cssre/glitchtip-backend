@@ -3,7 +3,7 @@
     "values": [
       {
         "type": "Error",
-        "value": "A Generic Error 9a9132",
+        "value": "A Generic Error 9371d7",
         "stacktrace": {
           "frames": [
             {
@@ -60,7 +60,7 @@
               "filename": "http://localhost:4201/vendor.js",
               "function": "sentryWrapped",
               "in_app": true,
-              "lineno": 84582
+              "lineno": 84611
             },
             {
               "colno": 50,
@@ -111,26 +111,26 @@
     ]
   },
   "level": "error",
-  "event_id": "70ecf4a90a2a4ce9bc0474b1d5db8460",
+  "event_id": "0deedc6e122944f093c29d6e6182fce9",
   "platform": "javascript",
   "sdk": {
     "name": "sentry.javascript.browser",
-    "packages": [{ "name": "npm:@sentry/browser", "version": "5.19.2" }],
-    "version": "5.19.2",
+    "packages": [{ "name": "npm:@sentry/browser", "version": "5.20.0" }],
+    "version": "5.20.0",
     "integrations": [
       "InboundFilters",
       "FunctionToString",
+      "TryCatch",
       "Breadcrumbs",
       "GlobalHandlers",
       "LinkedErrors",
-      "UserAgent",
-      "TryCatch"
+      "UserAgent"
     ]
   },
-  "timestamp": 1595264892.911,
+  "timestamp": 1595472880.109,
   "breadcrumbs": [
     {
-      "timestamp": 1595264883.019,
+      "timestamp": 1595472877.277,
       "category": "console",
       "data": {
         "arguments": [
@@ -142,16 +142,16 @@
       "message": "Angular is running in the development mode. Call enableProdMode() to enable the production mode."
     },
     {
-      "timestamp": 1595264883.103,
+      "timestamp": 1595472877.344,
       "category": "ui.click",
       "message": "body > app-root > ol > li > button"
     },
     {
-      "timestamp": 1595264883.231,
+      "timestamp": 1595472877.823,
       "category": "xhr",
       "data": {
         "method": "GET",
-        "url": "http://localhost:4201/sockjs-node/info?t=1595264883921",
+        "url": "http://localhost:4201/sockjs-node/info?t=1595472877347",
         "status_code": 200
       },
       "type": "http"

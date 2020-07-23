@@ -133,12 +133,15 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         self.assertEqual(res.data["metadata"]["function"], data["metadata"]["function"])
 
     def test_js_sdk_with_unix_timestamp(self):
-        sdk_error = self.get_json_data(
-            "event_store/test_data/incoming_events/js_event_with_unix_timestamp.json"
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+            "js_event_with_unix_timestamp"
         )
         res = self.client.post(self.event_store_url, sdk_error, format="json")
-        self.assertIsNotNone(Event.objects.first().timestamp)
-        self.assertNotEqual(Event.objects.first().timestamp, sdk_error["timestamp"])
+        event = Event.objects.first()
+        self.assertIsNotNone(event.timestamp)
+        self.assertNotEqual(event.timestamp, sdk_error["timestamp"])
+        event_json = event.event_json()
+        self.assertEqual(event_json["datetime"], sentry_json["datetime"])
 
 
     def test_dotnet_error(self):

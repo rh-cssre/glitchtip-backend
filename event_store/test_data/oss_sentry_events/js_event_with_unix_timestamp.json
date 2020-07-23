@@ -1,0 +1,435 @@
+{
+  "eventID": "0deedc6e122944f093c29d6e6182fce9",
+  "dist": null,
+  "userReport": null,
+  "projectID": "8",
+  "previousEventID": "e79614855d58408da72bd3cd074f1d1d",
+  "message": "viewWrappedDebugError A Generic Error 9371d7 /vendor.js viewWrappedDebugError(/vendor.js)",
+  "id": "2720",
+  "size": 4690,
+  "errors": [
+    {
+      "data": {
+        "url": "http://localhost:4201/polyfills.js",
+        "value": "<class 'requests.exceptions.ConnectionError'>"
+      },
+      "message": "Unable to fetch HTTP resource",
+      "type": "fetch_generic_error"
+    },
+    {
+      "data": {
+        "url": "http://localhost:4201/vendor.js",
+        "value": "<class 'requests.exceptions.ConnectionError'>"
+      },
+      "message": "Unable to fetch HTTP resource",
+      "type": "fetch_generic_error"
+    }
+  ],
+  "culprit": "viewWrappedDebugError(/vendor.js)",
+  "title": "Error: A Generic Error 9371d7",
+  "platform": "javascript",
+  "location": "/vendor.js",
+  "nextEventID": null,
+  "type": "error",
+  "metadata": {
+    "function": "viewWrappedDebugError",
+    "type": "Error",
+    "value": "A Generic Error 9371d7",
+    "filename": "/vendor.js"
+  },
+  "groupingConfig": { "id": "legacy:2019-03-12" },
+  "crashFile": null,
+  "tags": [
+    { "value": "Firefox 78.0", "key": "browser", "_meta": null },
+    { "value": "Firefox", "key": "browser.name", "_meta": null },
+    { "value": "yes", "key": "handled", "_meta": null },
+    { "value": "error", "key": "level", "_meta": null },
+    { "value": "generic", "key": "mechanism", "_meta": null },
+    { "value": "Ubuntu", "key": "os.name", "_meta": null },
+    { "value": "http://localhost:4201/", "key": "url", "_meta": null },
+    {
+      "query": "user.ip:75.88.94.240",
+      "value": "ip:75.88.94.240",
+      "key": "user",
+      "_meta": null
+    }
+  ],
+  "dateCreated": "2020-07-23T02:54:40.109Z",
+  "dateReceived": "2020-07-23T02:57:43.061Z",
+  "user": {
+    "username": null,
+    "name": null,
+    "ip_address": "75.88.94.240",
+    "email": null,
+    "data": {},
+    "id": null
+  },
+  "entries": [
+    {
+      "type": "exception",
+      "data": {
+        "values": [
+          {
+            "stacktrace": {
+              "frames": [
+                {
+                  "function": "globalZoneAwareCallback",
+                  "colNo": 27,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "polyfills",
+                  "lineNo": 4864,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:4201/polyfills.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/polyfills.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "invokeTask",
+                  "colNo": 14,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "polyfills",
+                  "lineNo": 4838,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:4201/polyfills.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/polyfills.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "invokeTask",
+                  "colNo": 34,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "polyfills",
+                  "lineNo": 3700,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:4201/polyfills.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/polyfills.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "runTask",
+                  "colNo": 47,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "polyfills",
+                  "lineNo": 3403,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:4201/polyfills.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/polyfills.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "invokeTask",
+                  "colNo": 60,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "polyfills",
+                  "lineNo": 3625,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:4201/polyfills.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/polyfills.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "onInvokeTask",
+                  "colNo": 33,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "vendor",
+                  "lineNo": 73280,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:4201/vendor.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/vendor.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "invokeTask",
+                  "colNo": 31,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "polyfills",
+                  "lineNo": 3626,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:4201/polyfills.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/polyfills.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "sentryWrapped",
+                  "colNo": 23,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "vendor",
+                  "lineNo": 84611,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:4201/vendor.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/vendor.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "decoratePreventDefault/<",
+                  "colNo": 50,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "vendor",
+                  "lineNo": 81955,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:4201/vendor.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/vendor.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "renderEventHandlerClosure/<",
+                  "colNo": 29,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "vendor",
+                  "lineNo": 76209,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:4201/vendor.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/vendor.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "dispatchEvent",
+                  "colNo": 25,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "vendor",
+                  "lineNo": 64364,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:4201/vendor.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/vendor.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "debugHandleEvent",
+                  "colNo": 12,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "vendor",
+                  "lineNo": 78531,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:4201/vendor.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/vendor.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "callWithDebugContext",
+                  "colNo": 15,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "vendor",
+                  "lineNo": 78906,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:4201/vendor.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/vendor.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "viewWrappedDebugError",
+                  "colNo": 15,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "vendor",
+                  "lineNo": 63709,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:4201/vendor.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/vendor.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                }
+              ],
+              "framesOmitted": null,
+              "registers": null,
+              "hasSystemFrames": false
+            },
+            "module": null,
+            "rawStacktrace": null,
+            "mechanism": { "type": "generic", "handled": true },
+            "threadId": null,
+            "value": "A Generic Error 9371d7",
+            "type": "Error"
+          }
+        ],
+        "excOmitted": null,
+        "hasSystemFrames": false
+      }
+    },
+    {
+      "type": "breadcrumbs",
+      "data": {
+        "values": [
+          {
+            "category": "console",
+            "level": "info",
+            "event_id": null,
+            "timestamp": "2020-07-23T02:54:37.277Z",
+            "data": {
+              "logger": "console",
+              "arguments": [
+                "Angular is running in the development mode. Call enableProdMode() to enable the production mode."
+              ]
+            },
+            "message": "Angular is running in the development mode. Call enableProdMode() to enable the production mode.",
+            "type": "default"
+          },
+          {
+            "category": "ui.click",
+            "level": "info",
+            "event_id": null,
+            "timestamp": "2020-07-23T02:54:37.344Z",
+            "data": null,
+            "message": "body > app-root > ol > li > button",
+            "type": "default"
+          },
+          {
+            "category": "xhr",
+            "level": "info",
+            "event_id": null,
+            "timestamp": "2020-07-23T02:54:37.823Z",
+            "data": {
+              "url": "http://localhost:4201/sockjs-node/info?t=1595472877347",
+              "status_code": 200,
+              "method": "GET"
+            },
+            "message": null,
+            "type": "http"
+          }
+        ]
+      }
+    },
+    {
+      "type": "request",
+      "data": {
+        "fragment": "",
+        "cookies": [],
+        "inferredContentType": null,
+        "env": null,
+        "headers": [
+          [
+            "User-Agent",
+            "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:78.0) Gecko/20100101 Firefox/78.0"
+          ]
+        ],
+        "url": "http://localhost:4201/",
+        "query": [],
+        "data": null,
+        "method": null
+      }
+    }
+  ],
+  "packages": {},
+  "sdk": {
+    "version": "5.20.0",
+    "name": "sentry.javascript.browser",
+    "upstream": {
+      "url": null,
+      "isNewer": false,
+      "name": "sentry.javascript.browser"
+    }
+  },
+  "_meta": {
+    "user": null,
+    "context": null,
+    "entries": {},
+    "contexts": null,
+    "message": null,
+    "packages": null,
+    "tags": {},
+    "sdk": null
+  },
+  "contexts": {
+    "os": { "type": "os", "name": "Ubuntu" },
+    "browser": { "version": "78.0", "type": "browser", "name": "Firefox" }
+  },
+  "fingerprints": ["cd05695f108567c9cd4e56c8945ade8b"],
+  "context": {},
+  "release": null,
+  "groupID": "88"
+}
