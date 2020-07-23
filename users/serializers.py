@@ -1,5 +1,7 @@
+from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers, exceptions
+from dj_rest_auth.serializers import PasswordResetSerializer
 from dj_rest_auth.registration.serializers import (
     SocialAccountSerializer as BaseSocialAccountSerializer,
     RegisterSerializer as BaseRegisterSerializer,
@@ -11,6 +13,7 @@ from allauth.account.utils import filter_users_by_email
 from allauth.account.models import EmailAddress
 from .utils import is_user_registration_open
 from .models import User
+from .forms import PasswordSetAndResetForm
 
 
 class SocialAccountSerializer(BaseSocialAccountSerializer):
@@ -143,3 +146,21 @@ class RegisterSerializer(BaseRegisterSerializer):
 
 class NoopTokenSerializer(serializers.Serializer):
     """ dj-rest-auth requires tokens, but we don't use them. """
+
+
+class PasswordSetResetSerializer(PasswordResetSerializer):
+    password_reset_form_class = PasswordSetAndResetForm
+
+    def save(self):
+        request = self.context.get('request')
+        opts = {
+            "use_https": request.is_secure(),
+            "from_email": getattr(settings, "DEFAULT_FROM_EMAIL"),
+            "request": request,
+            "subject_template_name": "registration/password_reset_subject.txt",
+            "email_template_name": "registration/password_reset_email.txt",
+            "html_email_template_name": "registration/password_reset_email.html"
+        }
+
+        opts.update(self.get_email_options())
+        self.reset_form.save(**opts)

@@ -319,6 +319,7 @@ LOGOUT_ON_PASSWORD_CHANGE = False
 REST_AUTH_SERIALIZERS = {
     "USER_DETAILS_SERIALIZER": "users.serializers.UserSerializer",
     "TOKEN_SERIALIZER": "users.serializers.NoopTokenSerializer",
+    "PASSWORD_RESET_SERIALIZER": "users.serializers.PasswordSetResetSerializer",
 }
 REST_AUTH_REGISTER_SERIALIZERS = {
     "REGISTER_SERIALIZER": "users.serializers.RegisterSerializer",
