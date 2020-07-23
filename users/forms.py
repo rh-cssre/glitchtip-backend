@@ -3,6 +3,11 @@ from django.contrib.auth import get_user_model
 
 UserModel = get_user_model()
 
+"""
+Overriding this becaue the original filtered out users who didn't have a usable
+password. This includes social auth users, and we want to give them the option
+to set a password if they want to disconnect.
+"""
 class PasswordSetAndResetForm(PasswordResetForm):
     def get_users(self, email):
         email_field_name = UserModel.get_email_field_name()

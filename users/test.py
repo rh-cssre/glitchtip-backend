@@ -230,5 +230,4 @@ class UsersTestCase(GlitchTipTestCase):
         user_without_password.save()
         self.assertFalse(user_without_password.has_usable_password())
         res = self.client.post(url, {"email": user_without_password.email})
-        print(mail.outbox[1].body)
         self.assertEqual(len(mail.outbox), 2)
