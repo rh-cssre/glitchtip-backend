@@ -12,7 +12,7 @@ class FlexibleDateTimeField(serializers.DateTimeField):
     def to_internal_value(self, timestamp):
         try:
             return datetime.fromtimestamp(float(timestamp))
-        except ValueError: # Don't leave naked
+        except ValueError:
             return super().to_internal_value(timestamp)
 
 
