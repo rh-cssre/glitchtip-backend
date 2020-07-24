@@ -111,7 +111,7 @@ urlpatterns += [
     # These routes belong to the Angular single page app
     re_path(r"^$", TemplateView.as_view(template_name="index.html")),
     re_path(
-        r"^(login|register|issues|settings|organizations|profile|accept).*$",
+        r"^(login|register|issues|settings|organizations|profile|accept|reset-password).*$",
         TemplateView.as_view(template_name="index.html"),
     ),
     # Change the activate_url in the confirm emails
