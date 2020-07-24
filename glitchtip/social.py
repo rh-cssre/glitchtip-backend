@@ -1,9 +1,13 @@
+from django.conf import settings
 from dj_rest_auth.registration.views import SocialConnectView, SocialLoginView
 from allauth.socialaccount.providers.gitlab.views import GitLabOAuth2Adapter
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.microsoft.views import MicrosoftGraphOAuth2Adapter
 from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+
+
+DOMAIN = settings.GLITCHTIP_DOMAIN.geturl()
 
 
 class GitlabConnect(SocialConnectView):
@@ -17,13 +21,13 @@ class GitlabLogin(SocialLoginView):
 class GithubConnect(SocialConnectView):
     adapter_class = GitHubOAuth2Adapter
     client_class = OAuth2Client
-    callback_url = "http://localhost:4200/login/github"
+    callback_url = DOMAIN + "/auth/github"
 
 
 class GithubLogin(SocialLoginView):
     adapter_class = GitHubOAuth2Adapter
     client_class = OAuth2Client
-    callback_url = "http://localhost:4200/login/github"
+    callback_url = DOMAIN + "/auth/github"
 
 
 class GoogleConnect(SocialConnectView):
