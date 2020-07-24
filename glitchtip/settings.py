@@ -352,7 +352,7 @@ REST_FRAMEWORK = {
 }
 
 DRF_YASG_EXCLUDE_VIEWS = [
-    "dj_rest_auth.registration.views.SocialAccountDisconnectView",
+    "users.views.SocialAccountDisconnectView",
 ]
 SWAGGER_SETTINGS = {
     "DEFAULT_AUTO_SCHEMA_CLASS": "glitchtip.yasg.SquadSwaggerAutoSchema",
