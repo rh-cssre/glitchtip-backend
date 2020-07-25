@@ -65,6 +65,7 @@ urlpatterns += [
     path("api/0/", include("organizations_ext.urls")),
     path("api/0/", include("teams.urls")),
     path("api/", include("event_store.urls")),
+    path("api/embed/", include("user_reports.urls")),
     # What an oddball API endpoint
     path(
         "organizations/<slug:org>/issues/<int:issue>/events/<str:event>/json/",

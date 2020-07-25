@@ -74,7 +74,7 @@ class ProjectKey(models.Model):
         return str(self.public_key)
 
     @classmethod
-    def from_dsn(cls, dsn):
+    def from_dsn(cls, dsn: str):
         urlparts = urlparse(dsn)
 
         public_key = urlparts.username

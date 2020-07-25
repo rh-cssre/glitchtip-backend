@@ -137,6 +137,7 @@ INSTALLED_APPS = [
     "event_store",
     "issues",
     "users",
+    "user_reports",
     "projects",
     "teams",
 ]
