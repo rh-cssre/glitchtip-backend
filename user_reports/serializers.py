@@ -1,5 +1,6 @@
 from django.utils.translation import ugettext_lazy as _
 from rest_framework import serializers
+from .models import UserReport
 
 # Copy credited to OSS Sentry sentry/web/error_page_embed.py
 DEFAULT_TITLE = _("It looks like we're having issues.")
@@ -34,3 +35,28 @@ class ErrorPageEmbedSerializer(serializers.Serializer):
     errorGeneric = serializers.CharField(default=GENERIC_ERROR)
     errorFormEntry = serializers.CharField(default=FORM_ERROR)
     successMessage = serializers.CharField(default=SENT_MESSAGE)
+
+
+class UserReportSerializer(serializers.ModelSerializer):
+    eventId = serializers.CharField(source="event_id.hex")
+    event = serializers.SerializerMethodField()
+    user = serializers.CharField(default=None)  # stub
+    dateCreated = serializers.DateTimeField(source="created")
+
+    class Meta:
+        model = UserReport
+        fields = (
+            "eventId",
+            "name",
+            "event",
+            "user",
+            "dateCreated",
+            "id",
+            "comments",
+            "email",
+        )
+
+    def get_event(self, obj):
+        return {
+            "eventId": obj.event_id.hex,
+        }

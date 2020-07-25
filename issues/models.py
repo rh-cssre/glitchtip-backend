@@ -4,6 +4,7 @@ from django.contrib.postgres.search import SearchVectorField
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 from sentry.interfaces.stacktrace import get_context
+from user_reports.models import UserReport
 from .utils import base32_encode
 
 
@@ -157,6 +158,10 @@ class Event(models.Model):
     @property
     def culprit(self):
         return self.data.get("culprit")
+
+    @property
+    def user_report(self):
+        return UserReport.objects.filter(event_id=self.pk).first()
 
     @property
     def entries(self):

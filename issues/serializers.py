@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from projects.serializers.base_serializers import ProjectReferenceSerializer
+from user_reports.serializers import UserReportSerializer
 from .models import Issue, Event
 
 
@@ -37,11 +38,16 @@ class EventSerializer(serializers.ModelSerializer):
 
 
 class EventDetailSerializer(EventSerializer):
+    userReport = UserReportSerializer(source="user_report")
     nextEventID = serializers.SerializerMethodField()
     previousEventID = serializers.SerializerMethodField()
 
     class Meta(EventSerializer.Meta):
-        fields = EventSerializer.Meta.fields + ("nextEventID", "previousEventID",)
+        fields = EventSerializer.Meta.fields + (
+            "userReport",
+            "nextEventID",
+            "previousEventID",
+        )
 
     def get_next_or_previous(self, obj, is_next):
         kwargs = self.context["view"].kwargs
