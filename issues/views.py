@@ -62,7 +62,11 @@ class IssueViewSet(viewsets.ModelViewSet):
             # Anything left is full text search
             qs = qs.filter(search_vector=queries)
 
-        qs = qs.select_related("project").defer("search_vector")
+        qs = (
+            qs.select_related("project")
+            .defer("search_vector")
+            .prefetch_related("userreport_set")
+        )
 
         return qs
 

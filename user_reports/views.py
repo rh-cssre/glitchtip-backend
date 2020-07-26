@@ -3,13 +3,14 @@ from django.db import IntegrityError
 from django.conf import settings
 from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
-from rest_framework import views, exceptions, permissions, renderers
+from rest_framework import views, viewsets, exceptions, permissions, renderers
 from rest_framework.response import Response
 
 from projects.models import ProjectKey
 from issues.models import Event
+from .models import UserReport
 from .forms import UserReportForm
-from .serializers import ErrorPageEmbedSerializer
+from .serializers import ErrorPageEmbedSerializer, UserReportSerializer
 
 
 class JavaScriptSuccessRenderer(renderers.JSONRenderer):
@@ -124,3 +125,18 @@ class ErrorPageEmbedView(views.APIView):
                 pass  # Duplicate, ignore
             return Response()
         return Response({"errors": form.errors}, status=400)
+
+
+class UserReportViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = UserReport.objects.all()
+    serializer_class = UserReportSerializer
+
+    def get_queryset(self):
+        if not self.request.user.is_authenticated:
+            return self.queryset.none()
+        queryset = super().get_queryset()
+        queryset = queryset.filter(project__team__members__user=self.request.user)
+        issue_id = self.kwargs.get("issue_pk")
+        if issue_id:
+            queryset = queryset.filter(issue_id=issue_id)
+        return queryset
