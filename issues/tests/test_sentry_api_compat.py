@@ -2,7 +2,6 @@ import json
 from typing import List, Dict
 from django.urls import reverse
 from event_store.test_data.django_error_factory import message
-from event_store.test_data.js_error_factory import throw_error
 from event_store.test_data.csp import mdn_sample_csp
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.models import Event
@@ -14,6 +13,16 @@ is_exception = lambda v: v.get("type") == "exception"
 
 
 class SentryAPICompatTestCase(GlitchTipTestCase):
+    """
+    These tests use raw json data taken from the OSS Sentry SDK.
+    It compares GlitchTip's processing of the events with OSS Sentry's raw event
+    JSON link and API Endpoints JSON.
+    These tests do not include references to the proprietary Sentry API at this time.
+    Compatibility with the proprietary Sentry API will be considered for interoperability reasons
+    as long as testing can be done while respecting's Sentry's license by not referencing/viewing
+    proprietary code
+    """
+
     def setUp(self):
         self.create_user_and_project()
         key = self.project.projectkey_set.first().public_key
@@ -105,33 +114,6 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         )
         self.assertCompareData(res.data, data, ["title", "metadata"])
 
-    def test_throw_error(self):
-        res = self.client.post(self.event_store_url, throw_error, format="json")
-        self.assertEqual(res.status_code, 200)
-
-        event_id = res.data["id"]
-        url = self.get_project_events_detail(event_id)
-        res = self.client.get(url)
-        self.assertEqual(res.status_code, 200)
-        issue = Event.objects.get(event_id=event_id).issue
-
-        data = self.get_json_data("event_store/test_data/js_throw_error_event.json")
-        self.assertCompareData(res.data, data, ["title"])
-        self.assertEqual(
-            res.data["culprit"],
-            "viewWrappedDebugError(http://localhost:4200/vendor.js)",
-            "Not perfect match, should really be viewWrappedDebugError(vendor)",
-        )
-        self.assertEqual(res.data["metadata"]["function"], data["metadata"]["function"])
-
-        url = reverse("issue-detail", kwargs={"pk": issue.pk})
-        res = self.client.get(url)
-        self.assertEqual(res.status_code, 200)
-
-        data = self.get_json_data("event_store/test_data/js_throw_error_issue.json")
-        self.assertCompareData(res.data, data, ["title"])
-        self.assertEqual(res.data["metadata"]["function"], data["metadata"]["function"])
-
     def test_js_sdk_with_unix_timestamp(self):
         sdk_error, sentry_json, sentry_data = self.get_json_test_data(
             "js_event_with_unix_timestamp"
@@ -143,8 +125,8 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         event_json = event.event_json()
         self.assertEqual(event_json["datetime"], sentry_json["datetime"])
 
-
     def test_dotnet_error(self):
+        # Don't mimic this test, use self.get_jest_test_data instead
         sdk_error = self.get_json_data(
             "event_store/test_data/incoming_events/dotnet_error.json"
         )
@@ -172,6 +154,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         )
 
     def test_csp_event(self):
+        # Don't mimic this test, use self.get_jest_test_data instead
         data = mdn_sample_csp
         res = self.client.post(self.csp_store_url, data, format="json")
         self.assertEqual(res.status_code, 200)
@@ -187,6 +170,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
 
     def test_message_event(self):
         """ A generic message made with the Sentry SDK. Generally has less data than exceptions. """
+        # Don't mimic this test, use self.get_jest_test_data instead
         res = self.client.post(self.event_store_url, message, format="json")
         self.assertEqual(res.status_code, 200)
 
@@ -203,6 +187,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
 
     def test_python_logging(self):
         """ Test Sentry SDK logging integration based event """
+        # Don't mimic this test, use self.get_jest_test_data instead
         sdk_error = self.get_json_data(
             "event_store/test_data/incoming_events/python_logging.json"
         )
@@ -224,6 +209,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         )
 
     def test_go_file_not_found(self):
+        # Don't mimic this test, use self.get_jest_test_data instead
         sdk_error = self.get_json_data(
             "event_store/test_data/incoming_events/go_file_not_found.json"
         )
@@ -246,6 +232,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         """
         Shows a very minimalist event example. Good for seeing what data is null
         """
+        # Don't mimic this test, use self.get_jest_test_data instead
         sdk_error = self.get_json_data(
             "event_store/test_data/incoming_events/very_small_event.json"
         )
