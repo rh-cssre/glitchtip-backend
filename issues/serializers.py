@@ -1,7 +1,15 @@
 from rest_framework import serializers
 from projects.serializers.base_serializers import ProjectReferenceSerializer
 from user_reports.serializers import UserReportSerializer
-from .models import Issue, Event
+from .models import Issue, Event, EventTag
+
+
+class EventTagSerializer(serializers.ModelSerializer):
+    key = serializers.StringRelatedField()
+
+    class Meta:
+        model = EventTag
+        fields = ("key", "value")
 
 
 class EventSerializer(serializers.ModelSerializer):
@@ -9,7 +17,7 @@ class EventSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source="event_id_hex")
     dateCreated = serializers.DateTimeField(source="timestamp")
     dateReceived = serializers.DateTimeField(source="created")
-    tags = serializers.ListField(default=[])
+    tags = EventTagSerializer(many=True)
 
     class Meta:
         model = Event

@@ -4,16 +4,30 @@ from django.db import transaction
 from rest_framework import serializers
 from sentry.eventtypes.error import ErrorEvent
 from sentry.eventtypes.base import DefaultEvent
-from issues.models import EventType, Event, Issue
+from issues.models import EventType, Event, Issue, EventTagKey, EventTag
+from .event_tag_processors import TAG_PROCESSORS
 
 
 class FlexibleDateTimeField(serializers.DateTimeField):
     """ Supports both DateTime and unix epoch timestamp """
+
     def to_internal_value(self, timestamp):
         try:
             return datetime.fromtimestamp(float(timestamp))
         except ValueError:
             return super().to_internal_value(timestamp)
+
+
+class RequestSerializer(serializers.Serializer):
+    env = serializers.DictField(
+        child=serializers.CharField(allow_blank=True), required=False
+    )
+    headers = serializers.DictField(
+        child=serializers.CharField(allow_blank=True), required=False
+    )
+    url = serializers.CharField(required=False, allow_blank=True)
+    method = serializers.CharField(required=False, allow_blank=True)
+    query_string = serializers.CharField(required=False, allow_blank=True)
 
 
 class StoreDefaultSerializer(serializers.Serializer):
@@ -31,7 +45,7 @@ class StoreDefaultSerializer(serializers.Serializer):
     message = serializers.CharField(required=False)
     platform = serializers.CharField()
     release = serializers.CharField(required=False)
-    request = serializers.JSONField(required=False)
+    request = RequestSerializer(required=False)
     sdk = serializers.JSONField()
     timestamp = FlexibleDateTimeField(required=False)
     transaction = serializers.CharField(required=False, allow_null=True)
@@ -56,6 +70,18 @@ class StoreDefaultSerializer(serializers.Serializer):
                         for frame in frames:
                             frame["in_app"] = False
         return exception
+
+    def process_tags(self, event, data):
+        tags_to_add = []
+        for Processor in TAG_PROCESSORS:
+            processor = Processor()
+            value = processor.get_tag_values(data)
+            if value:
+                tag_key, _ = EventTagKey.objects.get_or_create(key=processor.tag)
+                tag_value, _ = EventTag.objects.get_or_create(key=tag_key, value=value)
+                tags_to_add.append(tag_value)
+
+        event.tags.add(*tags_to_add)
 
     def create(self, project_id: int, data):
         eventtype = self.get_eventtype()
@@ -96,6 +122,7 @@ class StoreDefaultSerializer(serializers.Serializer):
             }
             event = Event.objects.create(**params)
             issue.check_for_status_update()
+            self.process_tags(event, data)
         return event
 
 
