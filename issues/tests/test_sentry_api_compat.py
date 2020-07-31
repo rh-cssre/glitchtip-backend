@@ -310,3 +310,12 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
             res_exception["data"]["values"][0]["stacktrace"]["frames"][4]["context"],
             sentry_exception["data"]["values"][0]["stacktrace"]["frames"][4]["context"],
         )
+        tags = res.data.get("tags")
+        browser_tag = next(filter(lambda tag: tag["key"] == "browser", tags), None)
+        self.assertEqual(browser_tag["value"], "Firefox 76.0")
+
+        event_json = event.event_json()
+        browser_tag = next(
+            filter(lambda tag: tag[0] == "browser", event_json.get("tags")), None
+        )
+        self.assertEqual(browser_tag[1], "Firefox 76.0")

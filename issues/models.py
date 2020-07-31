@@ -100,9 +100,19 @@ class Issue(models.Model):
             return f"{self.project.slug.upper()}-{base32_encode(self.short_id)}"
 
 
+class EventTagKey(models.Model):
+    key = models.CharField(max_length=255, unique=True)
+
+    def __str__(self):
+        return self.key
+
+
 class EventTag(models.Model):
-    key = models.CharField(max_length=255)
+    key = models.ForeignKey(EventTagKey, on_delete=models.CASCADE)
     value = models.CharField(max_length=225)
+
+    class Meta:
+        unique_together = ("key", "value")
 
 
 class Event(models.Model):
@@ -124,6 +134,7 @@ class Event(models.Model):
 
     created = models.DateTimeField(auto_now_add=True, db_index=True)
     data = JSONField()
+    tags = models.ManyToManyField(EventTag, blank=True)
 
     class Meta:
         ordering = ["-created"]
@@ -147,6 +158,7 @@ class Event(models.Model):
         event = self.data
         event["event_id"] = self.event_id_hex
         event["project"] = self.issue.project_id
+        event["tags"] = self.tags.all().values_list("key__key", "value")
         if self.timestamp:
             event["datetime"] = self.timestamp.isoformat().replace("+00:00", "Z")
         return event

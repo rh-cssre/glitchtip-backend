@@ -4,7 +4,7 @@ from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
 from issues.models import Issue, Event, EventStatus
-from .test_data.csp import mdn_sample_csp
+from ..test_data.csp import mdn_sample_csp
 
 
 class EventStoreTestCase(APITestCase):

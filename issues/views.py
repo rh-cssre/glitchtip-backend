@@ -104,6 +104,7 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
             )
         if "project_slug" in self.kwargs:
             qs = qs.filter(issue__project__slug=self.kwargs["project_slug"],)
+        qs = qs.prefetch_related("tags__key")
         return qs
 
     @action(detail=False, methods=["get"])
