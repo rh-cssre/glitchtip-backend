@@ -1,61 +1,62 @@
-""" Roughly a replacement of sentry/plugins/sentry_useragents """
-import abc
 from typing import Optional
-from user_agents import parse
 
 
-class UserAgentProcessor(abc.ABC):
-    """ Abstract class for processing user agent related tags """
+class EventContextsTagProcessor:
+    """
+    Abstract class for generating tags based on event contexts
+    This is done to make some contexts searchable
+    """
 
     def get_tag_values(self, event) -> Optional[str]:
-        headers = event.get("request", {}).get("headers")
-        if not headers:
-            return
-        ua_string = next(x[1] for x in headers if x[0] == "User-Agent")
-        ua = parse(ua_string)
-        tag_value = self.get_tag_from_ua(ua)
-        if tag_value:
-            return tag_value.strip()
+        contexts = event.get("contexts")
+        if contexts:
+            return self.get_tag_from_contexts(contexts)
 
-    @abc.abstractmethod
-    def get_tag_from_ua(self, ua):
+    def get_tag_from_contexts(self, contexts):
         raise NotImplementedError()
 
 
-class BrowserNameProcessor(UserAgentProcessor):
+class BrowserNameTagProcessor(EventContextsTagProcessor):
     """
-    Adds browser.name tag from request, which user_agents refers to as family
+    Adds browser.name tag from contexts
     """
 
     tag = "browser.name"
 
-    def get_tag_from_ua(self, ua):
-        return ua.browser.family
+    def get_tag_from_contexts(self, contexts) -> Optional[str]:
+        return contexts.get("browser", {}).get("name")
 
 
-class BrowserProcessor(UserAgentProcessor):
+class BrowserTagProcessor(EventContextsTagProcessor):
     """
     Adds browser tag from request, which user_agents refers to as family + version_string
     """
 
     tag = "browser"
 
-    def get_tag_from_ua(self, ua):
-        return ua.browser.family + " " + ua.browser.version_string
+    def get_tag_from_contexts(self, contexts) -> Optional[str]:
+        browser = contexts.get("browser")
+        if browser:
+            name = browser.get("name")
+            if name:
+                version = browser.get("version")
+                if version:
+                    return name + " " + version
+                return name
 
 
-class OsProcessor(UserAgentProcessor):
+class OsTagProcessor(EventContextsTagProcessor):
     """
     Adds os.name tag from request, which user_agents refers to as os family
     """
 
     tag = "os.name"
 
-    def get_tag_from_ua(self, ua):
-        return ua.os.family
+    def get_tag_from_contexts(self, contexts) -> Optional[str]:
+        return contexts.get("os", {}).get("name")
 
 
-class DeviceProcessor(UserAgentProcessor):
+class DeviceTagProcessor(EventContextsTagProcessor):
     """
     Adds device tag from request, which user_agents refers to as device model
     This field is fairly unreliable as browsers such as Firefox do not share it for privacy reasons
@@ -63,8 +64,13 @@ class DeviceProcessor(UserAgentProcessor):
 
     tag = "device"
 
-    def get_tag_from_ua(self, ua):
-        return ua.device.model
+    def get_tag_from_contexts(self, contexts) -> Optional[str]:
+        return contexts.get("device", {}).get("model")
 
 
-TAG_PROCESSORS = [BrowserProcessor, BrowserNameProcessor, OsProcessor, DeviceProcessor]
+TAG_PROCESSORS = [
+    BrowserTagProcessor,
+    BrowserNameTagProcessor,
+    OsTagProcessor,
+    DeviceTagProcessor,
+]

@@ -1,3 +1,4 @@
+from typing import List, Tuple
 from urllib.parse import urlparse
 from datetime import datetime
 from django.db import transaction
@@ -6,6 +7,7 @@ from sentry.eventtypes.error import ErrorEvent
 from sentry.eventtypes.base import DefaultEvent
 from issues.models import EventType, Event, Issue, EventTagKey, EventTag
 from .event_tag_processors import TAG_PROCESSORS
+from .event_context_processors import EVENT_CONTEXT_PROCESSORS
 
 
 class FlexibleDateTimeField(serializers.DateTimeField):
@@ -71,17 +73,39 @@ class StoreDefaultSerializer(serializers.Serializer):
                             frame["in_app"] = False
         return exception
 
-    def process_tags(self, event, data):
-        tags_to_add = []
+    def generate_tags(self, event, data):
+        """ Determine and ddd tag relational data """
+        tags: List[Tuple[str, str]] = []
         for Processor in TAG_PROCESSORS:
             processor = Processor()
             value = processor.get_tag_values(data)
             if value:
-                tag_key, _ = EventTagKey.objects.get_or_create(key=processor.tag)
-                tag_value, _ = EventTag.objects.get_or_create(key=tag_key, value=value)
-                tags_to_add.append(tag_value)
+                tags.append((processor.tag, value))
+        self.save_tags(event, tags)
 
+    def save_tags(self, event, tags: List[Tuple[str, str]]):
+        """ Commit tags to database """
+        tags_to_add: List[EventTag] = []
+        for tag, value in tags:
+            tag_key, _ = EventTagKey.objects.get_or_create(key=tag)
+            tag_value, _ = EventTag.objects.get_or_create(key=tag_key, value=value)
+            tags_to_add.append(tag_value)
         event.tags.add(*tags_to_add)
+
+    def annotate_contexts(self, event):
+        """
+        SDK events may contain contexts. This function adds additional contexts data
+        """
+        contexts = event.get("contexts")
+        for Processor in EVENT_CONTEXT_PROCESSORS:
+            processor = Processor()
+            if contexts is None or not contexts.get(processor.name):
+                processor_contexts = processor.get_context(event)
+                if processor_contexts:
+                    if contexts is None:
+                        contexts = {}
+                    contexts[processor.name] = processor_contexts
+        return contexts
 
     def create(self, project_id: int, data):
         eventtype = self.get_eventtype()
@@ -95,6 +119,9 @@ class StoreDefaultSerializer(serializers.Serializer):
             if headers:
                 request["inferred_content_type"] = headers.get("Content-Type")
                 request["headers"] = sorted([pair for pair in headers.items()])
+        contexts = self.annotate_contexts(data)
+        data["contexts"] = contexts
+
         with transaction.atomic():
             issue, _ = Issue.objects.get_or_create(
                 title=title,
@@ -108,7 +135,7 @@ class StoreDefaultSerializer(serializers.Serializer):
                 "issue": issue,
                 "timestamp": data.get("timestamp"),
                 "data": {
-                    "contexts": data.get("contexts"),
+                    "contexts": contexts,
                     "culprit": culprit,
                     "exception": exception,
                     "metadata": metadata,
@@ -122,7 +149,7 @@ class StoreDefaultSerializer(serializers.Serializer):
             }
             event = Event.objects.create(**params)
             issue.check_for_status_update()
-            self.process_tags(event, data)
+            self.generate_tags(event, data)
         return event
 
 
