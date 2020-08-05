@@ -1,5 +1,4 @@
 import uuid
-from django.contrib.postgres.fields import JSONField
 from django.contrib.postgres.search import SearchVectorField
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
@@ -51,7 +50,7 @@ class Issue(models.Model):
     level = models.PositiveSmallIntegerField(
         choices=LogLevel.choices, default=LogLevel.NOTSET
     )
-    metadata = JSONField()
+    metadata = models.JSONField()
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
     title = models.CharField(max_length=255)
     type = models.PositiveSmallIntegerField(
@@ -133,7 +132,7 @@ class Event(models.Model):
     )
 
     created = models.DateTimeField(auto_now_add=True, db_index=True)
-    data = JSONField()
+    data = models.JSONField()
     tags = models.ManyToManyField(EventTag, blank=True)
 
     class Meta:

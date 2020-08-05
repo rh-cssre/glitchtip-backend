@@ -7,8 +7,8 @@ class WebsiteUser(HttpUser):
 
     @task
     def send_event(self):
-        project_id = "248"
-        dsn = "5174afbcc4ad47f287bc28696bfb170f"
+        project_id = "1"
+        dsn = "2ed2762c07a04261bec95b197f500626"
         event_url = f"/api/{project_id}/store/?sentry_key={dsn}"
         event = generate_random_event(True)
         self.client.post(event_url, json=event)
