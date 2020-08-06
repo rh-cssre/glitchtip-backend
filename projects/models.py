@@ -1,6 +1,5 @@
 from urllib.parse import urlparse
 from uuid import uuid4
-from django.contrib.postgres.fields import JSONField
 from django.conf import settings
 from django.db import models
 from django.utils.text import slugify
@@ -68,7 +67,7 @@ class ProjectKey(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     rate_limit_count = models.PositiveSmallIntegerField(blank=True, null=True)
     rate_limit_window = models.PositiveSmallIntegerField(blank=True, null=True)
-    data = JSONField(blank=True, null=True)
+    data = models.JSONField(blank=True, null=True)
 
     def __str__(self):
         return str(self.public_key)
