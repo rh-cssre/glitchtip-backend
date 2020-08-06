@@ -152,14 +152,14 @@ class PasswordSetResetSerializer(PasswordResetSerializer):
     password_reset_form_class = PasswordSetAndResetForm
 
     def save(self):
-        request = self.context.get('request')
+        request = self.context.get("request")
         opts = {
             "use_https": request.is_secure(),
             "from_email": getattr(settings, "DEFAULT_FROM_EMAIL"),
             "request": request,
             "subject_template_name": "registration/password_reset_subject.txt",
             "email_template_name": "registration/password_reset_email.txt",
-            "html_email_template_name": "registration/password_reset_email.html"
+            "html_email_template_name": "registration/password_reset_email.html",
         }
 
         opts.update(self.get_email_options())

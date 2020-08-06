@@ -1,16 +1,44 @@
 from django.conf import settings
-from django.core.mail import EmailMultiAlternatives
-from django.template.loader import render_to_string
 from django.urls import re_path
+from django.utils.http import base36_to_int
+from django.utils.crypto import constant_time_compare
 from organizations.backends.tokens import RegistrationTokenGenerator
 from organizations.backends.defaults import InvitationBackend as BaseInvitationBackend
 from .models import Organization
 from .email import send_invitation_email
 
 
+REGISTRATION_TIMEOUT_DAYS = getattr(settings, "REGISTRATION_TIMEOUT_DAYS", 15)
+
+
 class InvitationTokenGenerator(RegistrationTokenGenerator):
     def _make_hash_value(self, user, timestamp):
         return str(user.pk) + str(timestamp)
+
+    def check_token(self, user, token):
+        """
+        Check that a password reset token is correct for a given user.
+        """
+        # Parse the token
+        try:
+            ts_b36, hash = token.split("-")
+        except ValueError:
+            return False
+
+        try:
+            ts = base36_to_int(ts_b36)
+        except ValueError:
+            return False
+
+        # Check that the timestamp/uid has not been tampered with
+        if not constant_time_compare(self._make_token_with_timestamp(user, ts), token):
+            return False
+
+        # Check the timestamp is within limit
+        if (self._num_seconds(self._now()) - ts) > REGISTRATION_TIMEOUT_DAYS * 86400:
+            return False
+
+        return True
 
 
 class InvitationBackend(BaseInvitationBackend):
@@ -25,7 +53,7 @@ class InvitationBackend(BaseInvitationBackend):
     def get_urls(self):
         return [
             re_path(
-                r"^(?P<user_id>[\d]+)/(?P<token>[0-9A-Za-z]{1,13}-[0-9A-Za-z]{1,20})/$",
+                r"^(?P<user_id>[\d]+)/(?P<token>[0-9A-Za-z]{1,90}-[0-9A-Za-z]{1,90})/$",
                 view=self.activate_view,
                 name="invitations_register",
             ),
@@ -35,9 +63,8 @@ class InvitationBackend(BaseInvitationBackend):
         return InvitationTokenGenerator().make_token(org_user)
 
     def send_invitation(self, user, sender=None, **kwargs):
-        kwargs.update({
-            "token": self.get_token(user),
-            "organization": user.organization,
-        })
+        kwargs.update(
+            {"token": self.get_token(user), "organization": user.organization,}
+        )
         send_invitation_email(self, user, **kwargs)
         return True

@@ -212,7 +212,7 @@ class UsersTestCase(GlitchTipTestCase):
         self.assertEqual(res.status_code, 204)
         # Default deletes the row
         self.assertEqual(UserProjectAlert.objects.all().count(), 0)
-    
+
     def test_reset_password(self):
         url = reverse("rest_password_reset")
 
