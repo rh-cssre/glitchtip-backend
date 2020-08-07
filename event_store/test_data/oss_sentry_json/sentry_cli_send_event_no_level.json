@@ -10,7 +10,7 @@
   "tags": [
     ["environment", "release"],
     ["level", "error"],
-    ["user", "username:brendan"],
+    ["user", "username:user"],
     ["server_name", "pop-os"]
   ],
   "culprit": "",
@@ -22,10 +22,10 @@
       "XDG_CURRENT_DESKTOP": "pop:GNOME",
       "XDG_SESSION_TYPE": "x11",
       "QT_IM_MODULE": "ibus",
-      "LOGNAME": "brendan",
-      "USER": "brendan",
+      "LOGNAME": "user",
+      "USER": "user",
       "PATH": "/home/user/.nvm/versions/node/v10.16.3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin",
-      "HOME": "/home/brendan",
+      "HOME": "/home/user",
       "DISPLAY": ":1",
       "SSH_AGENT_PID": "2529",
       "LANG": "en_US.UTF-8",
@@ -45,7 +45,7 @@
       "JAVA_HOME": "/usr/lib/jvm/java-8-openjdk-amd64",
       "XDG_SESSION_CLASS": "user",
       "INVOCATION_ID": "c79575677cc444f880a6bd4fb560cd26",
-      "USERNAME": "brendan",
+      "USERNAME": "user",
       "XDG_SESSION_DESKTOP": "pop",
       "ANDROID_SDK_ROOT": "/home/user/Android/Sdk/",
       "XDG_RUNTIME_DIR": "/run/user/1000",
@@ -65,7 +65,7 @@
       "GTK_MODULES": "gail:atk-bridge:appmenu-gtk-module",
       "LANGUAGE": "en_US:en",
       "XDG_DATA_DIRS": "/usr/share/pop",
-      "PWD": "/home/brendan",
+      "PWD": "/home/user",
       "COLORTERM": "truecolor",
       "XDG_MENU_PREFIX": "gnome-",
       "GNOME_TERMINAL_SCREEN": "/org/gnome/Terminal/screen/834d4c23_d5ec_4d6a_b217_352f05ef7dfd"
@@ -86,6 +86,6 @@
   "title": "hello there!",
   "type": "default",
   "use_rust_normalize": true,
-  "user": { "username": "brendan", "ip_address": "173.75.141.54" },
+  "user": { "username": "user", "ip_address": "173.75.141.54" },
   "version": "7"
 }
