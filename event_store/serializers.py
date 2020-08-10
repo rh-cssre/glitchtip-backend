@@ -42,7 +42,7 @@ class StoreDefaultSerializer(serializers.Serializer):
     contexts = serializers.JSONField(required=False)
     event_id = serializers.UUIDField()
     extra = serializers.JSONField(required=False)
-    level = serializers.CharField()
+    level = serializers.CharField(required=False)
     logentry = serializers.JSONField(required=False)
     message = serializers.CharField(required=False)
     platform = serializers.CharField()
