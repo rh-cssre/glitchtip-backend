@@ -320,12 +320,11 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         )
         self.assertEqual(browser_tag[1], "Firefox 76.0")
 
-    def test_sentry_cli_send_event(self):
+    def test_sentry_cli_send_event_no_level(self):
         sdk_error, sentry_json, sentry_data = self.get_json_test_data(
             "sentry_cli_send_event_no_level"
         )
         res = self.client.post(self.event_store_url, sdk_error, format="json")
         event = Event.objects.get(pk=res.data["id"])
         event_json = event.event_json()
-        self.assertEqual("error", sentry_json["level"])
-        self.assertEqual(event_json["level"], sentry_json["level"])
+        self.assertEqual(event_json["title"], sentry_json["title"])
