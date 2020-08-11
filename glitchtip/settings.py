@@ -291,8 +291,7 @@ else:  # This is needed for angular cli
     STATIC_URL = "/"
 
 
-# This started being "/" by default in Django 3.1 but is documented to be "". Not sure why.
-MEDIA_URL = ""  # Not used, can be anything except the STATIC_URL
+MEDIA_URL = "media"  # Not used, can be anything except the STATIC_URL. Cannot be "" nor "/"
 
 
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
