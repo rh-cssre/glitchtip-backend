@@ -291,7 +291,7 @@ else:  # This is needed for angular cli
     STATIC_URL = "/"
 
 
-MEDIA_URL = "media"  # Not used, can be anything except the STATIC_URL. Cannot be "" nor "/"
+MEDIA_URL = "media/"  # Not used, can be anything except the STATIC_URL. Cannot be "" nor "/", but must end with a slash
 
 
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
