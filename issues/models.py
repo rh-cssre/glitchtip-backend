@@ -171,6 +171,10 @@ class Event(models.Model):
         return self.data.get("culprit")
 
     @property
+    def message(self):
+        return self.data.get("message")
+
+    @property
     def user_report(self):
         return UserReport.objects.filter(event_id=self.pk).first()
 

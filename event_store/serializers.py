@@ -5,7 +5,7 @@ from django.db import transaction, connection
 from rest_framework import serializers
 from sentry.eventtypes.error import ErrorEvent
 from sentry.eventtypes.base import DefaultEvent
-from issues.models import EventType, Event, Issue, EventTagKey, EventTag
+from issues.models import EventType, Event, Issue, EventTagKey
 from .event_tag_processors import TAG_PROCESSORS
 from .event_context_processors import EVENT_CONTEXT_PROCESSORS
 
@@ -117,6 +117,9 @@ class StoreDefaultSerializer(serializers.Serializer):
                     contexts[processor.name] = processor_contexts
         return contexts
 
+    def get_message(self, data):
+        return data.get("logentry", {}).get("message", "")
+
     def create(self, project_id: int, data):
         eventtype = self.get_eventtype()
         metadata = eventtype.get_metadata(data)
@@ -149,6 +152,7 @@ class StoreDefaultSerializer(serializers.Serializer):
                     "culprit": culprit,
                     "exception": exception,
                     "metadata": metadata,
+                    "message": self.get_message(data),
                     "modules": data.get("modules"),
                     "platform": data["platform"],
                     "request": request,

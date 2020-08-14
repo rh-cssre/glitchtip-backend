@@ -4,17 +4,19 @@
   "userReport": null,
   "projectID": "22",
   "previousEventID": null,
-  "message": "hello there!",
+  "message": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
   "id": "2985",
   "size": 2971,
   "errors": [],
   "culprit": "",
-  "title": "hello there!",
+  "title": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labo...",
   "platform": "native",
   "location": null,
   "nextEventID": null,
   "type": "default",
-  "metadata": { "title": "hello there!" },
+  "metadata": {
+    "title": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labo..."
+  },
   "groupingConfig": { "id": "legacy:2019-03-12" },
   "crashFile": null,
   "tags": [
@@ -38,7 +40,14 @@
     "data": {},
     "id": null
   },
-  "entries": [{ "type": "message", "data": { "formatted": "hello there!" } }],
+  "entries": [
+    {
+      "type": "message",
+      "data": {
+        "formatted": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
+      }
+    }
+  ],
   "packages": {},
   "sdk": {
     "version": "1.55.1",

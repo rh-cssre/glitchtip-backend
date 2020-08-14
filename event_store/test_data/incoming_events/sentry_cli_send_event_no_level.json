@@ -1,6 +1,8 @@
 {
   "event_id": "142a8bb0193f447a9508180d1904f614",
-  "logentry": { "message": "hello there!" },
+  "logentry": {
+    "message": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
+  },
   "platform": "native",
   "timestamp": 1596820277.125992,
   "server_name": "pop-os",

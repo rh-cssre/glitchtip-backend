@@ -33,7 +33,7 @@ class EventSerializer(serializers.ModelSerializer):
             "entries",
             # "errors",
             # "location",
-            # "message",
+            "message",
             "metadata",
             "packages",
             "platform",
@@ -46,12 +46,14 @@ class EventSerializer(serializers.ModelSerializer):
 
 
 class EventDetailSerializer(EventSerializer):
+    projectID = serializers.IntegerField(source="issue.project_id")
     userReport = UserReportSerializer(source="user_report")
     nextEventID = serializers.SerializerMethodField()
     previousEventID = serializers.SerializerMethodField()
 
     class Meta(EventSerializer.Meta):
         fields = EventSerializer.Meta.fields + (
+            "projectID",
             "userReport",
             "nextEventID",
             "previousEventID",

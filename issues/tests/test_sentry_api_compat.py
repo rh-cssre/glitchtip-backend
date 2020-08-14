@@ -33,11 +33,34 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
             reverse("csp_store", args=[self.project.id]) + "?sentry_key=" + key.hex
         )
 
+    # Upgrade functions handle intentional differences between GlitchTip and Sentry OSS
+    def upgrade_title(self, value: str):
+        """ Sentry OSS uses ... while GlitchTip uses unicode …"""
+        if value[-1] == "…":
+            return value[:-4]
+        return value.strip("...")
+
+    def upgrade_metadata(self, value: dict):
+        value["title"] = self.upgrade_title(value.get("title"))
+        return value
+
     def assertCompareData(self, data1: Dict, data2: Dict, fields: List[str]):
         """ Compare data of two dict objects. Compare only provided fields list """
         for field in fields:
+            field_value1 = data1.get(field)
+            field_value2 = data2.get(field)
+            if field == "title" and isinstance(field_value1, str):
+                field_value1 = self.upgrade_title(field_value1)
+                field_value2 = self.upgrade_title(field_value2)
+            if (
+                field == "metadata"
+                and isinstance(field_value1, dict)
+                and field_value1.get("title")
+            ):
+                field_value1 = self.upgrade_metadata(field_value1)
+                field_value2 = self.upgrade_metadata(field_value2)
             self.assertEqual(
-                data1.get(field), data2.get(field), f"Failed for field '{field}'",
+                field_value1, field_value2, f"Failed for field '{field}'",
             )
 
     def get_json_test_data(self, name: str):
@@ -327,4 +350,24 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         res = self.client.post(self.event_store_url, sdk_error, format="json")
         event = Event.objects.get(pk=res.data["id"])
         event_json = event.event_json()
-        self.assertEqual(event_json["title"], sentry_json["title"])
+        self.assertCompareData(event_json, sentry_json, ["title", "message"])
+        self.assertEqual(event_json["project"], event.issue.project_id)
+
+        url = self.get_project_events_detail(event.pk)
+        res = self.client.get(url)
+        self.assertCompareData(
+            res.data,
+            sentry_data,
+            [
+                "userReport",
+                "title",
+                "culprit",
+                "type",
+                "metadata",
+                "message",
+                "platform",
+                "previousEventID",
+            ],
+        )
+        self.assertEqual(res.data["projectID"], event.issue.project_id)
+

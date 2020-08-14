@@ -4,7 +4,7 @@
   "release": null,
   "dist": null,
   "platform": "native",
-  "message": "hello there!",
+  "message": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
   "datetime": "2020-08-07T17:11:17.126000Z",
   "time_spent": null,
   "tags": [
@@ -77,13 +77,17 @@
   "key_id": "22",
   "level": "error",
   "location": null,
-  "logentry": { "formatted": "hello there!" },
+  "logentry": {
+    "formatted": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
+  },
   "logger": "",
-  "metadata": { "title": "hello there!" },
+  "metadata": {
+    "title": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labo..."
+  },
   "received": 1596821236.23,
   "sdk": { "version": "1.55.1", "name": "sentry-cli" },
   "timestamp": 1596820277.126,
-  "title": "hello there!",
+  "title": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labo...",
   "type": "default",
   "use_rust_normalize": true,
   "user": { "username": "user", "ip_address": "173.75.141.54" },
