@@ -133,6 +133,7 @@ INSTALLED_APPS = [
     "storages",
     "glitchtip",
     "alerts",
+    "api_tokens",
     "organizations_ext",
     "event_store",
     "issues",

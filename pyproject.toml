@@ -35,6 +35,7 @@ django-anymail = {extras = ["mailgun"], version = "^7.1.0"}
 drf-yasg = "^1.17.1"
 dj-rest-auth = "^1.0.5"
 user-agents = "^2.1"
+django-bitfield = "^2.0.1"
 
 [tool.poetry.dev-dependencies]
 black = "^19.10b0"

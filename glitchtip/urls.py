@@ -13,6 +13,7 @@ from projects.urls import router as projectsRouter
 from teams.urls import router as teamsRouter
 from organizations_ext.urls import router as organizationsRouter
 from users.urls import router as usersRouter
+from api_tokens.urls import router as apiTokensRouter
 from users.views import SocialAccountDisconnectView
 from . import social
 from .yasg import CustomOpenAPISchemaGenerator
@@ -25,6 +26,7 @@ router.registry.extend(issuesRouter.registry)
 router.registry.extend(organizationsRouter.registry)
 router.registry.extend(teamsRouter.registry)
 router.registry.extend(usersRouter.registry)
+router.registry.extend(apiTokensRouter.registry)
 
 if settings.BILLING_ENABLED:
     from djstripe_ext.urls import router as djstripeRouter
@@ -64,6 +66,7 @@ urlpatterns += [
     path("api/0/", include("users.urls")),
     path("api/0/", include("organizations_ext.urls")),
     path("api/0/", include("teams.urls")),
+    path("api/0/", include("api_tokens.urls")),
     path("api/", include("event_store.urls")),
     path("api/embed/", include("user_reports.urls")),
     # What an oddball API endpoint
