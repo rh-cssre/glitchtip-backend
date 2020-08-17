@@ -29,6 +29,7 @@ class ProjectSerializer(ProjectReferenceWithMemberSerializer):
     features = serializers.SerializerMethodField()
     firstEvent = serializers.SerializerMethodField()
     hasAccess = serializers.SerializerMethodField()
+    id = serializers.CharField()
     isBookmarked = serializers.SerializerMethodField()
     isInternal = serializers.SerializerMethodField()
     isPublic = serializers.SerializerMethodField()
