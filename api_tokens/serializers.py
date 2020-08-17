@@ -26,10 +26,17 @@ class BitFieldSerializer(serializers.Field):
         return [i[0] for i in value.items() if i[1] is True]
 
 
-class APITokenSerializer(serializers.ModelSerializer):
-    dateCreated = serializers.DateTimeField(source="created", read_only=True)
+class APITokenAuthScopesSerializer(serializers.ModelSerializer):
     scopes = BitFieldSerializer()
 
     class Meta:
         model = APIToken
+        fields = ("scopes",)
+
+
+class APITokenSerializer(APITokenAuthScopesSerializer):
+    dateCreated = serializers.DateTimeField(source="created", read_only=True)
+    scopes = BitFieldSerializer()
+
+    class Meta(APITokenAuthScopesSerializer.Meta):
         fields = ("scopes", "dateCreated", "label", "token", "id")
