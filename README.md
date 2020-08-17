@@ -1,18 +1,19 @@
 [![Gitter](https://badges.gitter.im/GlitchTip/community.svg)](https://gitter.im/GlitchTip/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 <script src="https://liberapay.com/GlitchTip/widgets/button.js"></script>
+
 <noscript><a href="https://liberapay.com/GlitchTip/donate"><img alt="Donate using Liberapay" src="https://liberapay.com/assets/widgets/donate.svg"></a></noscript>
 
 # GlitchTip Backend
 
 GlitchTip is an open source, Sentry API compatible error tracking platform. It is a partial fork/partial reimplementation of Sentry's open source codebase before it went proprietary. Its goals are to be a modern, easy-to-develop error tracking platform that respects your freedom to use it any way you wish. Some differences include:
 
-- A modern development environment with Python 3 and Django 3.0.
+- A modern development environment with Python 3 and Django 3.1.
 - Simplicity over features. We use Postgres to store error data. Our code base is a fraction of the size of Sentry and looks like a typical Django app. We leverage existing open source Django ecosystem apps whenever possible.
 - Respects your privacy. No massive JS bundles. No invasive tracking. No third party spying. Even our marketing site runs Matomo and respects Do Not Track. GlitchTip will never report home. We will never know if you run it yourself.
 - Commitment to open source. We use open source tools like GitLab whenever possible. With our MIT license, you can use it for anything you'd like and even sell it. We believe in competition and hope you make GlitchTip even better.
 
-Project status: Experimental. Open an issue and say hello if you'd like to help. We are able to process basic error requests from the open source Sentry client tools.
+Project status: Stable. Open an issue and say hello if you'd like to help. We are able to process basic error requests from the open source Sentry client tools. More features are on the way.
 
 # Developing
 

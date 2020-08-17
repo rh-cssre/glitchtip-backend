@@ -308,8 +308,11 @@ STATICFILES_DIRS = [
 STATIC_ROOT = path("static/")
 STATICFILES_STORAGE = env("STATICFILES_STORAGE")
 EMAIL_BACKEND = env.str(
-    "EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend"
+    "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
 )
+if os.getenv("EMAIL_URL"):
+    EMAIL_CONFIG = env.email_url("EMAIL_URL")
+    vars().update(EMAIL_CONFIG)
 
 AUTH_USER_MODEL = "users.User"
 ACCOUNT_AUTHENTICATION_METHOD = "email"

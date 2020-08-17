@@ -5,6 +5,7 @@ x-environment: &default-environment
   ENABLE_OPEN_USER_REGISTRATION: "true"
   ENABLE_TEST_API: "true"
   DEBUG: "true"
+  EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
 x-depends_on: &default-depends_on
   - postgres
   - redis
