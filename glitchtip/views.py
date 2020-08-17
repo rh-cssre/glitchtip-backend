@@ -5,7 +5,8 @@ from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from allauth.socialaccount.models import SocialApp
 from users.utils import is_user_registration_open
-from users.serializers import SocialAppSerializer
+from users.serializers import SocialAppSerializer, UserSerializer
+from api_tokens.serializers import APITokenAuthScopesSerializer
 
 try:
     from djstripe.settings import STRIPE_PUBLIC_KEY
@@ -36,6 +37,19 @@ class SettingsView(APIView):
                 "sentryDSN": settings.SENTRY_FRONTEND_DSN,
             }
         )
+
+
+class APIRootView(APIView):
+    """ /api/0/ gives information about the server and current user """
+
+    def get(self, request, format=None):
+        user_data = None
+        auth_data = None
+        if request.user.is_authenticated:
+            user_data = UserSerializer(instance=request.user).data
+        if request.auth:
+            auth_data = APITokenAuthScopesSerializer(instance=request.auth).data
+        return Response({"version": "0", "user": user_data, "auth": auth_data,})
 
 
 def health(request):

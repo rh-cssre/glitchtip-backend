@@ -17,7 +17,7 @@ from api_tokens.urls import router as apiTokensRouter
 from users.views import SocialAccountDisconnectView
 from . import social
 from .yasg import CustomOpenAPISchemaGenerator
-from .views import SettingsView, health
+from .views import SettingsView, health, APIRootView
 
 
 router = routers.DefaultRouter()
@@ -52,6 +52,7 @@ schema_view = get_schema_view(
 urlpatterns = [
     path("_health/", health),
     path("admin/", admin.site.urls),
+    path("api/0/", APIRootView.as_view()),
     path("api/0/", include(router.urls)),
 ]
 

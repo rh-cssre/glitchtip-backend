@@ -103,11 +103,14 @@ class EmailAddressSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="email", read_only=True)
     lastLogin = serializers.DateTimeField(source="last_login", read_only=True)
     isSuperuser = serializers.BooleanField(source="is_superuser")
+    emails = EmailAddressSerializer(many=True, default=[])
     identities = SocialAccountSerializer(
         source="socialaccount_set", many=True, read_only=True
     )
+    id = serializers.CharField()
     isActive = serializers.BooleanField(source="is_active")
     dateJoined = serializers.DateTimeField(source="created", read_only=True)
     hasPasswordAuth = serializers.BooleanField(
@@ -117,8 +120,10 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = (
+            "username",
             "lastLogin",
             "isSuperuser",
+            "emails",
             "identities",
             "id",
             "isActive",
