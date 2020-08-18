@@ -182,19 +182,33 @@ WSGI_APPLICATION = "glitchtip.wsgi.application"
 CORS_ORIGIN_ALLOW_ALL = env.bool("CORS_ORIGIN_ALLOW_ALL", True)
 CORS_ORIGIN_WHITELIST = env.tuple("CORS_ORIGIN_WHITELIST", str, default=())
 SECURE_BROWSER_XSS_FILTER = True
-CSP_STYLE_SRC = ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]
-CSP_STYLE_SRC_ELEM = ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]
-CSP_FONT_SRC = ["'self'", "https://fonts.gstatic.com"]
+CSP_DEFAULT_SRC = env.list("CSP_DEFAULT_SRC", str, ["'self'"])
+CSP_STYLE_SRC = env.list(
+    "CSP_STYLE_SRC", str, ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]
+)
+CSP_STYLE_SRC_ELEM = env.list(
+    "CSP_STYLE_SRC_ELEM",
+    str,
+    ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+)
+CSP_FONT_SRC = env.list("CSP_FONT_SRC", str, ["'self'", "https://fonts.gstatic.com"])
 # Redoc requires blob
-CSP_WORKER_SRC = ["'self'", "blob:"]
+CSP_WORKER_SRC = env.list("CSP_WORKER_SRC", str, ["'self'", "blob:"])
 # GlitchTip can record it's own errors
-CSP_CONNECT_SRC = ["'self'", "https://app.glitchtip.com"]
+CSP_CONNECT_SRC = env.list(
+    "CSP_CONNECT_SRC", str, ["'self'", "https://app.glitchtip.com"]
+)
 # Needed for Matomo and Stripe for SaaS use cases. Both are disabled by default.
-CSP_SCRIPT_SRC = ["'self'", "https://matomo.glitchtip.com", "https://js.stripe.com"]
-CSP_IMG_SRC = ["'self'", "https://matomo.glitchtip.com"]
-CSP_FRAME_SRC = ["'self'", "https://js.stripe.com"]
+CSP_SCRIPT_SRC = env.list(
+    "CSP_SCRIPT_SRC",
+    str,
+    ["'self'", "https://matomo.glitchtip.com", "https://js.stripe.com"],
+)
+CSP_IMG_SRC = env.list("CSP_IMG_SRC", str, ["'self'", "https://matomo.glitchtip.com"])
+CSP_FRAME_SRC = env.list("CSP_FRAME_SRC", str, ["'self'", "https://js.stripe.com"])
 # Consider tracking CSP reports with GlitchTip itself
 CSP_REPORT_URI = env.tuple("CSP_REPORT_URI", str, None)
+CSP_REPORT_ONLY = env.bool("CSP_REPORT_ONLY", False)
 SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", 0)
 SECURE_HSTS_PRELOAD = env.bool("SECURE_HSTS_PRELOAD", False)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", False)
