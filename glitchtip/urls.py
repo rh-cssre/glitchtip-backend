@@ -2,6 +2,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.generic import TemplateView
+from django.views.generic.base import RedirectView
 from rest_framework import permissions
 from rest_framework_nested import routers
 from organizations.backends import invitation_backend
@@ -52,6 +53,7 @@ schema_view = get_schema_view(
 urlpatterns = [
     path("_health/", health),
     path("admin/", admin.site.urls),
+    path("api/", RedirectView.as_view(url="/profile/auth-tokens")),
     path("api/0/", APIRootView.as_view()),
     path("api/0/", include(router.urls)),
 ]
