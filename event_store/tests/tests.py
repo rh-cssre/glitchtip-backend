@@ -59,7 +59,13 @@ class EventStoreTestCase(APITestCase):
     def test_performance(self):
         with open("event_store/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
-        with self.assertNumQueries(8):
+        with self.assertNumQueries(9):
+            res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+
+        # Second event should have less queries
+        data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4bb"
+        with self.assertNumQueries(5):
             res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 
@@ -71,3 +77,11 @@ class EventStoreTestCase(APITestCase):
             data = json.load(json_file)
         res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 429)
+
+    def test_project_first_event(self):
+        with open("event_store/test_data/py_error.json") as json_file:
+            data = json.load(json_file)
+        self.assertFalse(self.project.first_event)
+        self.client.post(self.url, data, format="json")
+        self.project.refresh_from_db()
+        self.assertTrue(self.project.first_event)

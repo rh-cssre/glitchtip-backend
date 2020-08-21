@@ -27,7 +27,7 @@ class ProjectSerializer(ProjectReferenceWithMemberSerializer):
     color = serializers.SerializerMethodField()
     dateCreated = serializers.DateTimeField(source="created", read_only=True)
     features = serializers.SerializerMethodField()
-    firstEvent = serializers.SerializerMethodField()
+    firstEvent = serializers.DateTimeField(source="first_event", read_only=True)
     hasAccess = serializers.SerializerMethodField()
     id = serializers.CharField(read_only=True)
     isBookmarked = serializers.SerializerMethodField()
@@ -65,9 +65,6 @@ class ProjectSerializer(ProjectReferenceWithMemberSerializer):
 
     def get_features(self, obj):
         return []
-
-    def get_firstEvent(self, obj):
-        return None
 
     def get_hasAccess(self, obj):
         return True

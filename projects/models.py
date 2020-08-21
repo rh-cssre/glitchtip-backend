@@ -21,6 +21,7 @@ class Project(models.Model):
     )
     created = models.DateTimeField(auto_now_add=True, db_index=True)
     platform = models.CharField(max_length=64, blank=True, null=True)
+    first_event = models.DateTimeField(null=True)
 
     class Meta:
         unique_together = (("organization", "slug"),)

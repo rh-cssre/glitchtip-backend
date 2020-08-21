@@ -26,7 +26,7 @@ class Command(BaseCommand):
         data = event_generator.generate_random_event(unique_issue)
         serializer = EventStoreAPIView().get_serializer_class(data)(data=data)
         serializer.is_valid()
-        serializer.create(project.id, serializer.data)
+        serializer.create(project, serializer.data)
 
     def handle(self, *args, **options):
         project = Project.objects.first()

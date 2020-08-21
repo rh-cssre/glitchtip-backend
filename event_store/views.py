@@ -82,7 +82,7 @@ class EventStoreAPIView(APIView):
                 id=kwargs.get("id"), projectkey__public_key=sentry_key
             )
             .select_related("organization")
-            .only("id", "organization__is_accepting_events")
+            .only("id", "first_event", "organization__is_accepting_events")
             .first()
         )
         if not project:
@@ -91,7 +91,7 @@ class EventStoreAPIView(APIView):
             raise exceptions.Throttled(detail="event rejected due to rate limit")
         serializer = self.get_serializer_class(request.data)(data=request.data)
         if serializer.is_valid():
-            event = serializer.create(project.id, serializer.data)
+            event = serializer.create(project, serializer.data)
             return Response({"id": event.event_id_hex})
         # TODO {"error": "Invalid api key"}, CSP type, valid json but no type at all
         return Response()

@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.shortcuts import reverse
+from django.utils import timezone
 from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
@@ -26,6 +27,19 @@ class ProjectsAPITestCase(APITestCase):
         project = baker.make("projects.Project", organization=organization)
         res = self.client.get(self.url)
         self.assertContains(res, project.name)
+
+    def test_projects_api_retrieve(self):
+        organization = baker.make("organizations_ext.Organization")
+        organization.add_user(self.user, role=OrganizationUserRole.OWNER)
+        project = baker.make(
+            "projects.Project", organization=organization, first_event=timezone.now()
+        )
+        res = self.client.get(
+            reverse(
+                "project-detail", kwargs={"pk": organization.slug + "/" + project.slug}
+            )
+        )
+        self.assertTrue(res.data["firstEvent"])
 
     def test_projects_pagination(self):
         """

@@ -120,7 +120,7 @@ class StoreDefaultSerializer(serializers.Serializer):
     def get_message(self, data):
         return data.get("logentry", {}).get("message", "")
 
-    def create(self, project_id: int, data):
+    def create(self, project, data):
         eventtype = self.get_eventtype()
         metadata = eventtype.get_metadata(data)
         title = eventtype.get_title(metadata)
@@ -136,10 +136,13 @@ class StoreDefaultSerializer(serializers.Serializer):
         data["contexts"] = contexts
 
         with transaction.atomic():
+            if not project.first_event:
+                project.first_event = data.get("timestamp")
+                project.save(update_fields=["first_event"])
             issue, _ = Issue.objects.get_or_create(
                 title=title,
                 culprit=culprit,
-                project_id=project_id,
+                project_id=project.id,
                 type=self.type,
                 defaults={"metadata": metadata},
             )
@@ -188,7 +191,7 @@ class StoreCSPReportSerializer(serializers.Serializer):
         # This is done to support the hyphen
         self.fields.update({"csp-report": serializers.JSONField()})
 
-    def create(self, project_id: int, data):
+    def create(self, project, data):
         csp = data["csp-report"]
         title = self.get_title(csp)
         culprit = self.get_culprit(csp)
@@ -202,7 +205,7 @@ class StoreCSPReportSerializer(serializers.Serializer):
         issue, _ = Issue.objects.get_or_create(
             title=title,
             culprit=culprit,
-            project_id=project_id,
+            project_id=project.id,
             type=EventType.CSP,
             defaults={"metadata": metadata},
         )
