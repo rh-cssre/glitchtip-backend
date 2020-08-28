@@ -10,6 +10,11 @@ from organizations.backends import invitation_backend
 from teams.serializers import TeamSerializer
 from users.utils import is_user_registration_open
 from projects.views import NestedProjectViewSet
+from .permissions import (
+    OrganizationPermission,
+    OrganizationMemberPermission,
+    OrganizationMemberTeamsPermission,
+)
 from .invitation_backend import InvitationTokenGenerator
 from .models import Organization, OrganizationUserRole, OrganizationUser
 from .serializers.serializers import (
@@ -27,6 +32,7 @@ class OrganizationViewSet(viewsets.ModelViewSet):
     queryset = Organization.objects.all()
     serializer_class = OrganizationSerializer
     lookup_field = "slug"
+    permission_classes = [OrganizationPermission]
 
     def get_serializer_class(self):
         if self.action in ["retrieve"]:
@@ -55,6 +61,7 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
 
     queryset = OrganizationUser.objects.all()
     serializer_class = OrganizationUserSerializer
+    permission_classes = [OrganizationMemberPermission]
 
     def get_serializer_class(self):
         if self.action in ["retrieve"]:
@@ -169,9 +176,23 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         if not pk or not organization_slug or not members_team_slug:
             raise exceptions.MethodNotAllowed(request.method)
 
-        org_user = self.get_object()
+        pk = self.kwargs.get("pk")
+        if pk == "me":
+            org_user = get_object_or_404(self.get_queryset(), user=self.request.user)
+        else:
+            queryset = self.filter_queryset(self.get_queryset())
+            lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+            filter_kwargs = {self.lookup_field: self.kwargs[lookup_url_kwarg]}
+            org_user = get_object_or_404(queryset, **filter_kwargs)
+
         team = org_user.organization.teams.filter(slug=members_team_slug).first()
 
+        # Instead of check_object_permissions
+        permission = OrganizationMemberTeamsPermission()
+        if not permission.has_permission(request, self):
+            self.permission_denied(
+                request, message=getattr(permission, "message", None)
+            )
         self.check_team_member_permission(org_user, self.request.user, team)
 
         if not team:

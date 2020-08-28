@@ -7,6 +7,7 @@ from teams.views import NestedTeamViewSet
 from organizations_ext.models import Organization, OrganizationUserRole
 from .models import Project, ProjectKey
 from .serializers.serializers import ProjectSerializer, ProjectKeySerializer
+from .permissions import ProjectPermission, ProjectKeyPermission
 
 
 class NestedProjectViewSet(viewsets.ModelViewSet):
@@ -18,16 +19,16 @@ class NestedProjectViewSet(viewsets.ModelViewSet):
 
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
+    lookup_field = "slug"
+    permission_classes = [ProjectPermission]
 
     def get_object(self):
         queryset = self.filter_queryset(self.get_queryset())
+        slug = self.kwargs.get("project_slug", self.kwargs.get("slug"))
         obj = get_object_or_404(
-            queryset,
-            slug=self.kwargs["project_slug"],
-            organization__slug=self.kwargs["organization_slug"],
+            queryset, slug=slug, organization__slug=self.kwargs["organization_slug"],
         )
 
-        # May raise a permission denied
         self.check_object_permissions(self.request, obj)
 
         return obj
@@ -45,15 +46,17 @@ class NestedProjectViewSet(viewsets.ModelViewSet):
         return self.queryset.none()
 
     def perform_create(self, serializer):
-        try:
-            team = Team.objects.get(
-                slug=self.kwargs.get("team_slug"),
-                organization__slug=self.kwargs.get("organization_slug"),
-                organization__users=self.request.user,
-                organization__organization_users__role__gte=OrganizationUserRole.ADMIN,
-            )
-        except Team.DoesNotExist:
-            raise exceptions.ValidationError("Team not found")
+        team = None
+        if self.kwargs.get("team_slug"):
+            try:
+                team = Team.objects.get(
+                    slug=self.kwargs.get("team_slug"),
+                    organization__slug=self.kwargs.get("organization_slug"),
+                    organization__users=self.request.user,
+                    organization__organization_users__role__gte=OrganizationUserRole.ADMIN,
+                )
+            except Team.DoesNotExist:
+                raise exceptions.ValidationError("Team not found")
         try:
             organization = Organization.objects.get(
                 slug=self.kwargs.get("organization_slug"),
@@ -64,18 +67,26 @@ class NestedProjectViewSet(viewsets.ModelViewSet):
             raise exceptions.ValidationError("Organization not found")
 
         new_project = serializer.save(organization=organization)
-        if new_project:
+        if new_project and team:
             new_project.team_set.add(team)
 
 
 class ProjectViewSet(NestedProjectViewSet):
+    lookup_field = "pk"
     lookup_value_regex = r"(?P<organization_slug>[^/.]+)/(?P<project_slug>[-\w]+)"
+
+    def create(self, request, *args, **kwargs):
+        raise exceptions.MethodNotAllowed(
+            request.method,
+            "Create project not allowed. Use team-projects view instead.",
+        )
 
 
 class ProjectKeyViewSet(viewsets.ModelViewSet):
     queryset = ProjectKey.objects.all()
     serializer_class = ProjectKeySerializer
     lookup_field = "public_key"
+    permission_classes = [ProjectKeyPermission]
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
@@ -89,6 +100,15 @@ class ProjectKeyViewSet(viewsets.ModelViewSet):
                 project__organization__users=self.request.user,
             )
         )
+
+    def perform_create(self, serializer):
+        project = get_object_or_404(
+            Project,
+            slug=self.kwargs.get("project_slug"),
+            organization__slug=self.kwargs["organization_slug"],
+            organization__users=self.request.user,
+        )
+        serializer.save(project=project)
 
 
 class ProjectTeamViewSet(NestedTeamViewSet):

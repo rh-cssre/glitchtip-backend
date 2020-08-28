@@ -5,7 +5,7 @@ from users.serializers import UserSerializer
 from teams.serializers import TeamSerializer
 from teams.models import Team
 from .base_serializers import OrganizationReferenceSerializer
-from ..models import OrganizationUser, OrganizationUserRole
+from ..models import OrganizationUser, OrganizationUserRole, ROLES
 
 
 class OrganizationSerializer(OrganizationReferenceSerializer):
@@ -106,6 +106,13 @@ class OrganizationUserDetailSerializer(OrganizationUserSerializer):
     teams = serializers.SlugRelatedField(
         source="team_set", slug_field="slug", read_only=True, many=True
     )
+    roles = serializers.SerializerMethodField()
+
+    class Meta(OrganizationUserSerializer.Meta):
+        fields = OrganizationUserSerializer.Meta.fields + ("roles",)
+
+    def get_roles(self, obj):
+        return ROLES
 
 
 class OrganizationUserProjectsSerializer(OrganizationUserSerializer):

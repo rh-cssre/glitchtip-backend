@@ -19,7 +19,7 @@ class ProjectsAPITestCase(APITestCase):
         data = {"name": "test"}
         res = self.client.post(self.url, data)
         # Must specify organization and team
-        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.status_code, 405)
 
     def test_projects_api_list(self):
         organization = baker.make("organizations_ext.Organization")
