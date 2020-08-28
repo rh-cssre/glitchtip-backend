@@ -110,10 +110,10 @@ description = "The AWS SDK for Python"
 name = "boto3"
 optional = false
 python-versions = "*"
-version = "1.14.47"
+version = "1.14.48"
 
 [package.dependencies]
-botocore = ">=1.17.47,<1.18.0"
+botocore = ">=1.17.48,<1.18.0"
 jmespath = ">=0.7.1,<1.0.0"
 s3transfer = ">=0.3.0,<0.4.0"
 
@@ -123,13 +123,16 @@ description = "Low-level, data-driven core of boto 3."
 name = "botocore"
 optional = false
 python-versions = "*"
-version = "1.17.47"
+version = "1.17.48"
 
 [package.dependencies]
 docutils = ">=0.10,<0.16"
 jmespath = ">=0.7.1,<1.0.0"
 python-dateutil = ">=2.1,<3.0.0"
-urllib3 = ">=1.20,<1.26"
+
+[package.dependencies.urllib3]
+python = "<3.4.0 || >=3.5.0"
+version = ">=1.20,<1.26"
 
 [[package]]
 category = "main"
@@ -389,10 +392,10 @@ description = "django-cors-headers is a Django application for handling the serv
 name = "django-cors-headers"
 optional = false
 python-versions = ">=3.5"
-version = "3.4.0"
+version = "3.5.0"
 
 [package.dependencies]
-Django = ">=2.0"
+Django = ">=2.2"
 
 [[package]]
 category = "main"
@@ -659,7 +662,7 @@ description = "A port of Ruby on Rails inflector to Python"
 name = "inflection"
 optional = false
 python-versions = ">=3.5"
-version = "0.5.0"
+version = "0.5.1"
 
 [[package]]
 category = "dev"
@@ -863,7 +866,7 @@ description = "Developer friendly load testing framework"
 name = "locust"
 optional = false
 python-versions = ">=3.6"
-version = "1.2.1"
+version = "1.2.2"
 
 [package.dependencies]
 ConfigArgParse = ">=1.0"
@@ -1366,14 +1369,14 @@ socks = ["PySocks (>=1.5.6,<1.5.7 || >1.5.7,<2.0)"]
 
 [[package]]
 category = "main"
-description = "A library to identify devices (phones, tablets) and their capabilities by parsing (browser/HTTP) user agent strings"
+description = "A library to identify devices (phones, tablets) and their capabilities by parsing browser user agent strings."
 name = "user-agents"
 optional = false
 python-versions = "*"
-version = "2.1"
+version = "2.2.0"
 
 [package.dependencies]
-ua-parser = ">=0.9.0"
+ua-parser = ">=0.10.0"
 
 [[package]]
 category = "main"
@@ -1517,11 +1520,12 @@ black = [
     {file = "black-19.10b0.tar.gz", hash = "sha256:c2edb73a08e9e0e6f65a0e6af18b059b8b1cdd5bef997d7a0b181df93dc81539"},
 ]
 boto3 = [
-    {file = "boto3-1.14.47-py2.py3-none-any.whl", hash = "sha256:0d9cbeb5c8ca67650cc963c77e2e3b3ab5dffeeee16e03d61d740755f8fc7c44"},
-    {file = "boto3-1.14.47.tar.gz", hash = "sha256:df73edf3bd6f191870212e04ae9a8bc6245fd6749f464e9fb950392a8d15bd8c"},
+    {file = "boto3-1.14.48-py2.py3-none-any.whl", hash = "sha256:34ee7608afa457da7bf4ad42dc53ac967b2f28769ef4ef1a0a41e1b40f35d897"},
+    {file = "boto3-1.14.48.tar.gz", hash = "sha256:997369e68a5091f608897caa0322daca12ee76338371b983b34b98c57c1e1913"},
 ]
 botocore = [
-    {file = "botocore-1.17.47.tar.gz", hash = "sha256:eca25f01c503c2b86b394497f875a0eb0d3fe367dbc032f3a02851ba7e827109"},
+    {file = "botocore-1.17.48-py2.py3-none-any.whl", hash = "sha256:0b23b519ec10193d1ead1cbb1469e7ede80789b068b74575b4efb06619e8e457"},
+    {file = "botocore-1.17.48.tar.gz", hash = "sha256:db9cd219d4180e782615179950e16b43d13e2f3fa57f510a43bf4ed5a3a8dacb"},
 ]
 celery = [
     {file = "celery-4.4.7-py2.py3-none-any.whl", hash = "sha256:a92e1d56e650781fb747032a3997d16236d037c8199eacd5217d1a72893bca45"},
@@ -1619,8 +1623,8 @@ django-celery-results = [
     {file = "django_celery_results-1.2.1.tar.gz", hash = "sha256:e390f70cc43bbc2cd7c8e4607dc29ab6211a2ab968f93677583f0160921f670c"},
 ]
 django-cors-headers = [
-    {file = "django-cors-headers-3.4.0.tar.gz", hash = "sha256:f5218f2f0bb1210563ff87687afbf10786e080d8494a248e705507ebd92d7153"},
-    {file = "django_cors_headers-3.4.0-py3-none-any.whl", hash = "sha256:5240062ef0b16668ce8a5f43324c388d65f5439e1a30e22c38684d5ddaff0d15"},
+    {file = "django-cors-headers-3.5.0.tar.gz", hash = "sha256:db82b2840f667d47872ae3e4a4e0a0d72fbecb42779b8aa233fa8bb965f7836a"},
+    {file = "django_cors_headers-3.5.0-py3-none-any.whl", hash = "sha256:9322255c296d5f75089571f29e520c83ff9693df17aa3cf9f6a4bea7c6740169"},
 ]
 django-csp = [
     {file = "django_csp-3.7-py2.py3-none-any.whl", hash = "sha256:01443a07723f9a479d498bd7bb63571aaa771e690f64bde515db6cdb76e8041a"},
@@ -1778,8 +1782,8 @@ importlib-metadata = [
     {file = "importlib_metadata-1.7.0.tar.gz", hash = "sha256:90bb658cdbbf6d1735b6341ce708fc7024a3e14e99ffdc5783edea9f9b077f83"},
 ]
 inflection = [
-    {file = "inflection-0.5.0-py2.py3-none-any.whl", hash = "sha256:88b101b2668a1d81d6d72d4c2018e53bc6c7fc544c987849da1c7f77545c3bc9"},
-    {file = "inflection-0.5.0.tar.gz", hash = "sha256:f576e85132d34f5bf7df5183c2c6f94cfb32e528f53065345cf71329ba0b8924"},
+    {file = "inflection-0.5.1-py2.py3-none-any.whl", hash = "sha256:f38b2b640938a4f35ade69ac3d053042959b62a0f1076a5bbaa1b9526605a8a2"},
+    {file = "inflection-0.5.1.tar.gz", hash = "sha256:1a29730d366e996aaacffb2f1f1cb9593dc38e2ddd30c91250c6dde09ea9b417"},
 ]
 ipdb = [
     {file = "ipdb-0.13.3.tar.gz", hash = "sha256:d6f46d261c45a65e65a2f7ec69288a1c511e16206edb2875e7ec6b2f66997e78"},
@@ -1852,8 +1856,8 @@ lazy-object-proxy = [
     {file = "lazy_object_proxy-1.4.3-cp38-cp38-win_amd64.whl", hash = "sha256:59f79fef100b09564bc2df42ea2d8d21a64fdcda64979c0fa3db7bdaabaf6239"},
 ]
 locust = [
-    {file = "locust-1.2.1-py3-none-any.whl", hash = "sha256:41ef9b1c3bcf00c71b06441f98649fe34528addab1be8259ef370a04e55945f1"},
-    {file = "locust-1.2.1.tar.gz", hash = "sha256:288ca88de6ef8f6864cebd34ba68f2d5587c64013623cfe4f73c3ce5be0b0fe2"},
+    {file = "locust-1.2.2-py3-none-any.whl", hash = "sha256:2ba4e6f6052089b070717fd26ae0e97da140ee8100f938020c673ac76a679bb9"},
+    {file = "locust-1.2.2.tar.gz", hash = "sha256:b1cf521031769d9577938afae7e9596a4a0d1aae1a5569eeb569f71cc7fb5b32"},
 ]
 markupsafe = [
     {file = "MarkupSafe-1.1.1-cp27-cp27m-macosx_10_6_intel.whl", hash = "sha256:09027a7803a62ca78792ad89403b1b7a73a01c8cb65909cd876f7fcebd79b161"},
@@ -2239,8 +2243,8 @@ urllib3 = [
     {file = "urllib3-1.25.10.tar.gz", hash = "sha256:91056c15fa70756691db97756772bb1eb9678fa585d9184f24534b100dc60f4a"},
 ]
 user-agents = [
-    {file = "user-agents-2.1.tar.gz", hash = "sha256:da54371d856c35d8ead0622da24ad5ef6d667eda3629a750e3373a3e847a054b"},
-    {file = "user_agents-2.1-py2-none-any.whl", hash = "sha256:e727ab6f169e829bc25d41dbd25b9ff679b4631bd81959bcf7de1e246da67194"},
+    {file = "user-agents-2.2.0.tar.gz", hash = "sha256:d36d25178db65308d1458c5fa4ab39c9b2619377010130329f3955e7626ead26"},
+    {file = "user_agents-2.2.0-py3-none-any.whl", hash = "sha256:a98c4dc72ecbc64812c4534108806fb0a0b3a11ec3fd1eafe807cee5b0a942e7"},
 ]
 uwsgi = [
     {file = "uWSGI-2.0.19.1.tar.gz", hash = "sha256:faa85e053c0b1be4d5585b0858d3a511d2cd10201802e8676060fd0a109e5869"},
