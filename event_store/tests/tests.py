@@ -85,3 +85,32 @@ class EventStoreTestCase(APITestCase):
         self.client.post(self.url, data, format="json")
         self.project.refresh_from_db()
         self.assertTrue(self.project.first_event)
+
+    def test_null_character_event(self):
+        """
+        Unicode null characters \u0000 are not compatible with Postgres JSON data types.
+        They should be filtered out
+        """
+        with open("event_store/test_data/py_error.json") as json_file:
+            data = json.load(json_file)
+        data["exception"]["values"][0]["stacktrace"]["frames"][0][
+            "function"
+        ] = "a\u0000a"
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+
+    def test_header_value_array(self):
+        """
+        Request Header values are both strings and arrays (sentry-php uses arrays)
+        """
+        with open("event_store/test_data/py_error.json") as json_file:
+            data = json.load(json_file)
+        data["request"]["headers"]["Content-Type"] = ["text/plain"]
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        event = Event.objects.first()
+        header = next(
+            x for x in event.data["request"]["headers"] if x[0] == "Content-Type"
+        )
+        self.assertTrue(isinstance(header[1], str))
+

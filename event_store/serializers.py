@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Union
 from urllib.parse import urlparse
 from datetime import datetime
 from django.db import transaction, connection
@@ -8,6 +8,17 @@ from sentry.eventtypes.base import DefaultEvent
 from issues.models import EventType, Event, Issue, EventTagKey
 from .event_tag_processors import TAG_PROCESSORS
 from .event_context_processors import EVENT_CONTEXT_PROCESSORS
+
+
+def replace(data: Union[str, dict, list], match: str, repl: str):
+    """ A recursive replace function """
+    if isinstance(data, dict):
+        return {k: replace(v, match, repl) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [replace(i, match, repl) for i in data]
+    elif isinstance(data, str):
+        return data.replace(match, repl)
+    return data
 
 
 class FlexibleDateTimeField(serializers.DateTimeField):
@@ -24,9 +35,8 @@ class RequestSerializer(serializers.Serializer):
     env = serializers.DictField(
         child=serializers.CharField(allow_blank=True), required=False
     )
-    headers = serializers.DictField(
-        child=serializers.CharField(allow_blank=True), required=False
-    )
+    # Dict values can be both str and List[str]
+    headers = serializers.DictField(required=False)
     url = serializers.CharField(required=False, allow_blank=True)
     method = serializers.CharField(required=False, allow_blank=True)
     query_string = serializers.CharField(required=False, allow_blank=True)
@@ -131,7 +141,11 @@ class StoreDefaultSerializer(serializers.Serializer):
             headers = request.get("headers")
             if headers:
                 request["inferred_content_type"] = headers.get("Content-Type")
-                request["headers"] = sorted([pair for pair in headers.items()])
+                sorted_headers = sorted([pair for pair in headers.items()])
+                for idx, header in enumerate(sorted_headers):
+                    if isinstance(header[1], list):
+                        sorted_headers[idx] = (header[0], header[1][0])
+                request["headers"] = sorted_headers
         contexts = self.annotate_contexts(data)
         data["contexts"] = contexts
 
@@ -146,11 +160,9 @@ class StoreDefaultSerializer(serializers.Serializer):
                 type=self.type,
                 defaults={"metadata": metadata},
             )
-            params = {
-                "event_id": data["event_id"],
-                "issue": issue,
-                "timestamp": data.get("timestamp"),
-                "data": {
+            # Remove \u0000 values which are not supposed by the postgres JSON data type
+            json_data = replace(
+                {
                     "contexts": contexts,
                     "culprit": culprit,
                     "exception": exception,
@@ -163,6 +175,14 @@ class StoreDefaultSerializer(serializers.Serializer):
                     "title": title,
                     "type": self.type.label,
                 },
+                "\u0000",
+                " ",
+            )
+            params = {
+                "event_id": data["event_id"],
+                "issue": issue,
+                "timestamp": data.get("timestamp"),
+                "data": json_data,
             }
             event = Event.objects.create(**params)
         issue.check_for_status_update()
