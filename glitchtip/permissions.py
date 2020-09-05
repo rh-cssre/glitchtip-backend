@@ -25,3 +25,14 @@ class ScopedPermission(BasePermission):
         allowed_scopes = self.get_allowed_scopes(request, view)
         current_scopes = self.get_user_scopes(obj, request.user)
         return any(s in allowed_scopes for s in current_scopes)
+
+
+class UserOnlyPermission(BasePermission):
+    """
+    Authentication method disallows tokens. User must be logged in via session.
+    """
+
+    def has_permission(self, request, view):
+        if request.auth:
+            return False
+        return bool(request.user and request.user.is_authenticated)

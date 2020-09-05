@@ -1,6 +1,7 @@
 from django.urls import reverse
 from rest_framework.test import APITestCase
 from model_bakery import baker
+from glitchtip import test_utils  # pylint: disable=unused-import
 
 
 class APITokenTests(APITestCase):
@@ -48,3 +49,19 @@ class APITokenTests(APITestCase):
         url = reverse("api-tokens-detail", args=[other_api_token.id])
         res = self.client.delete(url)
         self.assertEqual(res.status_code, 404)
+
+    def test_token_auth(self):
+        """ Token based auth should not be able to create it's own token """
+        organization = baker.make("organizations_ext.Organization")
+        organization.add_user(self.user)
+        auth_token = baker.make("api_tokens.APIToken", user=self.user)
+        self.client.credentials(HTTP_AUTHORIZATION="Bearer " + auth_token.token)
+
+        url = reverse("api-tokens-list")
+        scope_name = "member:read"
+        data = {"scopes": [scope_name]}
+        res = self.client.post(url, data, format="json")
+        self.assertEqual(res.status_code, 403)
+
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 403)
