@@ -163,6 +163,10 @@ class Event(models.Model):
         return event
 
     @property
+    def context(self):
+        return self.data.get("extra")
+
+    @property
     def contexts(self):
         return self.data.get("contexts")
 
@@ -173,6 +177,10 @@ class Event(models.Model):
     @property
     def message(self):
         return self.data.get("message")
+
+    @property
+    def user(self):
+        return self.data.get("user")
 
     @property
     def user_report(self):

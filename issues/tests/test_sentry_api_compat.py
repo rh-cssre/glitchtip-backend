@@ -371,3 +371,20 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         )
         self.assertEqual(res.data["projectID"], event.issue.project_id)
 
+    def test_js_error_with_context(self):
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+            "js_error_with_context"
+        )
+        res = self.client.post(
+            self.event_store_url, sdk_error, format="json", REMOTE_ADDR="142.255.29.14"
+        )
+        event = Event.objects.get(pk=res.data["id"])
+        event_json = event.event_json()
+        self.assertCompareData(
+            event_json, sentry_json, ["title", "message", "extra", "user"]
+        )
+
+        url = self.get_project_events_detail(event.pk)
+        res = self.client.get(url)
+        self.assertCompareData(res.json(), sentry_data, ["context", "user"])
+

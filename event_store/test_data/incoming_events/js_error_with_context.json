@@ -1,0 +1,110 @@
+{
+  "exception": {
+    "values": [
+      {
+        "type": "Error",
+        "value": "Error with context",
+        "stacktrace": {
+          "frames": [
+            {
+              "colno": 31,
+              "filename": "http://localhost:4201/polyfills.js",
+              "function": "globalZoneAwareCallback",
+              "in_app": true,
+              "lineno": 1660
+            }
+          ]
+        },
+        "mechanism": { "handled": true, "type": "generic" }
+      }
+    ]
+  },
+  "level": "error",
+  "event_id": "34526172dfbe4c9c92bf1e6f14d6cd25",
+  "platform": "javascript",
+  "sdk": {
+    "name": "sentry.javascript.browser",
+    "packages": [{ "name": "npm:@sentry/browser", "version": "5.20.1" }],
+    "version": "5.20.1",
+    "integrations": [
+      "InboundFilters",
+      "FunctionToString",
+      "TryCatch",
+      "Breadcrumbs",
+      "GlobalHandlers",
+      "LinkedErrors",
+      "UserAgent"
+    ]
+  },
+  "timestamp": 1599504520.529,
+  "extra": { "foo": "bar" },
+  "user": { "id": "1", "email": "test@example.com" },
+  "breadcrumbs": [
+    {
+      "timestamp": 1599504392.881,
+      "category": "console",
+      "data": {
+        "arguments": [
+          "Angular is running in development mode. Call enableProdMode() to enable production mode."
+        ],
+        "logger": "console"
+      },
+      "level": "log",
+      "message": "Angular is running in development mode. Call enableProdMode() to enable production mode."
+    },
+    {
+      "timestamp": 1599504393.891,
+      "category": "ui.click",
+      "message": "body > app-root > ol > li > button"
+    },
+    {
+      "timestamp": 1599504394.935,
+      "category": "xhr",
+      "data": {
+        "method": "GET",
+        "url": "http://localhost:4201/sockjs-node/info?t=1599504394897",
+        "status_code": 200
+      },
+      "type": "http"
+    },
+    {
+      "timestamp": 1599504515.072,
+      "category": "sentry.event",
+      "event_id": "35f2ef9d299c4fe18747318105e2c42a",
+      "level": "error",
+      "message": "A Generic Error "
+    },
+    {
+      "timestamp": 1599504515.08,
+      "category": "sentry.event",
+      "event_id": "77f0a7c8af0b44369a021d13f3a4263b",
+      "level": "error",
+      "message": "A Generic Error "
+    },
+    {
+      "timestamp": 1599504515.081,
+      "category": "console",
+      "data": { "arguments": ["A Generic Error "], "logger": "console" },
+      "level": "error",
+      "message": "A Generic Error "
+    },
+    {
+      "timestamp": 1599504515.083,
+      "category": "ui.click",
+      "message": "body > app-root > ol > li > button"
+    },
+    {
+      "timestamp": 1599504520.525,
+      "category": "sentry.event",
+      "event_id": "9a7181e42bec4b17966f1347c93d4879",
+      "level": "error",
+      "message": "Error: Error with context"
+    }
+  ],
+  "request": {
+    "url": "http://localhost:4201/",
+    "headers": {
+      "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:80.0) Gecko/20100101 Firefox/80.0"
+    }
+  }
+}
