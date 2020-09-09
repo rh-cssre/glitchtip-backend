@@ -2,6 +2,7 @@ from typing import List, Tuple, Union
 from urllib.parse import urlparse
 from datetime import datetime
 from django.db import transaction, connection
+from ipware import get_client_ip
 from rest_framework import serializers
 from sentry.eventtypes.error import ErrorEvent
 from sentry.eventtypes.base import DefaultEvent
@@ -61,6 +62,7 @@ class StoreDefaultSerializer(serializers.Serializer):
     sdk = serializers.JSONField()
     timestamp = FlexibleDateTimeField(required=False)
     transaction = serializers.CharField(required=False, allow_null=True)
+    user = serializers.JSONField(required=False)
     modules = serializers.JSONField(required=False)
 
     def get_eventtype(self):
@@ -160,24 +162,31 @@ class StoreDefaultSerializer(serializers.Serializer):
                 type=self.type,
                 defaults={"metadata": metadata},
             )
-            # Remove \u0000 values which are not supposed by the postgres JSON data type
-            json_data = replace(
-                {
-                    "contexts": contexts,
-                    "culprit": culprit,
-                    "exception": exception,
-                    "metadata": metadata,
-                    "message": self.get_message(data),
-                    "modules": data.get("modules"),
-                    "platform": data["platform"],
-                    "request": request,
-                    "sdk": data["sdk"],
-                    "title": title,
-                    "type": self.type.label,
-                },
-                "\u0000",
-                " ",
-            )
+            json_data = {
+                "contexts": contexts,
+                "culprit": culprit,
+                "exception": exception,
+                "metadata": metadata,
+                "message": self.get_message(data),
+                "modules": data.get("modules"),
+                "platform": data["platform"],
+                "request": request,
+                "sdk": data["sdk"],
+                "title": title,
+                "type": self.type.label,
+            }
+            extra = data.get("extra")
+            if extra:
+                json_data["extra"] = extra
+            user = data.get("user", {})
+            if self.context:
+                client_ip, is_routable = get_client_ip(self.context["request"])
+                if user or is_routable:
+                    if is_routable:
+                        user["ip_address"] = client_ip
+                    json_data["user"] = user
+            # Remove \u0000 values which are not supported by the postgres JSON data type
+            json_data = replace(json_data, "\u0000", " ",)
             params = {
                 "event_id": data["event_id"],
                 "issue": issue,

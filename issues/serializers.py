@@ -12,12 +12,22 @@ class EventTagSerializer(serializers.ModelSerializer):
         fields = ("key", "value")
 
 
+class EventUserSerializer(serializers.Serializer):
+    username = serializers.CharField(allow_null=True)
+    name = serializers.CharField(allow_null=True)
+    ip_address = serializers.IPAddressField(allow_null=True)
+    email = serializers.EmailField(allow_null=True)
+    data = serializers.JSONField(default={})
+    id = serializers.CharField(allow_null=True)
+
+
 class EventSerializer(serializers.ModelSerializer):
     eventID = serializers.CharField(source="event_id_hex")
     id = serializers.CharField(source="event_id_hex")
     dateCreated = serializers.DateTimeField(source="timestamp")
     dateReceived = serializers.DateTimeField(source="created")
     tags = EventTagSerializer(many=True)
+    user = EventUserSerializer()
 
     class Meta:
         model = Event
@@ -25,7 +35,7 @@ class EventSerializer(serializers.ModelSerializer):
             "eventID",
             "id",
             "issue",
-            # "context",
+            "context",
             "contexts",
             "culprit",
             "dateCreated",
@@ -41,7 +51,7 @@ class EventSerializer(serializers.ModelSerializer):
             "tags",
             "title",
             "type",
-            # "user",
+            "user",
         )
 
 

@@ -1,0 +1,155 @@
+{
+  "event_id": "34526172dfbe4c9c92bf1e6f14d6cd25",
+  "project": 25,
+  "release": null,
+  "dist": null,
+  "platform": "javascript",
+  "message": "",
+  "datetime": "2020-09-07T18:44:56.513000Z",
+  "time_spent": null,
+  "tags": [
+    ["browser", "Firefox 80.0"],
+    ["browser.name", "Firefox"],
+    ["handled", "yes"],
+    ["level", "error"],
+    ["mechanism", "generic"],
+    ["os.name", "Ubuntu"],
+    ["user", "id:1"],
+    ["url", "http://localhost:4201/"]
+  ],
+  "breadcrumbs": {
+    "values": [
+      {
+        "category": "console",
+        "level": "info",
+        "timestamp": 1599504294.211,
+        "type": "default",
+        "message": "Angular is running in development mode. Call enableProdMode() to enable production mode.",
+        "data": {
+          "logger": "console",
+          "arguments": [
+            "Angular is running in development mode. Call enableProdMode() to enable production mode."
+          ]
+        }
+      },
+      {
+        "category": "ui.click",
+        "timestamp": 1599504294.227,
+        "message": "body > app-root > ol > li > button",
+        "type": "default",
+        "level": "info"
+      },
+      {
+        "category": "xhr",
+        "timestamp": 1599504294.246,
+        "level": "info",
+        "type": "http",
+        "data": {
+          "url": "http://localhost:4201/sockjs-node/info?t=1599504294229",
+          "status_code": 200,
+          "method": "GET"
+        }
+      },
+      {
+        "category": "sentry.event",
+        "level": "error",
+        "event_id": "0a1a99083a6d483cac187e2d39cc8ba3",
+        "timestamp": 1599504296.509,
+        "message": "Error: Error with context",
+        "type": "default"
+      }
+    ]
+  },
+  "contexts": {
+    "os": { "version": null, "name": "Ubuntu" },
+    "browser": { "version": "80.0", "name": "Firefox" }
+  },
+  "culprit": "errorWithContext(/main.js)",
+  "errors": [
+    {
+      "url": "http://localhost:4201/polyfills.js",
+      "type": "fetch_generic_error",
+      "value": "<class 'requests.exceptions.ConnectionError'>"
+    },
+    {
+      "url": "http://localhost:4201/vendor.js",
+      "type": "fetch_generic_error",
+      "value": "<class 'requests.exceptions.ConnectionError'>"
+    },
+    {
+      "url": "http://localhost:4201/main.js",
+      "type": "fetch_generic_error",
+      "value": "<class 'requests.exceptions.ConnectionError'>"
+    }
+  ],
+  "exception": {
+    "values": [
+      {
+        "stacktrace": {
+          "frames": [
+            {
+              "function": "globalZoneAwareCallback",
+              "abs_path": "http://localhost:4201/polyfills.js",
+              "module": "polyfills",
+              "in_app": false,
+              "lineno": 1660,
+              "colno": 31,
+              "filename": "/polyfills.js"
+            }
+          ]
+        },
+        "type": "Error",
+        "value": "Error with context",
+        "mechanism": { "type": "generic", "handled": true }
+      }
+    ]
+  },
+  "extra": { "foo": "bar" },
+  "fingerprint": ["{{ default }}"],
+  "grouping_config": { "id": "legacy:2019-03-12" },
+  "hashes": ["ed702321c8240ab5c45d67eb19e3c1d4"],
+  "key_id": "25",
+  "level": "error",
+  "location": "/main.js",
+  "logger": "",
+  "metadata": {
+    "function": "errorWithContext",
+    "type": "Error",
+    "value": "Error with context",
+    "filename": "/main.js"
+  },
+  "received": 1599504300.252,
+  "request": {
+    "url": "http://localhost:4201/",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:80.0) Gecko/20100101 Firefox/80.0"
+      ]
+    ]
+  },
+  "sdk": {
+    "version": "5.20.1",
+    "name": "sentry.javascript.browser",
+    "packages": [{ "version": "5.20.1", "name": "npm:@sentry/browser" }],
+    "integrations": [
+      "InboundFilters",
+      "FunctionToString",
+      "TryCatch",
+      "Breadcrumbs",
+      "GlobalHandlers",
+      "LinkedErrors",
+      "UserAgent"
+    ]
+  },
+  "timestamp": 1599504296.513,
+  "title": "Error: Error with context",
+  "type": "error",
+  "use_rust_normalize": true,
+  "user": {
+    "ip_address": "142.255.29.14",
+    "id": "1",
+    "email": "test@example.com"
+  },
+  "version": "7"
+}
