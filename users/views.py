@@ -121,6 +121,10 @@ class EmailAddressViewSet(
         )
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            # queryset just for schema generation metadata
+            return EmailAddress.objects.none()
+
         user = self.get_user(self.kwargs.get("user_pk"))
         queryset = super().get_queryset().filter(user=user)
         return queryset
