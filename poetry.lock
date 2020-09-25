@@ -348,17 +348,15 @@ category = "main"
 description = "Django email integration for Amazon SES, Mailgun, Mailjet, Postmark, SendGrid, SendinBlue, SparkPost and other transactional ESPs"
 name = "django-anymail"
 optional = false
-python-versions = "*"
-version = "7.2.1"
+python-versions = ">=3.5"
+version = "8.0"
 
 [package.dependencies]
-django = ">=1.11"
+django = ">=2.0"
 requests = ">=2.4.3"
-six = "*"
 
 [package.extras]
 amazon_ses = ["boto3"]
-sparkpost = ["sparkpost"]
 
 [[package]]
 category = "main"
@@ -418,10 +416,10 @@ description = "A configurable set of panels that display various debug informati
 name = "django-debug-toolbar"
 optional = false
 python-versions = ">=3.5"
-version = "2.2"
+version = "3.1.1"
 
 [package.dependencies]
-Django = ">=1.11"
+Django = ">=2.2"
 sqlparse = ">=0.2.0"
 
 [[package]]
@@ -581,12 +579,11 @@ category = "dev"
 description = "Let your Python tests travel through time"
 name = "freezegun"
 optional = false
-python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
-version = "0.3.15"
+python-versions = ">=3.5"
+version = "1.0.0"
 
 [package.dependencies]
-python-dateutil = ">=1.0,<2.0 || >2.0"
-six = "*"
+python-dateutil = ">=2.7"
 
 [[package]]
 category = "dev"
@@ -1245,7 +1242,7 @@ description = "Python client for Sentry (https://sentry.io)"
 name = "sentry-sdk"
 optional = false
 python-versions = "*"
-version = "0.16.5"
+version = "0.17.8"
 
 [package.dependencies]
 certifi = "*"
@@ -1256,6 +1253,7 @@ aiohttp = ["aiohttp (>=3.5)"]
 beam = ["apache-beam (>=2.12)"]
 bottle = ["bottle (>=0.12.13)"]
 celery = ["celery (>=3)"]
+chalice = ["chalice (>=1.16.0)"]
 django = ["django (>=1.8)"]
 falcon = ["falcon (>=1.4)"]
 flask = ["flask (>=0.11)", "blinker (>=1.1)"]
@@ -1475,7 +1473,7 @@ test = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 
 [metadata]
-content-hash = "43c719ea634fb7ed5e68a84c91404cbe505fc6fd9a6e3550fe06657bed3b780b"
+content-hash = "5d48e353f47160b76b7663ab917b890cc61d88b8be80a58bb27b756509aa60f0"
 lock-version = "1.0"
 python-versions = "^3.7"
 
@@ -1616,8 +1614,8 @@ django-allauth = [
     {file = "django-allauth-0.42.0.tar.gz", hash = "sha256:f17209410b7f87da0a84639fd79d3771b596a6d3fc1a8e48ce50dabc7f441d30"},
 ]
 django-anymail = [
-    {file = "django-anymail-7.2.1.tar.gz", hash = "sha256:7fadf9781573b30af5bb6ca2f39b345c4ca2547723ce677c3025292d0a309a96"},
-    {file = "django_anymail-7.2.1-py2.py3-none-any.whl", hash = "sha256:dc5d835049a5dbf738a0f4bd793c4655cd53ba455e2ead275845bc158d48cc63"},
+    {file = "django-anymail-8.0.tar.gz", hash = "sha256:9a0a7d3f0722d0b4509548051b0d7578384e7d2d65112fc01c1ce66e5e16ae0c"},
+    {file = "django_anymail-8.0-py3-none-any.whl", hash = "sha256:ee6a59f8b4a4897fef49d40b876e62d62e55c7450f3380e830777194da1fd1b8"},
 ]
 django-bitfield = [
     {file = "django-bitfield-2.0.1.tar.gz", hash = "sha256:ab340eb50cdb1e8c005594b9f8170a95a698102d06cf3f5031763be2750a8862"},
@@ -1636,8 +1634,8 @@ django-csp = [
     {file = "django_csp-3.7.tar.gz", hash = "sha256:01eda02ad3f10261c74131cdc0b5a6a62b7c7ad4fd017fbefb7a14776e0a9727"},
 ]
 django-debug-toolbar = [
-    {file = "django-debug-toolbar-2.2.tar.gz", hash = "sha256:eabbefe89881bbe4ca7c980ff102e3c35c8e8ad6eb725041f538988f2f39a943"},
-    {file = "django_debug_toolbar-2.2-py3-none-any.whl", hash = "sha256:ff94725e7aae74b133d0599b9bf89bd4eb8f5d2c964106e61d11750228c8774c"},
+    {file = "django-debug-toolbar-3.1.1.tar.gz", hash = "sha256:c97921a9cd421d392e7860dc4b464db8e06c8628df4dc58fedab012888c293c6"},
+    {file = "django_debug_toolbar-3.1.1-py3-none-any.whl", hash = "sha256:a1ce0665f7ef47d27b8df4b5d1058748e1f08500a01421a30d35164f38aaaf4c"},
 ]
 django-environ = [
     {file = "django-environ-0.4.5.tar.gz", hash = "sha256:6c9d87660142608f63ec7d5ce5564c49b603ea8ff25da595fd6098f6dc82afde"},
@@ -1686,8 +1684,8 @@ flask-basicauth = [
     {file = "Flask-BasicAuth-0.2.0.tar.gz", hash = "sha256:df5ebd489dc0914c224419da059d991eb72988a01cdd4b956d52932ce7d501ff"},
 ]
 freezegun = [
-    {file = "freezegun-0.3.15-py2.py3-none-any.whl", hash = "sha256:82c757a05b7c7ca3e176bfebd7d6779fd9139c7cb4ef969c38a28d74deef89b2"},
-    {file = "freezegun-0.3.15.tar.gz", hash = "sha256:e2062f2c7f95cc276a834c22f1a17179467176b624cc6f936e8bc3be5535ad1b"},
+    {file = "freezegun-1.0.0-py2.py3-none-any.whl", hash = "sha256:02b35de52f4699a78f6ac4518e4cd3390dddc43b0aeb978335a8f270a2d9668b"},
+    {file = "freezegun-1.0.0.tar.gz", hash = "sha256:1cf08e441f913ff5e59b19cc065a8faa9dd1ddc442eaf0375294f344581a0643"},
 ]
 gevent = [
     {file = "gevent-20.9.0-cp27-cp27m-macosx_10_15_x86_64.whl", hash = "sha256:1628a403fc9c3ea9b35924638a4d4fbe236f60ecdf4e22ed133fbbaf0bc7cb6b"},
@@ -2152,8 +2150,8 @@ s3transfer = [
     {file = "s3transfer-0.3.3.tar.gz", hash = "sha256:921a37e2aefc64145e7b73d50c71bb4f26f46e4c9f414dc648c6245ff92cf7db"},
 ]
 sentry-sdk = [
-    {file = "sentry-sdk-0.16.5.tar.gz", hash = "sha256:e12eb1c2c01cd9e9cfe70608dbda4ef451f37ef0b7cbb92e5d43f87c341d6334"},
-    {file = "sentry_sdk-0.16.5-py2.py3-none-any.whl", hash = "sha256:d359609e23ec9360b61e5ffdfa417e2f6bca281bfb869608c98c169c7e64acd5"},
+    {file = "sentry-sdk-0.17.8.tar.gz", hash = "sha256:e159f7c919d19ae86e5a4ff370fccc45149fab461fbeb93fb5a735a0b33a9cb1"},
+    {file = "sentry_sdk-0.17.8-py2.py3-none-any.whl", hash = "sha256:c9c0fa1412bad87104c4eee8dd36c7bbf60b0d92ae917ab519094779b22e6d9a"},
 ]
 simplejson = [
     {file = "simplejson-3.17.2-cp27-cp27m-macosx_10_13_x86_64.whl", hash = "sha256:2d3eab2c3fe52007d703a26f71cf649a8c771fcdd949a3ae73041ba6797cfcf8"},
