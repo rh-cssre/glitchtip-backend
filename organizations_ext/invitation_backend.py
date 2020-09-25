@@ -1,8 +1,8 @@
 from django.conf import settings
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.urls import re_path
 from django.utils.http import base36_to_int
 from django.utils.crypto import constant_time_compare
-from organizations.backends.tokens import RegistrationTokenGenerator
 from organizations.backends.defaults import InvitationBackend as BaseInvitationBackend
 from .models import Organization
 from .email import send_invitation_email
@@ -11,7 +11,7 @@ from .email import send_invitation_email
 REGISTRATION_TIMEOUT_DAYS = getattr(settings, "REGISTRATION_TIMEOUT_DAYS", 15)
 
 
-class InvitationTokenGenerator(RegistrationTokenGenerator):
+class InvitationTokenGenerator(PasswordResetTokenGenerator):
     def _make_hash_value(self, user, timestamp):
         return str(user.pk) + str(timestamp)
 
@@ -46,9 +46,10 @@ class InvitationBackend(BaseInvitationBackend):
     Based on django-organizations InvitationBackend but for org user instead of user
     """
 
-    def __init__(self, org_model=None):
+    def __init__(self, org_model=None, namespace=None):
         self.user_model = None
         self.org_model = Organization
+        self.namespace = namespace
 
     def get_urls(self):
         return [
