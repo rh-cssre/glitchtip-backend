@@ -8,8 +8,8 @@ from freezegun import freeze_time
 from glitchtip import test_utils  # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.models import EventStatus, Issue
-from .tasks import process_alerts
-from .models import Notification, ProjectAlert
+from ..tasks import process_alerts
+from ..models import Notification, ProjectAlert
 
 
 class AlertTestCase(GlitchTipTestCase):

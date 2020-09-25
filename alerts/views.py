@@ -2,11 +2,13 @@ from rest_framework import viewsets, exceptions
 from projects.models import Project
 from .models import ProjectAlert
 from .serializers import ProjectAlertSerializer
+from .permissions import ProjectAlertPermission
 
 
 class ProjectAlertViewSet(viewsets.ModelViewSet):
     queryset = ProjectAlert.objects.all()
     serializer_class = ProjectAlertSerializer
+    permission_classes = [ProjectAlertPermission]
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
