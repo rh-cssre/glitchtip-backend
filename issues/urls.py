@@ -8,9 +8,9 @@ router = BulkSimpleRouter()
 router.register(r"issues", IssueViewSet)
 
 issues_router = routers.NestedSimpleRouter(router, r"issues", lookup="issue")
-issues_router.register(r"events", EventViewSet, basename="event-issues")
+issues_router.register(r"events", EventViewSet, basename="issue-events")
 issues_router.register(
-    r"user-reports", UserReportViewSet, basename="user-reports-issues"
+    r"user-reports", UserReportViewSet, basename="issue-user-reports"
 )
 
 # The API URLs are now determined automatically by the router.

@@ -1,5 +1,5 @@
 from django.shortcuts import get_object_or_404
-from rest_framework import viewsets, views
+from rest_framework import viewsets, views, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Issue, Event, EventStatus
@@ -9,9 +9,16 @@ from .serializers import (
     EventDetailSerializer,
 )
 from .filters import IssueFilter
+from .permissions import IssuePermission, EventPermission
 
 
-class IssueViewSet(viewsets.ModelViewSet):
+class IssueViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
     """
     View and bulk update issues.
 
@@ -28,6 +35,7 @@ class IssueViewSet(viewsets.ModelViewSet):
     queryset = Issue.objects.all()
     serializer_class = IssueSerializer
     filterset_class = IssueFilter
+    permission_classes = [IssuePermission]
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
@@ -82,6 +90,7 @@ class IssueViewSet(viewsets.ModelViewSet):
 class EventViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Event.objects.all()
     serializer_class = EventSerializer
+    permission_classes = [EventPermission]
 
     def get_serializer_class(self):
         if self.action in ["retrieve", "latest"]:
@@ -120,6 +129,8 @@ class EventJsonView(views.APIView):
     Not significantly different from event API view in usage but format is very different.
     Exists mainly for Sentry API compatibility
     """
+
+    permission_classes = [EventPermission]
 
     def get(self, request, org, issue, event, format=None):
         event = get_object_or_404(

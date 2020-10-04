@@ -45,7 +45,7 @@ class EventTestCase(GlitchTipTestCase):
         issue2_event1 = baker.make("issues.Event", issue=issue2)
         issue1_event2 = baker.make("issues.Event", issue=issue1)
 
-        url = reverse("event-issues-latest", args=[issue1.id])
+        url = reverse("issue-events-latest", args=[issue1.id])
         res = self.client.get(url)
         self.assertContains(res, issue1_event2.pk.hex)
         self.assertEqual(res.data["previousEventID"], issue1_event1.pk.hex)

@@ -30,7 +30,7 @@ class IssuesUserReportTestCase(GlitchTipTestCase):
 
     def test_issues_list_user_report_count(self):
         url = reverse("issue-detail", kwargs={"pk": self.event.issue.pk})
-        with self.assertNumQueries(4):
+        with self.assertNumQueries(6):
             res = self.client.get(url)
         self.assertEqual(res.data["userReportCount"], 1)
 
@@ -43,7 +43,7 @@ class IssuesUserReportTestCase(GlitchTipTestCase):
             event_id=event2.pk.hex,
         )
         url = reverse(
-            "user-reports-issues-list", kwargs={"issue_pk": self.event.issue.pk}
+            "issue-user-reports-list", kwargs={"issue_pk": self.event.issue.pk}
         )
         res = self.client.get(url)
         self.assertContains(res, self.user_report.email)
