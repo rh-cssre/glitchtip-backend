@@ -3,6 +3,7 @@ from rest_framework import viewsets, exceptions
 from organizations_ext.models import Organization, OrganizationUserRole
 from .serializers import TeamSerializer
 from .models import Team
+from .permissions import TeamPermission
 
 
 class NestedTeamViewSet(viewsets.ModelViewSet):
@@ -10,6 +11,7 @@ class NestedTeamViewSet(viewsets.ModelViewSet):
 
     queryset = Team.objects.all()
     serializer_class = TeamSerializer
+    permission_classes = [TeamPermission]
 
     def get_queryset(self):
         if self.request.user.is_authenticated:
@@ -27,8 +29,14 @@ class NestedTeamViewSet(viewsets.ModelViewSet):
                 users=self.request.user,
                 organization_users__role__gte=OrganizationUserRole.ADMIN,
             )
-        except Organization.DoesNotExist:
-            raise exceptions.ValidationError("Organization does not exist")
+        except Organization.DoesNotExist as org_no_exist:
+            raise exceptions.ValidationError(
+                "Organization does not exist"
+            ) from org_no_exist
+        if Team.objects.filter(
+            organization=organization, slug=serializer.validated_data.get("slug")
+        ).exists():
+            raise exceptions.ValidationError("Slug must be unique for organization")
         team = serializer.save(organization=organization)
         org_user = organization.organization_users.filter(
             user=self.request.user

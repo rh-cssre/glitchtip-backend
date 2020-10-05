@@ -3,7 +3,7 @@ from .models import Team
 
 
 class RelatedTeamSerializer(serializers.ModelSerializer):
-    """ Less detailed team serializer intnded for nested relations """
+    """ Less detailed team serializer intended for nested relations """
 
     class Meta:
         model = Team
