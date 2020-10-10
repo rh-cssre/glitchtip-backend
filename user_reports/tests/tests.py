@@ -3,7 +3,7 @@ from django.shortcuts import reverse
 from model_bakery import baker
 from rest_framework.test import APITestCase
 from glitchtip import test_utils  # pylint: disable=unused-import
-from .models import UserReport
+from ..models import UserReport
 
 
 class ErrorPageEmbedTestCase(APITestCase):

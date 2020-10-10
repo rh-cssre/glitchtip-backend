@@ -6,7 +6,7 @@ from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from organizations_ext.models import OrganizationUserRole
-from .models import UserProjectAlert, User
+from ..models import UserProjectAlert, User
 
 
 class UserRegistrationTestCase(APITestCase):

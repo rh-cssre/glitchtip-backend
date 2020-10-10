@@ -8,6 +8,7 @@ from rest_framework.response import Response
 
 from projects.models import ProjectKey
 from issues.models import Event
+from issues.permissions import EventPermission
 from .models import UserReport
 from .forms import UserReportForm
 from .serializers import ErrorPageEmbedSerializer, UserReportSerializer
@@ -130,6 +131,7 @@ class ErrorPageEmbedView(views.APIView):
 class UserReportViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = UserReport.objects.all()
     serializer_class = UserReportSerializer
+    permission_classes = [EventPermission]
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
