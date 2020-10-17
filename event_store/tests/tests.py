@@ -114,3 +114,21 @@ class EventStoreTestCase(APITestCase):
         )
         self.assertTrue(isinstance(header[1], str))
 
+    def test_anonymize_ip(self):
+        """ ip address should get masked because default project settings are to scrub ip address """
+        with open("event_store/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        test_ip = "123.168.29.14"
+        res = self.client.post(self.url, data, format="json", REMOTE_ADDR=test_ip)
+        self.assertEqual(res.status_code, 200)
+        event = Event.objects.first()
+        self.assertNotEqual(event.data["user"]["ip_address"], test_ip)
+
+    def test_csp_event_anonymize_ip(self):
+        url = reverse("csp_store", args=[self.project.id]) + self.params
+        test_ip = "123.168.29.14"
+        data = mdn_sample_csp
+        res = self.client.post(url, data, format="json", REMOTE_ADDR=test_ip)
+        self.assertEqual(res.status_code, 200)
+        event = Event.objects.first()
+        self.assertNotEqual(event.data["user"]["ip_address"], test_ip)

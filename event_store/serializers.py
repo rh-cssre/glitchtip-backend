@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 from datetime import datetime
 from django.db import transaction, connection
 from ipware import get_client_ip
+from anonymizeip import anonymize_ip
 from rest_framework import serializers
 from sentry.eventtypes.error import ErrorEvent
 from sentry.eventtypes.base import DefaultEvent
@@ -43,7 +44,21 @@ class RequestSerializer(serializers.Serializer):
     query_string = serializers.CharField(required=False, allow_blank=True)
 
 
-class StoreDefaultSerializer(serializers.Serializer):
+class BaseSerializer(serializers.Serializer):
+    def process_user(self, project, data):
+        """ Fetch user data from SDK event and request """
+        user = data.get("user", {})
+        if self.context:
+            client_ip, is_routable = get_client_ip(self.context["request"])
+            if user or is_routable:
+                if is_routable:
+                    if project.should_scrub_ip_addresses:
+                        client_ip = anonymize_ip(client_ip)
+                    user["ip_address"] = client_ip
+                return user
+
+
+class StoreDefaultSerializer(BaseSerializer):
     """
     Default serializer. Used as both a base class and for default error types
     """
@@ -178,13 +193,9 @@ class StoreDefaultSerializer(serializers.Serializer):
             extra = data.get("extra")
             if extra:
                 json_data["extra"] = extra
-            user = data.get("user", {})
-            if self.context:
-                client_ip, is_routable = get_client_ip(self.context["request"])
-                if user or is_routable:
-                    if is_routable:
-                        user["ip_address"] = client_ip
-                    json_data["user"] = user
+            user = self.process_user(project, data)
+            if user:
+                json_data["user"] = user
             # Remove \u0000 values which are not supported by the postgres JSON data type
             json_data = replace(json_data, "\u0000", " ",)
             params = {
@@ -206,7 +217,7 @@ class StoreErrorSerializer(StoreDefaultSerializer):
     exception = serializers.JSONField(required=False)
 
 
-class StoreCSPReportSerializer(serializers.Serializer):
+class StoreCSPReportSerializer(BaseSerializer):
     """
     CSP Report Serializer
     Very different format from others Store serializers.
@@ -242,16 +253,22 @@ class StoreCSPReportSerializer(serializers.Serializer):
         normalized_csp = dict((k.replace("-", "_"), v) for k, v in csp.items())
         if "effective_directive" not in normalized_csp:
             normalized_csp["effective_directive"] = directive
+
+        json_data = {
+            "culprit": culprit,
+            "csp": normalized_csp,
+            "title": title,
+            "metadata": metadata,
+            "message": title,
+            "type": EventType.CSP.label,
+        }
+        user = self.process_user(project, data)
+        if user:
+            json_data["user"] = user
+
         params = {
             "issue": issue,
-            "data": {
-                "culprit": culprit,
-                "csp": normalized_csp,
-                "title": title,
-                "metadata": metadata,
-                "message": title,
-                "type": EventType.CSP.label,
-            },
+            "data": json_data,
         }
         return Event.objects.create(**params)
 

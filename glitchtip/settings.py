@@ -156,7 +156,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "glitchtip.middleware.proxy.DecompressBodyMiddleware",
+    "sentry.middleware.proxy.DecompressBodyMiddleware",
 ]
 
 ROOT_URLCONF = "glitchtip.urls"
