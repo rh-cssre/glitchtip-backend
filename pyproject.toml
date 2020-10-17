@@ -21,7 +21,7 @@ psycopg2-binary = "^2.8.4"
 uWSGI = "^2.0.18"
 whitenoise = "^5.0.1"
 boto3 = "^1.10.44"
-sentry-sdk = "^0.18.0"
+sentry-sdk = "^0.19.0"
 django-filter = "^2.2.0"
 celery = {extras = ["redis"], version = "~4.4.6"}
 django-celery-results = "^1.2.0"
