@@ -22,6 +22,9 @@ class Project(models.Model):
     created = models.DateTimeField(auto_now_add=True, db_index=True)
     platform = models.CharField(max_length=64, blank=True, null=True)
     first_event = models.DateTimeField(null=True)
+    scrub_ip_addresses = models.BooleanField(
+        default=True, help_text="Should project anonymize IP Addresses",
+    )
 
     class Meta:
         unique_together = (("organization", "slug"),)
@@ -36,6 +39,11 @@ class Project(models.Model):
         super().save(*args, **kwargs)
         if first:
             ProjectKey.objects.create(project=self)
+
+    @property
+    def should_scrub_ip_addresses(self):
+        """ Organization overrides project setting """
+        return self.scrub_ip_addresses or self.organization.scrub_ip_addresses
 
     def slugify_function(self, content):
         """
@@ -52,7 +60,7 @@ class ProjectCounter(models.Model):
     Counter for issue short IDs
     - Unique per project
     - Autoincrements on each new issue
-    - Seperate table for performance
+    - Separate table for performance
     """
 
     project = models.OneToOneField(Project, on_delete=models.CASCADE)

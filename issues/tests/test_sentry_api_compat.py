@@ -372,6 +372,8 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         self.assertEqual(res.data["projectID"], event.issue.project_id)
 
     def test_js_error_with_context(self):
+        self.project.scrub_ip_addresses = False
+        self.project.save()
         sdk_error, sentry_json, sentry_data = self.get_json_test_data(
             "js_error_with_context"
         )

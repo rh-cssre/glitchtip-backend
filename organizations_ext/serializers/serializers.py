@@ -16,11 +16,13 @@ class OrganizationDetailSerializer(OrganizationSerializer):
     projects = ProjectReferenceWithMemberSerializer(many=True)
     teams = TeamSerializer(many=True)
     openMembership = serializers.BooleanField(source="open_membership")
+    scrubIPAddresses = serializers.BooleanField(source="scrub_ip_addresses")
 
     class Meta(OrganizationSerializer.Meta):
         fields = OrganizationSerializer.Meta.fields + (
             "projects",
             "openMembership",
+            "scrubIPAddresses",
             "teams",
         )
 

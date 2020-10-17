@@ -6,7 +6,9 @@ from organizations_ext.models import OrganizationUserRole
 class GlitchTipTestCase(APITestCase):
     def create_user_and_project(self):
         self.user = baker.make("users.user")
-        self.organization = baker.make("organizations_ext.Organization")
+        self.organization = baker.make(
+            "organizations_ext.Organization", scrub_ip_addresses=False
+        )
         self.org_user = self.organization.add_user(
             self.user, OrganizationUserRole.ADMIN
         )

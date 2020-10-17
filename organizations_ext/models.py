@@ -140,6 +140,10 @@ class Organization(SharedBaseModel, OrganizationBase):
     open_membership = models.BooleanField(
         default=True, help_text="Allow any organization member to join any team"
     )
+    scrub_ip_addresses = models.BooleanField(
+        default=True,
+        help_text="Default for whether projects should script IP Addresses",
+    )
 
     def add_user(self, user, role=OrganizationUserRole.MEMBER):
         """
