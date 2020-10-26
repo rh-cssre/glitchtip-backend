@@ -1,10 +1,13 @@
 import random
 from django.core.management.base import BaseCommand
 from model_bakery import baker
+from model_bakery.random_gen import gen_json
 from projects.models import Project
-from glitchtip.test_utils import generators
 from event_store.test_data import event_generator
 from event_store.views import EventStoreAPIView
+
+
+baker.generators.add("django.db.models.JSONField", gen_json)
 
 
 class Command(BaseCommand):
