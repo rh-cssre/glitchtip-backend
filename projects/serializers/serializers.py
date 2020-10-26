@@ -35,7 +35,9 @@ class ProjectSerializer(ProjectReferenceWithMemberSerializer):
     isPublic = serializers.SerializerMethodField()
     organization = OrganizationReferenceSerializer(read_only=True)
     teams = RelatedTeamSerializer(source="team_set", read_only=True, many=True)
-    scrubIPAddresses = serializers.BooleanField(source="scrub_ip_addresses")
+    scrubIPAddresses = serializers.BooleanField(
+        source="scrub_ip_addresses", required=False
+    )
 
     class Meta(ProjectReferenceWithMemberSerializer.Meta):
         fields = (
