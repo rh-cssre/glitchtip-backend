@@ -2,6 +2,8 @@ from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, views, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.filters import OrderingFilter
+from django_filters.rest_framework import DjangoFilterBackend
 from .models import Issue, Event, EventStatus
 from .serializers import (
     IssueSerializer,
@@ -35,7 +37,10 @@ class IssueViewSet(
     queryset = Issue.objects.all()
     serializer_class = IssueSerializer
     filterset_class = IssueFilter
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
     permission_classes = [IssuePermission]
+    ordering = ["-last_seen"]
+    ordering_fields = ["last_seen", "created", "count"]
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
@@ -76,6 +81,7 @@ class IssueViewSet(
             .prefetch_related("userreport_set")
         )
 
+        # qs = qs.order_by("last_seen")
         return qs
 
     def bulk_update(self, request, *args, **kwargs):

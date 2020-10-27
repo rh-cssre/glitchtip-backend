@@ -63,7 +63,7 @@ class Issue(models.Model):
     short_id = models.PositiveIntegerField(null=True)
     search_vector = SearchVectorField(null=True, editable=False)
     count = models.PositiveIntegerField(default=1, editable=False)
-    last_seen = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
         unique_together = (
