@@ -346,6 +346,7 @@ REST_AUTH_SERIALIZERS = {
 REST_AUTH_REGISTER_SERIALIZERS = {
     "REGISTER_SERIALIZER": "users.serializers.RegisterSerializer",
 }
+REST_AUTH_TOKEN_MODEL = "users.utils.NoopModel"
 REST_AUTH_TOKEN_CREATOR = "users.utils.noop_token_creator"
 
 # By default (False) only the first user may register and create an organization
