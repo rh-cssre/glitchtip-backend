@@ -1,8 +1,10 @@
+from django.db.models.expressions import RawSQL
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, views, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.filters import OrderingFilter
+
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Issue, Event, EventStatus
 from .serializers import (
@@ -40,7 +42,7 @@ class IssueViewSet(
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     permission_classes = [IssuePermission]
     ordering = ["-last_seen"]
-    ordering_fields = ["last_seen", "created", "count"]
+    ordering_fields = ["last_seen", "created", "count", "priority"]
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
@@ -75,13 +77,21 @@ class IssueViewSet(
             # Anything left is full text search
             qs = qs.filter(search_vector=queries)
 
+        if str(self.request.query_params.get("sort")).endswith("priority"):
+            # Raw SQL must be added when sorting by priority
+            # Inspired by https://stackoverflow.com/a/43788975/443457
+            qs = qs.annotate(
+                priority=RawSQL(
+                    "LOG10(count) + EXTRACT(EPOCH FROM last_seen)/300000", ()
+                )
+            )
+
         qs = (
             qs.select_related("project")
             .defer("search_vector")
             .prefetch_related("userreport_set")
         )
 
-        # qs = qs.order_by("last_seen")
         return qs
 
     def bulk_update(self, request, *args, **kwargs):

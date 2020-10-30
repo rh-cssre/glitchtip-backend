@@ -188,6 +188,26 @@ class IssuesAPITestCase(GlitchTipTestCase):
         self.assertContains(res, issue2.title)
         self.assertNotContains(res, issue3.title)
 
+    def test_issue_list_sort(self):
+        issue1 = baker.make("issues.Issue", project=self.project)
+        issue2 = baker.make("issues.Issue", project=self.project)
+        issue3 = baker.make("issues.Issue", project=self.project)
+
+        baker.make("issues.Event", issue=issue2, _quantity=2)
+        baker.make("issues.Event", issue=issue1)
+
+        res = self.client.get(self.url)
+        self.assertEqual(res.data[0]["id"], issue1.id)
+
+        res = self.client.get(self.url + "?sort=-count")
+        self.assertEqual(res.data[0]["id"], issue2.id)
+
+        res = self.client.get(self.url + "?sort=priority")
+        self.assertEqual(res.data[0]["id"], issue3.id)
+
+        res = self.client.get(self.url + "?sort=-priority")
+        self.assertEqual(res.data[0]["id"], issue2.id)
+
     def test_filter_is_status(self):
         """ Match sentry's usage of "is" for status filtering """
         resolved_issue = baker.make(
