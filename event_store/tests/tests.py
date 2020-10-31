@@ -20,6 +20,13 @@ class EventStoreTestCase(APITestCase):
         res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 
+    def test_store_duplicate(self):
+        with open("event_store/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        self.client.post(self.url, data, format="json")
+        res = self.client.post(self.url, data, format="json")
+        self.assertContains(res, "ID already exist", status_code=403)
+
     def test_store_api_auth_failure(self):
         url = "/api/1/store/"
         with open("event_store/test_data/py_hi_event.json") as json_file:

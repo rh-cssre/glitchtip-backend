@@ -2,9 +2,11 @@ from typing import List, Tuple, Union
 from urllib.parse import urlparse
 from datetime import datetime
 from django.db import transaction, connection
+from django.db.utils import IntegrityError
 from ipware import get_client_ip
 from anonymizeip import anonymize_ip
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
 from sentry.eventtypes.error import ErrorEvent
 from sentry.eventtypes.base import DefaultEvent
 from issues.models import EventType, Event, Issue, EventTagKey
@@ -204,7 +206,14 @@ class StoreDefaultSerializer(BaseSerializer):
                 "timestamp": data.get("timestamp"),
                 "data": json_data,
             }
-            event = Event.objects.create(**params)
+            try:
+                event = Event.objects.create(**params)
+            except IntegrityError as e:
+                # This except is more efficient than a query for exists().
+                if e.args and "event_id" in e.args[0]:
+                    raise PermissionDenied("An event with the same ID already exists (%s)" % params["event_id"])
+                raise e
+
         issue.check_for_status_update()
         self.generate_tags(event, data)
         return event
