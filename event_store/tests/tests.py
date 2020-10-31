@@ -27,12 +27,30 @@ class EventStoreTestCase(APITestCase):
         res = self.client.post(self.url, data, format="json")
         self.assertContains(res, "ID already exist", status_code=403)
 
+    def test_store_invalid_key(self):
+        with open("event_store/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        self.client.post(self.url, data, format="json")
+        res = self.client.post(self.url, data, format="json")
+        self.assertContains(res, "ID already exist", status_code=403)
+
     def test_store_api_auth_failure(self):
         url = "/api/1/store/"
         with open("event_store/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
+        params = f"?sentry_key=aaa"
+        url = reverse("event_store", args=[self.project.id]) + params
         res = self.client.post(url, data, format="json")
-        self.assertEqual(res.status_code, 403)
+        self.assertEqual(res.status_code, 401)
+
+        params = f"?sentry_key=238df2aac6331578a16c14bcb3db5259"
+        url = reverse("event_store", args=[self.project.id]) + params
+        res = self.client.post(url, data, format="json")
+        self.assertContains(res, "Invalid api key", status_code=401)
+
+        url = reverse("event_store", args=[10000]) + self.params
+        res = self.client.post(url, data, format="json")
+        self.assertContains(res, "Invalid project_id", status_code=400)
 
     def test_error_event(self):
         with open("event_store/test_data/py_error.json") as json_file:

@@ -2,7 +2,7 @@ import json
 import uuid
 import string
 import random
-from django.core.exceptions import SuspiciousOperation
+from django.core.exceptions import SuspiciousOperation, ValidationError
 from django.conf import settings
 from django.http import HttpResponse
 from django.test import RequestFactory
@@ -77,16 +77,21 @@ class EventStoreAPIView(APIView):
         if settings.EVENT_STORE_DEBUG:
             print(json.dumps(request.data))
         sentry_key = EventStoreAPIView.auth_from_request(request)
-        project = (
-            Project.objects.filter(
-                id=kwargs.get("id"), projectkey__public_key=sentry_key
+        try:
+            project = (
+                Project.objects.filter(
+                    id=kwargs.get("id"), projectkey__public_key=sentry_key
+                )
+                .select_related("organization")
+                .only("id", "first_event", "organization__is_accepting_events")
+                .first()
             )
-            .select_related("organization")
-            .only("id", "first_event", "organization__is_accepting_events")
-            .first()
-        )
+        except ValidationError as e:
+            return Response({'error': 'Invalid api key'}, status=401)
         if not project:
-            raise exceptions.PermissionDenied()
+            if Project.objects.filter(id=kwargs.get("id")).exists():
+                return Response({'error': 'Invalid api key'}, status=401)
+            raise exceptions.ValidationError("Invalid project_id: %s" % kwargs.get("id"))
         if not project.organization.is_accepting_events:
             raise exceptions.Throttled(detail="event rejected due to rate limit")
         serializer = self.get_serializer_class(request.data)(
@@ -95,7 +100,6 @@ class EventStoreAPIView(APIView):
         if serializer.is_valid():
             event = serializer.create(project, serializer.data)
             return Response({"id": event.event_id_hex})
-        # TODO {"error": "Invalid api key"}, CSP type, valid json but no type at all
         return Response()
 
     @classmethod
