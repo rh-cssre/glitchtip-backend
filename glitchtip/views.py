@@ -34,6 +34,7 @@ class SettingsView(APIView):
                 "stripePublicKey": stripe_public_key,
                 "matomoURL": settings.MATOMO_URL,
                 "matomoSiteId": settings.MATOMO_SITE_ID,
+                "rocketChatDomain": settings.ROCKET_CHAT_DOMAIN,
                 "sentryDSN": settings.SENTRY_FRONTEND_DSN,
             }
         )

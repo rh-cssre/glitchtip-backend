@@ -410,6 +410,9 @@ def organization_request_callback(request):
 MATOMO_URL = env.str("MATOMO_URL", default=None)
 MATOMO_SITE_ID = env.str("MATOMO_SITE_ID", default=None)
 
+# Set to Rocket Chat domain to enable live help widget. Example `https://example.rocket.chat`
+ROCKET_CHAT_DOMAIN = env.str("ROCKET_CHAT_DOMAIN", None)
+
 # Is running unit test
 TESTING = len(sys.argv) > 1 and sys.argv[1] == "test"
 
