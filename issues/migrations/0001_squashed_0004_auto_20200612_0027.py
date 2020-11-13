@@ -7,7 +7,7 @@ from django.db import migrations, models
 import django.db.models.deletion
 import django.utils.timezone
 import uuid
-from .sql.triggers import update_issue_trigger
+from .sql.triggers import UPDATE_ISSUE_TRIGGER
 
 
 class Migration(migrations.Migration):
@@ -164,7 +164,7 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.RunSQL(
-            sql=update_issue_trigger,
+            sql=UPDATE_ISSUE_TRIGGER,
             reverse_sql="DROP TRIGGER IF EXISTS event_issue_update on issues_event; DROP FUNCTION IF EXISTS update_issue;",
         ),
     ]

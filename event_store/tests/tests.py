@@ -1,4 +1,5 @@
 import json
+import random
 from django.shortcuts import reverse
 from rest_framework.test import APITestCase
 from model_bakery import baker
@@ -157,3 +158,19 @@ class EventStoreTestCase(APITestCase):
         self.assertEqual(res.status_code, 200)
         event = Event.objects.first()
         self.assertNotEqual(event.data["user"]["ip_address"], test_ip)
+
+    def test_store_very_large_data(self):
+        """
+        This test is expected to exceed the 1mb limit of a postgres tsvector
+        """
+        with open("event_store/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+
+        data["platform"] = " ".join([str(random.random()) for _ in range(50000)])
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(
+            Issue.objects.first().search_vector,
+            None,
+            "No tsvector is expected as it would exceed the Postgres limit",
+        )
