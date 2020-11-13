@@ -25,6 +25,26 @@ def replace(data: Union[str, dict, list], match: str, repl: str):
     return data
 
 
+def sanitize_bad_postgres_chars(data: Union[str, dict, list]):
+    """
+    Remove values which are not supported by the postgres string data types
+    """
+    known_bads = ["\x00"]
+    for known_bad in known_bads:
+        data = data.replace(known_bad, " ")
+    return data
+
+
+def sanitize_bad_postgres_json(data: Union[str, dict, list]):
+    """
+    Remove values which are not supported by the postgres JSONB data type
+    """
+    known_bads = ["\u0000"]
+    for known_bad in known_bads:
+        data = replace(data, known_bad, " ")
+    return data
+
+
 class FlexibleDateTimeField(serializers.DateTimeField):
     """ Supports both DateTime and unix epoch timestamp """
 
@@ -50,7 +70,7 @@ class BaseSerializer(serializers.Serializer):
     def process_user(self, project, data):
         """ Fetch user data from SDK event and request """
         user = data.get("user", {})
-        if self.context:
+        if self.context and self.context.get("request"):
             client_ip, is_routable = get_client_ip(self.context["request"])
             if user or is_routable:
                 if is_routable:
@@ -149,7 +169,8 @@ class StoreDefaultSerializer(BaseSerializer):
     def get_message(self, data):
         return data.get("logentry", {}).get("message", "")
 
-    def create(self, project, data):
+    def create(self, data):
+        project = self.context.get("project")
         eventtype = self.get_eventtype()
         metadata = eventtype.get_metadata(data)
         title = eventtype.get_title(metadata)
@@ -173,11 +194,11 @@ class StoreDefaultSerializer(BaseSerializer):
                 project.first_event = data.get("timestamp")
                 project.save(update_fields=["first_event"])
             issue, _ = Issue.objects.get_or_create(
-                title=title,
-                culprit=culprit,
+                title=sanitize_bad_postgres_chars(title),
+                culprit=sanitize_bad_postgres_chars(culprit),
                 project_id=project.id,
                 type=self.type,
-                defaults={"metadata": metadata},
+                defaults={"metadata": sanitize_bad_postgres_json(metadata)},
             )
             json_data = {
                 "contexts": contexts,
@@ -198,20 +219,21 @@ class StoreDefaultSerializer(BaseSerializer):
             user = self.process_user(project, data)
             if user:
                 json_data["user"] = user
-            # Remove \u0000 values which are not supported by the postgres JSON data type
-            json_data = replace(json_data, "\u0000", " ",)
             params = {
                 "event_id": data["event_id"],
                 "issue": issue,
                 "timestamp": data.get("timestamp"),
-                "data": json_data,
+                "data": sanitize_bad_postgres_json(json_data),
             }
             try:
                 event = Event.objects.create(**params)
             except IntegrityError as e:
                 # This except is more efficient than a query for exists().
                 if e.args and "event_id" in e.args[0]:
-                    raise PermissionDenied("An event with the same ID already exists (%s)" % params["event_id"])
+                    raise PermissionDenied(
+                        "An event with the same ID already exists (%s)"
+                        % params["event_id"]
+                    )
                 raise e
 
         issue.check_for_status_update()
@@ -240,7 +262,8 @@ class StoreCSPReportSerializer(BaseSerializer):
         # This is done to support the hyphen
         self.fields.update({"csp-report": serializers.JSONField()})
 
-    def create(self, project, data):
+    def create(self, data):
+        project = self.context.get("project")
         csp = data["csp-report"]
         title = self.get_title(csp)
         culprit = self.get_culprit(csp)

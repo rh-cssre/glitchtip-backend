@@ -114,7 +114,8 @@ class EventStoreTestCase(APITestCase):
 
     def test_null_character_event(self):
         """
-        Unicode null characters \u0000 are not compatible with Postgres JSON data types.
+        Unicode null characters \u0000 are not supported by Postgres JSONB
+        NUL \x00 characters are not supported by Postgres string types
         They should be filtered out
         """
         with open("event_store/test_data/py_error.json") as json_file:
@@ -122,6 +123,7 @@ class EventStoreTestCase(APITestCase):
         data["exception"]["values"][0]["stacktrace"]["frames"][0][
             "function"
         ] = "a\u0000a"
+        data["exception"]["values"][0]["value"] = "\x00\u0000"
         res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 

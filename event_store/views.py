@@ -87,18 +87,20 @@ class EventStoreAPIView(APIView):
                 .first()
             )
         except ValidationError as e:
-            return Response({'error': 'Invalid api key'}, status=401)
+            return Response({"error": "Invalid api key"}, status=401)
         if not project:
             if Project.objects.filter(id=kwargs.get("id")).exists():
-                return Response({'error': 'Invalid api key'}, status=401)
-            raise exceptions.ValidationError("Invalid project_id: %s" % kwargs.get("id"))
+                return Response({"error": "Invalid api key"}, status=401)
+            raise exceptions.ValidationError(
+                "Invalid project_id: %s" % kwargs.get("id")
+            )
         if not project.organization.is_accepting_events:
             raise exceptions.Throttled(detail="event rejected due to rate limit")
         serializer = self.get_serializer_class(request.data)(
-            data=request.data, context={"request": self.request}
+            data=request.data, context={"request": self.request, "project": project}
         )
         if serializer.is_valid():
-            event = serializer.create(project, serializer.data)
+            event = serializer.save()
             return Response({"id": event.event_id_hex})
         return Response()
 
