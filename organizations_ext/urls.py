@@ -2,6 +2,7 @@ from django.urls import path, include
 from rest_framework_nested import routers
 from issues.views import IssueViewSet
 from teams.views import NestedTeamViewSet
+from environments.views import EnvironmentViewSet
 from glitchtip.routers import BulkSimpleRouter
 from .views import (
     OrganizationViewSet,
@@ -29,6 +30,9 @@ organizations_router.register(
 )
 organizations_router.register(
     r"projects", OrganizationProjectsViewSet, basename="organization-projects"
+)
+organizations_router.register(
+    r"environments", EnvironmentViewSet, basename="organization-environments"
 )
 
 urlpatterns = [
