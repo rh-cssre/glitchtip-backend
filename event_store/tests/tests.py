@@ -91,7 +91,7 @@ class EventStoreTestCase(APITestCase):
 
         # Second event should have less queries
         data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4bb"
-        with self.asserties(5):
+        with self.assertNumQueries(5):
             res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 
