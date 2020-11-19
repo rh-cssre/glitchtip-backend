@@ -322,10 +322,12 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         event = Event.objects.get(pk=res.data["id"])
         url = self.get_project_events_detail(event.pk)
         res = self.client.get(url)
+
+        self.assertCompareData(event.event_json(), sentry_json, ["environment"])
         self.assertCompareData(
             res.data,
             sentry_data,
-            ["eventID", "title", "culprit", "platform", "type", "metadata"],
+            ["eventID", "title", "culprit", "platform", "type", "metadata",],
         )
         res_exception = next(filter(is_exception, res.data["entries"]), None)
         sentry_exception = next(filter(is_exception, sentry_data["entries"]), None)
@@ -336,6 +338,10 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         tags = res.data.get("tags")
         browser_tag = next(filter(lambda tag: tag["key"] == "browser", tags), None)
         self.assertEqual(browser_tag["value"], "Firefox 76.0")
+        environment_tag = next(
+            filter(lambda tag: tag["key"] == "environment", tags), None
+        )
+        self.assertEqual(environment_tag["value"], "Development")
 
         event_json = event.event_json()
         browser_tag = next(

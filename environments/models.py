@@ -6,7 +6,7 @@ class EnvironmentProject(models.Model):
     environment = models.ForeignKey(
         "environments.Environment", on_delete=models.CASCADE
     )
-    is_hidden = models.BooleanField()
+    is_hidden = models.BooleanField(default=False)
     created = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
