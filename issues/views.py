@@ -70,8 +70,17 @@ class IssueViewSet(
                     queries = queries.replace(query, "").strip()
 
                     query_name, query_value = query_part
+                    query_value = query_value.strip('"')
+
                     if query_name == "is":
                         qs = qs.filter(status=EventStatus.from_string(query_value))
+                    elif query_name == "has":
+                        qs = qs.filter(event__tags__key__key=query_value)
+                    else:
+                        qs = qs.filter(
+                            event__tags__key__key=query_name,
+                            event__tags__value=query_value,
+                        )
 
         if queries:
             # Anything left is full text search
