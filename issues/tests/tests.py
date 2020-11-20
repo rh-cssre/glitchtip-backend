@@ -216,6 +216,9 @@ class IssuesAPITestCase(GlitchTipTestCase):
         unresolved_issue = baker.make(
             Issue, status=EventStatus.UNRESOLVED, project=self.project
         )
+        unresolved_event = baker.make("issues.Event", issue=unresolved_issue)
+        tag = baker.make("issues.EventTag", key__key="platform", value="Linux")
+        unresolved_event.tags.add(tag)
         res = self.client.get(self.url, {"query": "is:unresolved has:platform"})
         self.assertEqual(len(res.data), 1)
         self.assertContains(res, unresolved_issue.title)
