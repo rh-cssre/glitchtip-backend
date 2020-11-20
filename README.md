@@ -6,7 +6,7 @@
 
 # GlitchTip Backend
 
-GlitchTip is an open source, Sentry API compatible error tracking platform. It is a partial fork/partial reimplementation of Sentry's open source codebase before it went proprietary. Its goals are to be a modern, easy-to-develop error tracking platform that respects your freedom to use it any way you wish. Some differences include:
+GlitchTip is an open source, Sentry API compatible error tracking platform. It is a partial fork/mostly reimplementation of Sentry's open source codebase before it went proprietary. Its goals are to be a modern, easy-to-develop error tracking platform that respects your freedom to use it any way you wish. Some differences include:
 
 - A modern development environment with Python 3 and Django 3.1.
 - Simplicity over features. We use Postgres to store error data. Our code base is a fraction of the size of Sentry and looks like a typical Django app. We leverage existing open source Django ecosystem apps whenever possible.
@@ -45,3 +45,9 @@ Locust is built into the dev dependencies. To run with locus run
 Now go to localhost:8089 to run the test.
 
 Locust will not be intalled to production docker images and cannot be run from them.
+
+# Acknowledgements
+
+- Thank you to the Sentry team for their ongoing open source SDK work and formerly open source backend of which this project is based on.
+- We use Rocket Chat for embedded support on glitchtip.com and in app
+- Matomo is used for analytics and is not shared with any third party

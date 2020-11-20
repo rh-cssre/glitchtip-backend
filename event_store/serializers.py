@@ -1,4 +1,4 @@
-from typing import List, Tuple, Union
+from typing import Dict, List, Tuple, Union
 from urllib.parse import urlparse
 from datetime import datetime
 from django.db import transaction, connection
@@ -10,6 +10,7 @@ from rest_framework.exceptions import PermissionDenied
 from sentry.eventtypes.error import ErrorEvent
 from sentry.eventtypes.base import DefaultEvent
 from issues.models import EventType, Event, Issue, EventTagKey
+from environments.models import Environment
 from .event_tag_processors import TAG_PROCESSORS
 from .event_context_processors import EVENT_CONTEXT_PROCESSORS
 
@@ -88,6 +89,7 @@ class StoreDefaultSerializer(BaseSerializer):
     type = EventType.DEFAULT
     breadcrumbs = serializers.JSONField(required=False)
     contexts = serializers.JSONField(required=False)
+    environment = serializers.CharField(required=False)
     event_id = serializers.UUIDField()
     extra = serializers.JSONField(required=False)
     level = serializers.CharField(required=False)
@@ -122,9 +124,12 @@ class StoreDefaultSerializer(BaseSerializer):
                             frame["in_app"] = False
         return exception
 
-    def generate_tags(self, event, data):
-        """ Determine and ddd tag relational data """
-        tags: List[Tuple[str, str]] = []
+    def generate_tags(self, event: Event, data: Dict, tags: List[Tuple[str, str]] = []):
+        """
+        Determine tag relational data
+
+        Optionally pass tags array for existing known tags to generate
+        """
         for Processor in TAG_PROCESSORS:
             processor = Processor()
             value = processor.get_tag_values(data)
@@ -169,6 +174,13 @@ class StoreDefaultSerializer(BaseSerializer):
     def get_message(self, data):
         return data.get("logentry", {}).get("message", "")
 
+    def get_environment(self, name: str, project):
+        environment, _ = Environment.objects.get_or_create(
+            name=name, organization_id=project.organization_id
+        )
+        environment.projects.add(project)
+        return environment
+
     def create(self, data):
         project = self.context.get("project")
         eventtype = self.get_eventtype()
@@ -200,6 +212,11 @@ class StoreDefaultSerializer(BaseSerializer):
                 type=self.type,
                 defaults={"metadata": sanitize_bad_postgres_json(metadata)},
             )
+
+            environment = None
+            if data.get("environment"):
+                environment = self.get_environment(data["environment"], project)
+
             json_data = {
                 "contexts": contexts,
                 "culprit": culprit,
@@ -213,12 +230,17 @@ class StoreDefaultSerializer(BaseSerializer):
                 "title": title,
                 "type": self.type.label,
             }
+
+            if environment:
+                json_data["environment"] = environment.name
+
             extra = data.get("extra")
             if extra:
                 json_data["extra"] = extra
             user = self.process_user(project, data)
             if user:
                 json_data["user"] = user
+
             params = {
                 "event_id": data["event_id"],
                 "issue": issue,
@@ -233,11 +255,16 @@ class StoreDefaultSerializer(BaseSerializer):
                     raise PermissionDenied(
                         "An event with the same ID already exists (%s)"
                         % params["event_id"]
-                    )
+                    ) from e
                 raise e
 
         issue.check_for_status_update()
-        self.generate_tags(event, data)
+
+        tags = []
+        if environment:
+            tags.append(("environment", environment.name))
+        self.generate_tags(event, data, tags)
+
         return event
 
 
