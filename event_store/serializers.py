@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 from datetime import datetime
 from django.db import transaction, connection
 from django.db.utils import IntegrityError
+from django.utils.timezone import make_aware
 from ipware import get_client_ip
 from anonymizeip import anonymize_ip
 from rest_framework import serializers
@@ -51,7 +52,7 @@ class FlexibleDateTimeField(serializers.DateTimeField):
 
     def to_internal_value(self, timestamp):
         try:
-            return datetime.fromtimestamp(float(timestamp))
+            return make_aware(datetime.fromtimestamp(float(timestamp)))
         except ValueError:
             return super().to_internal_value(timestamp)
 
