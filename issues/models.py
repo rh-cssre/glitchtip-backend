@@ -2,7 +2,6 @@ import uuid
 from django.contrib.postgres.search import SearchVectorField
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
-from sentry.interfaces.stacktrace import get_context
 from user_reports.models import UserReport
 from .utils import base32_encode
 
@@ -185,62 +184,6 @@ class Event(models.Model):
     @property
     def user_report(self):
         return UserReport.objects.filter(event_id=self.pk).first()
-
-    @property
-    def entries(self):
-        def get_has_system_frames(frames):
-            return any(frame.in_app for frame in frames)
-
-        entries = []
-
-        exception = self.data.get("exception")
-        # Some, but not all, keys are made more JS camel case like
-        if exception and exception.get("values"):
-            # https://gitlab.com/glitchtip/sentry-open-source/sentry/-/blob/master/src/sentry/interfaces/stacktrace.py#L487
-            # if any frame is "in_app" set this to True
-            exception["hasSystemFrames"] = False
-            for value in exception["values"]:
-                if "stacktrace" in value and "frames" in value["stacktrace"]:
-                    for frame in value["stacktrace"]["frames"]:
-                        if frame.get("in_app") == True:
-                            exception["hasSystemFrames"] = True
-                        if "in_app" in frame:
-                            frame["inApp"] = frame.pop("in_app")
-                        if "abs_path" in frame:
-                            frame["absPath"] = frame.pop("abs_path")
-                        if "colno" in frame:
-                            frame["colNo"] = frame.pop("colno")
-                        if "lineno" in frame:
-                            frame["lineNo"] = frame.pop("lineno")
-                            pre_context = frame.pop("pre_context", None)
-                            post_context = frame.pop("post_context", None)
-                            frame["context"] = get_context(
-                                frame["lineNo"],
-                                frame.get("context_line"),
-                                pre_context,
-                                post_context,
-                            )
-
-            entries.append({"type": "exception", "data": exception})
-
-        request = self.data.get("request")
-        if request:
-            request["inferredContentType"] = request.pop("inferred_content_type")
-            entries.append({"type": "request", "data": request})
-
-        breadcrumbs = self.data.get("breadcrumbs")
-        if breadcrumbs:
-            entries.append({"type": "breadcrumbs", "data": {"values": breadcrumbs}})
-
-        message = self.data.get("message")
-        if message:
-            entries.append({"type": "message", "data": {"formatted": message}})
-
-        csp = self.data.get("csp")
-        if csp:
-            entries.append({"type": EventType.CSP.label, "data": csp})
-
-        return entries
 
     def _build_context(self, context: list, base_line_no: int, is_pre: bool):
         context_length = len(context)

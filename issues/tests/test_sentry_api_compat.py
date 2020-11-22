@@ -1,5 +1,6 @@
 import json
-from typing import List, Dict
+from typing import List, Dict, Union
+from django.utils import dateparse
 from django.urls import reverse
 from event_store.test_data.django_error_factory import message
 from event_store.test_data.csp import mdn_sample_csp
@@ -43,6 +44,31 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
     def upgrade_metadata(self, value: dict):
         value["title"] = self.upgrade_title(value.get("title"))
         return value
+
+    def upgrade_datetime(self, value: str):
+        """
+        DRF DateTimeField sets precision while Sentry OSS does not
+        DRF DateTimeField 2020-07-23T02:54:37.823000Z
+        Sentry OSS: 2020-07-23T02:54:37.823Z
+        """
+        date_value = dateparse.parse_datetime(value)
+        if date_value:
+            value = date_value.isoformat()
+            if value.endswith("+00:00"):
+                value = value[:-6] + "Z"
+        return value
+
+    def upgrade_data(self, data: Union[str, dict, list]):
+        """ A recursive replace function """
+        if isinstance(data, dict):
+            return {k: self.upgrade_data(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self.upgrade_data(i) for i in data]
+        elif isinstance(data, str):
+            if data.endswith("Z"):
+                return self.upgrade_datetime(data)
+            return data
+        return data
 
     def assertCompareData(self, data1: Dict, data2: Dict, fields: List[str]):
         """ Compare data of two dict objects. Compare only provided fields list """
@@ -145,8 +171,18 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         event = Event.objects.first()
         self.assertIsNotNone(event.timestamp)
         self.assertNotEqual(event.timestamp, sdk_error["timestamp"])
+
         event_json = event.event_json()
-        self.assertEqual(event_json["datetime"], sentry_json["datetime"])
+        self.assertCompareData(event_json, sentry_json, ["datetime", "breadcrumbs"])
+
+        url = self.get_project_events_detail(event.pk)
+        res = self.client.get(url)
+        res_data = res.json()
+        self.assertCompareData(res_data, sentry_data, ["datetime"])
+        self.assertEqual(res_data["entries"][1].get("type"), "breadcrumbs")
+        self.assertEqual(
+            res_data["entries"][1], self.upgrade_data(sentry_data["entries"][1]),
+        )
 
     def test_dotnet_error(self):
         # Don't mimic this test, use self.get_jest_test_data instead

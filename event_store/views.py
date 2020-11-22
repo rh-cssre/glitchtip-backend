@@ -102,6 +102,7 @@ class EventStoreAPIView(APIView):
         if serializer.is_valid():
             event = serializer.save()
             return Response({"id": event.event_id_hex})
+        print(serializer.errors)
         return Response()
 
     @classmethod

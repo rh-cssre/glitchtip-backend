@@ -1,7 +1,9 @@
 from rest_framework import serializers
 from projects.serializers.base_serializers import ProjectReferenceSerializer
 from user_reports.serializers import UserReportSerializer
-from .models import Issue, Event, EventTag
+from sentry.interfaces.stacktrace import get_context
+from glitchtip.serializers import FlexibleDateTimeField
+from .models import Issue, Event, EventTag, EventType
 
 
 class EventTagSerializer(serializers.ModelSerializer):
@@ -21,11 +23,94 @@ class EventUserSerializer(serializers.Serializer):
     id = serializers.CharField(allow_null=True)
 
 
+class BaseBreadcrumbsSerializer(serializers.Serializer):
+    category = serializers.CharField()
+    level = serializers.CharField(default="info")
+    event_id = serializers.CharField(required=False)
+    data = serializers.JSONField(required=False)
+    message = serializers.CharField(required=False)
+    type = serializers.CharField(default="default")
+
+
+class BreadcrumbsSerializer(BaseBreadcrumbsSerializer):
+    timestamp = FlexibleDateTimeField()
+    message = serializers.CharField(default=None)
+    event_id = serializers.CharField(default=None)
+    data = serializers.JSONField(default=None)
+
+
+class EventEntriesSerializer(serializers.Serializer):
+    def to_representation(self, instance):
+        def get_has_system_frames(frames):
+            return any(frame.in_app for frame in frames)
+
+        entries = []
+
+        exception = instance.get("exception")
+        # Some, but not all, keys are made more JS camel case like
+        if exception and exception.get("values"):
+            # https://gitlab.com/glitchtip/sentry-open-source/sentry/-/blob/master/src/sentry/interfaces/stacktrace.py#L487
+            # if any frame is "in_app" set this to True
+            exception["hasSystemFrames"] = False
+            for value in exception["values"]:
+                if "stacktrace" in value and "frames" in value["stacktrace"]:
+                    for frame in value["stacktrace"]["frames"]:
+                        if frame.get("in_app") == True:
+                            exception["hasSystemFrames"] = True
+                        if "in_app" in frame:
+                            frame["inApp"] = frame.pop("in_app")
+                        if "abs_path" in frame:
+                            frame["absPath"] = frame.pop("abs_path")
+                        if "colno" in frame:
+                            frame["colNo"] = frame.pop("colno")
+                        if "lineno" in frame:
+                            frame["lineNo"] = frame.pop("lineno")
+                            pre_context = frame.pop("pre_context", None)
+                            post_context = frame.pop("post_context", None)
+                            frame["context"] = get_context(
+                                frame["lineNo"],
+                                frame.get("context_line"),
+                                pre_context,
+                                post_context,
+                            )
+
+            entries.append({"type": "exception", "data": exception})
+
+        breadcrumbs = instance.get("breadcrumbs")
+        if breadcrumbs:
+            breadcrumbs_serializer = BreadcrumbsSerializer(
+                data=breadcrumbs.get("values"), many=True
+            )
+            if breadcrumbs_serializer.is_valid():
+                entries.append(
+                    {
+                        "type": "breadcrumbs",
+                        "data": {"values": breadcrumbs_serializer.validated_data},
+                    }
+                )
+
+        request = instance.get("request")
+        if request:
+            request["inferredContentType"] = request.pop("inferred_content_type")
+            entries.append({"type": "request", "data": request})
+
+        message = instance.get("message")
+        if message:
+            entries.append({"type": "message", "data": {"formatted": message}})
+
+        csp = instance.get("csp")
+        if csp:
+            entries.append({"type": EventType.CSP.label, "data": csp})
+
+        return entries
+
+
 class EventSerializer(serializers.ModelSerializer):
     eventID = serializers.CharField(source="event_id_hex")
     id = serializers.CharField(source="event_id_hex")
     dateCreated = serializers.DateTimeField(source="timestamp")
     dateReceived = serializers.DateTimeField(source="created")
+    entries = EventEntriesSerializer(source="data")
     tags = EventTagSerializer(many=True)
     user = EventUserSerializer()
 

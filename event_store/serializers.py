@@ -1,9 +1,7 @@
 from typing import Dict, List, Tuple, Union
 from urllib.parse import urlparse
-from datetime import datetime
 from django.db import transaction, connection
 from django.db.utils import IntegrityError
-from django.utils.timezone import make_aware
 from ipware import get_client_ip
 from anonymizeip import anonymize_ip
 from rest_framework import serializers
@@ -11,7 +9,9 @@ from rest_framework.exceptions import PermissionDenied
 from sentry.eventtypes.error import ErrorEvent
 from sentry.eventtypes.base import DefaultEvent
 from issues.models import EventType, Event, Issue, EventTagKey
+from issues.serializers import BaseBreadcrumbsSerializer
 from environments.models import Environment
+from glitchtip.serializers import FlexibleDateTimeField
 from .event_tag_processors import TAG_PROCESSORS
 from .event_context_processors import EVENT_CONTEXT_PROCESSORS
 
@@ -47,16 +47,6 @@ def sanitize_bad_postgres_json(data: Union[str, dict, list]):
     return data
 
 
-class FlexibleDateTimeField(serializers.DateTimeField):
-    """ Supports both DateTime and unix epoch timestamp """
-
-    def to_internal_value(self, timestamp):
-        try:
-            return make_aware(datetime.fromtimestamp(float(timestamp)))
-        except ValueError:
-            return super().to_internal_value(timestamp)
-
-
 class RequestSerializer(serializers.Serializer):
     env = serializers.DictField(
         child=serializers.CharField(allow_blank=True), required=False
@@ -66,6 +56,20 @@ class RequestSerializer(serializers.Serializer):
     url = serializers.CharField(required=False, allow_blank=True)
     method = serializers.CharField(required=False, allow_blank=True)
     query_string = serializers.CharField(required=False, allow_blank=True)
+
+
+class GenericField(serializers.Field):
+    def to_internal_value(self, data):
+        return data
+
+
+class BreadcrumbsSerializer(BaseBreadcrumbsSerializer):
+    timestamp = GenericField(required=False)
+
+    def validate_level(self, value):
+        if value == "log":
+            return "info"
+        return value
 
 
 class BaseSerializer(serializers.Serializer):
@@ -88,7 +92,7 @@ class StoreDefaultSerializer(BaseSerializer):
     """
 
     type = EventType.DEFAULT
-    breadcrumbs = serializers.JSONField(required=False)
+    breadcrumbs = BreadcrumbsSerializer(required=False, many=True)
     contexts = serializers.JSONField(required=False)
     environment = serializers.CharField(required=False)
     event_id = serializers.UUIDField()
@@ -189,6 +193,9 @@ class StoreDefaultSerializer(BaseSerializer):
         title = eventtype.get_title(metadata)
         culprit = eventtype.get_location(data)
         request = data.get("request")
+        breadcrumbs = data.get("breadcrumbs")
+        if breadcrumbs:
+            breadcrumbs = {"values": breadcrumbs}
         exception = self.modify_exception(data.get("exception"))
         if request:
             headers = request.get("headers")
@@ -219,6 +226,7 @@ class StoreDefaultSerializer(BaseSerializer):
                 environment = self.get_environment(data["environment"], project)
 
             json_data = {
+                "breadcrumbs": breadcrumbs,
                 "contexts": contexts,
                 "culprit": culprit,
                 "exception": exception,
