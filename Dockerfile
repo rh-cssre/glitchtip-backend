@@ -1,4 +1,4 @@
-FROM python:3.8-slim
+FROM python:3.9-slim
 ARG IS_CI
 ENV PYTHONUNBUFFERED=1 \
   PORT=8080 \

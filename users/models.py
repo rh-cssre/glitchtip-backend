@@ -59,6 +59,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         help_text="Subscribe to project notifications by default. Overrides project settings",
     )
     USERNAME_FIELD = "email"
+    EMAIL_FIELD = "email"
     objects = UserManager()
 
     def __str__(self):

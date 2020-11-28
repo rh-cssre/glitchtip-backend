@@ -16,7 +16,7 @@ include:
   - template: Secret-Detection.gitlab-ci.yml
 
 test:
-  image: python:3.8-slim
+  image: python:3.9-slim
   variables:
     SECRET_KEY: testing
     ENABLE_TEST_API: "true"
