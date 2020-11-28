@@ -1,11 +1,13 @@
 from django.conf import settings
 from django.http import Http404
 from rest_framework import viewsets, views, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from drf_yasg.utils import swagger_auto_schema
 from djstripe.models import Subscription, Customer, Product
 from djstripe.settings import STRIPE_SECRET_KEY
 import stripe
+from issues.models import Event
 from .serializers import (
     SubscriptionSerializer,
     CreateSubscriptionSerializer,
@@ -48,6 +50,18 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
             )
         except Subscription.DoesNotExist:
             raise Http404
+
+    @action(detail=True, methods=["get"])
+    def events_count(self, *args, **kwargs):
+        """ Get event count for current billing period """
+        subscription = self.get_object()
+        organization = subscription.customer.subscriber
+        event_count = Event.objects.filter(
+            issue__project__organization=organization,
+            created__gte=subscription.current_period_start,
+            created__lt=subscription.current_period_end,
+        ).count()
+        return Response(event_count)
 
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):

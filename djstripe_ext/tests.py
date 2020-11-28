@@ -5,6 +5,7 @@ from django.conf import settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 from model_bakery import baker
+from freezegun import freeze_time
 from glitchtip import test_utils  # pylint: disable=unused-import
 
 
@@ -51,6 +52,28 @@ class SubscriptionAPITestCase(APITestCase):
         url = reverse("subscription-detail", args=[self.organization.slug])
         res = self.client.get(url)
         self.assertContains(res, subscription.id)
+
+    def test_events_count(self):
+        customer = baker.make("djstripe.Customer", subscriber=self.organization)
+        baker.make(
+            "djstripe.Subscription",
+            customer=customer,
+            livemode=False,
+            created=timezone.make_aware(timezone.datetime(2020, 1, 2)),
+            current_period_start=timezone.make_aware(timezone.datetime(2020, 1, 2)),
+            current_period_end=timezone.make_aware(timezone.datetime(2020, 2, 2)),
+        )
+        url = (
+            reverse("subscription-detail", args=[self.organization.slug])
+            + "events_count/"
+        )
+        with freeze_time(timezone.datetime(2020, 3, 1)):
+            baker.make("issues.Event", issue__project__organization=self.organization)
+        with freeze_time(timezone.datetime(2020, 1, 5)):
+            baker.make("issues.Event")
+            baker.make("issues.Event", issue__project__organization=self.organization)
+        res = self.client.get(url)
+        self.assertEqual(res.data, 1)
 
     @patch("djstripe.models.Customer.subscribe")
     def test_create(self, djstripe_customer_subscribe_mock):

@@ -9,7 +9,10 @@ class ScopedPermission(BasePermission):
     """
 
     def get_allowed_scopes(self, request, view):
-        return self.scope_map[request.method]
+        try:
+            return self.scope_map[request.method]
+        except KeyError:
+            return {}
 
     def has_permission(self, request, view):
         if request.auth:
