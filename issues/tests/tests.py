@@ -148,6 +148,16 @@ class IssuesAPITestCase(GlitchTipTestCase):
         res = self.client.delete(url)
         self.assertEqual(res.status_code, 404)
 
+    def test_issue_update(self):
+        issue = baker.make(Issue, project=self.project)
+        self.assertEqual(issue.status, EventStatus.UNRESOLVED)
+        url = reverse("issue-detail", kwargs={"pk": issue.pk})
+        data = {"status": "resolved"}
+        res = self.client.put(url, data)
+        self.assertEqual(res.status_code, 200)
+        issue.refresh_from_db()
+        self.assertEqual(issue.status, EventStatus.RESOLVED)
+
     def test_bulk_update(self):
         """ Bulk update only supports Issue status """
         issues = baker.make(Issue, project=self.project, _quantity=2)

@@ -3,7 +3,7 @@ from projects.serializers.base_serializers import ProjectReferenceSerializer
 from user_reports.serializers import UserReportSerializer
 from sentry.interfaces.stacktrace import get_context
 from glitchtip.serializers import FlexibleDateTimeField
-from .models import Issue, Event, EventTag, EventType
+from .models import Issue, Event, EventTag, EventType, EventStatus
 
 
 class EventTagSerializer(serializers.ModelSerializer):
@@ -173,6 +173,26 @@ class EventDetailSerializer(EventSerializer):
         return self.get_next_or_previous(obj, False)
 
 
+class DisplayChoiceField(serializers.ChoiceField):
+    """
+    ChoiceField that represents choice only as display value
+    Useful if the API should only deal with display values
+    """
+
+    def to_representation(self, value):
+        return self.choices[value]
+
+    def to_internal_value(self, data):
+        if data == "" and self.allow_blank:
+            return ""
+
+        choice_strings_to_values = {value: key for key, value in self.choices.items()}
+        try:
+            return choice_strings_to_values[str(data)]
+        except KeyError:
+            self.fail("invalid_choice", input=data)
+
+
 class IssueSerializer(serializers.ModelSerializer):
     annotations = serializers.JSONField(default=list, read_only=True)
     assignedTo = serializers.CharField(default=None, read_only=True)
@@ -191,7 +211,7 @@ class IssueSerializer(serializers.ModelSerializer):
     shareId = serializers.IntegerField(default=None, read_only=True)
     shortId = serializers.CharField(source="short_id_display", read_only=True)
     stats = serializers.JSONField(default=dict, read_only=True)
-    status = serializers.CharField(source="get_status_display")
+    status = DisplayChoiceField(choices=EventStatus.choices)
     statusDetails = serializers.JSONField(default=dict, read_only=True)
     subscriptionDetails = serializers.CharField(default=None, read_only=True)
     type = serializers.CharField(source="get_type_display", read_only=True)
