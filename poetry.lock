@@ -27,8 +27,8 @@ python-versions = "*"
 
 [[package]]
 name = "appnope"
-version = "0.1.0"
-description = "Disable App Nap on OS X 10.9"
+version = "0.1.2"
+description = "Disable App Nap on macOS >= 10.9"
 category = "dev"
 optional = false
 python-versions = "*"
@@ -110,20 +110,20 @@ d = ["aiohttp (>=3.3.2)", "aiohttp-cors"]
 
 [[package]]
 name = "boto3"
-version = "1.16.25"
+version = "1.16.30"
 description = "The AWS SDK for Python"
 category = "main"
 optional = false
 python-versions = "*"
 
 [package.dependencies]
-botocore = ">=1.19.25,<1.20.0"
+botocore = ">=1.19.30,<1.20.0"
 jmespath = ">=0.7.1,<1.0.0"
 s3transfer = ">=0.3.0,<0.4.0"
 
 [[package]]
 name = "botocore"
-version = "1.19.25"
+version = "1.19.30"
 description = "Low-level, data-driven core of boto 3."
 category = "main"
 optional = false
@@ -136,7 +136,7 @@ urllib3 = {version = ">=1.25.4,<1.27", markers = "python_version != \"3.4\""}
 
 [[package]]
 name = "celery"
-version = "5.0.2"
+version = "5.0.3"
 description = "Distributed Task Queue."
 category = "main"
 optional = false
@@ -144,8 +144,9 @@ python-versions = ">=3.6,"
 
 [package.dependencies]
 billiard = ">=3.6.3.0,<4.0"
-click = ">=7.0"
+click = ">=7.0,<8.0"
 click-didyoumean = ">=0.0.3"
+click-plugins = ">=1.1.1"
 click-repl = ">=0.1.6"
 kombu = ">=5.0.0,<6.0"
 pytz = ">0.0-dev"
@@ -174,6 +175,7 @@ mongodb = ["pymongo[srv] (>=3.3.0)"]
 msgpack = ["msgpack"]
 pymemcache = ["python-memcached"]
 pyro = ["pyro4"]
+pytest = ["pytest-celery"]
 redis = ["redis (>=3.2.0)"]
 s3 = ["boto3 (>=1.9.125)"]
 slmq = ["softlayer-messaging (>=1.0.3)"]
@@ -230,6 +232,20 @@ python-versions = "*"
 
 [package.dependencies]
 click = "*"
+
+[[package]]
+name = "click-plugins"
+version = "1.1.1"
+description = "An extension module for click to enable registering CLI commands via setuptools entry-points."
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+click = ">=4.0"
+
+[package.extras]
+dev = ["pytest (>=3.6)", "pytest-cov", "wheel", "coveralls"]
 
 [[package]]
 name = "click-repl"
@@ -325,7 +341,7 @@ python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
 
 [[package]]
 name = "dj-rest-auth"
-version = "2.1.1"
+version = "2.1.2"
 description = "Authentication and Registration in Django Rest Framework"
 category = "main"
 optional = false
@@ -340,7 +356,7 @@ with_social = ["django-allauth (>=0.40.0,<0.43.0)"]
 
 [[package]]
 name = "dj-stripe"
-version = "2.4.0"
+version = "2.4.1"
 description = "Django + Stripe made easy"
 category = "main"
 optional = false
@@ -356,7 +372,7 @@ docs = ["mkdocs (>=1.1.2,<2.0.0)", "mkautodoc (>=0.1.0,<0.2.0)"]
 
 [[package]]
 name = "django"
-version = "3.1.3"
+version = "3.1.4"
 description = "A high-level Python Web framework that encourages rapid development and clean, pragmatic design."
 category = "main"
 optional = false
@@ -373,7 +389,7 @@ bcrypt = ["bcrypt"]
 
 [[package]]
 name = "django-allauth"
-version = "0.43.0"
+version = "0.44.0"
 description = "Integrated set of Django applications addressing authentication, registration, account management as well as 3rd party (social) account authentication."
 category = "main"
 optional = false
@@ -455,11 +471,11 @@ tests = ["pytest (<4.0)", "pytest-django", "pytest-flakes (1.0.1)", "pytest-pep8
 
 [[package]]
 name = "django-debug-toolbar"
-version = "3.1.1"
+version = "3.2"
 description = "A configurable set of panels that display various debug information about the current request/response."
 category = "main"
 optional = false
-python-versions = ">=3.5"
+python-versions = ">=3.6"
 
 [package.dependencies]
 Django = ">=2.2"
@@ -649,7 +665,7 @@ test = ["dnspython (>=1.16.0,<2.0)", "idna", "requests", "objgraph", "cffi (>=1.
 
 [[package]]
 name = "geventhttpclient"
-version = "1.4.4"
+version = "1.4.5"
 description = "http client library for gevent"
 category = "dev"
 optional = false
@@ -678,7 +694,7 @@ python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
 
 [[package]]
 name = "importlib-metadata"
-version = "3.1.0"
+version = "3.1.1"
 description = "Read metadata from Python packages"
 category = "main"
 optional = false
@@ -688,8 +704,8 @@ python-versions = ">=3.6"
 zipp = ">=0.5"
 
 [package.extras]
-docs = ["sphinx", "rst.linker"]
-testing = ["packaging", "pep517", "unittest2", "importlib-resources (>=1.3)"]
+docs = ["sphinx", "jaraco.packaging (>=3.2)", "rst.linker (>=1.9)"]
+testing = ["pytest (>=3.5,<3.7.3 || >3.7.3)", "pytest-checkdocs (>=1.2.3)", "pytest-flake8", "pytest-cov", "jaraco.test (>=3.2.0)", "packaging", "pep517", "pyfakefs", "flufl.flake8", "pytest-black (>=0.3.7)", "pytest-mypy", "importlib-resources (>=1.3)"]
 
 [[package]]
 name = "inflection"
@@ -1339,7 +1355,7 @@ python-versions = ">=3.5"
 
 [[package]]
 name = "stripe"
-version = "2.55.0"
+version = "2.55.1"
 description = "Python bindings for the Stripe API"
 category = "main"
 optional = false
@@ -1513,7 +1529,7 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "e0386f30db1237f0a7bbc1ccec649e4f91d79b608290da1c22beb63c556ac986"
+content-hash = "a876fa69e880821d0ad7a06c1ae3d750e3250a68202d6b384598318b8104ad25"
 
 [metadata.files]
 amqp = [
@@ -1529,8 +1545,8 @@ appdirs = [
     {file = "appdirs-1.4.4.tar.gz", hash = "sha256:7d5d0167b2b1ba821647616af46a749d1c653740dd0d2415100fe26e27afdf41"},
 ]
 appnope = [
-    {file = "appnope-0.1.0-py2.py3-none-any.whl", hash = "sha256:5b26757dc6f79a3b7dc9fab95359328d5747fcb2409d331ea66d0272b90ab2a0"},
-    {file = "appnope-0.1.0.tar.gz", hash = "sha256:8b995ffe925347a2138d7ac0fe77155e4311a0ea6d6da4f5128fe4b3cbe5ed71"},
+    {file = "appnope-0.1.2-py2.py3-none-any.whl", hash = "sha256:93aa393e9d6c54c5cd570ccadd8edad61ea0c4b9ea7a01409020c9aa019eb442"},
+    {file = "appnope-0.1.2.tar.gz", hash = "sha256:dd83cd4b5b460958838f6eb3000c660b1f9caf2a5b1de4264e941512f603258a"},
 ]
 asgiref = [
     {file = "asgiref-3.3.1-py3-none-any.whl", hash = "sha256:5ee950735509d04eb673bd7f7120f8fa1c9e2df495394992c73234d526907e17"},
@@ -1557,16 +1573,16 @@ black = [
     {file = "black-19.10b0.tar.gz", hash = "sha256:c2edb73a08e9e0e6f65a0e6af18b059b8b1cdd5bef997d7a0b181df93dc81539"},
 ]
 boto3 = [
-    {file = "boto3-1.16.25-py2.py3-none-any.whl", hash = "sha256:fb25ec578fe59aee298da2c976e2bcfd79a2eabead386e8e4f68bb3eb4ec50b3"},
-    {file = "boto3-1.16.25.tar.gz", hash = "sha256:13e6ab0abe10b4de54583067d12ed48c8477d91b7a7a8e6097d366a2a3631d17"},
+    {file = "boto3-1.16.30-py2.py3-none-any.whl", hash = "sha256:163ab6f9030ade265af9b36a10e608f12911cb5f3557e8e3390dffeba919262e"},
+    {file = "boto3-1.16.30.tar.gz", hash = "sha256:848aa8d11c9927daa13512072a501e2fc70ba86b073fc6927b86466f4a459b4d"},
 ]
 botocore = [
-    {file = "botocore-1.19.25-py2.py3-none-any.whl", hash = "sha256:4e488351f399501a78b16e1dc466e505ccf63897c936030c56c6d3c37e57939c"},
-    {file = "botocore-1.19.25.tar.gz", hash = "sha256:ccaf3979590b72625b3699d93dabf48f350f9a3304c127fc6830e8ac842b0d96"},
+    {file = "botocore-1.19.30-py2.py3-none-any.whl", hash = "sha256:70a8ec8d76096927b619a2f1f0dffe326fc9a4f9224afc6cf5d7ef2fd98a94a2"},
+    {file = "botocore-1.19.30.tar.gz", hash = "sha256:822f9dd11f11c54b9c4666cfec9b7246a32990dbca1be27528a75a8dabed4dc2"},
 ]
 celery = [
-    {file = "celery-5.0.2-py3-none-any.whl", hash = "sha256:930c3acd55349d028c4e7104a7d377729cbcca19d9fce470c17172d9e7f9a8b6"},
-    {file = "celery-5.0.2.tar.gz", hash = "sha256:012c814967fe89e3f5d2cf49df2dba3de5f29253a7f4f2270e8fce6b901b4ebf"},
+    {file = "celery-5.0.3-py3-none-any.whl", hash = "sha256:2cc87518fdd41375c8f40e2b0b59391568a3fb0a0b5f859f7bedef9b37efbc90"},
+    {file = "celery-5.0.3.tar.gz", hash = "sha256:d7bcb0fca6fc94c41c946e8979c4c276a02cc7532c68757b43b25c2fa9eda68b"},
 ]
 certifi = [
     {file = "certifi-2020.11.8-py2.py3-none-any.whl", hash = "sha256:1f422849db327d534e3d0c5f02a263458c3955ec0aae4ff09b95f195c59f4edd"},
@@ -1619,6 +1635,10 @@ click = [
 click-didyoumean = [
     {file = "click-didyoumean-0.0.3.tar.gz", hash = "sha256:112229485c9704ff51362fe34b2d4f0b12fc71cc20f6d2b3afabed4b8bfa6aeb"},
 ]
+click-plugins = [
+    {file = "click-plugins-1.1.1.tar.gz", hash = "sha256:46ab999744a9d831159c3411bb0c79346d94a444df9a3a3742e9ed63645f264b"},
+    {file = "click_plugins-1.1.1-py2.py3-none-any.whl", hash = "sha256:5d262006d3222f5057fd81e1623d4443e41dcda5dc815c06b442aa3c02889fc8"},
+]
 click-repl = [
     {file = "click-repl-0.1.6.tar.gz", hash = "sha256:b9f29d52abc4d6059f8e276132a111ab8d94980afe6a5432b9d996544afa95d5"},
     {file = "click_repl-0.1.6-py3-none-any.whl", hash = "sha256:9c4c3d022789cae912aad8a3f5e1d7c2cdd016ee1225b5212ad3e8691563cda5"},
@@ -1670,18 +1690,18 @@ defusedxml = [
     {file = "defusedxml-0.6.0.tar.gz", hash = "sha256:f684034d135af4c6cbb949b8a4d2ed61634515257a67299e5f940fbaa34377f5"},
 ]
 dj-rest-auth = [
-    {file = "dj-rest-auth-2.1.1.tar.gz", hash = "sha256:c0d3495d3629f54644966da31611ca4619b8470978ae8bdc03f6b87e04cb562c"},
+    {file = "dj-rest-auth-2.1.2.tar.gz", hash = "sha256:d0de0926e6df67460b62e9643b9faab04c3c1a08659c7a594f8afa1a911ba03b"},
 ]
 dj-stripe = [
-    {file = "dj-stripe-2.4.0.tar.gz", hash = "sha256:f54f063a388b028617afcb2ad2ae6f70044148981f5624bc403057c2e043ea67"},
-    {file = "dj_stripe-2.4.0-py3-none-any.whl", hash = "sha256:4dd28557dec87acb4df9bfdde4cc2dbca022f5a3bcbb65f2a319efdb3c2dee22"},
+    {file = "dj-stripe-2.4.1.tar.gz", hash = "sha256:4da77d6a6e387941bc70377c9cbbab6f3739ae92602d93275ea5a2814f7901a4"},
+    {file = "dj_stripe-2.4.1-py3-none-any.whl", hash = "sha256:39381937a0c7ea8c6b78992e3ced80f4d94919c7c2d61c19c36eee9aca8887d9"},
 ]
 django = [
-    {file = "Django-3.1.3-py3-none-any.whl", hash = "sha256:14a4b7cd77297fba516fc0d92444cc2e2e388aa9de32d7a68d4a83d58f5a4927"},
-    {file = "Django-3.1.3.tar.gz", hash = "sha256:14b87775ffedab2ef6299b73343d1b4b41e5d4e2aa58c6581f114dbec01e3f8f"},
+    {file = "Django-3.1.4-py3-none-any.whl", hash = "sha256:5c866205f15e7a7123f1eec6ab939d22d5bde1416635cab259684af66d8e48a2"},
+    {file = "Django-3.1.4.tar.gz", hash = "sha256:edb10b5c45e7e9c0fb1dc00b76ec7449aca258a39ffd613dbd078c51d19c9f03"},
 ]
 django-allauth = [
-    {file = "django-allauth-0.43.0.tar.gz", hash = "sha256:0bfb975fe46e8bff67effb3fa46dea5acd7c66140cb78b5ed92c533f639898e2"},
+    {file = "django-allauth-0.44.0.tar.gz", hash = "sha256:e51af457466022f52154d74c8523ac69375120fad2acce6e239635d85e610b25"},
 ]
 django-anymail = [
     {file = "django-anymail-8.1.tar.gz", hash = "sha256:0c3e56a339a37e654b7511572564fe0949f4fbb12c072761c9e35cfc49cb4dc1"},
@@ -1704,8 +1724,8 @@ django-csp = [
     {file = "django_csp-3.7.tar.gz", hash = "sha256:01eda02ad3f10261c74131cdc0b5a6a62b7c7ad4fd017fbefb7a14776e0a9727"},
 ]
 django-debug-toolbar = [
-    {file = "django-debug-toolbar-3.1.1.tar.gz", hash = "sha256:c97921a9cd421d392e7860dc4b464db8e06c8628df4dc58fedab012888c293c6"},
-    {file = "django_debug_toolbar-3.1.1-py3-none-any.whl", hash = "sha256:a1ce0665f7ef47d27b8df4b5d1058748e1f08500a01421a30d35164f38aaaf4c"},
+    {file = "django-debug-toolbar-3.2.tar.gz", hash = "sha256:84e2607d900dbd571df0a2acf380b47c088efb787dce9805aefeb407341961d2"},
+    {file = "django_debug_toolbar-3.2-py3-none-any.whl", hash = "sha256:9e5a25d0c965f7e686f6a8ba23613ca9ca30184daa26487706d4829f5cfb697a"},
 ]
 django-environ = [
     {file = "django-environ-0.4.5.tar.gz", hash = "sha256:6c9d87660142608f63ec7d5ce5564c49b603ea8ff25da595fd6098f6dc82afde"},
@@ -1782,52 +1802,57 @@ gevent = [
     {file = "gevent-20.9.0.tar.gz", hash = "sha256:5f6d48051d336561ec08995431ee4d265ac723a64bba99cc58c3eb1a4d4f5c8d"},
 ]
 geventhttpclient = [
-    {file = "geventhttpclient-1.4.4-cp27-cp27m-macosx_10_9_x86_64.whl", hash = "sha256:834de08513d82e7eb5e125875e4da87b0c58f758a4ad17c7ce4df97848c84a2b"},
-    {file = "geventhttpclient-1.4.4-cp27-cp27m-manylinux1_i686.whl", hash = "sha256:18ed36a7065bd132037214b843de9fc05ce6fef896bbc3405191b0bc0cffc419"},
-    {file = "geventhttpclient-1.4.4-cp27-cp27m-manylinux1_x86_64.whl", hash = "sha256:1edc16be503fced3b91f6c9703f7cc61b148359c9263f5030730fe8b9ade0a21"},
-    {file = "geventhttpclient-1.4.4-cp27-cp27m-manylinux2010_i686.whl", hash = "sha256:7a9d6d2683feeb0e054aa224d6551bfad819eca86c3c5d3d387246c2c3916438"},
-    {file = "geventhttpclient-1.4.4-cp27-cp27m-manylinux2010_x86_64.whl", hash = "sha256:f446807f0f77b3d2ffe311fb9aec33c6f21376fd83456cfbd5c798ce277223d5"},
-    {file = "geventhttpclient-1.4.4-cp27-cp27mu-manylinux1_i686.whl", hash = "sha256:4705ac35abd6ed4bb14fd22a9abc3c1630ce63cb5e80ca575f93fc337296feae"},
-    {file = "geventhttpclient-1.4.4-cp27-cp27mu-manylinux1_x86_64.whl", hash = "sha256:98ae2a85b26b5c5fed811dfaf1d62d33af6dba2dd2047ac3f7bff67967bd99a3"},
-    {file = "geventhttpclient-1.4.4-cp27-cp27mu-manylinux2010_i686.whl", hash = "sha256:765515a70913974fe0a2cd785cbec1ec5524a64c2f4ce0935b801e4b7bfe8ac5"},
-    {file = "geventhttpclient-1.4.4-cp27-cp27mu-manylinux2010_x86_64.whl", hash = "sha256:22e62840c6d1f8618a2809bc2cd4dd7997e76144da67db761525894ad97e9b54"},
-    {file = "geventhttpclient-1.4.4-cp35-cp35m-macosx_10_9_x86_64.whl", hash = "sha256:39b890da6b5efde810b839d2733c7356b234f73dfd48be088942bd25eadd4d7f"},
-    {file = "geventhttpclient-1.4.4-cp35-cp35m-manylinux1_i686.whl", hash = "sha256:25fc5885b73bea6b5be346a7b472595df0c2bc94d0ac7af35473c68281714bc5"},
-    {file = "geventhttpclient-1.4.4-cp35-cp35m-manylinux1_x86_64.whl", hash = "sha256:3035f5976616d519218834e405fbb6b8c54f7d97a518de520b45eb9194db8040"},
-    {file = "geventhttpclient-1.4.4-cp35-cp35m-manylinux2010_i686.whl", hash = "sha256:3290519d810a67c7e83916a5c0fc69e19e41002099d8e06e47d43593ea4e3147"},
-    {file = "geventhttpclient-1.4.4-cp35-cp35m-manylinux2010_x86_64.whl", hash = "sha256:33185df5a73ff6c02405faae4d8180ef45c770a3e1ee9eb702032e666b5806aa"},
-    {file = "geventhttpclient-1.4.4-cp35-cp35m-win32.whl", hash = "sha256:7e0f70c7431748b8d442de1afc4d7c30f54b155cc67a6367ee1ab27459db648c"},
-    {file = "geventhttpclient-1.4.4-cp35-cp35m-win_amd64.whl", hash = "sha256:5fabddb555f9104bedc85c8a9358f060aff0049bfc8f6098c83d139887b947a6"},
-    {file = "geventhttpclient-1.4.4-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:4cd2540973eb8b33433bce3933d70b4c83b46788132681e08b356571cd3ab703"},
-    {file = "geventhttpclient-1.4.4-cp36-cp36m-manylinux1_i686.whl", hash = "sha256:4b731402db393a4c9d9f77a453c5775af40c3595786d673bbded7d6d07ddd4e8"},
-    {file = "geventhttpclient-1.4.4-cp36-cp36m-manylinux1_x86_64.whl", hash = "sha256:78cfa6ef21d2cd2718c020395a637b14b449707ec2be4004c9b862233c23f226"},
-    {file = "geventhttpclient-1.4.4-cp36-cp36m-manylinux2010_i686.whl", hash = "sha256:debc6f57a7c863b4d9a4e7f4b2a3615ce4670daa3ee717e0c02c2626d2ce9d8e"},
-    {file = "geventhttpclient-1.4.4-cp36-cp36m-manylinux2010_x86_64.whl", hash = "sha256:6236e7cc5462aa41d7c1dad1c6fb35ff77ec693465ccae0efa253df7f6532ff2"},
-    {file = "geventhttpclient-1.4.4-cp36-cp36m-win32.whl", hash = "sha256:450be5efeb1382c9323a06f325f24d0ed09ddcd2b430f127f9e2a6ba065115f6"},
-    {file = "geventhttpclient-1.4.4-cp36-cp36m-win_amd64.whl", hash = "sha256:030a44f5482d648010a42cf2e1411520f408811e6b462bfeb8757c251fb897e6"},
-    {file = "geventhttpclient-1.4.4-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:41cdf3092693a6e938f24774f357d24e525aba22a71ad4dca8ab23e8921ee28f"},
-    {file = "geventhttpclient-1.4.4-cp37-cp37m-manylinux1_i686.whl", hash = "sha256:fca499fc8ffc62544d9571c358d7a833a609c15efa9ff9ab67681e040c1833ff"},
-    {file = "geventhttpclient-1.4.4-cp37-cp37m-manylinux1_x86_64.whl", hash = "sha256:66cfea0b29b8c63a9978c90948a0ba73748540f9676b5539baf16029144ab46e"},
-    {file = "geventhttpclient-1.4.4-cp37-cp37m-manylinux2010_i686.whl", hash = "sha256:6a86204fba4991c84092aea771be6d51ff497651deb1db288eef83b7860fec74"},
-    {file = "geventhttpclient-1.4.4-cp37-cp37m-manylinux2010_x86_64.whl", hash = "sha256:087a1b700d0ea9db97d09e163e96207f322f54881aff05edb7e769a0e5ba617b"},
-    {file = "geventhttpclient-1.4.4-cp37-cp37m-win32.whl", hash = "sha256:1157abcc0f7b0e2e9ccdc956882592b813411390ebe7108a9c8781adfc875029"},
-    {file = "geventhttpclient-1.4.4-cp37-cp37m-win_amd64.whl", hash = "sha256:77a877dbbd1f092a41969b6241e726553308b8c3f5b7ad99a20dafe62eadb79c"},
-    {file = "geventhttpclient-1.4.4-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:2eb6b06a1463b92a4e5a2c654b5a5f9661bd283309d7300607865e0a2271bf1e"},
-    {file = "geventhttpclient-1.4.4-cp38-cp38-manylinux1_i686.whl", hash = "sha256:dc7ec0876d001df0b0a053e81a474ecb682001c3004bd0c85106812cf42f0f75"},
-    {file = "geventhttpclient-1.4.4-cp38-cp38-manylinux1_x86_64.whl", hash = "sha256:bf765f4e711bdef66461f8f460b4a4d3300d514b6961bad9b355873ba3236415"},
-    {file = "geventhttpclient-1.4.4-cp38-cp38-manylinux2010_i686.whl", hash = "sha256:932229722807b9190729bfce47e9f7b575dddc1c2f899a025d45e3b6141aa052"},
-    {file = "geventhttpclient-1.4.4-cp38-cp38-manylinux2010_x86_64.whl", hash = "sha256:340f50cfd7f2715a7336c3187bff540d446818b98c452bd4d0c80e49ad4e40b0"},
-    {file = "geventhttpclient-1.4.4-cp38-cp38-win32.whl", hash = "sha256:c5e7fd0e22c299555fca7f60119ae8287d0342f5e89f85e408fe08d44192a045"},
-    {file = "geventhttpclient-1.4.4-cp38-cp38-win_amd64.whl", hash = "sha256:f3319034d98a2fa1687bd1989a83d98277e2bad8a2ecf105f65eefed614a1a31"},
-    {file = "geventhttpclient-1.4.4-pp27-pypy_73-macosx_10_7_x86_64.whl", hash = "sha256:42361e8a72e6ff0c95314470463024c72b4779a6a3c7019ff9ecd106968209db"},
-    {file = "geventhttpclient-1.4.4-pp27-pypy_73-manylinux1_x86_64.whl", hash = "sha256:dfe07df600638d40cc5742a10340671b9c6ec37719fa125619aa0939a2f0c31d"},
-    {file = "geventhttpclient-1.4.4-pp27-pypy_73-manylinux2010_x86_64.whl", hash = "sha256:29bded7f686f395cdfb9c48c408ad2e5e265976d5e3394293ee2b3d4de2a2376"},
-    {file = "geventhttpclient-1.4.4-pp27-pypy_73-win32.whl", hash = "sha256:ab3cd6e3782091083c852c3d7f0eedd845a2d414c914e4dc7973156e17171671"},
-    {file = "geventhttpclient-1.4.4-pp36-pypy36_pp73-macosx_10_7_x86_64.whl", hash = "sha256:bcc3aa11914b03d23502413c434e729b9d889ddd885a9664061217b7d18ef35c"},
-    {file = "geventhttpclient-1.4.4-pp36-pypy36_pp73-manylinux1_x86_64.whl", hash = "sha256:ad2bbfeba76b09595163f3659a34144673d646646670c07b4dbae4c173a3a080"},
-    {file = "geventhttpclient-1.4.4-pp36-pypy36_pp73-manylinux2010_x86_64.whl", hash = "sha256:4d6344051472758e0e65ba1c56334819be4067134175685e2b9235eff101408e"},
-    {file = "geventhttpclient-1.4.4-pp36-pypy36_pp73-win32.whl", hash = "sha256:dcdae7d5b07f10327c692cbdbe1ee64060d4a790a4db6cb9229024837d688fcc"},
-    {file = "geventhttpclient-1.4.4.tar.gz", hash = "sha256:f59e5153f22e4a0be27b48aece8e45e19c1da294f8c49442b1c9e4d152c5c4c3"},
+    {file = "geventhttpclient-1.4.5-cp27-cp27m-macosx_10_9_x86_64.whl", hash = "sha256:d9d53176e45fd3856efc0413040645846cb6441d7d333187a2e615b28ae5e843"},
+    {file = "geventhttpclient-1.4.5-cp27-cp27m-manylinux1_i686.whl", hash = "sha256:e22ad10de297936136c23ddb4cd5300a9d1ce383f27b6111aaadb620ee24c87e"},
+    {file = "geventhttpclient-1.4.5-cp27-cp27m-manylinux1_x86_64.whl", hash = "sha256:a336b10998bb06e88192a1ff5ef74079316bf1072492673554ff95f69c7ba3d8"},
+    {file = "geventhttpclient-1.4.5-cp27-cp27m-manylinux2010_i686.whl", hash = "sha256:b0fed14b5c7949b7c0a5e0984806810ff009ed12750c498e46d18b1e26c19cc2"},
+    {file = "geventhttpclient-1.4.5-cp27-cp27m-manylinux2010_x86_64.whl", hash = "sha256:3367f664e26848755e3c574c5ba3f5c690ef00d13bba808889c5a761bc4079ed"},
+    {file = "geventhttpclient-1.4.5-cp27-cp27mu-manylinux1_i686.whl", hash = "sha256:f4041964515a1a226803662c52b12282f0ae2a8783debb8ded9a8161369bff93"},
+    {file = "geventhttpclient-1.4.5-cp27-cp27mu-manylinux1_x86_64.whl", hash = "sha256:93847625cc7fed329a44d9d8d02afdd0651c4e0202b7c6fde9badea11fff2e90"},
+    {file = "geventhttpclient-1.4.5-cp27-cp27mu-manylinux2010_i686.whl", hash = "sha256:c5edd4ccdbf3b45fbffc2c19e937f903914230e61b693c91c91d59cf5e1d926a"},
+    {file = "geventhttpclient-1.4.5-cp27-cp27mu-manylinux2010_x86_64.whl", hash = "sha256:1f078b28613a55a23e0f12e4a5aab5a1d0daf5f4110c763448f1d408e6dc4de0"},
+    {file = "geventhttpclient-1.4.5-cp35-cp35m-macosx_10_9_x86_64.whl", hash = "sha256:7ac1c4105092e0757caf0fb5aabde659e97204d0766ba0345e86286f2f3f2b28"},
+    {file = "geventhttpclient-1.4.5-cp35-cp35m-manylinux1_i686.whl", hash = "sha256:1a86f397cebee8253e51835e419efa9486790fb9e2e7dcdade5eed5fedae4a8c"},
+    {file = "geventhttpclient-1.4.5-cp35-cp35m-manylinux1_x86_64.whl", hash = "sha256:56868571c7262d477a7c200d9bb99089d969c10efcc488efdd737170d863c4f5"},
+    {file = "geventhttpclient-1.4.5-cp35-cp35m-manylinux2010_i686.whl", hash = "sha256:9059afd304c81ed3d7462bd7c43991ad499ca7395e7d2b562f5f61d3c6707056"},
+    {file = "geventhttpclient-1.4.5-cp35-cp35m-manylinux2010_x86_64.whl", hash = "sha256:af6fceb730d92e7f3b029ff5eb5e1ccc54530ac34d3b2aa50f2928948f478ac3"},
+    {file = "geventhttpclient-1.4.5-cp35-cp35m-win32.whl", hash = "sha256:50efbbe1a24019fef5f3ebe4e463c8b2aa965f6898469ab435b9c4f8e8b8b82f"},
+    {file = "geventhttpclient-1.4.5-cp35-cp35m-win_amd64.whl", hash = "sha256:0cf0f5ba00b3cc19b30ea5192bfc6673ebc2e160404385acae773aa699717f8e"},
+    {file = "geventhttpclient-1.4.5-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:92945e90da9a789fba24451bf31bc7c0d7606e2cd9ce4368542fb8e285ed6d96"},
+    {file = "geventhttpclient-1.4.5-cp36-cp36m-manylinux1_i686.whl", hash = "sha256:951dc279b387f45201afcab2a7d0807a8e7e5331c16950ed73b5617c09f0fa64"},
+    {file = "geventhttpclient-1.4.5-cp36-cp36m-manylinux1_x86_64.whl", hash = "sha256:caa624d13fa21bf1dd7925bc416c89b7c558d04200dcb8b36fb7b58f34d3e50d"},
+    {file = "geventhttpclient-1.4.5-cp36-cp36m-manylinux2010_i686.whl", hash = "sha256:4af9e90f19b192f14d863502d23eaf0e3e49719c249f0b459a46a40999754dc6"},
+    {file = "geventhttpclient-1.4.5-cp36-cp36m-manylinux2010_x86_64.whl", hash = "sha256:3e7f1ee77ec3e6449da319ca1f00710a9e53b78c0dea208ebd1999fb832a0910"},
+    {file = "geventhttpclient-1.4.5-cp36-cp36m-win32.whl", hash = "sha256:b1b6baaab4560679ec8bfe52c80b50f55c4c139677f3ee766cfece246cbc3321"},
+    {file = "geventhttpclient-1.4.5-cp36-cp36m-win_amd64.whl", hash = "sha256:9eb331f775c216515fd5352f6e6c7693062a77418c7e8ed9500ccf8ba7829ad2"},
+    {file = "geventhttpclient-1.4.5-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:a484c9ff9c965b6addda0043b765930431b794cb897895857f54c90327a8df83"},
+    {file = "geventhttpclient-1.4.5-cp37-cp37m-manylinux1_i686.whl", hash = "sha256:33c34848dc1e929b5be24ad8429f34704f2bbba5ab5b08aa9591e842e35ac7ea"},
+    {file = "geventhttpclient-1.4.5-cp37-cp37m-manylinux1_x86_64.whl", hash = "sha256:48b04615ced3bc6a759405ec28d86eaf460d6d69ed98ac18c2a5dff8f3eb26d2"},
+    {file = "geventhttpclient-1.4.5-cp37-cp37m-manylinux2010_i686.whl", hash = "sha256:6ac614b0f89e89e239a0ce800574d86187bea5a07fe4cc0edb13c75442ee1c03"},
+    {file = "geventhttpclient-1.4.5-cp37-cp37m-manylinux2010_x86_64.whl", hash = "sha256:fa4bf245d5770e1a85295f0a9966f12869a13e9cdc5a6a7b6a05ae787b80329d"},
+    {file = "geventhttpclient-1.4.5-cp37-cp37m-win32.whl", hash = "sha256:bf87aad4687dc69a2af5eac371c56116659b8346abfa0ce329b6fa606dc9123b"},
+    {file = "geventhttpclient-1.4.5-cp37-cp37m-win_amd64.whl", hash = "sha256:24b60c12a582c6f9ec2b217b1489d687231cc9c8574b771a28c81d8285874b79"},
+    {file = "geventhttpclient-1.4.5-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:36760415a845a0d8ef2338ed90335c66765b8ff7b7944a016bb487d822d39aa5"},
+    {file = "geventhttpclient-1.4.5-cp38-cp38-manylinux1_i686.whl", hash = "sha256:e124b9b2e385894405fe31f5e1468b72f784d5b656d753d502ab5c6b65d9f135"},
+    {file = "geventhttpclient-1.4.5-cp38-cp38-manylinux1_x86_64.whl", hash = "sha256:f809483056aac9fcc1eecabf62656172091d5ee0bf87f7763cc7df49b0f8070b"},
+    {file = "geventhttpclient-1.4.5-cp38-cp38-manylinux2010_i686.whl", hash = "sha256:88cce547d86efc296c8d53572cda0ff8793e55c0120399f68a26efb79330103b"},
+    {file = "geventhttpclient-1.4.5-cp38-cp38-manylinux2010_x86_64.whl", hash = "sha256:00a38e63c0de06a46839a568951826fa7a30264a8e14337451e98b13d5809dda"},
+    {file = "geventhttpclient-1.4.5-cp38-cp38-win32.whl", hash = "sha256:e392c1a740d343ba4d5ae15fc1c45f1fcc6864a17fa8f171e96d86c83f3aefd1"},
+    {file = "geventhttpclient-1.4.5-cp38-cp38-win_amd64.whl", hash = "sha256:7a7a57d64ee9d4c6c5a6b9dca07209796a853ce81c184b55a3aca5ec09964d59"},
+    {file = "geventhttpclient-1.4.5-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:5dacd90d821fc2b32491049e6231811ce4dea1314fc08d46b75372570e682422"},
+    {file = "geventhttpclient-1.4.5-cp39-cp39-win32.whl", hash = "sha256:05e19f3c7d0fbb9bf93bc88583aafe86b7bfe49e49b670ac3b49dc4b643c6ad9"},
+    {file = "geventhttpclient-1.4.5-cp39-cp39-win_amd64.whl", hash = "sha256:8b8294288382f9446a67d3399413f39bb1d281f9b9428e6a9bee24d96660ab38"},
+    {file = "geventhttpclient-1.4.5-pp27-pypy_73-macosx_10_9_x86_64.whl", hash = "sha256:b1178a45143901015160a15950e64a60fbf4459f9b8b4d85b43f070f65170078"},
+    {file = "geventhttpclient-1.4.5-pp27-pypy_73-manylinux1_x86_64.whl", hash = "sha256:df617afed129da1e69714b9ef148e35a0014cd34378fcde39228771fe8d16be3"},
+    {file = "geventhttpclient-1.4.5-pp27-pypy_73-manylinux2010_x86_64.whl", hash = "sha256:8ad49e85eb90e199aea04243333a858f22a6d2262f9545721c2c106e0b416aee"},
+    {file = "geventhttpclient-1.4.5-pp27-pypy_73-win32.whl", hash = "sha256:bd63f0e25ee1667d1327f63dfff78e973920769d26b2382a910a03f7605475c5"},
+    {file = "geventhttpclient-1.4.5-pp36-pypy36_pp73-macosx_10_9_x86_64.whl", hash = "sha256:2eef6e11cfab6fded8d0a60ac90e2abc2e3353bc5cd8d6932ce1c2a4c4f5cd09"},
+    {file = "geventhttpclient-1.4.5-pp36-pypy36_pp73-manylinux1_x86_64.whl", hash = "sha256:ead6fa808ccb311b50d66dcae7af45d2fcb1897ba75d9d0df8aa83b9dca6404c"},
+    {file = "geventhttpclient-1.4.5-pp36-pypy36_pp73-manylinux2010_x86_64.whl", hash = "sha256:6ec839ab64c5c1a508a9d9ccb0c7df9ac09d5266c4d0614138636ff1bc836b62"},
+    {file = "geventhttpclient-1.4.5-pp36-pypy36_pp73-win32.whl", hash = "sha256:de19bd08fa22d6f5d93424edb0b4819c10bfe0e6b4e8b8830c8074727ff083dd"},
+    {file = "geventhttpclient-1.4.5-pp37-pypy37_pp73-macosx_10_9_x86_64.whl", hash = "sha256:4246ce2649fb12ab6b9e9e4f3721856b30cbba29873b7c3a3d671f6d1cef54f5"},
+    {file = "geventhttpclient-1.4.5-pp37-pypy37_pp73-win32.whl", hash = "sha256:a8884dec1393b4a3febcd18088514560d926915924fee6c74676405e25d34604"},
+    {file = "geventhttpclient-1.4.5.tar.gz", hash = "sha256:3f0ab18d84ef26ba0c9df73ae2a41ba30a46072b447f2e36c740400de4a63d44"},
 ]
 greenlet = [
     {file = "greenlet-0.4.17-cp27-cp27m-manylinux1_x86_64.whl", hash = "sha256:75e4c27188f28149b74e7685809f9227410fd15432a4438fc48627f518577fa5"},
@@ -1854,8 +1879,8 @@ idna = [
     {file = "idna-2.10.tar.gz", hash = "sha256:b307872f855b18632ce0c21c5e45be78c0ea7ae4c15c828c20788b26921eb3f6"},
 ]
 importlib-metadata = [
-    {file = "importlib_metadata-3.1.0-py2.py3-none-any.whl", hash = "sha256:590690d61efdd716ff82c39ca9a9d4209252adfe288a4b5721181050acbd4175"},
-    {file = "importlib_metadata-3.1.0.tar.gz", hash = "sha256:d9b8a46a0885337627a6430db287176970fff18ad421becec1d64cfc763c2099"},
+    {file = "importlib_metadata-3.1.1-py3-none-any.whl", hash = "sha256:6112e21359ef8f344e7178aa5b72dc6e62b38b0d008e6d3cb212c5b84df72013"},
+    {file = "importlib_metadata-3.1.1.tar.gz", hash = "sha256:b0c2d3b226157ae4517d9625decf63591461c66b3a808c2666d538946519d170"},
 ]
 inflection = [
     {file = "inflection-0.5.1-py2.py3-none-any.whl", hash = "sha256:f38b2b640938a4f35ade69ac3d053042959b62a0f1076a5bbaa1b9526605a8a2"},
@@ -2316,8 +2341,8 @@ sqlparse = [
     {file = "sqlparse-0.4.1.tar.gz", hash = "sha256:0f91fd2e829c44362cbcfab3e9ae12e22badaa8a29ad5ff599f9ec109f0454e8"},
 ]
 stripe = [
-    {file = "stripe-2.55.0-py2.py3-none-any.whl", hash = "sha256:833313d28dcceca71128ee915c2dacbbf235c909e0a01b0f94ee5037e1c46109"},
-    {file = "stripe-2.55.0.tar.gz", hash = "sha256:2eebf023595e8aa9d65d8b46ccc3c716185bb9625d0e39d3956282fd7525848d"},
+    {file = "stripe-2.55.1-py2.py3-none-any.whl", hash = "sha256:fd98ae43b105e75cb4f1d23ba3d0c16b45e3957d432002398a2f75d083d606ce"},
+    {file = "stripe-2.55.1.tar.gz", hash = "sha256:6b70e2cf87cfbe0cb891b725b690495bc3d34ab0d82545a5989ecd3b5fa83e2a"},
 ]
 toml = [
     {file = "toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b"},
