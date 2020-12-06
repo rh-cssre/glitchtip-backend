@@ -1,3 +1,5 @@
+import urllib.parse as urlparse
+from urllib.parse import parse_qs
 from rest_framework.pagination import CursorPagination
 from rest_framework.response import Response
 
@@ -25,13 +27,21 @@ class LinkHeaderPagination(CursorPagination):
 
         links = []
         for url, label in (
-            (previous_url, "prev"),
+            (previous_url, "previous"),
             (next_url, "next"),
         ):
             if url is not None:
-                links.append('<{}>; rel="{}"; results="true"'.format(url, label))
+                parsed = urlparse.urlparse(url)
+                cursor = parse_qs(parsed.query).get(self.cursor_query_param, [""])[0]
+                links.append(
+                    '<{}>; rel="{}"; results="true"; cursor="{}"'.format(
+                        url, label, cursor
+                    )
+                )
             else:
-                links.append('<>; rel="{}"; results="false"'.format(label))
+                links.append(
+                    '<{}>; rel="{}"; results="false"'.format(self.base_url, label)
+                )
 
         headers = {"Link": ", ".join(links)} if links else {}
 
