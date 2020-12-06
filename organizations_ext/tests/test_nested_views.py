@@ -18,7 +18,7 @@ class OrganizationProjectsViewTestCase(GlitchTipTestCase):
         )
 
     def test_organization_projects_list(self):
-        with self.assertNumQueries(7):
+        with self.assertNumQueries(8):
             res = self.client.get(self.url)
         self.assertContains(res, self.organization.slug)
         self.assertContains(res, self.team.slug)

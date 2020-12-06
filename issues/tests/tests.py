@@ -19,7 +19,7 @@ class EventTestCase(GlitchTipTestCase):
         baker.make("issues.Event", issue__project=self.project, _quantity=3)
         not_my_event = baker.make("issues.Event")
 
-        with self.assertNumQueries(4):
+        with self.assertNumQueries(5):
             res = self.client.get(self.url)
         self.assertContains(res, event.pk.hex)
         self.assertNotContains(res, not_my_event.pk.hex)
@@ -115,6 +115,7 @@ class IssuesAPITestCase(GlitchTipTestCase):
         res = self.client.get(self.url)
         self.assertContains(res, issue.title)
         self.assertNotContains(res, not_my_issue.title)
+        self.assertEqual(res.get("X-Hits"), "1")
 
     def test_issue_retrieve(self):
         issue = baker.make("issues.Issue", project=self.project)

@@ -43,6 +43,7 @@ class IssueViewSet(
     permission_classes = [IssuePermission]
     ordering = ["-last_seen"]
     ordering_fields = ["last_seen", "created", "count", "priority"]
+    page_size_query_param = "limit"
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
