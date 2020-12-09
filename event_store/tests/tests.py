@@ -1,5 +1,6 @@
 import json
 import random
+from unittest.mock import patch
 from django.shortcuts import reverse
 from rest_framework.test import APITestCase
 from model_bakery import baker
@@ -176,3 +177,13 @@ class EventStoreTestCase(APITestCase):
             None,
             "No tsvector is expected as it would exceed the Postgres limit",
         )
+
+    @patch("event_store.views.logger")
+    def test_invalid_event(self, mock_logger):
+        with open("event_store/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+
+        data["transaction"] = True
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        mock_logger.warning.assert_called()

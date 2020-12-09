@@ -105,7 +105,9 @@ class StoreDefaultSerializer(BaseSerializer):
     request = RequestSerializer(required=False)
     sdk = serializers.JSONField()
     timestamp = FlexibleDateTimeField(required=False)
-    transaction = serializers.CharField(required=False, allow_null=True)
+    transaction = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True
+    )
     user = serializers.JSONField(required=False)
     modules = serializers.JSONField(required=False)
 

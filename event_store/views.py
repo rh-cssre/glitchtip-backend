@@ -1,3 +1,4 @@
+import logging
 import json
 import uuid
 import string
@@ -17,6 +18,9 @@ from .serializers import (
     StoreErrorSerializer,
     StoreCSPReportSerializer,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class IgnoreClientContentNegotiation(BaseContentNegotiation):
@@ -102,7 +106,8 @@ class EventStoreAPIView(APIView):
         if serializer.is_valid():
             event = serializer.save()
             return Response({"id": event.event_id_hex})
-        print(serializer.errors)
+        else:
+            logger.warning("Invalid event %s", serializer.errors)
         return Response()
 
     @classmethod
