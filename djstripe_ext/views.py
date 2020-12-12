@@ -55,6 +55,8 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
     def events_count(self, *args, **kwargs):
         """ Get event count for current billing period """
         subscription = self.get_object()
+        if not subscription:
+            return Response(0)
         organization = subscription.customer.subscriber
         event_count = Event.objects.filter(
             issue__project__organization=organization,

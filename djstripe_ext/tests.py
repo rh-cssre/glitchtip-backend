@@ -59,7 +59,6 @@ class SubscriptionAPITestCase(APITestCase):
             "djstripe.Subscription",
             customer=customer,
             livemode=False,
-            created=timezone.make_aware(timezone.datetime(2020, 1, 2)),
             current_period_start=timezone.make_aware(timezone.datetime(2020, 1, 2)),
             current_period_end=timezone.make_aware(timezone.datetime(2020, 2, 2)),
         )
@@ -74,6 +73,18 @@ class SubscriptionAPITestCase(APITestCase):
             baker.make("issues.Event", issue__project__organization=self.organization)
         res = self.client.get(url)
         self.assertEqual(res.data, 1)
+
+    def test_events_count_without_customer(self):
+        """
+        Due to async nature of Stripe integration, a customer may not exist
+        """
+        baker.make("djstripe.Subscription", livemode=False)
+        url = (
+            reverse("subscription-detail", args=[self.organization.slug])
+            + "events_count/"
+        )
+        res = self.client.get(url)
+        self.assertEqual(res.data, 0)
 
     @patch("djstripe.models.Customer.subscribe")
     def test_create(self, djstripe_customer_subscribe_mock):
