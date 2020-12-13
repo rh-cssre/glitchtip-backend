@@ -187,3 +187,22 @@ class EventStoreTestCase(APITestCase):
         res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
         mock_logger.warning.assert_called()
+
+    def test_breadcrumbs_object(self):
+        """ Event breadcrumbs may be sent as an array or a object. """
+        with open("event_store/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+
+        data["breadcrumbs"] = {
+            "values": [
+                {
+                    "timestamp": "2020-01-20T20:00:00.000Z",
+                    "message": "Something",
+                    "category": "log",
+                    "data": {"foo": "bar"},
+                },
+            ]
+        }
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(Issue.objects.exists())

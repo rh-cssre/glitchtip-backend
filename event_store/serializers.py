@@ -92,7 +92,7 @@ class StoreDefaultSerializer(BaseSerializer):
     """
 
     type = EventType.DEFAULT
-    breadcrumbs = BreadcrumbsSerializer(required=False, many=True)
+    breadcrumbs = serializers.JSONField(required=False)
     contexts = serializers.JSONField(required=False)
     environment = serializers.CharField(required=False)
     event_id = serializers.UUIDField()
@@ -110,6 +110,17 @@ class StoreDefaultSerializer(BaseSerializer):
     )
     user = serializers.JSONField(required=False)
     modules = serializers.JSONField(required=False)
+
+    def validate_breadcrumbs(self, value):
+        """
+        Normalize breadcrumbs, which may come in as dict or list
+        """
+        if isinstance(value, list):
+            value = {"values": value}
+        serializer = BreadcrumbsSerializer(data=value.get("values"), many=True)
+        if serializer.is_valid():
+            return {"values": serializer.validated_data}
+        return value
 
     def get_eventtype(self):
         """ Get event type class from self.type """
@@ -196,8 +207,6 @@ class StoreDefaultSerializer(BaseSerializer):
         culprit = eventtype.get_location(data)
         request = data.get("request")
         breadcrumbs = data.get("breadcrumbs")
-        if breadcrumbs:
-            breadcrumbs = {"values": breadcrumbs}
         exception = self.modify_exception(data.get("exception"))
         if request:
             headers = request.get("headers")
