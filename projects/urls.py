@@ -2,6 +2,7 @@ from django.urls import path, include
 from rest_framework_nested import routers
 from issues.views import IssueViewSet, EventViewSet
 from alerts.views import ProjectAlertViewSet
+from releases.views import ReleaseViewSet
 from environments.views import EnvironmentProjectViewSet
 from .views import ProjectViewSet, ProjectKeyViewSet, ProjectTeamViewSet
 
@@ -17,6 +18,7 @@ projects_router.register(r"teams", ProjectTeamViewSet, basename="project-teams")
 projects_router.register(
     r"environments", EnvironmentProjectViewSet, basename="project-environments"
 )
+projects_router.register(r"releases", ReleaseViewSet, basename="project-releases")
 
 urlpatterns = [
     path("", include(router.urls)),
