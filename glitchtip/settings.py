@@ -197,7 +197,9 @@ CSP_FONT_SRC = env.list("CSP_FONT_SRC", str, ["'self'", "https://fonts.gstatic.c
 CSP_WORKER_SRC = env.list("CSP_WORKER_SRC", str, ["'self'", "blob:"])
 # GlitchTip can record it's own errors
 CSP_CONNECT_SRC = env.list(
-    "CSP_CONNECT_SRC", str, ["'self'", "https://app.glitchtip.com"]
+    "CSP_CONNECT_SRC",
+    str,
+    ["'self'", "https://app.glitchtip.com", "https://matomo.glitchtip.com"],
 )
 # Needed for Matomo and Stripe for SaaS use cases. Both are disabled by default.
 CSP_SCRIPT_SRC = env.list(
