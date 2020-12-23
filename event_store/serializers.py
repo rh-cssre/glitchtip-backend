@@ -117,6 +117,8 @@ class StoreDefaultSerializer(BaseSerializer):
         """
         if isinstance(value, list):
             value = {"values": value}
+        if value.get("values") == []:
+            return None
         serializer = BreadcrumbsSerializer(data=value.get("values"), many=True)
         if serializer.is_valid():
             return {"values": serializer.validated_data}

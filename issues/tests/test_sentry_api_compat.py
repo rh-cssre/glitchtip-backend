@@ -333,6 +333,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
                 "type",
                 "title",
                 "culprit",
+                "breadcrumbs",
             ],
         )
         self.assertEqual(
