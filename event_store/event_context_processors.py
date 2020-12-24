@@ -9,10 +9,11 @@ class UserAgentContextProcessor:
     """ Abstract class for processing user agent related contexts """
 
     def get_context(self, event) -> Optional[Dict[str, str]]:
-        headers = event.get("request", {}).get("headers")
-        if not headers:
-            return
-        ua_string = next(x[1] for x in headers if x[0] == "User-Agent")
+        headers = event.get("request", {}).get("headers", {})
+        try:
+            ua_string = next(x[1] for x in headers if x[0] == "User-Agent")
+        except StopIteration:
+            return  # Not found
         if isinstance(ua_string, list) and len(ua_string) > 0:
             ua_string = ua_string[0]
         if not ua_string:

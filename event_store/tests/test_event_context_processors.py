@@ -1,5 +1,8 @@
 from django.test import TestCase
-from ..event_context_processors import EVENT_CONTEXT_PROCESSORS
+from ..event_context_processors import (
+    EVENT_CONTEXT_PROCESSORS,
+    UserAgentContextProcessor,
+)
 
 
 class EventTagTestCase(TestCase):
@@ -38,3 +41,20 @@ class EventTagTestCase(TestCase):
                     context, ua_test_case[processor.name], str(processor),
                 )
 
+    def test_user_agent_context_processor_no_ua(self):
+        """ Missing UA header should return None """
+        event = {
+            "request": {
+                "headers": [
+                    ["Accept-Encoding", "gzip"],
+                    ["Connection", "Keep-Alive"],
+                    ["Content-Length", "123"],
+                    ["Content-Type", "multipart/form-data; boundary=1M",],
+                    ["Host", "example.com"],
+                ]
+            }
+        }
+
+        self.assertFalse(UserAgentContextProcessor().get_context(event))
+        self.assertFalse(UserAgentContextProcessor().get_context({}))
+        self.assertFalse(UserAgentContextProcessor().get_context({"request": {}}))
