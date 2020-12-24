@@ -13,6 +13,16 @@ class ReleaseViewSet(viewsets.ModelViewSet):
     lookup_field = "version"
     lookup_value_regex = "[^/]+"
 
+    def get_queryset(self):
+        if not self.request.user.is_authenticated:
+            return self.queryset.none()
+
+        queryset = self.queryset.filter(organization__users=self.request.user)
+        organization_slug = self.kwargs.get("organization_slug")
+        if organization_slug:
+            queryset = queryset.filter(organization__slug=organization_slug)
+        return queryset
+
     def perform_create(self, serializer):
         try:
             organization = Organization.objects.get(
