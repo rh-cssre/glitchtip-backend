@@ -142,6 +142,7 @@ INSTALLED_APPS = [
     "user_reports",
     "projects",
     "teams",
+    "releases",
 ]
 
 MIDDLEWARE = [

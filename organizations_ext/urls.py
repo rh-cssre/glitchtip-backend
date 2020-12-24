@@ -3,6 +3,7 @@ from rest_framework_nested import routers
 from issues.views import IssueViewSet
 from teams.views import NestedTeamViewSet
 from environments.views import EnvironmentViewSet
+from releases.views import ReleaseViewSet
 from glitchtip.routers import BulkSimpleRouter
 from .views import (
     OrganizationViewSet,
@@ -33,6 +34,9 @@ organizations_router.register(
 )
 organizations_router.register(
     r"environments", EnvironmentViewSet, basename="organization-environments"
+)
+organizations_router.register(
+    r"releases", ReleaseViewSet, basename="organization-releases"
 )
 
 urlpatterns = [
