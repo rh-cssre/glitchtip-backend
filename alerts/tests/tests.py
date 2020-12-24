@@ -8,6 +8,8 @@ from freezegun import freeze_time
 from glitchtip import test_utils  # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.models import EventStatus, Issue
+from users.models import ProjectAlertStatus
+from organizations_ext.models import OrganizationUserRole
 from ..tasks import process_alerts
 from ..models import Notification, ProjectAlert
 
@@ -116,6 +118,73 @@ class AlertTestCase(GlitchTipTestCase):
         self.client.post(url, data, format="json")
         process_alerts()
         self.assertEqual(len(mail.outbox), 2)
+
+
+class AlertWithUserProjectAlert(GlitchTipTestCase):
+    def setUp(self):
+        self.create_user_and_project()
+        self.now = timezone.now()
+
+    def test_alert_enabled_user_project_alert_disabled(self):
+        """ A user should be able to disable their own notifications """
+        baker.make(
+            "alerts.ProjectAlert", project=self.project, timespan_minutes=1, quantity=1,
+        )
+        baker.make(
+            "users.UserProjectAlert",
+            user=self.user,
+            project=self.project,
+            status=ProjectAlertStatus.OFF,
+        )
+
+        user2 = baker.make("users.user")
+        org_user2 = self.organization.add_user(user2, OrganizationUserRole.ADMIN)
+        self.team.members.add(org_user2)
+        baker.make(
+            "users.UserProjectAlert", user=user2, status=ProjectAlertStatus.ON,
+        )
+
+        user3 = baker.make("users.user")
+        org_user3 = self.organization.add_user(user3, OrganizationUserRole.ADMIN)
+        self.team.members.add(org_user3)
+        baker.make(
+            "users.UserProjectAlert",
+            user=user3,
+            project=self.project,
+            status=ProjectAlertStatus.ON,
+        )
+
+        baker.make("issues.Event", issue__project=self.project)
+        process_alerts()
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(len(mail.outbox[0].merge_data), 2)
+
+    def test_alert_enabled_subscribe_by_default(self):
+        self.user.subscribe_by_default = False
+        self.user.save()
+        baker.make(
+            "alerts.ProjectAlert", project=self.project, timespan_minutes=1, quantity=1,
+        )
+
+        baker.make("issues.Event", issue__project=self.project)
+        process_alerts()
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_alert_enabled_subscribe_by_default_override_false(self):
+        self.user.subscribe_by_default = False
+        self.user.save()
+        baker.make(
+            "alerts.ProjectAlert", project=self.project, timespan_minutes=1, quantity=1,
+        )
+        baker.make(
+            "users.UserProjectAlert",
+            user=self.user,
+            project=self.project,
+            status=ProjectAlertStatus.ON,
+        )
+        baker.make("issues.Event", issue__project=self.project)
+        process_alerts()
+        self.assertEqual(len(mail.outbox), 1)
 
 
 class AlertAPITestCase(GlitchTipTestCase):

@@ -1,7 +1,11 @@
+from django.db.models import Q
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
+from users.models import ProjectAlertStatus
+
+User = get_user_model()
 
 
 def send_email_notification(notification):
@@ -53,11 +57,19 @@ def send_email_notification(notification):
             },
         )
 
-    User = get_user_model()
     users = User.objects.filter(
         organizations_ext_organization__projects__notification=notification
+    ).exclude(
+        Q(
+            userprojectalert__project=notification.project,
+            userprojectalert__status=ProjectAlertStatus.OFF,
+        )
+        | Q(subscribe_by_default=False, userprojectalert=None),
     )
+    if not users.exists():
+        return
     to = users.values_list("email", flat=True)
     msg = EmailMultiAlternatives(subject, text_content, to=to)
+    msg.merge_data = {user.email: {"unique_id": user.id} for user in users}
     msg.attach_alternative(html_content, "text/html")
     msg.send()
