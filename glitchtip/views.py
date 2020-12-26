@@ -36,6 +36,8 @@ class SettingsView(APIView):
                 "matomoSiteId": settings.MATOMO_SITE_ID,
                 "rocketChatDomain": settings.ROCKET_CHAT_DOMAIN,
                 "sentryDSN": settings.SENTRY_FRONTEND_DSN,
+                "environment": settings.ENVIRONMENT,
+                "version": settings.GLITCHTIP_VERSION,
             }
         )
 
