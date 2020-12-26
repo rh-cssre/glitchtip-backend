@@ -59,6 +59,10 @@ POD_IP = env.str("POD_IP", default=None)
 if POD_IP:
     ALLOWED_HOSTS.append(POD_IP)
 
+
+ENVIRONMENT = env.str("ENVIRONMENT", None)
+GLITCHTIP_VERSION = env.str("GLITCHTIP_VERSION", None)
+
 # Used in email and DSN generation. Set to full domain such as https://glitchtip.example.com
 GLITCHTIP_DOMAIN = env.url("GLITCHTIP_DOMAIN", default="http://localhost:8000")
 
@@ -84,8 +88,13 @@ SENTRY_DSN = env.str("SENTRY_DSN", None)
 # Optionally allow a different DSN for the frontend
 SENTRY_FRONTEND_DSN = env.str("SENTRY_FRONTEND_DSN", SENTRY_DSN)
 if SENTRY_DSN:
+    release = "glitchtip@" + GLITCHTIP_VERSION if GLITCHTIP_VERSION else None
     sentry_sdk.init(
-        dsn=SENTRY_DSN, integrations=[DjangoIntegration()], before_send=before_send,
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration()],
+        before_send=before_send,
+        release=release,
+        environment=ENVIRONMENT,
     )
 
 
@@ -216,9 +225,6 @@ SECURE_HSTS_PRELOAD = env.bool("SECURE_HSTS_PRELOAD", False)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", False)
 SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", False)
 SESSION_COOKIE_SAMESITE = env.str("SESSION_COOKIE_SAMESITE", "Lax")
-
-ENVIRONMENT = env.str("ENVIRONMENT", None)
-GLITCHTIP_VERSION = env.str("GLITCHTIP_VERSION", "dev")
 
 DEFAULT_FROM_EMAIL = env.str("DEFAULT_FROM_EMAIL", "webmaster@localhost")
 ANYMAIL = {
