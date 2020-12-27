@@ -162,6 +162,8 @@ class Event(models.Model):
         event["tags"] = self.tags.all().values_list("key__key", "value")
         if self.timestamp:
             event["datetime"] = self.timestamp.isoformat().replace("+00:00", "Z")
+        if self.release:
+            event["release"] = self.release.version
         return event
 
     @property

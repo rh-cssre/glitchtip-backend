@@ -297,6 +297,8 @@ class StoreDefaultSerializer(BaseSerializer):
         tags = []
         if environment:
             tags.append(("environment", environment.name))
+        if release:
+            tags.append(("release", release.version))
         self.generate_tags(event, data, tags)
 
         return event
