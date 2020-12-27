@@ -245,3 +245,27 @@ class IssuesAPITestCase(GlitchTipTestCase):
         url = reverse("issue-detail", args=[issue.id])
         res = self.client.get(url)
         self.assertContains(res, issue.get_type_display())
+
+    def test_event_release(self):
+        release = baker.make("releases.Release", organization=self.organization)
+        event = baker.make("issues.Event", issue__project=self.project, release=release)
+
+        url = reverse(
+            "project-events-list",
+            kwargs={
+                "project_pk": f"{self.project.organization.slug}/{self.project.slug}",
+            },
+        )
+        res = self.client.get(url)
+        # Not in list view
+        self.assertNotContains(res, release.version)
+
+        url = reverse(
+            "project-events-detail",
+            kwargs={
+                "project_pk": f"{self.project.organization.slug}/{self.project.slug}",
+                "pk": event.pk,
+            },
+        )
+        res = self.client.get(url)
+        self.assertContains(res, release.version)

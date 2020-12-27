@@ -133,6 +133,9 @@ class Event(models.Model):
     created = models.DateTimeField(auto_now_add=True, db_index=True)
     data = models.JSONField()
     tags = models.ManyToManyField(EventTag, blank=True)
+    release = models.ForeignKey(
+        "releases.Release", blank=True, null=True, on_delete=models.SET_NULL
+    )
 
     class Meta:
         ordering = ["-created"]

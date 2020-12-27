@@ -3,6 +3,7 @@ from projects.serializers.base_serializers import ProjectReferenceSerializer
 from user_reports.serializers import UserReportSerializer
 from sentry.interfaces.stacktrace import get_context
 from glitchtip.serializers import FlexibleDateTimeField
+from releases.serializers import ReleaseSerializer
 from .models import Issue, Event, EventTag, EventType, EventStatus
 
 
@@ -145,6 +146,7 @@ class EventDetailSerializer(EventSerializer):
     userReport = UserReportSerializer(source="user_report")
     nextEventID = serializers.SerializerMethodField()
     previousEventID = serializers.SerializerMethodField()
+    release = ReleaseSerializer()
 
     class Meta(EventSerializer.Meta):
         fields = EventSerializer.Meta.fields + (
@@ -152,6 +154,7 @@ class EventDetailSerializer(EventSerializer):
             "userReport",
             "nextEventID",
             "previousEventID",
+            "release",
         )
 
     def get_next_or_previous(self, obj, is_next):

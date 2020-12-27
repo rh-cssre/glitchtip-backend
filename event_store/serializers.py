@@ -11,6 +11,7 @@ from sentry.eventtypes.base import DefaultEvent
 from issues.models import EventType, Event, Issue, EventTagKey
 from issues.serializers import BaseBreadcrumbsSerializer
 from environments.models import Environment
+from releases.models import Release
 from glitchtip.serializers import FlexibleDateTimeField
 from .event_tag_processors import TAG_PROCESSORS
 from .event_context_processors import EVENT_CONTEXT_PROCESSORS
@@ -196,10 +197,17 @@ class StoreDefaultSerializer(BaseSerializer):
 
     def get_environment(self, name: str, project):
         environment, _ = Environment.objects.get_or_create(
-            name=name, organization_id=project.organization_id
+            name=name, organization=project.organization
         )
         environment.projects.add(project)
         return environment
+
+    def get_release(self, version: str, project):
+        release, _ = Release.objects.get_or_create(
+            version=version, organization=project.organization
+        )
+        release.projects.add(project)
+        return release
 
     def create(self, data):
         project = self.context.get("project")
@@ -237,6 +245,9 @@ class StoreDefaultSerializer(BaseSerializer):
             environment = None
             if data.get("environment"):
                 environment = self.get_environment(data["environment"], project)
+            release = None
+            if data.get("release"):
+                release = self.get_release(data["release"], project)
 
             json_data = {
                 "breadcrumbs": breadcrumbs,
@@ -268,6 +279,7 @@ class StoreDefaultSerializer(BaseSerializer):
                 "issue": issue,
                 "timestamp": data.get("timestamp"),
                 "data": sanitize_bad_postgres_json(json_data),
+                "release": release,
             }
             try:
                 event = Event.objects.create(**params)
