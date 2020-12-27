@@ -35,6 +35,9 @@ test:
 
 build:
   image: docker
+  only:
+    variables:
+      - $CI_COMMIT_REF_PROTECTED
   services:
     - docker:19.03.5-dind
   script:
