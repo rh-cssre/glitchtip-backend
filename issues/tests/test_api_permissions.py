@@ -91,7 +91,7 @@ class EventAPIPermissionTests(APIPermissionTestCase):
         self.team.members.add(self.org_user)
         self.project = baker.make("projects.Project", organization=self.organization)
         self.project.team_set.add(self.team)
-        self.event = baker.make("issues.Event", issue__project=self.project)
+        self.event = baker.make("events.Event", issue__project=self.project)
         self.list_url = reverse(
             "issue-events-list", kwargs={"issue_pk": self.event.issue.pk}
         )

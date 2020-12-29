@@ -33,7 +33,7 @@ def test_event_view(request):
     request = request = factory.get(
         "/api/6/store/?sentry_key=244703e8083f4b16988c376ea46e9a08"
     )
-    with open("event_store/test_data/py_hi_event.json") as json_file:
+    with open("events/test_data/py_hi_event.json") as json_file:
         data = json.load(json_file)
     data["event_id"] = uuid.uuid4()
     data["message"] = "".join(

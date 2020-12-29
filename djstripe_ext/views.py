@@ -7,7 +7,7 @@ from drf_yasg.utils import swagger_auto_schema
 from djstripe.models import Subscription, Customer, Product
 from djstripe.settings import STRIPE_SECRET_KEY
 import stripe
-from issues.models import Event
+from events.models import Event
 from .serializers import (
     SubscriptionSerializer,
     CreateSubscriptionSerializer,

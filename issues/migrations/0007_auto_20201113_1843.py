@@ -11,9 +11,4 @@ class Migration(migrations.Migration):
         ("issues", "0006_auto_20201027_0018"),
     ]
 
-    operations = [
-        migrations.RunSQL(
-            sql=UPDATE_ISSUE_TRIGGER,
-            reverse_sql="DROP TRIGGER IF EXISTS event_issue_update on issues_event; DROP FUNCTION IF EXISTS update_issue;",
-        ),
-    ]
+    operations = []

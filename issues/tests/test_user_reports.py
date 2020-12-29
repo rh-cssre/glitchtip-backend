@@ -6,7 +6,7 @@ from glitchtip.test_utils.test_case import GlitchTipTestCase
 class IssuesUserReportTestCase(GlitchTipTestCase):
     def setUp(self):
         self.create_user_and_project()
-        self.event = baker.make("issues.Event", issue__project=self.project)
+        self.event = baker.make("events.Event", issue__project=self.project)
         self.user_report = baker.make(
             "user_reports.UserReport",
             project=self.project,
@@ -35,7 +35,7 @@ class IssuesUserReportTestCase(GlitchTipTestCase):
         self.assertEqual(res.data["userReportCount"], 1)
 
     def test_issues_user_report_list(self):
-        event2 = baker.make("issues.Event", issue__project=self.project)
+        event2 = baker.make("events.Event", issue__project=self.project)
         user_report2 = baker.make(
             "user_reports.UserReport",
             project=self.project,

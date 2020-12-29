@@ -145,7 +145,7 @@ INSTALLED_APPS = [
     "api_tokens",
     "environments",
     "organizations_ext",
-    "event_store",
+    "events",
     "issues",
     "users",
     "user_reports",
@@ -305,9 +305,6 @@ USE_L10N = True
 USE_TZ = True
 
 SITE_ID = 1
-
-# sentry-python reports, incorrectly, this very large size
-DATA_UPLOAD_MAX_MEMORY_SIZE = 4294967295
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/dev/howto/static-files/

@@ -27,14 +27,14 @@ class OrganizationThrottlingTestCase(TestCase):
                 status="active",
             )
             baker.make(
-                "issues.Event", issue__project__organization=organization, _quantity=3
+                "events.Event", issue__project__organization=organization, _quantity=3
             )
             set_organization_throttle()
             organization.refresh_from_db()
             self.assertTrue(organization.is_accepting_events)
 
             baker.make(
-                "issues.Event", issue__project__organization=organization, _quantity=8
+                "events.Event", issue__project__organization=organization, _quantity=8
             )
             set_organization_throttle()
             organization.refresh_from_db()
@@ -53,7 +53,7 @@ class OrganizationThrottlingTestCase(TestCase):
 
             # Throttle again
             baker.make(
-                "issues.Event", issue__project__organization=organization, _quantity=11
+                "events.Event", issue__project__organization=organization, _quantity=11
             )
             set_organization_throttle()
             organization.refresh_from_db()
@@ -78,7 +78,7 @@ class OrganizationThrottlingTestCase(TestCase):
                 status="active",
             )
             baker.make(
-                "issues.Event", issue__project__organization=organization, _quantity=2
+                "events.Event", issue__project__organization=organization, _quantity=2
             )
         with self.assertNumQueries(6):
             set_organization_throttle()

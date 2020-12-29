@@ -1,7 +1,7 @@
 import random
 from django.core import management
 from django.test import TestCase
-from issues.models import Event
+from events.models import Event
 
 
 class CommandsTestCase(TestCase):

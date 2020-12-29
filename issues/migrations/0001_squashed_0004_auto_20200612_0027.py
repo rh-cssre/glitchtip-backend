@@ -163,8 +163,4 @@ class Migration(migrations.Migration):
                 fields=["search_vector"], name="search_vector_idx"
             ),
         ),
-        migrations.RunSQL(
-            sql=UPDATE_ISSUE_TRIGGER,
-            reverse_sql="DROP TRIGGER IF EXISTS event_issue_update on issues_event; DROP FUNCTION IF EXISTS update_issue;",
-        ),
     ]

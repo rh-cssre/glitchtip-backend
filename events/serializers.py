@@ -8,11 +8,12 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from sentry.eventtypes.error import ErrorEvent
 from sentry.eventtypes.base import DefaultEvent
-from issues.models import EventType, Event, Issue, EventTagKey
+from issues.models import EventType, Issue
 from issues.serializers import BaseBreadcrumbsSerializer
 from environments.models import Environment
 from releases.models import Release
 from glitchtip.serializers import FlexibleDateTimeField
+from .models import Event, EventTagKey
 from .event_tag_processors import TAG_PROCESSORS
 from .event_context_processors import EVENT_CONTEXT_PROCESSORS
 

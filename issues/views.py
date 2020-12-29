@@ -6,7 +6,8 @@ from rest_framework.response import Response
 from rest_framework.filters import OrderingFilter
 
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Issue, Event, EventStatus
+from events.models import Event
+from .models import Issue, EventStatus
 from .serializers import (
     IssueSerializer,
     EventSerializer,
