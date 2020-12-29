@@ -8,7 +8,6 @@ from django.conf import settings
 from django.http import HttpResponse
 from django.test import RequestFactory
 from rest_framework import permissions, exceptions
-from rest_framework.negotiation import BaseContentNegotiation
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from sentry.utils.auth import parse_auth_header
@@ -18,28 +17,11 @@ from .serializers import (
     StoreErrorSerializer,
     StoreCSPReportSerializer,
 )
+from .parsers import EnvelopeParser
+from .negotiation import IgnoreClientContentNegotiation
 
 
 logger = logging.getLogger(__name__)
-
-
-class IgnoreClientContentNegotiation(BaseContentNegotiation):
-    """
-    @sentry/browser sends an interesting content-type of text/plain when it's actually sending json
-    We have to ignore it and assume it's actually JSON
-    """
-
-    def select_parser(self, request, parsers):
-        """
-        Select the first parser in the `.parser_classes` list.
-        """
-        return parsers[0]
-
-    def select_renderer(self, request, renderers, format_suffix):
-        """
-        Select the first renderer in the `.renderer_classes` list.
-        """
-        return (renderers[0], renderers[0].media_type)
 
 
 def test_event_view(request):
@@ -63,12 +45,38 @@ def test_event_view(request):
     return HttpResponse("<html><body></body></html>")
 
 
-class EventStoreAPIView(APIView):
+class BaseEventAPIView(APIView):
     permission_classes = [permissions.AllowAny]
     authentication_classes = []
     content_negotiation_class = IgnoreClientContentNegotiation
     http_method_names = ["post"]
 
+    @classmethod
+    def auth_from_request(cls, request):
+        result = {k: request.GET[k] for k in request.GET.keys() if k[:7] == "sentry_"}
+
+        if request.META.get("HTTP_X_SENTRY_AUTH", "")[:7].lower() == "sentry ":
+            if result:
+                raise SuspiciousOperation(
+                    "Multiple authentication payloads were detected."
+                )
+            result = parse_auth_header(request.META["HTTP_X_SENTRY_AUTH"])
+        elif request.META.get("HTTP_AUTHORIZATION", "")[:7].lower() == "sentry ":
+            if result:
+                raise SuspiciousOperation(
+                    "Multiple authentication payloads were detected."
+                )
+            result = parse_auth_header(request.META["HTTP_AUTHORIZATION"])
+
+        if not result:
+            raise exceptions.NotAuthenticated(
+                "Unable to find authentication information"
+            )
+
+        return result.get("sentry_key")
+
+
+class EventStoreAPIView(BaseEventAPIView):
     def get_serializer_class(self, data=[]):
         """ Determine event type and return serializer """
         if "exception" in data and data["exception"]:
@@ -110,30 +118,20 @@ class EventStoreAPIView(APIView):
             logger.warning("Invalid event %s", serializer.errors)
         return Response()
 
-    @classmethod
-    def auth_from_request(cls, request):
-        result = {k: request.GET[k] for k in request.GET.keys() if k[:7] == "sentry_"}
-
-        if request.META.get("HTTP_X_SENTRY_AUTH", "")[:7].lower() == "sentry ":
-            if result:
-                raise SuspiciousOperation(
-                    "Multiple authentication payloads were detected."
-                )
-            result = parse_auth_header(request.META["HTTP_X_SENTRY_AUTH"])
-        elif request.META.get("HTTP_AUTHORIZATION", "")[:7].lower() == "sentry ":
-            if result:
-                raise SuspiciousOperation(
-                    "Multiple authentication payloads were detected."
-                )
-            result = parse_auth_header(request.META["HTTP_AUTHORIZATION"])
-
-        if not result:
-            raise exceptions.NotAuthenticated(
-                "Unable to find authentication information"
-            )
-
-        return result.get("sentry_key")
-
 
 class CSPStoreAPIView(EventStoreAPIView):
     pass
+
+
+class EnvelopeAPIView(BaseEventAPIView):
+    parser_classes = [EnvelopeParser]
+
+    def get_serializer_class(self, data):
+        pass
+
+    def post(self, request, *args, **kwargs):
+        sentry_key = EnvelopeAPIView.auth_from_request(request)
+        print(sentry_key)
+        print(request.data)
+        print(request.META)
+        return Response()
