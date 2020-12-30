@@ -115,7 +115,7 @@ class IssueViewSet(
 
 
 class EventViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Event.objects.all()
+    queryset = Event.objects.filter(issue__isnull=False)
     serializer_class = EventSerializer
     permission_classes = [EventPermission]
 

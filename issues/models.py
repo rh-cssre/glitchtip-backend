@@ -8,6 +8,7 @@ class EventType(models.IntegerChoices):
     DEFAULT = 0, "default"
     ERROR = 1, "error"
     CSP = 2, "csp"
+    TRANSACTION = 3, "transaction"
 
 
 class EventStatus(models.IntegerChoices):

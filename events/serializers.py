@@ -88,24 +88,32 @@ class BaseSerializer(serializers.Serializer):
                 return user
 
 
-class StoreDefaultSerializer(BaseSerializer):
+class SentrySDKEventSerializer(BaseSerializer):
+    """ Represents events coming from a OSS sentry SDK client """
+
+    breadcrumbs = serializers.JSONField(required=False)
+    tags = serializers.JSONField(required=False)
+    event_id = serializers.UUIDField()
+    extra = serializers.JSONField(required=False)
+    request = RequestSerializer(required=False)
+    server_name = serializers.CharField(required=False)
+    sdk = serializers.JSONField()
+    platform = serializers.CharField()
+    release = serializers.CharField(required=False)
+    environment = serializers.CharField(required=False)
+    _meta = serializers.JSONField(required=False)
+
+
+class StoreDefaultSerializer(SentrySDKEventSerializer):
     """
     Default serializer. Used as both a base class and for default error types
     """
 
     type = EventType.DEFAULT
-    breadcrumbs = serializers.JSONField(required=False)
     contexts = serializers.JSONField(required=False)
-    environment = serializers.CharField(required=False)
-    event_id = serializers.UUIDField()
-    extra = serializers.JSONField(required=False)
     level = serializers.CharField(required=False)
     logentry = serializers.JSONField(required=False)
     message = serializers.CharField(required=False)
-    platform = serializers.CharField()
-    release = serializers.CharField(required=False)
-    request = RequestSerializer(required=False)
-    sdk = serializers.JSONField()
     timestamp = FlexibleDateTimeField(required=False)
     transaction = serializers.CharField(
         required=False, allow_null=True, allow_blank=True
@@ -391,3 +399,40 @@ class StoreCSPReportSerializer(BaseSerializer):
     def get_culprit(self, data):
         # "style-src cdn.example.com"
         return data.get("violated-directive")
+
+
+class EnvelopeHeaderSerializer(serializers.Serializer):
+    event_id = serializers.UUIDField()
+    sent_at = FlexibleDateTimeField(required=False)
+
+
+class SpanSerializer(serializers.Serializer):
+    data = serializers.JSONField(required=False)
+    description = serializers.CharField(required=False)
+    op = serializers.CharField(required=False)
+    parent_span_id = serializers.CharField(required=False)
+    span_id = serializers.CharField(required=False)
+    start_timestamp = FlexibleDateTimeField()
+    status = serializers.CharField(required=False)
+    tags = serializers.JSONField(required=False)
+    timestamp = FlexibleDateTimeField()
+    trace_id = serializers.UUIDField()
+    same_process_as_parent = serializers.BooleanField(required=False)
+
+
+class TransactionSerializer(SentrySDKEventSerializer):
+    type = serializers.CharField()
+    contexts = serializers.JSONField()
+    measurements = serializers.JSONField(required=False)
+    spans = serializers.ListField(
+        child=SpanSerializer(), required=False, allow_empty=True
+    )
+    start_timestamp = FlexibleDateTimeField()
+    timestamp = FlexibleDateTimeField()
+    transaction = serializers.CharField()
+
+    def create(self, data):
+        return Event.objects.create(
+            event_id=data["event_id"], timestamp=data["timestamp"], data={}
+        )
+

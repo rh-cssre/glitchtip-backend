@@ -1,0 +1,182 @@
+{
+  "contexts": {
+    "trace": {
+      "op": "pageload",
+      "span_id": "a133c27dc47e7aa0",
+      "tags": {
+        "__sentry_samplingMethod": "client_rate",
+        "__sentry_sampleRate": "1",
+        "hardwareConcurrency": "8"
+      },
+      "trace_id": "f35be933b211460a986593077f31cae7"
+    }
+  },
+  "spans": [
+    {
+      "data": {
+        "type": "xhr",
+        "method": "GET",
+        "url": "http://localhost:4201/sockjs-node/info?t=1609289196609"
+      },
+      "description": "GET http://localhost:4201/sockjs-node/info?t=1609289196609",
+      "op": "http",
+      "parent_span_id": "a133c27dc47e7aa0",
+      "span_id": "a7407cde318bdc8a",
+      "start_timestamp": 1609289196.61,
+      "status": "ok",
+      "tags": { "http.status_code": "200" },
+      "timestamp": 1609289196.616,
+      "trace_id": "f35be933b211460a986593077f31cae7"
+    },
+    {
+      "description": "unloadEvent",
+      "op": "browser",
+      "parent_span_id": "a133c27dc47e7aa0",
+      "span_id": "8eb61fd4a8b455fb",
+      "start_timestamp": 1609289196.442,
+      "timestamp": 1609289196.442,
+      "trace_id": "f35be933b211460a986593077f31cae7"
+    },
+    {
+      "description": "domContentLoadedEvent",
+      "op": "browser",
+      "parent_span_id": "a133c27dc47e7aa0",
+      "span_id": "b07d15804415324b",
+      "start_timestamp": 1609289196.604,
+      "timestamp": 1609289196.604,
+      "trace_id": "f35be933b211460a986593077f31cae7"
+    },
+    {
+      "description": "loadEvent",
+      "op": "browser",
+      "parent_span_id": "a133c27dc47e7aa0",
+      "span_id": "9fafc65a72e38c38",
+      "start_timestamp": 1609289196.604,
+      "timestamp": 1609289196.604,
+      "trace_id": "f35be933b211460a986593077f31cae7"
+    },
+    {
+      "description": "connect",
+      "op": "browser",
+      "parent_span_id": "a133c27dc47e7aa0",
+      "span_id": "a7a78cccbf42b78d",
+      "start_timestamp": 1609289196.433,
+      "timestamp": 1609289196.433,
+      "trace_id": "f35be933b211460a986593077f31cae7"
+    },
+    {
+      "description": "domainLookup",
+      "op": "browser",
+      "parent_span_id": "a133c27dc47e7aa0",
+      "span_id": "b5a567978ef2d3aa",
+      "start_timestamp": 1609289196.433,
+      "timestamp": 1609289196.433,
+      "trace_id": "f35be933b211460a986593077f31cae7"
+    },
+    {
+      "description": "request",
+      "op": "browser",
+      "parent_span_id": "a133c27dc47e7aa0",
+      "span_id": "aae9e36596422dbc",
+      "start_timestamp": 1609289196.437,
+      "timestamp": 1609289196.438,
+      "trace_id": "f35be933b211460a986593077f31cae7"
+    },
+    {
+      "description": "Zone:PromiseRejectionEvent",
+      "op": "measure",
+      "parent_span_id": "a133c27dc47e7aa0",
+      "span_id": "a01a87453dac708f",
+      "start_timestamp": 1609289196.482,
+      "timestamp": 1609289196.482,
+      "trace_id": "f35be933b211460a986593077f31cae7"
+    },
+    {
+      "description": "sentry-tracing-init",
+      "op": "mark",
+      "parent_span_id": "a133c27dc47e7aa0",
+      "span_id": "b0c7959922286bf0",
+      "start_timestamp": 1609289196.558,
+      "timestamp": 1609289196.558,
+      "trace_id": "f35be933b211460a986593077f31cae7"
+    },
+    {
+      "description": "first-contentful-paint",
+      "op": "paint",
+      "parent_span_id": "a133c27dc47e7aa0",
+      "span_id": "83691247574aed87",
+      "start_timestamp": 1609289196.558,
+      "timestamp": 1609289196.558,
+      "trace_id": "f35be933b211460a986593077f31cae7"
+    }
+  ],
+  "start_timestamp": 1609289196.433,
+  "tags": { "hardwareConcurrency": "8" },
+  "timestamp": 1609289196.616,
+  "transaction": "/",
+  "type": "transaction",
+  "measurements": {
+    "ttfb": { "value": 4.999876022338867 },
+    "ttfb.requestTime": { "value": 1 },
+    "fcp": { "value": 125 },
+    "mark.fcp": { "value": 1609289196.558 }
+  },
+  "platform": "javascript",
+  "sdk": {
+    "name": "sentry.javascript.browser",
+    "packages": [{ "name": "npm:@sentry/browser", "version": "5.29.2" }],
+    "version": "5.29.2",
+    "integrations": [
+      "InboundFilters",
+      "FunctionToString",
+      "TryCatch",
+      "Breadcrumbs",
+      "GlobalHandlers",
+      "LinkedErrors",
+      "UserAgent",
+      "BrowserTracing"
+    ]
+  },
+  "event_id": "35b3e388b2eb4753a60ae9943626e3bc",
+  "environment": "production",
+  "breadcrumbs": [
+    {
+      "timestamp": 1609289196.594,
+      "category": "console",
+      "data": {
+        "arguments": [
+          "Angular is running in development mode. Call enableProdMode() to enable production mode."
+        ],
+        "logger": "console"
+      },
+      "level": "log",
+      "message": "Angular is running in development mode. Call enableProdMode() to enable production mode."
+    },
+    {
+      "timestamp": 1609289196.599,
+      "category": "navigation",
+      "data": { "from": "/", "to": "/" }
+    },
+    {
+      "timestamp": 1609289196.607,
+      "category": "ui.click",
+      "message": "body > app-root > ol > li > button"
+    },
+    {
+      "timestamp": 1609289196.616,
+      "category": "xhr",
+      "data": {
+        "method": "GET",
+        "url": "http://localhost:4201/sockjs-node/info?t=1609289196609",
+        "status_code": 200
+      },
+      "type": "http"
+    }
+  ],
+  "request": {
+    "url": "http://localhost:4201/",
+    "headers": {
+      "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:84.0) Gecko/20100101 Firefox/84.0"
+    }
+  }
+}

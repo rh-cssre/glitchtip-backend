@@ -7,14 +7,19 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('issues', '0010_auto_20201229_1627'),
-        ('events', '0001_initial'),
+        ("issues", "0009_auto_20201229_1622"),
+        ("events", "0001_initial"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='event',
-            name='issue',
-            field=models.ForeignKey(help_text='Sentry calls this a group', null=True, on_delete=django.db.models.deletion.CASCADE, to='issues.issue'),
+            model_name="event",
+            name="issue",
+            field=models.ForeignKey(
+                help_text="Sentry calls this a group",
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                to="issues.issue",
+            ),
         ),
     ]

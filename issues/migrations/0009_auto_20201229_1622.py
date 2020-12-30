@@ -11,9 +11,15 @@ class Migration(migrations.Migration):
 
     database_operations = [
         migrations.AlterModelTable("Event", "events_event"),
+        migrations.AlterModelTable("EventTagKey", "events_eventtagkey"),
+        migrations.AlterModelTable("EventTag", "events_eventtag"),
     ]
 
-    state_operations = [migrations.DeleteModel("Event")]
+    state_operations = [
+        migrations.DeleteModel("Event"),
+        migrations.DeleteModel("EventTagKey"),
+        migrations.DeleteModel("EventTag"),
+    ]
 
     operations = [
         migrations.SeparateDatabaseAndState(

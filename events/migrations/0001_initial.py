@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("releases", "0002_auto_20201227_1518"),
-        ("issues", "0010_auto_20201229_1627"),
+        ("issues", "0009_auto_20201229_1622"),
     ]
 
     state_operations = [
@@ -60,9 +60,6 @@ class Migration(migrations.Migration):
             ],
             options={"ordering": ["-created"],},
         ),
-    ]
-
-    operations = [
         migrations.CreateModel(
             name="EventTagKey",
             fields=[
@@ -101,6 +98,9 @@ class Migration(migrations.Migration):
             ],
             options={"unique_together": {("key", "value")},},
         ),
+    ]
+
+    operations = [
         migrations.SeparateDatabaseAndState(state_operations=state_operations),
         migrations.RunSQL(
             sql=ADD_EVENT_TAGS, reverse_sql="DROP FUNCTION IF EXISTS add_event_tags;",

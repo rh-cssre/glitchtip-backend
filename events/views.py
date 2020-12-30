@@ -16,6 +16,8 @@ from .serializers import (
     StoreDefaultSerializer,
     StoreErrorSerializer,
     StoreCSPReportSerializer,
+    EnvelopeHeaderSerializer,
+    TransactionSerializer,
 )
 from .parsers import EnvelopeParser
 from .negotiation import IgnoreClientContentNegotiation
@@ -75,6 +77,25 @@ class BaseEventAPIView(APIView):
 
         return result.get("sentry_key")
 
+    def get_project(self, request, project_id):
+        sentry_key = BaseEventAPIView.auth_from_request(request)
+        try:
+            project = (
+                Project.objects.filter(id=project_id, projectkey__public_key=sentry_key)
+                .select_related("organization")
+                .only("id", "first_event", "organization__is_accepting_events")
+                .first()
+            )
+        except ValidationError as e:
+            raise exceptions.AuthenticationFailed({"error": "Invalid api key"})
+        if not project:
+            if Project.objects.filter(id=project_id).exists():
+                raise exceptions.AuthenticationFailed({"error": "Invalid api key"})
+            raise exceptions.ValidationError("Invalid project_id: %s" % project_id)
+        if not project.organization.is_accepting_events:
+            raise exceptions.Throttled(detail="event rejected due to rate limit")
+        return project
+
 
 class EventStoreAPIView(BaseEventAPIView):
     def get_serializer_class(self, data=[]):
@@ -88,26 +109,12 @@ class EventStoreAPIView(BaseEventAPIView):
     def post(self, request, *args, **kwargs):
         if settings.EVENT_STORE_DEBUG:
             print(json.dumps(request.data))
-        sentry_key = EventStoreAPIView.auth_from_request(request)
         try:
-            project = (
-                Project.objects.filter(
-                    id=kwargs.get("id"), projectkey__public_key=sentry_key
-                )
-                .select_related("organization")
-                .only("id", "first_event", "organization__is_accepting_events")
-                .first()
-            )
-        except ValidationError as e:
-            return Response({"error": "Invalid api key"}, status=401)
-        if not project:
-            if Project.objects.filter(id=kwargs.get("id")).exists():
-                return Response({"error": "Invalid api key"}, status=401)
-            raise exceptions.ValidationError(
-                "Invalid project_id: %s" % kwargs.get("id")
-            )
-        if not project.organization.is_accepting_events:
-            raise exceptions.Throttled(detail="event rejected due to rate limit")
+            project = self.get_project(request, kwargs.get("id"))
+        except exceptions.AuthenticationFailed as e:
+            # Replace 403 status code with 401 to match OSS Sentry
+            return Response(e.detail, status=401)
+
         serializer = self.get_serializer_class(request.data)(
             data=request.data, context={"request": self.request, "project": project}
         )
@@ -126,12 +133,26 @@ class CSPStoreAPIView(EventStoreAPIView):
 class EnvelopeAPIView(BaseEventAPIView):
     parser_classes = [EnvelopeParser]
 
-    def get_serializer_class(self, data):
-        pass
+    def get_serializer_class(self):
+        return TransactionSerializer
 
     def post(self, request, *args, **kwargs):
-        sentry_key = EnvelopeAPIView.auth_from_request(request)
-        print(sentry_key)
-        print(request.data)
-        print(request.META)
+        if settings.EVENT_STORE_DEBUG:
+            print(json.dumps(request.data))
+        project = self.get_project(request, kwargs.get("id"))
+
+        data = request.data
+        if len(data) < 2:
+            raise ValidationError("Envelope has no headers")
+        event_header_serializer = EnvelopeHeaderSerializer(data=data.pop(0))
+        event_header_serializer.is_valid(raise_exception=True)
+        # Multi part envelopes are not yet supported
+        data.pop(0)  # Second header isn't used at this time
+
+        serializer = self.get_serializer_class()(
+            data=data.pop(0), context={"request": self.request, "project": project}
+        )
+        if serializer.is_valid():
+            event = serializer.save()
+            return Response({"id": event.event_id_hex})
         return Response()
