@@ -12,12 +12,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from sentry.utils.auth import parse_auth_header
 from projects.models import Project
+from performance.serializers import TransactionEventSerializer
 from .serializers import (
     StoreDefaultSerializer,
     StoreErrorSerializer,
     StoreCSPReportSerializer,
     EnvelopeHeaderSerializer,
-    TransactionSerializer,
 )
 from .parsers import EnvelopeParser
 from .negotiation import IgnoreClientContentNegotiation
@@ -134,7 +134,7 @@ class EnvelopeAPIView(BaseEventAPIView):
     parser_classes = [EnvelopeParser]
 
     def get_serializer_class(self):
-        return TransactionSerializer
+        return TransactionEventSerializer
 
     def post(self, request, *args, **kwargs):
         if settings.EVENT_STORE_DEBUG:
@@ -147,12 +147,11 @@ class EnvelopeAPIView(BaseEventAPIView):
         event_header_serializer = EnvelopeHeaderSerializer(data=data.pop(0))
         event_header_serializer.is_valid(raise_exception=True)
         # Multi part envelopes are not yet supported
-        data.pop(0)  # Second header isn't used at this time
+        data.pop(0)  # Message header isn't used at this time
 
         serializer = self.get_serializer_class()(
             data=data.pop(0), context={"request": self.request, "project": project}
         )
-        if serializer.is_valid():
-            event = serializer.save()
-            return Response({"id": event.event_id_hex})
-        return Response()
+        serializer.is_valid(raise_exception=True)
+        event = serializer.save()
+        return Response({"id": event.event_id_hex})

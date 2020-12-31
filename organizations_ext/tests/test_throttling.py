@@ -53,7 +53,12 @@ class OrganizationThrottlingTestCase(TestCase):
 
             # Throttle again
             baker.make(
-                "events.Event", issue__project__organization=organization, _quantity=11
+                "events.Event", issue__project__organization=organization, _quantity=10
+            )
+            baker.make(
+                "performance.TransactionEvent",
+                project__organization=organization,
+                _quantity=1,
             )
             set_organization_throttle()
             organization.refresh_from_db()

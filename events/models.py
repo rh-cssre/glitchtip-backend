@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from django.db.models import Q
 from user_reports.models import UserReport
 
 
@@ -16,6 +17,18 @@ class EventTag(models.Model):
 
     class Meta:
         unique_together = ("key", "value")
+
+
+class EventManager(models.Manager):
+    def for_organization(self, organization):
+        return (
+            super()
+            .get_queryset()
+            .filter(
+                Q(issue__project__organization=organization)
+                | Q(transactionevent__project__organization=organization)
+            )
+        )
 
 
 class Event(models.Model):
@@ -44,6 +57,8 @@ class Event(models.Model):
     release = models.ForeignKey(
         "releases.Release", blank=True, null=True, on_delete=models.SET_NULL
     )
+
+    objects = EventManager()
 
     class Meta:
         ordering = ["-created"]

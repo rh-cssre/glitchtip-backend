@@ -149,6 +149,7 @@ INSTALLED_APPS = [
     "issues",
     "users",
     "user_reports",
+    "performance",
     "projects",
     "teams",
     "releases",

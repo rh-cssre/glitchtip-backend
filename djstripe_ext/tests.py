@@ -71,8 +71,11 @@ class SubscriptionAPITestCase(APITestCase):
         with freeze_time(timezone.datetime(2020, 1, 5)):
             baker.make("events.Event")
             baker.make("events.Event", issue__project__organization=self.organization)
+            baker.make(
+                "performance.TransactionEvent", project__organization=self.organization
+            )
         res = self.client.get(url)
-        self.assertEqual(res.data, 1)
+        self.assertEqual(res.data, 2)
 
     def test_events_count_without_customer(self):
         """

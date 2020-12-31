@@ -4,6 +4,7 @@ from issues.views import IssueViewSet
 from teams.views import NestedTeamViewSet
 from environments.views import EnvironmentViewSet
 from releases.views import ReleaseViewSet
+from performance.views import TransactionViewSet
 from glitchtip.routers import BulkSimpleRouter
 from .views import (
     OrganizationViewSet,
@@ -37,6 +38,9 @@ organizations_router.register(
 )
 organizations_router.register(
     r"releases", ReleaseViewSet, basename="organization-releases"
+)
+organizations_router.register(
+    r"transactions", TransactionViewSet, basename="organization-transactions"
 )
 
 urlpatterns = [

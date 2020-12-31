@@ -404,35 +404,3 @@ class StoreCSPReportSerializer(BaseSerializer):
 class EnvelopeHeaderSerializer(serializers.Serializer):
     event_id = serializers.UUIDField()
     sent_at = FlexibleDateTimeField(required=False)
-
-
-class SpanSerializer(serializers.Serializer):
-    data = serializers.JSONField(required=False)
-    description = serializers.CharField(required=False)
-    op = serializers.CharField(required=False)
-    parent_span_id = serializers.CharField(required=False)
-    span_id = serializers.CharField(required=False)
-    start_timestamp = FlexibleDateTimeField()
-    status = serializers.CharField(required=False)
-    tags = serializers.JSONField(required=False)
-    timestamp = FlexibleDateTimeField()
-    trace_id = serializers.UUIDField()
-    same_process_as_parent = serializers.BooleanField(required=False)
-
-
-class TransactionSerializer(SentrySDKEventSerializer):
-    type = serializers.CharField()
-    contexts = serializers.JSONField()
-    measurements = serializers.JSONField(required=False)
-    spans = serializers.ListField(
-        child=SpanSerializer(), required=False, allow_empty=True
-    )
-    start_timestamp = FlexibleDateTimeField()
-    timestamp = FlexibleDateTimeField()
-    transaction = serializers.CharField()
-
-    def create(self, data):
-        return Event.objects.create(
-            event_id=data["event_id"], timestamp=data["timestamp"], data={}
-        )
-
