@@ -15,4 +15,8 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
             .get_queryset()
             .filter(project__team__members__user=self.request.user)
         )
+        if "organization_slug" in self.kwargs:
+            qs = qs.filter(
+                project__organization__slug=self.kwargs["organization_slug"],
+            )
         return qs
