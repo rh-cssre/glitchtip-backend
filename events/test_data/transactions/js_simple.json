@@ -1,0 +1,528 @@
+[
+  {
+    "event_id": "35b3e388b2eb4753a60ae9943626e3bc",
+    "sent_at": "2020-12-30T00:46:37.628Z"
+  },
+  {
+    "type": "transaction",
+    "sample_rates": [{ "id": "client_rate", "rate": "1" }]
+  },
+  {
+    "contexts": {
+      "trace": {
+        "op": "pageload",
+        "span_id": "a133c27dc47e7aa0",
+        "tags": {
+          "__sentry_samplingMethod": "client_rate",
+          "__sentry_sampleRate": "1",
+          "hardwareConcurrency": "8"
+        },
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      }
+    },
+    "spans": [
+      {
+        "data": {
+          "type": "xhr",
+          "method": "GET",
+          "url": "http://localhost:4201/sockjs-node/info?t=1609289196609"
+        },
+        "description": "GET http://localhost:4201/sockjs-node/info?t=1609289196609",
+        "op": "http",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "a7407cde318bdc8a",
+        "start_timestamp": 1609289196.61,
+        "status": "ok",
+        "tags": { "http.status_code": "200" },
+        "timestamp": 1609289196.616,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "unloadEvent",
+        "op": "browser",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "8eb61fd4a8b455fb",
+        "start_timestamp": 1609289196.442,
+        "timestamp": 1609289196.442,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "domContentLoadedEvent",
+        "op": "browser",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "b07d15804415324b",
+        "start_timestamp": 1609289196.604,
+        "timestamp": 1609289196.604,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "loadEvent",
+        "op": "browser",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "9fafc65a72e38c38",
+        "start_timestamp": 1609289196.604,
+        "timestamp": 1609289196.604,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "connect",
+        "op": "browser",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "a7a78cccbf42b78d",
+        "start_timestamp": 1609289196.433,
+        "timestamp": 1609289196.433,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "domainLookup",
+        "op": "browser",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "b5a567978ef2d3aa",
+        "start_timestamp": 1609289196.433,
+        "timestamp": 1609289196.433,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "request",
+        "op": "browser",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "aae9e36596422dbc",
+        "start_timestamp": 1609289196.437,
+        "timestamp": 1609289196.438,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "response",
+        "op": "browser",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "8721b4652b36a795",
+        "start_timestamp": 1609289196.438,
+        "timestamp": 1609289196.438,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "data": {
+          "Transfer Size": 235,
+          "Encoded Body Size": 144710,
+          "Decoded Body Size": 144710
+        },
+        "description": "/polyfills.js",
+        "op": "resource.script",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "93f7028f2492d976",
+        "start_timestamp": 1609289196.444,
+        "timestamp": 1609289196.457,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "data": {
+          "Transfer Size": 236,
+          "Encoded Body Size": 3405569,
+          "Decoded Body Size": 3405569
+        },
+        "description": "/vendor.js",
+        "op": "resource.script",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "8da2a1b55b59ff27",
+        "start_timestamp": 1609289196.444,
+        "timestamp": 1609289196.46,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "data": {
+          "Transfer Size": 234,
+          "Encoded Body Size": 6299,
+          "Decoded Body Size": 6299
+        },
+        "description": "/runtime.js",
+        "op": "resource.script",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "a62c9439e9342bce",
+        "start_timestamp": 1609289196.444,
+        "timestamp": 1609289196.457,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "data": {
+          "Transfer Size": 232,
+          "Encoded Body Size": 119,
+          "Decoded Body Size": 119
+        },
+        "description": "/styles.css",
+        "op": "resource.link",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "82da34c19664235b",
+        "start_timestamp": 1609289196.444,
+        "timestamp": 1609289196.456,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "data": {
+          "Transfer Size": 234,
+          "Encoded Body Size": 26269,
+          "Decoded Body Size": 26269
+        },
+        "description": "/main.js",
+        "op": "resource.script",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "855dbece0a4a9f9a",
+        "start_timestamp": 1609289196.445,
+        "timestamp": 1609289196.462,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "data": {
+          "Transfer Size": 0,
+          "Encoded Body Size": 948,
+          "Decoded Body Size": 948
+        },
+        "description": "/favicon.ico",
+        "op": "resource.other",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "8ea5bd52f0c2ebd9",
+        "start_timestamp": 1609289196.451,
+        "timestamp": 1609289196.615,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone",
+        "op": "mark",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "9d5446a9cb74f242",
+        "start_timestamp": 1609289196.473,
+        "timestamp": 1609289196.473,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone",
+        "op": "measure",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "9eac7e173fc3f950",
+        "start_timestamp": 1609289196.473,
+        "timestamp": 1609289196.473,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:ZoneAwarePromise",
+        "op": "mark",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "b5a996f18bbfe29e",
+        "start_timestamp": 1609289196.473,
+        "timestamp": 1609289196.473,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:ZoneAwarePromise",
+        "op": "measure",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "9d27c81de3137726",
+        "start_timestamp": 1609289196.473,
+        "timestamp": 1609289196.474,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:toString",
+        "op": "mark",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "bef7c36b55bef357",
+        "start_timestamp": 1609289196.474,
+        "timestamp": 1609289196.474,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:toString",
+        "op": "measure",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "8a2917270f6f04ca",
+        "start_timestamp": 1609289196.474,
+        "timestamp": 1609289196.474,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:requestAnimationFrame",
+        "op": "mark",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "b4b7e2fe19c6141b",
+        "start_timestamp": 1609289196.475,
+        "timestamp": 1609289196.475,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:util",
+        "op": "mark",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "bd81c8378aac3a7e",
+        "start_timestamp": 1609289196.475,
+        "timestamp": 1609289196.475,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:util",
+        "op": "measure",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "a7883d2eefb1ebbc",
+        "start_timestamp": 1609289196.475,
+        "timestamp": 1609289196.475,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:legacy",
+        "op": "mark",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "85706f2ab75bfdb5",
+        "start_timestamp": 1609289196.475,
+        "timestamp": 1609289196.475,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:legacy",
+        "op": "measure",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "af42128c5d96f5db",
+        "start_timestamp": 1609289196.475,
+        "timestamp": 1609289196.475,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:timers",
+        "op": "mark",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "90790ab2afad7390",
+        "start_timestamp": 1609289196.475,
+        "timestamp": 1609289196.475,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:timers",
+        "op": "measure",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "94002fc4fb74fefd",
+        "start_timestamp": 1609289196.475,
+        "timestamp": 1609289196.475,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:requestAnimationFrame",
+        "op": "measure",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "b24f200ce2a97c6e",
+        "start_timestamp": 1609289196.475,
+        "timestamp": 1609289196.475,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:blocking",
+        "op": "mark",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "a724d987d623deef",
+        "start_timestamp": 1609289196.475,
+        "timestamp": 1609289196.475,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:blocking",
+        "op": "measure",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "9a2e9c32162a9c5c",
+        "start_timestamp": 1609289196.475,
+        "timestamp": 1609289196.475,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:EventTarget",
+        "op": "mark",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "8f44d3e5431ef11f",
+        "start_timestamp": 1609289196.475,
+        "timestamp": 1609289196.475,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:EventTarget",
+        "op": "measure",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "b41346fbb4367be7",
+        "start_timestamp": 1609289196.475,
+        "timestamp": 1609289196.477,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:on_property",
+        "op": "mark",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "9b7de11f174c041c",
+        "start_timestamp": 1609289196.477,
+        "timestamp": 1609289196.477,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:on_property",
+        "op": "measure",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "8929ee002782b3ec",
+        "start_timestamp": 1609289196.477,
+        "timestamp": 1609289196.481,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:customElements",
+        "op": "measure",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "b147edaa7e2fad57",
+        "start_timestamp": 1609289196.481,
+        "timestamp": 1609289196.481,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:XHR",
+        "op": "mark",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "8afd32740c301e05",
+        "start_timestamp": 1609289196.481,
+        "timestamp": 1609289196.481,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:XHR",
+        "op": "measure",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "90abe73c39e1e093",
+        "start_timestamp": 1609289196.481,
+        "timestamp": 1609289196.481,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:geolocation",
+        "op": "measure",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "b59200351a95948d",
+        "start_timestamp": 1609289196.481,
+        "timestamp": 1609289196.4819999,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:geolocation",
+        "op": "mark",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "a739776ac4dcd1a0",
+        "start_timestamp": 1609289196.481,
+        "timestamp": 1609289196.481,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:customElements",
+        "op": "mark",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "90f3965b372cf961",
+        "start_timestamp": 1609289196.481,
+        "timestamp": 1609289196.481,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:PromiseRejectionEvent",
+        "op": "mark",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "8e8ac7cf7a424714",
+        "start_timestamp": 1609289196.482,
+        "timestamp": 1609289196.482,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "Zone:PromiseRejectionEvent",
+        "op": "measure",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "a01a87453dac708f",
+        "start_timestamp": 1609289196.482,
+        "timestamp": 1609289196.482,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "sentry-tracing-init",
+        "op": "mark",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "b0c7959922286bf0",
+        "start_timestamp": 1609289196.558,
+        "timestamp": 1609289196.558,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      },
+      {
+        "description": "first-contentful-paint",
+        "op": "paint",
+        "parent_span_id": "a133c27dc47e7aa0",
+        "span_id": "83691247574aed87",
+        "start_timestamp": 1609289196.558,
+        "timestamp": 1609289196.558,
+        "trace_id": "f35be933b211460a986593077f31cae7"
+      }
+    ],
+    "start_timestamp": 1609289196.433,
+    "tags": { "hardwareConcurrency": "8" },
+    "timestamp": 1609289196.616,
+    "transaction": "/",
+    "type": "transaction",
+    "measurements": {
+      "ttfb": { "value": 4.999876022338867 },
+      "ttfb.requestTime": { "value": 1 },
+      "fcp": { "value": 125 },
+      "mark.fcp": { "value": 1609289196.558 }
+    },
+    "platform": "javascript",
+    "sdk": {
+      "name": "sentry.javascript.browser",
+      "packages": [{ "name": "npm:@sentry/browser", "version": "5.29.2" }],
+      "version": "5.29.2",
+      "integrations": [
+        "InboundFilters",
+        "FunctionToString",
+        "TryCatch",
+        "Breadcrumbs",
+        "GlobalHandlers",
+        "LinkedErrors",
+        "UserAgent",
+        "BrowserTracing"
+      ]
+    },
+    "event_id": "35b3e388b2eb4753a60ae9943626e3bc",
+    "environment": "production",
+    "breadcrumbs": [
+      {
+        "timestamp": 1609289196.594,
+        "category": "console",
+        "data": {
+          "arguments": [
+            "Angular is running in development mode. Call enableProdMode() to enable production mode."
+          ],
+          "logger": "console"
+        },
+        "level": "log",
+        "message": "Angular is running in development mode. Call enableProdMode() to enable production mode."
+      },
+      {
+        "timestamp": 1609289196.599,
+        "category": "navigation",
+        "data": { "from": "/", "to": "/" }
+      },
+      {
+        "timestamp": 1609289196.607,
+        "category": "ui.click",
+        "message": "body > app-root > ol > li > button"
+      },
+      {
+        "timestamp": 1609289196.616,
+        "category": "xhr",
+        "data": {
+          "method": "GET",
+          "url": "http://localhost:4201/sockjs-node/info?t=1609289196609",
+          "status_code": 200
+        },
+        "type": "http"
+      }
+    ],
+    "request": {
+      "url": "http://localhost:4201/",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:84.0) Gecko/20100101 Firefox/84.0"
+      }
+    }
+  }
+]

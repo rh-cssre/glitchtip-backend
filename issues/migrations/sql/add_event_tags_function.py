@@ -9,7 +9,7 @@ BEGIN
   FOREACH event_tag IN ARRAY tags
   LOOP
     WITH e AS (
-        INSERT INTO issues_eventtag (key_id, "value") VALUES
+        INSERT INTO events_eventtag (key_id, "value") VALUES
         (event_tag.key_id, event_tag.value)
         ON CONFLICT (key_id, value) DO NOTHING
         RETURNING id
@@ -17,10 +17,10 @@ BEGIN
     SELECT id FROM e
         UNION
             SELECT id
-            FROM issues_eventtag
+            FROM events_eventtag
             WHERE key_id=event_tag.key_id AND value=event_tag.value
     )
-    INSERT INTO issues_event_tags (event_id, eventtag_id)
+    INSERT INTO events_event_tags (event_id, eventtag_id)
     select event_id, id
     FROM y;
   END LOOP;

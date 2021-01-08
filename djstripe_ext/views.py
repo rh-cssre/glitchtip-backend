@@ -7,7 +7,7 @@ from drf_yasg.utils import swagger_auto_schema
 from djstripe.models import Subscription, Customer, Product
 from djstripe.settings import STRIPE_SECRET_KEY
 import stripe
-from issues.models import Event
+from events.models import Event
 from .serializers import (
     SubscriptionSerializer,
     CreateSubscriptionSerializer,
@@ -58,11 +58,14 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         if not subscription:
             return Response(0)
         organization = subscription.customer.subscriber
-        event_count = Event.objects.filter(
-            issue__project__organization=organization,
-            created__gte=subscription.current_period_start,
-            created__lt=subscription.current_period_end,
-        ).count()
+        event_count = (
+            Event.objects.for_organization(organization)
+            .filter(
+                created__gte=subscription.current_period_start,
+                created__lt=subscription.current_period_end,
+            )
+            .count()
+        )
         return Response(event_count)
 
 

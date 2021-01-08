@@ -15,9 +15,9 @@ class EventTestCase(GlitchTipTestCase):
         )
 
     def test_project_events_list(self):
-        event = baker.make("issues.Event", issue__project=self.project)
-        baker.make("issues.Event", issue__project=self.project, _quantity=3)
-        not_my_event = baker.make("issues.Event")
+        event = baker.make("events.Event", issue__project=self.project)
+        baker.make("events.Event", issue__project=self.project, _quantity=3)
+        not_my_event = baker.make("events.Event")
 
         with self.assertNumQueries(5):
             res = self.client.get(self.url)
@@ -28,8 +28,8 @@ class EventTestCase(GlitchTipTestCase):
         """
         Should show more recent event with previousEventID of previous/first event
         """
-        event = baker.make("issues.Event", issue__project=self.project)
-        event2 = baker.make("issues.Event", issue=event.issue)
+        event = baker.make("events.Event", issue__project=self.project)
+        event2 = baker.make("events.Event", issue=event.issue)
         url = f"/api/0/issues/{event.issue.id}/events/latest/"
         res = self.client.get(url)
         self.assertContains(res, event2.pk.hex)
@@ -40,10 +40,10 @@ class EventTestCase(GlitchTipTestCase):
         """ Get next and previous event IDs that belong to same issue """
         issue1 = baker.make("issues.Issue", project=self.project)
         issue2 = baker.make("issues.Issue", project=self.project)
-        baker.make("issues.Event")
-        issue1_event1 = baker.make("issues.Event", issue=issue1)
-        issue2_event1 = baker.make("issues.Event", issue=issue2)
-        issue1_event2 = baker.make("issues.Event", issue=issue1)
+        baker.make("events.Event")
+        issue1_event1 = baker.make("events.Event", issue=issue1)
+        issue2_event1 = baker.make("events.Event", issue=issue2)
+        issue1_event2 = baker.make("events.Event", issue=issue1)
 
         url = reverse("issue-events-latest", args=[issue1.id])
         res = self.client.get(url)
@@ -85,12 +85,12 @@ class EventTestCase(GlitchTipTestCase):
                 ]
             },
         }
-        event = baker.make("issues.Event", issue__project=self.project, data=data)
+        event = baker.make("events.Event", issue__project=self.project, data=data)
         res = self.client.get(self.url)
         self.assertTrue("entries" in res.data[0])
 
     def test_event_json(self):
-        event = baker.make("issues.Event", issue__project=self.project)
+        event = baker.make("events.Event", issue__project=self.project)
         url = reverse(
             "event_json",
             kwargs={
@@ -131,7 +131,7 @@ class IssuesAPITestCase(GlitchTipTestCase):
 
     def test_issue_last_seen(self):
         issue = baker.make("issues.Issue", project=self.project)
-        events = baker.make("issues.Event", issue=issue, _quantity=2)
+        events = baker.make("events.Event", issue=issue, _quantity=2)
         res = self.client.get(self.url)
         self.assertEqual(
             res.data[0]["lastSeen"][:25], events[1].created.isoformat()[:25]
@@ -204,8 +204,8 @@ class IssuesAPITestCase(GlitchTipTestCase):
         issue2 = baker.make("issues.Issue", project=self.project)
         issue3 = baker.make("issues.Issue", project=self.project)
 
-        baker.make("issues.Event", issue=issue2, _quantity=2)
-        baker.make("issues.Event", issue=issue1)
+        baker.make("events.Event", issue=issue2, _quantity=2)
+        baker.make("events.Event", issue=issue1)
 
         res = self.client.get(self.url)
         self.assertEqual(res.data[0]["id"], issue1.id)
@@ -227,8 +227,8 @@ class IssuesAPITestCase(GlitchTipTestCase):
         unresolved_issue = baker.make(
             Issue, status=EventStatus.UNRESOLVED, project=self.project
         )
-        unresolved_event = baker.make("issues.Event", issue=unresolved_issue)
-        tag = baker.make("issues.EventTag", key__key="platform", value="Linux")
+        unresolved_event = baker.make("events.Event", issue=unresolved_issue)
+        tag = baker.make("events.EventTag", key__key="platform", value="Linux")
         unresolved_event.tags.add(tag)
         res = self.client.get(self.url, {"query": "is:unresolved has:platform"})
         self.assertEqual(len(res.data), 1)
@@ -248,7 +248,7 @@ class IssuesAPITestCase(GlitchTipTestCase):
 
     def test_event_release(self):
         release = baker.make("releases.Release", organization=self.organization)
-        event = baker.make("issues.Event", issue__project=self.project, release=release)
+        event = baker.make("events.Event", issue__project=self.project, release=release)
 
         url = reverse(
             "project-events-list",

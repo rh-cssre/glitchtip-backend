@@ -23,6 +23,14 @@ def set_organization_throttle():
                     )
                 ),
             )
+            + Count(
+                "projects__transactionevent",
+                filter=Q(
+                    projects__transactionevent__created__gte=F(
+                        "djstripe_customers__subscriptions__current_period_start"
+                    )
+                ),
+            )
         )
 
         orgs_over_quota = free_tier_organizations.filter(

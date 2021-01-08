@@ -5,7 +5,8 @@ from django.shortcuts import reverse
 from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
-from issues.models import Issue, Event, EventStatus
+from issues.models import Issue, EventStatus
+from ..models import Event
 from ..test_data.csp import mdn_sample_csp
 
 
@@ -17,20 +18,20 @@ class EventStoreTestCase(APITestCase):
         self.url = reverse("event_store", args=[self.project.id]) + self.params
 
     def test_store_api(self):
-        with open("event_store/test_data/py_hi_event.json") as json_file:
+        with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
         res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 
     def test_store_duplicate(self):
-        with open("event_store/test_data/py_hi_event.json") as json_file:
+        with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
         self.client.post(self.url, data, format="json")
         res = self.client.post(self.url, data, format="json")
         self.assertContains(res, "ID already exist", status_code=403)
 
     def test_store_invalid_key(self):
-        with open("event_store/test_data/py_hi_event.json") as json_file:
+        with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
         self.client.post(self.url, data, format="json")
         res = self.client.post(self.url, data, format="json")
@@ -38,7 +39,7 @@ class EventStoreTestCase(APITestCase):
 
     def test_store_api_auth_failure(self):
         url = "/api/1/store/"
-        with open("event_store/test_data/py_hi_event.json") as json_file:
+        with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
         params = f"?sentry_key=aaa"
         url = reverse("event_store", args=[self.project.id]) + params
@@ -55,7 +56,7 @@ class EventStoreTestCase(APITestCase):
         self.assertContains(res, "Invalid project_id", status_code=400)
 
     def test_error_event(self):
-        with open("event_store/test_data/py_error.json") as json_file:
+        with open("events/test_data/py_error.json") as json_file:
             data = json.load(json_file)
         res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
@@ -72,7 +73,7 @@ class EventStoreTestCase(APITestCase):
         self.assertTrue(issue)
 
     def test_reopen_resolved_issue(self):
-        with open("event_store/test_data/py_hi_event.json") as json_file:
+        with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
         self.client.post(self.url, data, format="json")
         issue = Issue.objects.all().first()
@@ -84,7 +85,7 @@ class EventStoreTestCase(APITestCase):
         self.assertEqual(issue.status, EventStatus.UNRESOLVED)
 
     def test_performance(self):
-        with open("event_store/test_data/py_hi_event.json") as json_file:
+        with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
         with self.assertNumQueries(20):
             res = self.client.post(self.url, data, format="json")
@@ -100,13 +101,13 @@ class EventStoreTestCase(APITestCase):
         organization = self.project.organization
         organization.is_accepting_events = False
         organization.save()
-        with open("event_store/test_data/py_hi_event.json") as json_file:
+        with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
         res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 429)
 
     def test_project_first_event(self):
-        with open("event_store/test_data/py_error.json") as json_file:
+        with open("events/test_data/py_error.json") as json_file:
             data = json.load(json_file)
         self.assertFalse(self.project.first_event)
         self.client.post(self.url, data, format="json")
@@ -119,7 +120,7 @@ class EventStoreTestCase(APITestCase):
         NUL \x00 characters are not supported by Postgres string types
         They should be filtered out
         """
-        with open("event_store/test_data/py_error.json") as json_file:
+        with open("events/test_data/py_error.json") as json_file:
             data = json.load(json_file)
         data["exception"]["values"][0]["stacktrace"]["frames"][0][
             "function"
@@ -132,7 +133,7 @@ class EventStoreTestCase(APITestCase):
         """
         Request Header values are both strings and arrays (sentry-php uses arrays)
         """
-        with open("event_store/test_data/py_error.json") as json_file:
+        with open("events/test_data/py_error.json") as json_file:
             data = json.load(json_file)
         data["request"]["headers"]["Content-Type"] = ["text/plain"]
         res = self.client.post(self.url, data, format="json")
@@ -145,7 +146,7 @@ class EventStoreTestCase(APITestCase):
 
     def test_anonymize_ip(self):
         """ ip address should get masked because default project settings are to scrub ip address """
-        with open("event_store/test_data/py_hi_event.json") as json_file:
+        with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
         test_ip = "123.168.29.14"
         res = self.client.post(self.url, data, format="json", REMOTE_ADDR=test_ip)
@@ -166,7 +167,7 @@ class EventStoreTestCase(APITestCase):
         """
         This test is expected to exceed the 1mb limit of a postgres tsvector
         """
-        with open("event_store/test_data/py_hi_event.json") as json_file:
+        with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
 
         data["platform"] = " ".join([str(random.random()) for _ in range(50000)])
@@ -178,9 +179,9 @@ class EventStoreTestCase(APITestCase):
             "No tsvector is expected as it would exceed the Postgres limit",
         )
 
-    @patch("event_store.views.logger")
+    @patch("events.views.logger")
     def test_invalid_event(self, mock_logger):
-        with open("event_store/test_data/py_hi_event.json") as json_file:
+        with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
 
         data["transaction"] = True
@@ -190,7 +191,7 @@ class EventStoreTestCase(APITestCase):
 
     def test_breadcrumbs_object(self):
         """ Event breadcrumbs may be sent as an array or a object. """
-        with open("event_store/test_data/py_hi_event.json") as json_file:
+        with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
 
         data["breadcrumbs"] = {
@@ -208,7 +209,7 @@ class EventStoreTestCase(APITestCase):
         self.assertTrue(Issue.objects.exists())
 
     def test_event_release(self):
-        with open("event_store/test_data/py_hi_event.json") as json_file:
+        with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
         self.client.post(self.url, data, format="json")
         event = Event.objects.first()

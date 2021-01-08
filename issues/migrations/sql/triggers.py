@@ -1,5 +1,5 @@
 UPDATE_ISSUE_TRIGGER = """
-DROP TRIGGER IF EXISTS event_issue_update on issues_event;
+DROP TRIGGER IF EXISTS event_issue_update on events_event;
 DROP FUNCTION IF EXISTS update_issue;
 
 CREATE FUNCTION update_issue() RETURNS trigger AS $$
@@ -7,7 +7,7 @@ DECLARE event_count INT;
 DECLARE events_search_vector tsvector;
 BEGIN
 
-event_count := (SELECT count(*) from issues_event where issues_event.issue_id = new.issue_id);
+event_count := (SELECT count(*) from events_event where events_event.issue_id = new.issue_id);
 
 UPDATE issues_issue
 SET last_seen = new.created, count = event_count
@@ -16,9 +16,9 @@ WHERE issues_issue.id = new.issue_id;
 IF event_count <= 100 THEN
     BEGIN
         events_search_vector := (
-            SELECT strip(jsonb_to_tsvector('english', jsonb_agg(issues_event.data), '["string"]'))
-            FROM issues_event
-            WHERE issues_event.issue_id = new.issue_id
+            SELECT strip(jsonb_to_tsvector('english', jsonb_agg(events_event.data), '["string"]'))
+            FROM events_event
+            WHERE events_event.issue_id = new.issue_id
         );
 
         UPDATE issues_issue
@@ -35,7 +35,7 @@ $$ LANGUAGE plpgsql;;
 
 
 CREATE TRIGGER event_issue_update AFTER INSERT OR UPDATE
-ON issues_event FOR EACH ROW EXECUTE PROCEDURE
+ON events_event FOR EACH ROW EXECUTE PROCEDURE
 update_issue();
 """
 

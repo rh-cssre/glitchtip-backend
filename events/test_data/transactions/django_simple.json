@@ -1,0 +1,197 @@
+[
+  {
+    "event_id": "5a337086bc1545448e29ed938729cba3",
+    "sent_at": "2020-12-29T17:51:08.471989Z"
+  },
+  { "type": "transaction", "content_type": "application/json", "length": 5684 },
+  {
+    "type": "transaction",
+    "transaction": "/",
+    "contexts": {
+      "trace": {
+        "trace_id": "581eb3bc1f4740eea53717cb7f7450f6",
+        "span_id": "a51f11f130d703b2",
+        "parent_span_id": null,
+        "op": "http.server",
+        "description": null,
+        "status": "ok"
+      },
+      "runtime": {
+        "name": "CPython",
+        "version": "3.9.1",
+        "build": "3.9.1 (default, Dec 11 2020, 14:22:09) \n[GCC 8.3.0]"
+      }
+    },
+    "tags": { "http.status_code": "200" },
+    "timestamp": "2020-12-29T17:51:08.468108Z",
+    "start_timestamp": "2020-12-29T17:51:08.458023Z",
+    "spans": [
+      {
+        "trace_id": "581eb3bc1f4740eea53717cb7f7450f6",
+        "span_id": "b822e9dedc69ad38",
+        "parent_span_id": "a51f11f130d703b2",
+        "same_process_as_parent": true,
+        "op": "django.middleware",
+        "description": "django.middleware.security.SecurityMiddleware.__call__",
+        "start_timestamp": "2020-12-29T17:51:08.459184Z",
+        "timestamp": "2020-12-29T17:51:08.467908Z",
+        "tags": {
+          "django.function_name": "django.utils.deprecation.MiddlewareMixin.__call__",
+          "django.middleware_name": "django.middleware.security.SecurityMiddleware"
+        }
+      },
+      {
+        "trace_id": "581eb3bc1f4740eea53717cb7f7450f6",
+        "span_id": "bc3b7d5de96413aa",
+        "parent_span_id": "b822e9dedc69ad38",
+        "same_process_as_parent": true,
+        "op": "django.middleware",
+        "description": "django.contrib.sessions.middleware.SessionMiddleware.__call__",
+        "start_timestamp": "2020-12-29T17:51:08.459378Z",
+        "timestamp": "2020-12-29T17:51:08.467850Z",
+        "tags": {
+          "django.function_name": "django.utils.deprecation.MiddlewareMixin.__call__",
+          "django.middleware_name": "django.contrib.sessions.middleware.SessionMiddleware"
+        }
+      },
+      {
+        "trace_id": "581eb3bc1f4740eea53717cb7f7450f6",
+        "span_id": "b32df5137e2bda2e",
+        "parent_span_id": "bc3b7d5de96413aa",
+        "same_process_as_parent": true,
+        "op": "django.middleware",
+        "description": "django.middleware.common.CommonMiddleware.__call__",
+        "start_timestamp": "2020-12-29T17:51:08.459741Z",
+        "timestamp": "2020-12-29T17:51:08.467817Z",
+        "tags": {
+          "django.function_name": "django.utils.deprecation.MiddlewareMixin.__call__",
+          "django.middleware_name": "django.middleware.common.CommonMiddleware"
+        }
+      },
+      {
+        "trace_id": "581eb3bc1f4740eea53717cb7f7450f6",
+        "span_id": "aea5c38d0ed37a0a",
+        "parent_span_id": "b32df5137e2bda2e",
+        "same_process_as_parent": true,
+        "op": "django.middleware",
+        "description": "django.middleware.csrf.CsrfViewMiddleware.__call__",
+        "start_timestamp": "2020-12-29T17:51:08.459987Z",
+        "timestamp": "2020-12-29T17:51:08.467742Z",
+        "tags": {
+          "django.function_name": "django.utils.deprecation.MiddlewareMixin.__call__",
+          "django.middleware_name": "django.middleware.csrf.CsrfViewMiddleware"
+        }
+      },
+      {
+        "trace_id": "581eb3bc1f4740eea53717cb7f7450f6",
+        "span_id": "96637f64cccce95c",
+        "parent_span_id": "aea5c38d0ed37a0a",
+        "same_process_as_parent": true,
+        "op": "django.middleware",
+        "description": "django.contrib.auth.middleware.AuthenticationMiddleware.__call__",
+        "start_timestamp": "2020-12-29T17:51:08.460158Z",
+        "timestamp": "2020-12-29T17:51:08.467536Z",
+        "tags": {
+          "django.function_name": "django.utils.deprecation.MiddlewareMixin.__call__",
+          "django.middleware_name": "django.contrib.auth.middleware.AuthenticationMiddleware"
+        }
+      },
+      {
+        "trace_id": "581eb3bc1f4740eea53717cb7f7450f6",
+        "span_id": "b26d935f9bb37598",
+        "parent_span_id": "96637f64cccce95c",
+        "same_process_as_parent": true,
+        "op": "django.middleware",
+        "description": "django.contrib.messages.middleware.MessageMiddleware.__call__",
+        "start_timestamp": "2020-12-29T17:51:08.460300Z",
+        "timestamp": "2020-12-29T17:51:08.467519Z",
+        "tags": {
+          "django.function_name": "django.utils.deprecation.MiddlewareMixin.__call__",
+          "django.middleware_name": "django.contrib.messages.middleware.MessageMiddleware"
+        }
+      },
+      {
+        "trace_id": "581eb3bc1f4740eea53717cb7f7450f6",
+        "span_id": "ab1235482d7ab4c3",
+        "parent_span_id": "b26d935f9bb37598",
+        "same_process_as_parent": true,
+        "op": "django.middleware",
+        "description": "django.middleware.clickjacking.XFrameOptionsMiddleware.__call__",
+        "start_timestamp": "2020-12-29T17:51:08.460705Z",
+        "timestamp": "2020-12-29T17:51:08.467470Z",
+        "tags": {
+          "django.function_name": "django.utils.deprecation.MiddlewareMixin.__call__",
+          "django.middleware_name": "django.middleware.clickjacking.XFrameOptionsMiddleware"
+        }
+      },
+      {
+        "trace_id": "581eb3bc1f4740eea53717cb7f7450f6",
+        "span_id": "9196aae1b05da8d2",
+        "parent_span_id": "ab1235482d7ab4c3",
+        "same_process_as_parent": true,
+        "op": "django.middleware",
+        "description": "django.middleware.csrf.CsrfViewMiddleware.process_view",
+        "start_timestamp": "2020-12-29T17:51:08.461004Z",
+        "timestamp": "2020-12-29T17:51:08.461040Z",
+        "tags": {
+          "django.function_name": "django.middleware.csrf.CsrfViewMiddleware.process_view",
+          "django.middleware_name": "django.middleware.csrf.CsrfViewMiddleware"
+        }
+      },
+      {
+        "trace_id": "581eb3bc1f4740eea53717cb7f7450f6",
+        "span_id": "9990658f017f5a82",
+        "parent_span_id": "ab1235482d7ab4c3",
+        "same_process_as_parent": true,
+        "op": "django.view",
+        "description": "home",
+        "start_timestamp": "2020-12-29T17:51:08.461294Z",
+        "timestamp": "2020-12-29T17:51:08.461498Z"
+      }
+    ],
+    "event_id": "5a337086bc1545448e29ed938729cba3",
+    "extra": { "sys.argv": ["./manage.py", "runserver", "0.0.0.0:8001"] },
+    "request": {
+      "url": "http://localhost:8001/",
+      "query_string": "",
+      "method": "GET",
+      "env": { "SERVER_NAME": "45e6cd65994c", "SERVER_PORT": "8001" },
+      "headers": {
+        "Content-Length": "",
+        "Content-Type": "text/plain",
+        "Host": "localhost:8001",
+        "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:84.0) Gecko/20100101 Firefox/84.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+        "Cookie": "",
+        "Upgrade-Insecure-Requests": "1",
+        "Cache-Control": "max-age=0"
+      }
+    },
+    "server_name": "45e6cd65994c",
+    "sdk": {
+      "name": "sentry.python",
+      "version": "0.19.5",
+      "packages": [{ "name": "pypi:sentry-sdk", "version": "0.19.5" }],
+      "integrations": [
+        "argv",
+        "atexit",
+        "dedupe",
+        "django",
+        "excepthook",
+        "logging",
+        "modules",
+        "stdlib",
+        "threading"
+      ]
+    },
+    "platform": "python",
+    "_meta": {
+      "request": {
+        "headers": { "Cookie": { "": { "rem": [["!config", "x", 0, 445]] } } }
+      }
+    }
+  }
+]

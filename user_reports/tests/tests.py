@@ -33,7 +33,7 @@ class ErrorPageEmbedTestCase(APITestCase):
 
     def test_submit_report_with_issue(self):
         issue = baker.make("issues.Issue", project=self.project)
-        event = baker.make("issues.Event", issue=issue)
+        event = baker.make("events.Event", issue=issue)
         params = f"?dsn={self.project_key.get_dsn()}&eventId={event.event_id.hex}"
         data = {"name": "Test Name", "email": "test@example.com", "comments": "hmm"}
         res = self.client.post(self.url + params, data)

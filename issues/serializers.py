@@ -4,7 +4,8 @@ from user_reports.serializers import UserReportSerializer
 from sentry.interfaces.stacktrace import get_context
 from glitchtip.serializers import FlexibleDateTimeField
 from releases.serializers import ReleaseSerializer
-from .models import Issue, Event, EventTag, EventType, EventStatus
+from events.models import Event, EventTag
+from .models import Issue, EventType, EventStatus
 
 
 class EventTagSerializer(serializers.ModelSerializer):

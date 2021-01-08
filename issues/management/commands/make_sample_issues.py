@@ -3,8 +3,8 @@ from django.core.management.base import BaseCommand
 from model_bakery import baker
 from model_bakery.random_gen import gen_json
 from projects.models import Project
-from event_store.test_data import event_generator
-from event_store.views import EventStoreAPIView
+from events.test_data import event_generator
+from events.views import EventStoreAPIView
 
 
 baker.generators.add("django.db.models.JSONField", gen_json)
@@ -48,11 +48,11 @@ class Command(BaseCommand):
             for _ in range(quantity):
                 self.generate_real_event(project)
         elif only_fake:
-            baker.make("issues.Event", issue__project=project, _quantity=quantity)
+            baker.make("events.Event", issue__project=project, _quantity=quantity)
         else:
             for _ in range(quantity):
                 if random.choice([0, 1]):  # nosec
-                    baker.make("issues.Event", issue__project=project)
+                    baker.make("events.Event", issue__project=project)
                 else:
                     self.generate_real_event(project)
 

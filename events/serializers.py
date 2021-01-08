@@ -8,11 +8,12 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from sentry.eventtypes.error import ErrorEvent
 from sentry.eventtypes.base import DefaultEvent
-from issues.models import EventType, Event, Issue, EventTagKey
+from issues.models import EventType, Issue
 from issues.serializers import BaseBreadcrumbsSerializer
 from environments.models import Environment
 from releases.models import Release
 from glitchtip.serializers import FlexibleDateTimeField
+from .models import Event, EventTagKey
 from .event_tag_processors import TAG_PROCESSORS
 from .event_context_processors import EVENT_CONTEXT_PROCESSORS
 
@@ -87,24 +88,32 @@ class BaseSerializer(serializers.Serializer):
                 return user
 
 
-class StoreDefaultSerializer(BaseSerializer):
+class SentrySDKEventSerializer(BaseSerializer):
+    """ Represents events coming from a OSS sentry SDK client """
+
+    breadcrumbs = serializers.JSONField(required=False)
+    tags = serializers.JSONField(required=False)
+    event_id = serializers.UUIDField()
+    extra = serializers.JSONField(required=False)
+    request = RequestSerializer(required=False)
+    server_name = serializers.CharField(required=False)
+    sdk = serializers.JSONField()
+    platform = serializers.CharField()
+    release = serializers.CharField(required=False)
+    environment = serializers.CharField(required=False)
+    _meta = serializers.JSONField(required=False)
+
+
+class StoreDefaultSerializer(SentrySDKEventSerializer):
     """
     Default serializer. Used as both a base class and for default error types
     """
 
     type = EventType.DEFAULT
-    breadcrumbs = serializers.JSONField(required=False)
     contexts = serializers.JSONField(required=False)
-    environment = serializers.CharField(required=False)
-    event_id = serializers.UUIDField()
-    extra = serializers.JSONField(required=False)
     level = serializers.CharField(required=False)
     logentry = serializers.JSONField(required=False)
     message = serializers.CharField(required=False)
-    platform = serializers.CharField()
-    release = serializers.CharField(required=False)
-    request = RequestSerializer(required=False)
-    sdk = serializers.JSONField()
     timestamp = FlexibleDateTimeField(required=False)
     transaction = serializers.CharField(
         required=False, allow_null=True, allow_blank=True
@@ -390,3 +399,8 @@ class StoreCSPReportSerializer(BaseSerializer):
     def get_culprit(self, data):
         # "style-src cdn.example.com"
         return data.get("violated-directive")
+
+
+class EnvelopeHeaderSerializer(serializers.Serializer):
+    event_id = serializers.UUIDField()
+    sent_at = FlexibleDateTimeField(required=False)

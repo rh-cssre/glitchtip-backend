@@ -7,7 +7,7 @@ from rest_framework import views, viewsets, exceptions, permissions, renderers
 from rest_framework.response import Response
 
 from projects.models import ProjectKey
-from issues.models import Event
+from events.models import Event
 from issues.permissions import EventPermission
 from .models import UserReport
 from .forms import UserReportForm
