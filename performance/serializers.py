@@ -42,8 +42,9 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
 
 
 class TransactionSerializer(serializers.ModelSerializer):
+    eventId = serializers.UUIDField(source="pk")
     startTimestamp = serializers.DateTimeField(source="start_timestamp")
 
     class Meta:
         model = TransactionEvent
-        fields = ("transaction", "timestamp", "startTimestamp")
+        fields = ("eventId", "transaction", "timestamp", "startTimestamp")

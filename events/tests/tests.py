@@ -221,3 +221,14 @@ class EventStoreTestCase(APITestCase):
             event_json.get("tags").values_list("value", flat=True),
         )
 
+    def test_client_tags(self):
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+            data["tags"] = {"test_tag": "the value"}
+        self.client.post(self.url, data, format="json")
+        event = Event.objects.first()
+        event_json = event.event_json()
+        self.assertIn(
+            "the value", event_json.get("tags").values_list("value", flat=True),
+        )
+
