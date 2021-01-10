@@ -92,7 +92,7 @@ class SentrySDKEventSerializer(BaseSerializer):
     """ Represents events coming from a OSS sentry SDK client """
 
     breadcrumbs = serializers.JSONField(required=False)
-    tags = serializers.JSONField(required=False)
+    tags = serializers.DictField(child=serializers.CharField(), required=False)
     event_id = serializers.UUIDField()
     extra = serializers.JSONField(required=False)
     request = RequestSerializer(required=False)
@@ -165,6 +165,8 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             value = processor.get_tag_values(data)
             if value:
                 tags.append((processor.tag, value))
+        if data.get("tags"):
+            tags += [(k, v) for k, v in data["tags"].items()]
         self.save_tags(event, tags)
 
     def save_tags(self, event, tags: List[Tuple[str, str]]):
