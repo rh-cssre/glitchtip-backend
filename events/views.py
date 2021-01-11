@@ -10,6 +10,7 @@ from django.test import RequestFactory
 from rest_framework import permissions, exceptions
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from sentry_sdk import set_context, capture_exception, set_level
 from sentry.utils.auth import parse_auth_header
 from projects.models import Project
 from performance.serializers import TransactionEventSerializer
@@ -115,15 +116,21 @@ class EventStoreAPIView(BaseEventAPIView):
             # Replace 403 status code with 401 to match OSS Sentry
             return Response(e.detail, status=401)
 
+        set_context("incoming event", request.data)
         serializer = self.get_serializer_class(request.data)(
             data=request.data, context={"request": self.request, "project": project}
         )
-        if serializer.is_valid():
-            event = serializer.save()
-            return Response({"id": event.event_id_hex})
-        else:
+
+        try:
+            serializer.is_valid(raise_exception=True)
+        except exceptions.ValidationError as e:
+            set_level("warning")
+            capture_exception(e)
             logger.warning("Invalid event %s", serializer.errors)
-        return Response()
+            return Response()
+
+        event = serializer.save()
+        return Response({"id": event.event_id_hex})
 
 
 class CSPStoreAPIView(EventStoreAPIView):
