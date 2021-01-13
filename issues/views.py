@@ -106,9 +106,10 @@ class IssueViewSet(
         return qs
 
     def bulk_update(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
+        queryset = self.filter_queryset(self.get_queryset())
         ids = request.GET.getlist("id")
-        queryset = queryset.filter(id__in=ids)
+        if ids:
+            queryset = queryset.filter(id__in=ids)
         status = EventStatus.from_string(request.data.get("status"))
         queryset.update(status=status)
         return Response({"status": status.label})
