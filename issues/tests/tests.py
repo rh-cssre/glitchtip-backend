@@ -171,6 +171,22 @@ class IssuesAPITestCase(GlitchTipTestCase):
         self.assertEqual(issues[0].status, status_to_set)
         self.assertEqual(issues[1].status, status_to_set)
 
+    def test_bulk_update_query(self):
+        """ Bulk update only supports Issue status """
+        project2 = baker.make("projects.Project", organization=self.organization)
+        project2.team_set.add(self.team)
+        issue1 = baker.make(Issue, project=self.project)
+        issue2 = baker.make(Issue, project=project2)
+        url = f"{self.url}?query=is:unresolved&project={self.project.id}"
+        status_to_set = EventStatus.RESOLVED
+        data = {"status": status_to_set.label}
+        res = self.client.put(url, data)
+        self.assertContains(res, status_to_set.label)
+        issue1.refresh_from_db()
+        issue2.refresh_from_db()
+        self.assertEqual(issue1.status, status_to_set)
+        self.assertEqual(issue2.status, EventStatus.UNRESOLVED)
+
     def test_filter_project(self):
         baker.make(Issue, project=self.project)
         project = baker.make("projects.Project", organization=self.organization)
