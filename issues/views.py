@@ -62,6 +62,7 @@ class IssueViewSet(
         if "project_slug" in self.kwargs:
             qs = qs.filter(project__slug=self.kwargs["project_slug"],)
 
+        distinct = False
         queries = self.request.GET.get("query")
         if queries:
             # First look for structured queries
@@ -77,12 +78,10 @@ class IssueViewSet(
                     if query_name == "is":
                         qs = qs.filter(status=EventStatus.from_string(query_value))
                     elif query_name == "has":
-                        qs = qs.filter(event__tags__key__key=query_value)
+                        qs = qs.filter(event__tags__has_key=query_value)
                     else:
-                        qs = qs.filter(
-                            event__tags__key__key=query_name,
-                            event__tags__value=query_value,
-                        )
+                        qs = qs.filter(event__tags__contains={query_name: query_value})
+                        distinct = True
 
         if queries:
             # Anything left is full text search
@@ -102,6 +101,9 @@ class IssueViewSet(
             .defer("search_vector")
             .prefetch_related("userreport_set")
         )
+
+        if distinct:
+            qs = qs.distinct()
 
         return qs
 

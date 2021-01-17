@@ -19,7 +19,7 @@ class EventTestCase(GlitchTipTestCase):
         baker.make("events.Event", issue__project=self.project, _quantity=3)
         not_my_event = baker.make("events.Event")
 
-        with self.assertNumQueries(5):
+        with self.assertNumQueries(4):
             res = self.client.get(self.url)
         self.assertContains(res, event.pk.hex)
         self.assertNotContains(res, not_my_event.pk.hex)
@@ -243,9 +243,7 @@ class IssuesAPITestCase(GlitchTipTestCase):
         unresolved_issue = baker.make(
             Issue, status=EventStatus.UNRESOLVED, project=self.project
         )
-        unresolved_event = baker.make("events.Event", issue=unresolved_issue)
-        tag = baker.make("events.EventTag", key__key="platform", value="Linux")
-        unresolved_event.tags.add(tag)
+        baker.make("events.Event", issue=unresolved_issue, tags={"platform": "Linux"})
         res = self.client.get(self.url, {"query": "is:unresolved has:platform"})
         self.assertEqual(len(res.data), 1)
         self.assertContains(res, unresolved_issue.title)
