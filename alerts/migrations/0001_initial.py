@@ -9,29 +9,60 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('projects', '0001_initial'),
-        ('issues', '0002_auto_20200306_1546'),
+        ("projects", "0001_initial"),
+        ("issues", "0001_squashed_0004_auto_20200612_0027"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='ProjectAlert',
+            name="ProjectAlert",
             fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('timespan_minutes', models.PositiveSmallIntegerField(blank=True, null=True)),
-                ('quantity', models.PositiveSmallIntegerField(blank=True, null=True)),
-                ('created', models.DateTimeField(auto_now_add=True)),
-                ('project', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='projects.Project')),
+                (
+                    "id",
+                    models.AutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "timespan_minutes",
+                    models.PositiveSmallIntegerField(blank=True, null=True),
+                ),
+                ("quantity", models.PositiveSmallIntegerField(blank=True, null=True)),
+                ("created", models.DateTimeField(auto_now_add=True)),
+                (
+                    "project",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="projects.Project",
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='Notification',
+            name="Notification",
             fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created', models.DateField(auto_now_add=True)),
-                ('is_sent', models.BooleanField(default=False)),
-                ('issues', models.ManyToManyField(to='issues.Issue')),
-                ('project', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='projects.Project')),
+                (
+                    "id",
+                    models.AutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("created", models.DateField(auto_now_add=True)),
+                ("is_sent", models.BooleanField(default=False)),
+                ("issues", models.ManyToManyField(to="issues.Issue")),
+                (
+                    "project",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="projects.Project",
+                    ),
+                ),
             ],
         ),
     ]
