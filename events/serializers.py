@@ -13,7 +13,7 @@ from issues.serializers import BaseBreadcrumbsSerializer
 from environments.models import Environment
 from releases.models import Release
 from glitchtip.serializers import FlexibleDateTimeField
-from .models import Event, EventTagKey
+from .models import Event
 from .event_tag_processors import TAG_PROCESSORS
 from .event_context_processors import EVENT_CONTEXT_PROCESSORS
 
@@ -154,7 +154,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                             frame["in_app"] = False
         return exception
 
-    def generate_tags(self, event: Event, data: Dict, tags: List[Tuple[str, str]] = []):
+    def generate_tags(self, data: Dict, tags: List[Tuple[str, str]] = []):
         """
         Determine tag relational data
 
@@ -167,26 +167,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 tags.append((processor.tag, value))
         if data.get("tags"):
             tags += [(k, v) for k, v in data["tags"].items()]
-        self.save_tags(event, tags)
-
-    def save_tags(self, event, tags: List[Tuple[str, str]]):
-        """ Commit tags to database """
-        tag_key_values = []
-        # Get tag keys with 1 query (New ones are rarely created)
-        event_tag_keys = EventTagKey.objects.filter(key__in=[tag[0] for tag in tags])
-        for tag, value in tags:
-            tag_key = next((x for x in event_tag_keys if x.key == tag), None)
-            if tag_key is None:  # If there's a new tag key, create it
-                tag_key, _ = EventTagKey.objects.get_or_create(key=tag)
-            tag_key_values.append((tag_key.id, value))
-
-        # add_event_tags adds event tag value (if necessary) and into event.tags
-        if tag_key_values:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "select add_event_tags(%s::uuid, %s::tag_key_value[]);",
-                    [event.event_id, tag_key_values],
-                )
+        return tags
 
     def annotate_contexts(self, event):
         """
@@ -260,6 +241,14 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             if data.get("release"):
                 release = self.get_release(data["release"], project)
 
+            tags = []
+            if environment:
+                tags.append(("environment", environment.name))
+            if release:
+                tags.append(("release", release.version))
+            tags = self.generate_tags(data, tags)
+            tags = {tag[0]: tag[1] for tag in tags}
+
             json_data = {
                 "breadcrumbs": breadcrumbs,
                 "contexts": contexts,
@@ -288,6 +277,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             params = {
                 "event_id": data["event_id"],
                 "issue": issue,
+                "tags": tags,
                 "timestamp": data.get("timestamp"),
                 "data": sanitize_bad_postgres_json(json_data),
                 "release": release,
@@ -304,13 +294,6 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 raise e
 
         issue.check_for_status_update()
-
-        tags = []
-        if environment:
-            tags.append(("environment", environment.name))
-        if release:
-            tags.append(("release", release.version))
-        self.generate_tags(event, data, tags)
 
         return event
 

@@ -134,6 +134,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "django_celery_results",
     "django_filters",
+    "django_extensions",
     "debug_toolbar",
     "rest_framework",
     "drf_yasg",

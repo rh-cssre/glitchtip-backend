@@ -3,7 +3,6 @@
 from django.db import migrations, models
 import django.db.models.deletion
 import uuid
-from issues.migrations.sql.add_event_tags_function import ADD_EVENT_TAGS
 from issues.migrations.sql.triggers import UPDATE_ISSUE_TRIGGER
 
 
@@ -102,9 +101,6 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.SeparateDatabaseAndState(state_operations=state_operations),
-        migrations.RunSQL(
-            sql=ADD_EVENT_TAGS, reverse_sql="DROP FUNCTION IF EXISTS add_event_tags;",
-        ),
         migrations.RunSQL(
             sql=UPDATE_ISSUE_TRIGGER,
             reverse_sql="DROP TRIGGER IF EXISTS event_issue_update on issues_event; DROP FUNCTION IF EXISTS update_issue;",

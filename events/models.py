@@ -1,22 +1,8 @@
 import uuid
 from django.db import models
 from django.db.models import Q
+from django.contrib.postgres.fields import HStoreField
 from user_reports.models import UserReport
-
-
-class EventTagKey(models.Model):
-    key = models.CharField(max_length=255, unique=True)
-
-    def __str__(self):
-        return self.key
-
-
-class EventTag(models.Model):
-    key = models.ForeignKey(EventTagKey, on_delete=models.CASCADE)
-    value = models.CharField(max_length=225)
-
-    class Meta:
-        unique_together = ("key", "value")
 
 
 class EventManager(models.Manager):
@@ -53,7 +39,7 @@ class Event(models.Model):
 
     created = models.DateTimeField(auto_now_add=True, db_index=True)
     data = models.JSONField()
-    tags = models.ManyToManyField(EventTag, blank=True)
+    tags = HStoreField(default=dict)
     release = models.ForeignKey(
         "releases.Release", blank=True, null=True, on_delete=models.SET_NULL
     )
@@ -82,7 +68,7 @@ class Event(models.Model):
         event = self.data
         event["event_id"] = self.event_id_hex
         event["project"] = self.issue.project_id
-        event["tags"] = self.tags.all().values_list("key__key", "value")
+        event["tags"] = self.tags.items()
         if self.timestamp:
             event["datetime"] = self.timestamp.isoformat().replace("+00:00", "Z")
         if self.release:

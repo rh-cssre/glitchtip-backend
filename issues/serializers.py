@@ -4,16 +4,8 @@ from user_reports.serializers import UserReportSerializer
 from sentry.interfaces.stacktrace import get_context
 from glitchtip.serializers import FlexibleDateTimeField
 from releases.serializers import ReleaseSerializer
-from events.models import Event, EventTag
+from events.models import Event
 from .models import Issue, EventType, EventStatus
-
-
-class EventTagSerializer(serializers.ModelSerializer):
-    key = serializers.StringRelatedField()
-
-    class Meta:
-        model = EventTag
-        fields = ("key", "value")
 
 
 class EventUserSerializer(serializers.Serializer):
@@ -107,13 +99,18 @@ class EventEntriesSerializer(serializers.Serializer):
         return entries
 
 
+class EventTagField(serializers.HStoreField):
+    def to_representation(self, obj):
+        return [{"key": tag[0], "value": tag[1]} for tag in obj.items()]
+
+
 class EventSerializer(serializers.ModelSerializer):
     eventID = serializers.CharField(source="event_id_hex")
     id = serializers.CharField(source="event_id_hex")
     dateCreated = serializers.DateTimeField(source="timestamp")
     dateReceived = serializers.DateTimeField(source="created")
     entries = EventEntriesSerializer(source="data")
-    tags = EventTagSerializer(many=True)
+    tags = EventTagField()
     user = EventUserSerializer()
 
     class Meta:

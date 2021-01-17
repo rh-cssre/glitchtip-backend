@@ -25,9 +25,7 @@ class TasksTestCase(TestCase):
             self.assertEqual(Issue.objects.count(), 0)
 
     def test_cleanup_old_events_foreign_keys(self):
-        event = baker.make("events.Event")
-        event_tag = baker.make("events.EventTag")
-        event.tags.add(event_tag)
+        baker.make("events.Event", tags={"foo": "bar"})
 
         with freeze_time(
             now() + timedelta(days=settings.GLITCHTIP_MAX_EVENT_LIFE_DAYS)

@@ -11,14 +11,6 @@ from .sql.triggers import UPDATE_ISSUE_TRIGGER
 
 
 class Migration(migrations.Migration):
-
-    replaces = [
-        ("issues", "0001_initial"),
-        ("issues", "0002_auto_20200306_1546"),
-        ("issues", "0003_event_search_vector"),
-        ("issues", "0004_auto_20200612_0027"),
-    ]
-
     initial = True
 
     dependencies = [
