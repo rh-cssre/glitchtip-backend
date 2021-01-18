@@ -1,3 +1,4 @@
+from timeit import default_timer as timer
 from django.shortcuts import reverse
 from model_bakery import baker
 from glitchtip.test_utils.test_case import GlitchTipTestCase
@@ -283,3 +284,89 @@ class IssuesAPITestCase(GlitchTipTestCase):
         )
         res = self.client.get(url)
         self.assertContains(res, release.version)
+
+    def test_issue_tags(self):
+        issue = baker.make("issues.Issue", project=self.project)
+        baker.make("events.Event", issue=issue, tags={"foo": "bar"}, _quantity=2)
+        baker.make("events.Event", issue=issue, tags={"foo": "bar", "animal": "cat"})
+        baker.make(
+            "events.Event",
+            issue=issue,
+            tags={"animal": "dog", "foo": "cat"},
+            _quantity=4,
+        )
+        url = reverse("issue-detail", args=[issue.id])
+        res = self.client.get(url + "tags/")
+
+        # Order is random
+        if res.data[0]["name"] == "animal":
+            animal = res.data[0]
+            foo = res.data[1]
+        else:
+            animal = res.data[1]
+            foo = res.data[0]
+
+        self.assertEqual(animal["totalValues"], 5)
+        self.assertEqual(animal["topValues"][0]["value"], "dog")
+        self.assertEqual(animal["topValues"][0]["count"], 4)
+        self.assertEqual(animal["uniqueValues"], 2)
+
+        self.assertEqual(foo["totalValues"], 7)
+        self.assertEqual(foo["topValues"][0]["value"], "cat")
+        self.assertEqual(foo["topValues"][0]["count"], 4)
+        self.assertEqual(foo["uniqueValues"], 2)
+
+    def test_issue_tags_filter(self):
+        issue = baker.make("issues.Issue", project=self.project)
+        baker.make("events.Event", issue=issue, tags={"foo": "bar", "lol": "bar"})
+        url = reverse("issue-detail", args=[issue.id])
+        res = self.client.get(url + "tags/?key=foo")
+        self.assertEqual(len(res.data), 1)
+
+    def test_issue_tags_performance(self):
+        issue = baker.make("issues.Issue", project=self.project)
+        baker.make("events.Event", issue=issue, tags={"foo": "bar"}, _quantity=50)
+        baker.make(
+            "events.Event",
+            issue=issue,
+            tags={"foo": "bar", "animal": "cat"},
+            _quantity=100,
+        )
+        baker.make(
+            "events.Event",
+            issue=issue,
+            tags={"type": "a", "animal": "cat"},
+            _quantity=100,
+        )
+        baker.make(
+            "events.Event",
+            issue=issue,
+            tags={"haha": "a", "arg": "cat", "b": "b"},
+            _quantity=100,
+        )
+        baker.make(
+            "events.Event", issue=issue, tags={"type": "b", "foo": "bar"}, _quantity=200
+        )
+
+        url = reverse("issue-detail", args=[issue.id])
+        with self.assertNumQueries(7):  # Includes many auth related queries
+            start = timer()
+            res = self.client.get(url + "tags/")
+            end = timer()
+        # print(end - start)
+
+    def test_issue_tag_detail(self):
+        issue = baker.make("issues.Issue", project=self.project)
+        baker.make(
+            "events.Event", issue=issue, tags={"foo": "bar", "a": "b"}, _quantity=2
+        )
+        baker.make("events.Event", issue=issue, tags={"foo": "foobar"})
+        baker.make("events.Event", issue=issue, tags={"type": "a"})
+        url = reverse("issue-detail", args=[issue.id])
+        res = self.client.get(url + "tags/foo/")
+        self.assertContains(res, "foobar")
+        self.assertEqual(res.data["totalValues"], 3)
+        self.assertEqual(res.data["uniqueValues"], 2)
+
+        res = self.client.get(url + "tags/ahh/")
+        self.assertEqual(res.status_code, 404)

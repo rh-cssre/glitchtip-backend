@@ -1,9 +1,11 @@
+from django.db import connection
 from django.db.models.expressions import RawSQL
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, views, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.filters import OrderingFilter
+from rest_framework.exceptions import NotFound
 
 from django_filters.rest_framework import DjangoFilterBackend
 from events.models import Event
@@ -115,6 +117,92 @@ class IssueViewSet(
         status = EventStatus.from_string(request.data.get("status"))
         queryset.update(status=status)
         return Response({"status": status.label})
+
+    def serialize_tags(self, rows):
+        return [
+            {
+                "topValues": [
+                    {"name": row[1], "value": row[1], "count": row[2], "key": key}
+                    for row in rows
+                    if row[0] == key
+                ],
+                "uniqueValues": len([row[2] for row in rows if row[0] == key]),
+                "name": key,
+                "key": key,
+                "totalValues": sum([row[2] for row in rows if row[0] == key]),
+            }
+            for key in {tup[0] for tup in rows}
+        ]
+
+    @action(detail=True, methods=["get"])
+    def tags(self, request, pk=None):
+        """
+        Get statistics about tags
+        Filter with query param key=<your key>
+        """
+        instance = self.get_object()
+        keys = tuple(request.GET.getlist("key"))
+        with connection.cursor() as cursor:
+            if keys:
+                query = """
+                SELECT key, value, count(*)
+                FROM (
+                    SELECT (each(tags)).key, (each(tags)).value
+                    FROM events_event
+                    WHERE issue_id=%s
+                )
+                AS stat
+                WHERE key in %s
+                GROUP BY key, value
+                ORDER BY count DESC, value
+                limit 100;
+                """
+                cursor.execute(query, [instance.pk, keys])
+            else:
+                query = """
+                SELECT key, value, count(*)
+                FROM (
+                    SELECT (each(tags)).key, (each(tags)).value
+                    FROM events_event
+                    WHERE issue_id=%s
+                )
+                AS stat
+                GROUP BY key, value
+                ORDER BY count DESC, value
+                limit 100;
+                """
+                cursor.execute(query, [instance.pk])
+            rows = cursor.fetchall()
+
+        tags = self.serialize_tags(rows)
+
+        return Response(tags)
+
+    @action(detail=True, methods=["get"], url_path=r"tags/(?P<tag>[-\w]+)")
+    def tag_detail(self, request, pk=None, tag=None):
+        """
+        Get statistics about specified tag
+        """
+        instance = self.get_object()
+        with connection.cursor() as cursor:
+            query = """
+            SELECT key, value, count(*)
+            FROM (
+                SELECT (each(tags)).key, (each(tags)).value
+                FROM events_event
+                WHERE issue_id=%s
+            )
+            AS stat
+            WHERE key=%s
+            GROUP BY key, value
+            ORDER BY count DESC, value;
+            """
+            cursor.execute(query, [instance.pk, tag])
+            rows = cursor.fetchall()
+        tags = self.serialize_tags(rows)
+        if not tags:
+            raise NotFound()
+        return Response(tags[0])
 
 
 class EventViewSet(viewsets.ReadOnlyModelViewSet):
