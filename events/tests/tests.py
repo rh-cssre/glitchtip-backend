@@ -231,3 +231,24 @@ class EventStoreTestCase(APITestCase):
             "the value", tuple(event_json.get("tags"))[1],
         )
 
+    def test_client_tags_invalid(self):
+        """ Invalid tags should not be saved. But should not error. """
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        data["tags"] = {
+            "value": "valid value",
+            "my invalid tag key": {"oh": "this is invalid"},
+        }
+        res = self.client.post(self.url, data, format="json")
+        event = Event.objects.first()
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(event)
+        event_json = event.event_json()
+        tags = tuple(event_json.get("tags"))
+        self.assertIn(
+            "valid value", tags[0],
+        )
+        for tag in tags:
+            self.assertNotIn("this is invalid", tag)
+        self.assertEqual(len(event_json.get("errors")), 1)
+

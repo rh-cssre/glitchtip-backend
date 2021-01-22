@@ -1,6 +1,6 @@
 from typing import Dict, List, Tuple, Union
 from urllib.parse import urlparse
-from django.db import transaction, connection
+from django.db import transaction
 from django.db.utils import IntegrityError
 from ipware import get_client_ip
 from anonymizeip import anonymize_ip
@@ -14,6 +14,7 @@ from environments.models import Environment
 from releases.models import Release
 from glitchtip.serializers import FlexibleDateTimeField
 from .models import Event
+from .fields import GenericField, ForgivingHStoreField
 from .event_tag_processors import TAG_PROCESSORS
 from .event_context_processors import EVENT_CONTEXT_PROCESSORS
 
@@ -49,6 +50,21 @@ def sanitize_bad_postgres_json(data: Union[str, dict, list]):
     return data
 
 
+# class ForgivingSerializer(serializers.Serializer):
+#     """ Allows handled validation errors and tracks them """
+
+#     handled_errors = []
+
+#     def is_valid(self, *args, **kwargs):
+#         valid = super().is_valid(*args, **kwargs)
+#         if valid:
+#             import ipdb
+
+#             ipdb.set_trace()
+#             print("do this stuff")
+#         return valid
+
+
 class RequestSerializer(serializers.Serializer):
     env = serializers.DictField(
         child=serializers.CharField(allow_blank=True), required=False
@@ -58,11 +74,6 @@ class RequestSerializer(serializers.Serializer):
     url = serializers.CharField(required=False, allow_blank=True)
     method = serializers.CharField(required=False, allow_blank=True)
     query_string = serializers.CharField(required=False, allow_blank=True)
-
-
-class GenericField(serializers.Field):
-    def to_internal_value(self, data):
-        return data
 
 
 class BreadcrumbsSerializer(BaseBreadcrumbsSerializer):
@@ -92,7 +103,7 @@ class SentrySDKEventSerializer(BaseSerializer):
     """ Represents events coming from a OSS sentry SDK client """
 
     breadcrumbs = serializers.JSONField(required=False)
-    tags = serializers.DictField(child=serializers.CharField(), required=False)
+    tags = ForgivingHStoreField(required=False)
     event_id = serializers.UUIDField()
     extra = serializers.JSONField(required=False)
     request = RequestSerializer(required=False)
@@ -274,10 +285,27 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             if user:
                 json_data["user"] = user
 
+            errors = None
+            handled_errors = self.context.get("handled_errors")
+            if handled_errors:
+                errors = []
+                for field_name, field_error in handled_errors.items():
+                    for field_errors in field_error.values():
+                        for error in field_errors:
+                            errors.append(
+                                {
+                                    "reason": str(error),
+                                    "type": error.code,
+                                    "name": field_name,
+                                    "value": error.value,
+                                }
+                            )
+
             params = {
                 "event_id": data["event_id"],
                 "issue": issue,
                 "tags": tags,
+                "errors": errors,
                 "timestamp": data.get("timestamp"),
                 "data": sanitize_bad_postgres_json(json_data),
                 "release": release,

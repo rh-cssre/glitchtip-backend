@@ -38,7 +38,12 @@ class Event(models.Model):
     )
 
     created = models.DateTimeField(auto_now_add=True, db_index=True)
-    data = models.JSONField()
+    data = models.JSONField(help_text="General event data that is searchable")
+    errors = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Event processing errors from event intake, including validation errors",
+    )
     tags = HStoreField(default=dict)
     release = models.ForeignKey(
         "releases.Release", blank=True, null=True, on_delete=models.SET_NULL
@@ -69,6 +74,8 @@ class Event(models.Model):
         event["event_id"] = self.event_id_hex
         event["project"] = self.issue.project_id
         event["tags"] = self.tags.items()
+        if self.errors:
+            event["errors"] = self.errors
         if self.timestamp:
             event["datetime"] = self.timestamp.isoformat().replace("+00:00", "Z")
         if self.release:
