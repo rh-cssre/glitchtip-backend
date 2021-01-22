@@ -252,3 +252,10 @@ class EventStoreTestCase(APITestCase):
             self.assertNotIn("this is invalid", tag)
         self.assertEqual(len(event_json.get("errors")), 1)
 
+    def test_malformed_exception_value(self):
+        """ Malformed exception values aren't 100% supported, but should stored anyway """
+        with open("events/test_data/py_error.json") as json_file:
+            data = json.load(json_file)
+        data["exception"]["values"][0]["value"] = {"why is this": "any object?"}
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)

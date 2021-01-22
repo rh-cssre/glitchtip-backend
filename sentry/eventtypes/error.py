@@ -57,7 +57,12 @@ class ErrorEvent(BaseEvent):
             return metadata.get("function") or "<unknown>"
         if not metadata.get("value"):
             return ty
-        return u"{}: {}".format(ty, truncatechars(metadata["value"].splitlines()[0]))
+        try:
+            return "{}: {}".format(ty, truncatechars(metadata["value"].splitlines()[0]))
+        except AttributeError:
+            # GlitchTip modification
+            # Exception value is specified as a string, sometimes it isn't. This is a fallback.
+            return "{}: {}".format(ty, str(metadata["value"]))
 
     def get_location(self, data):
         return force_text(
