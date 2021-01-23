@@ -146,6 +146,11 @@ class EnvelopeAPIView(BaseEventAPIView):
     def post(self, request, *args, **kwargs):
         if settings.EVENT_STORE_DEBUG:
             print(json.dumps(request.data))
+        if (
+            settings.THROTTLE_TRANSACTION_EVENTS
+            and random.random() < settings.THROTTLE_TRANSACTION_EVENTS
+        ):
+            raise exceptions.Throttled()
         project = self.get_project(request, kwargs.get("id"))
 
         data = request.data
