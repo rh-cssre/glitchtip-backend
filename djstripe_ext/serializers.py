@@ -8,17 +8,24 @@ from djstripe.contrib.rest_framework.serializers import (
 from organizations_ext.models import OrganizationUserRole
 
 
-class PlanSerializer(ModelSerializer):
-    class Meta:
-        model = Plan
-        fields = ("id", "nickname", "amount", "metadata")
-
-
-class ProductSerializer(ModelSerializer):
-    plans = PlanSerializer(many=True, source="plan_set")
-
+class BaseProductSerializer(ModelSerializer):
     class Meta:
         model = Product
+        fields = ("id", "name", "description", "type", "metadata")
+
+
+class PlanSerializer(ModelSerializer):
+    product = BaseProductSerializer()
+
+    class Meta:
+        model = Plan
+        fields = ("id", "nickname", "amount", "metadata", "product")
+
+
+class ProductSerializer(BaseProductSerializer):
+    plans = PlanSerializer(many=True, source="plan_set")
+
+    class Meta(BaseProductSerializer.Meta):
         fields = ("id", "name", "description", "type", "plans", "metadata")
 
 
