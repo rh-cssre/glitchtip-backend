@@ -3,7 +3,7 @@ from django.shortcuts import reverse
 from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
-from ..models import Event
+from performance.models import TransactionEvent
 
 
 class EventStoreTestCase(APITestCase):
@@ -24,5 +24,4 @@ class EventStoreTestCase(APITestCase):
         data = self.get_payload("events/test_data/transactions/django_simple.json")
         res = self.client.generic("POST", self.url, data)
         self.assertEqual(res.status_code, 200)
-        self.assertTrue(Event.objects.exists())
-
+        self.assertTrue(TransactionEvent.objects.exists())

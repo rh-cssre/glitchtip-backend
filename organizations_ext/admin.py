@@ -5,6 +5,7 @@ from organizations.base_admin import (
     BaseOrganizationUserAdmin,
     BaseOwnerInline,
 )
+from performance.models import TransactionEvent
 from .models import Organization, OrganizationUser, OrganizationOwner
 
 
@@ -36,7 +37,8 @@ class OrganizationAdmin(BaseOrganizationAdmin):
         return obj.issue_events
 
     def transaction_events(self, obj):
-        return obj.transaction_events
+        # Produces 1 query per row, but is fast enough and keeps queryset simple
+        return TransactionEvent.objects.filter(project__organization=obj).count()
 
     def total_events(self, obj):
         total = 0
@@ -48,10 +50,7 @@ class OrganizationAdmin(BaseOrganizationAdmin):
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
-        queryset = queryset.annotate(
-            issue_events=Sum("projects__issue__count"),
-            transaction_events=Count("projects__transactionevent"),
-        )
+        queryset = queryset.annotate(issue_events=Sum("projects__issue__count"),)
         return queryset
 
 

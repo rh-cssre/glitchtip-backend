@@ -8,6 +8,7 @@ from djstripe.models import Subscription, Customer, Product
 from djstripe.settings import STRIPE_SECRET_KEY
 import stripe
 from events.models import Event
+from performance.models import TransactionEvent
 from .serializers import (
     SubscriptionSerializer,
     CreateSubscriptionSerializer,
@@ -58,15 +59,17 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         if not subscription:
             return Response(0)
         organization = subscription.customer.subscriber
-        event_count = (
-            Event.objects.for_organization(organization)
-            .filter(
-                created__gte=subscription.current_period_start,
-                created__lt=subscription.current_period_end,
-            )
-            .count()
-        )
-        return Response(event_count)
+        event_count = Event.objects.filter(
+            issue__project__organization=organization,
+            created__gte=subscription.current_period_start,
+            created__lt=subscription.current_period_end,
+        ).count()
+        transaction_event_count = TransactionEvent.objects.filter(
+            project__organization=organization,
+            created__gte=subscription.current_period_start,
+            created__lt=subscription.current_period_end,
+        ).count()
+        return Response(event_count + transaction_event_count)
 
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):

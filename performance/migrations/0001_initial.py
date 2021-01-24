@@ -9,19 +9,35 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('projects', '0007_auto_20201026_2354'),
-        ('events', '0002_auto_20201229_1643'),
+        ("projects", "0007_auto_20201026_2354"),
+        ("events", "0002_auto_20201229_1643"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='TransactionEvent',
+            name="TransactionEvent",
             fields=[
-                ('event_ptr', models.OneToOneField(auto_created=True, on_delete=django.db.models.deletion.CASCADE, parent_link=True, primary_key=True, serialize=False, to='events.event')),
-                ('transaction', models.CharField(max_length=1024)),
-                ('start_timestamp', models.DateTimeField()),
-                ('project', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='projects.project')),
+                (
+                    "event_ptr",
+                    models.OneToOneField(
+                        auto_created=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        parent_link=True,
+                        primary_key=True,
+                        serialize=False,
+                        to="events.event",
+                    ),
+                ),
+                ("transaction", models.CharField(max_length=1024)),
+                ("start_timestamp", models.DateTimeField()),
+                (
+                    "project",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="projects.project",
+                    ),
+                ),
             ],
-            bases=('events.event',),
+            bases=("events.event",),
         ),
     ]

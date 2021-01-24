@@ -1,58 +1,21 @@
 import uuid
 from django.db import models
-from django.db.models import Q
 from django.contrib.postgres.fields import HStoreField
 from user_reports.models import UserReport
 
 
-class EventManager(models.Manager):
-    def for_organization(self, organization):
-        return (
-            super()
-            .get_queryset()
-            .filter(
-                Q(issue__project__organization=organization)
-                | Q(transactionevent__project__organization=organization)
-            )
-        )
-
-
-class Event(models.Model):
-    """
-    An individual event. An issue is a set of like-events.
-    Most is stored in "data" but some fields benefit from being real
-    relational data types such as dates and foreign keys
-    """
-
+class AbstractEvent(models.Model):
     event_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    issue = models.ForeignKey(
-        "issues.Issue",
-        on_delete=models.CASCADE,
-        null=True,
-        help_text="Sentry calls this a group",
-    )
+    created = models.DateTimeField(auto_now_add=True, db_index=True)
+    data = models.JSONField(help_text="General event data that is searchable")
     timestamp = models.DateTimeField(
         blank=True,
         null=True,
         help_text="Date created as claimed by client it came from",
     )
 
-    created = models.DateTimeField(auto_now_add=True, db_index=True)
-    data = models.JSONField(help_text="General event data that is searchable")
-    errors = models.JSONField(
-        null=True,
-        blank=True,
-        help_text="Event processing errors from event intake, including validation errors",
-    )
-    tags = HStoreField(default=dict)
-    release = models.ForeignKey(
-        "releases.Release", blank=True, null=True, on_delete=models.SET_NULL
-    )
-
-    objects = EventManager()
-
     class Meta:
-        ordering = ["-created"]
+        abstract = True
 
     def __str__(self):
         return self.event_id_hex
@@ -64,6 +27,33 @@ class Event(models.Model):
             if isinstance(self.event_id, str):
                 return self.event_id
             return self.event_id.hex
+
+
+class Event(AbstractEvent):
+    """
+    An individual event. An issue is a set of like-events.
+    Most is stored in "data" but some fields benefit from being real
+    relational data types such as dates and foreign keys
+    """
+
+    issue = models.ForeignKey(
+        "issues.Issue",
+        on_delete=models.CASCADE,
+        null=True,
+        help_text="Sentry calls this a group",
+    )
+    errors = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Event processing errors from event intake, including validation errors",
+    )
+    tags = HStoreField(default=dict)
+    release = models.ForeignKey(
+        "releases.Release", blank=True, null=True, on_delete=models.SET_NULL
+    )
+
+    class Meta:
+        ordering = ["-created"]
 
     def event_json(self):
         """
