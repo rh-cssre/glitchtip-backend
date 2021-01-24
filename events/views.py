@@ -7,7 +7,7 @@ from django.core.exceptions import SuspiciousOperation, ValidationError
 from django.conf import settings
 from django.http import HttpResponse
 from django.test import RequestFactory
-from rest_framework import permissions, exceptions
+from rest_framework import permissions, exceptions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from sentry_sdk import set_context, capture_exception, set_level
@@ -159,11 +159,13 @@ class EnvelopeAPIView(BaseEventAPIView):
         event_header_serializer = EnvelopeHeaderSerializer(data=data.pop(0))
         event_header_serializer.is_valid(raise_exception=True)
         # Multi part envelopes are not yet supported
-        data.pop(0)  # Message header isn't used at this time
+        message_header = data.pop(0)
+        if message_header.get("type") == "transaction":
+            serializer = self.get_serializer_class()(
+                data=data.pop(0), context={"request": self.request, "project": project}
+            )
+            serializer.is_valid(raise_exception=True)
+            event = serializer.save()
+            return Response({"id": event.event_id_hex})
 
-        serializer = self.get_serializer_class()(
-            data=data.pop(0), context={"request": self.request, "project": project}
-        )
-        serializer.is_valid(raise_exception=True)
-        event = serializer.save()
-        return Response({"id": event.event_id_hex})
+        return Response(status=status.HTTP_501_NOT_IMPLEMENTED)
