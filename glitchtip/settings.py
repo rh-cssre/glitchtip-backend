@@ -312,11 +312,7 @@ SITE_ID = 1
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/dev/howto/static-files/
-if DEBUG:
-    STATIC_URL = "/static/"
-else:  # This is needed for angular cli
-    STATIC_URL = "/"
-
+STATIC_URL = "/static/"
 
 MEDIA_URL = "media/"  # Not used, can be anything except the STATIC_URL. Cannot be "" nor "/", but must end with a slash
 
