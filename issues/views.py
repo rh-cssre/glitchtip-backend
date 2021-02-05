@@ -1,3 +1,5 @@
+import shlex
+from typing import List
 from django.db import connection
 from django.db.models.expressions import RawSQL
 from django.shortcuts import get_object_or_404
@@ -65,29 +67,26 @@ class IssueViewSet(
             qs = qs.filter(project__slug=self.kwargs["project_slug"],)
 
         distinct = False
-        queries = self.request.GET.get("query")
-        if queries:
-            # First look for structured queries
-            for query in queries.split():
-                query_part = query.split(":", 1)
-                if len(query_part) == 2:
-                    # Remove query from queries
-                    queries = queries.replace(query, "").strip()
+        queries = shlex.split(self.request.GET.get("query", ""))
+        # First look for structured queries
+        for i, query in enumerate(queries):
+            query_part = query.split(":", 1)
+            if len(query_part) == 2:
+                query_name, query_value = query_part
+                query_value = query_value.strip('"')
 
-                    query_name, query_value = query_part
-                    query_value = query_value.strip('"')
-
-                    if query_name == "is":
-                        qs = qs.filter(status=EventStatus.from_string(query_value))
-                    elif query_name == "has":
-                        qs = qs.filter(event__tags__has_key=query_value)
-                    else:
-                        qs = qs.filter(event__tags__contains={query_name: query_value})
-                        distinct = True
-
-        if queries:
-            # Anything left is full text search
-            qs = qs.filter(search_vector=queries)
+                if query_name == "is":
+                    qs = qs.filter(status=EventStatus.from_string(query_value))
+                elif query_name == "has":
+                    qs = qs.filter(event__tags__has_key=query_value)
+                else:
+                    qs = qs.filter(event__tags__contains={query_name: query_value})
+                    distinct = True
+            if len(query_part) == 1:
+                search_query = " ".join(queries[i:])
+                qs = qs.filter(search_vector=search_query)
+                # Search queries must be at end of query string, finished when parsing
+                break
 
         if str(self.request.query_params.get("sort")).endswith("priority"):
             # Raw SQL must be added when sorting by priority

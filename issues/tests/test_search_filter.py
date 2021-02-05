@@ -25,6 +25,21 @@ class FilterTestCase(GlitchTipTestCase):
         self.assertNotContains(res, event1.issue.title)
         self.assertNotContains(res, event3.issue.title)
 
+    def test_tag_space(self):
+        tag_name = "os.name"
+        tag_value = "Linux Vista"
+        event = baker.make(
+            "events.Event",
+            issue__project=self.project,
+            tags={tag_name: tag_value, "foo": "bar"},
+        )
+        event2 = baker.make(
+            "events.Event", issue__project=self.project, tags={tag_name: "BananaOS 7"}
+        )
+        res = self.client.get(self.url + f'?query={tag_name}:"Linux+Vista" foo:bar')
+        self.assertContains(res, event.issue.title)
+        self.assertNotContains(res, event2.issue.title)
+
     def test_filter_by_tag(self):
         tag_browser = "browser.name"
         tag_value_firefox = "Firefox"
@@ -158,6 +173,14 @@ class SearchTestCase(GlitchTipTestCase):
             "events.Event", issue=event.issue, data={"name": "apple sauce"}
         )
         other_event = baker.make("events.Event", issue__project=self.project)
+        res = self.client.get(self.url + "?query=is:unresolved apple+sauce")
+        self.assertContains(res, event.issue.title)
+        self.assertNotContains(res, other_event.issue.title)
+
         res = self.client.get(self.url + "?query=is:unresolved apple sauce")
+        self.assertContains(res, event.issue.title)
+        self.assertNotContains(res, other_event.issue.title)
+
+        res = self.client.get(self.url + '?query=is:unresolved "apple sauce"')
         self.assertContains(res, event.issue.title)
         self.assertNotContains(res, other_event.issue.title)
