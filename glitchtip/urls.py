@@ -135,7 +135,7 @@ urlpatterns += [
         name="password_reset_confirm",
     ),
     path("accept/", include(invitation_backend().get_urls())),
-    path('favicon.ico', RedirectView.as_view(url=staticfiles_storage.url('/favicon.ico')))
+    path("favicon.ico", RedirectView.as_view(url=staticfiles_storage.url("/favicon.ico")))
 ]
 
 if settings.BILLING_ENABLED:
