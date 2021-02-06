@@ -45,7 +45,7 @@ ipdb = "^0.13.2"
 pylint = "^2.4.4"
 pylint-django = "^2.0.13"
 locust = "^1.1.1"
-freezegun = "~1.0.0"
+freezegun = "^1.1.0"
 rope = "^0.17.0"
 model_bakery = "^1.1.1"
 
