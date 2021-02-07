@@ -4,7 +4,6 @@ from rest_framework import serializers, exceptions
 from dj_rest_auth.serializers import PasswordResetSerializer
 from dj_rest_auth.registration.serializers import (
     SocialAccountSerializer as BaseSocialAccountSerializer,
-    RegisterSerializer as BaseRegisterSerializer,
 )
 from allauth.socialaccount.models import SocialApp
 from allauth.account.adapter import get_adapter
@@ -140,13 +139,6 @@ class UserNotificationsSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ("subscribeByDefault",)
-
-
-class RegisterSerializer(BaseRegisterSerializer):
-    def validate(self, data):
-        if not is_user_registration_open():
-            raise exceptions.PermissionDenied("Registration is not open")
-        return super().validate(data)
 
 
 class NoopTokenSerializer(serializers.Serializer):

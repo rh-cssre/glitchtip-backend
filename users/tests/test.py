@@ -32,12 +32,11 @@ class UserRegistrationTestCase(APITestCase):
         org_data = {"name": "test"}
         res = self.client.post(url, data)
         self.assertEqual(res.status_code, 201)
-        # Can't make more users once Organization is made
         baker.make("organizations_ext.Organization")
         data["email"] = "another@example.com"
         with override_settings(ENABLE_OPEN_USER_REGISTRATION=False):
             res = self.client.post(url, data)
-            self.assertEqual(res.status_code, 403)
+            self.assertEqual(res.status_code, 201)
             # Can't make more organizations outside of Django Admin
             user = User.objects.first()
             self.client.force_login(user)
@@ -45,8 +44,6 @@ class UserRegistrationTestCase(APITestCase):
             self.assertEqual(res.status_code, 403)
         # When True, users can register and create more orgs
         with override_settings(ENABLE_OPEN_USER_REGISTRATION=True):
-            res = self.client.post(url, data)
-            self.assertEqual(res.status_code, 201)
             # Can't make more organizations outside of Django Admin
             user = User.objects.first()
             self.client.force_login(user)
