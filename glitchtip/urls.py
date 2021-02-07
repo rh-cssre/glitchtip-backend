@@ -53,6 +53,10 @@ schema_view = get_schema_view(
 urlpatterns = [
     path("_health/", health),
     path("admin/", admin.site.urls),
+    re_path(
+        r"^favicon\.ico$",
+        RedirectView.as_view(url="/static/favicon.ico", permanent=True),
+    ),
     path("api/", RedirectView.as_view(url="/profile/auth-tokens")),
     path("api/0/", APIRootView.as_view()),
     path("api/0/", include(router.urls)),
