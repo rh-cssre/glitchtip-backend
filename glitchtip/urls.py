@@ -55,7 +55,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     re_path(
         r"^favicon\.ico$",
-        RedirectView.as_view(url="/static/favicon.ico", permanent=True),
+        RedirectView.as_view(url=settings.STATIC_URL + "/favicon.ico", permanent=True),
     ),
     path("api/", RedirectView.as_view(url="/profile/auth-tokens")),
     path("api/0/", APIRootView.as_view()),
