@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.contrib import admin
+from django.contrib.staticfiles.storage import staticfiles_storage
 from django.urls import path, include, re_path
 from django.views.generic import TemplateView
 from django.views.generic.base import RedirectView
@@ -134,6 +135,7 @@ urlpatterns += [
         name="password_reset_confirm",
     ),
     path("accept/", include(invitation_backend().get_urls())),
+    path("favicon.ico", RedirectView.as_view(url=staticfiles_storage.url("/favicon.ico")))
 ]
 
 if settings.BILLING_ENABLED:
