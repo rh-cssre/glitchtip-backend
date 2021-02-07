@@ -15,18 +15,19 @@ import sys
 import warnings
 import environ
 import sentry_sdk
+from django.core.exceptions import ImproperlyConfigured
 from sentry_sdk.integrations.django import DjangoIntegration
 from celery.schedules import crontab
 
 env = environ.Env(
     ALLOWED_HOSTS=(list, ["*"]),
-    DEBUG=(bool, False),
-    DEBUG_TOOLBAR=(bool, False),
     AWS_ACCESS_KEY_ID=(str, None),
     AWS_SECRET_ACCESS_KEY=(str, None),
     AWS_STORAGE_BUCKET_NAME=(str, None),
     AWS_S3_ENDPOINT_URL=(str, None),
     AWS_LOCATION=(str, None),
+    DEBUG=(bool, False),
+    DEBUG_TOOLBAR=(bool, False),
     STATIC_URL=(str, "/"),
     STATICFILES_STORAGE=(
         str,
@@ -64,7 +65,12 @@ ENVIRONMENT = env.str("ENVIRONMENT", None)
 GLITCHTIP_VERSION = env.str("GLITCHTIP_VERSION", None)
 
 # Used in email and DSN generation. Set to full domain such as https://glitchtip.example.com
-GLITCHTIP_DOMAIN = env.url("GLITCHTIP_DOMAIN", default="http://localhost:8000")
+default_url = env.str(
+    "APP_URL", "http://localhost:8000"
+)  # DigitalOcean App Platform uses APP_URL
+GLITCHTIP_DOMAIN = env.url("GLITCHTIP_DOMAIN", default_url)
+if GLITCHTIP_DOMAIN.scheme not in ["http", "https"]:
+    raise ImproperlyConfigured("GLITCHTIP_DOMAIN must start with http or https")
 
 # Events and associated data older than this will be deleted from the database
 GLITCHTIP_MAX_EVENT_LIFE_DAYS = env.int("GLITCHTIP_MAX_EVENT_LIFE_DAYS", default=90)
