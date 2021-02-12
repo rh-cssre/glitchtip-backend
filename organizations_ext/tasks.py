@@ -5,33 +5,39 @@ from .models import Organization
 from .email import send_email_met_quota
 
 
+def get_free_tier_organizations_with_event_count():
+    return Organization.objects.filter(
+        djstripe_customers__subscriptions__plan__amount=0,
+        djstripe_customers__subscriptions__status="active",
+    ).annotate(
+        event_count=Count(
+            "projects__issue__event",
+            distinct=True,
+            filter=Q(
+                projects__issue__event__created__gte=F(
+                    "djstripe_customers__subscriptions__current_period_start"
+                )
+            ),
+        )
+        + Count(
+            "projects__transactionevent",
+            distinct=True,
+            filter=Q(
+                projects__transactionevent__created__gte=F(
+                    "djstripe_customers__subscriptions__current_period_start"
+                )
+            ),
+        )
+    )
+
+
 @shared_task
 def set_organization_throttle():
     """ Determine if organization should be throttled """
     # Currently throttling only happens if billing is enabled and user has free plan.
     if settings.BILLING_ENABLED:
         events_max = settings.BILLING_FREE_TIER_EVENTS
-        free_tier_organizations = Organization.objects.filter(
-            djstripe_customers__subscriptions__plan__amount=0,
-            djstripe_customers__subscriptions__status="active",
-        ).annotate(
-            event_count=Count(
-                "projects__issue__event",
-                filter=Q(
-                    projects__issue__event__created__gte=F(
-                        "djstripe_customers__subscriptions__current_period_start"
-                    )
-                ),
-            )
-            + Count(
-                "projects__transactionevent",
-                filter=Q(
-                    projects__transactionevent__created__gte=F(
-                        "djstripe_customers__subscriptions__current_period_start"
-                    )
-                ),
-            )
-        )
+        free_tier_organizations = get_free_tier_organizations_with_event_count()
 
         orgs_over_quota = free_tier_organizations.filter(
             is_accepting_events=True, event_count__gt=events_max
