@@ -93,8 +93,8 @@ class SentrySDKEventSerializer(BaseSerializer):
     extra = serializers.JSONField(required=False)
     request = RequestSerializer(required=False)
     server_name = serializers.CharField(required=False)
-    sdk = serializers.JSONField()
-    platform = serializers.CharField()
+    sdk = serializers.JSONField(required=False)
+    platform = serializers.CharField(required=False)
     release = serializers.CharField(required=False)
     environment = serializers.CharField(required=False)
     _meta = serializers.JSONField(required=False)
@@ -253,9 +253,9 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 "metadata": metadata,
                 "message": self.get_message(data),
                 "modules": data.get("modules"),
-                "platform": data["platform"],
+                "platform": data.get("platform", "other"),
                 "request": request,
-                "sdk": data["sdk"],
+                "sdk": data.get("sdk"),
                 "title": title,
                 "type": self.type.label,
             }

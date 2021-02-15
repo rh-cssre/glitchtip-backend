@@ -259,3 +259,25 @@ class EventStoreTestCase(APITestCase):
         data["exception"]["values"][0]["value"] = {"why is this": "any object?"}
         res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
+
+    def test_no_sdk(self):
+        data = {
+            "exception": [
+                {
+                    "type": "Plug.Parsers.ParseError",
+                    "value": "malformed request",
+                    "module": None,
+                }
+            ],
+            "culprit": "Plug.Parsers.JSON.decode",
+            "extra": {},
+            "event_id": "11111111111111111111111111111111",
+            "breadcrumbs": [],
+            "level": "error",
+            "modules": {"cowboy": "2.8.0",},
+            "fingerprint": ["{{ default }}"],
+            "message": "(Plug.Parsers.ParseError) malformed",
+        }
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(Event.objects.exists())
