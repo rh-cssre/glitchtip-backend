@@ -33,6 +33,8 @@ class ForgivingHStoreField(serializers.HStoreField):
         errors = OrderedDict()
 
         for key, value in data.items():
+            if value is None:
+                continue
             key = str(key)
 
             try:

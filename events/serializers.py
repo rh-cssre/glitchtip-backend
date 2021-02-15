@@ -50,21 +50,6 @@ def sanitize_bad_postgres_json(data: Union[str, dict, list]):
     return data
 
 
-# class ForgivingSerializer(serializers.Serializer):
-#     """ Allows handled validation errors and tracks them """
-
-#     handled_errors = []
-
-#     def is_valid(self, *args, **kwargs):
-#         valid = super().is_valid(*args, **kwargs)
-#         if valid:
-#             import ipdb
-
-#             ipdb.set_trace()
-#             print("do this stuff")
-#         return valid
-
-
 class RequestSerializer(serializers.Serializer):
     env = serializers.DictField(
         child=serializers.CharField(allow_blank=True), required=False
