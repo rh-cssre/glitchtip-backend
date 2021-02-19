@@ -324,6 +324,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
                 "release",
                 "dist",
                 "platform",
+                "level",
                 "exception",
                 "modules",
                 "time_spent",

@@ -253,6 +253,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 "metadata": metadata,
                 "message": self.get_message(data),
                 "modules": data.get("modules"),
+                "level": data.get("level"),
                 "platform": data.get("platform", "other"),
                 "request": request,
                 "sdk": data.get("sdk"),
