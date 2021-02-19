@@ -1,6 +1,8 @@
 from django.contrib.postgres.search import SearchVectorField
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
+from events.models import LogLevel
+from glitchtip.model_utils import FromStringIntegerChoices
 from .utils import base32_encode
 
 
@@ -11,25 +13,10 @@ class EventType(models.IntegerChoices):
     TRANSACTION = 3, "transaction"
 
 
-class EventStatus(models.IntegerChoices):
+class EventStatus(FromStringIntegerChoices):
     UNRESOLVED = 0, "unresolved"
     RESOLVED = 1, "resolved"
     IGNORED = 2, "ignored"
-
-    @classmethod
-    def from_string(cls, string: str):
-        for status in cls:
-            if status.label == string:
-                return status
-
-
-class LogLevel(models.IntegerChoices):
-    NOTSET = 0, "sample"
-    DEBUG = 1, "debug"
-    INFO = 2, "info"
-    WARNING = 3, "warning"
-    ERROR = 4, "error"
-    FATAL = 5, "fatal"
 
 
 class Issue(models.Model):
@@ -46,7 +33,7 @@ class Issue(models.Model):
     # is_bookmarked Not implement - is per user
     is_public = models.BooleanField(default=False)
     level = models.PositiveSmallIntegerField(
-        choices=LogLevel.choices, default=LogLevel.NOTSET
+        choices=LogLevel.choices, default=LogLevel.ERROR
     )
     metadata = models.JSONField()
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)

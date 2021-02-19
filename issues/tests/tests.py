@@ -370,3 +370,15 @@ class IssuesAPITestCase(GlitchTipTestCase):
 
         res = self.client.get(url + "tags/ahh/")
         self.assertEqual(res.status_code, 404)
+
+    def test_issue_greatest_level(self):
+        """
+        The issue should be the greatest level seen in events
+        This is a deviation from Sentry OSS
+        """
+        issue = baker.make("issues.Issue", level=1)
+        baker.make("events.Event", issue=issue, level=1)
+        baker.make("events.Event", issue=issue, level=3)
+        baker.make("events.Event", issue=issue, level=2)
+        issue.refresh_from_db()
+        self.assertEqual(issue.level, 3)

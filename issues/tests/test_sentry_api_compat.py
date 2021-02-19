@@ -5,7 +5,7 @@ from django.urls import reverse
 from events.test_data.django_error_factory import message
 from events.test_data.csp import mdn_sample_csp
 from glitchtip.test_utils.test_case import GlitchTipTestCase
-from events.models import Event
+from events.models import Event, LogLevel
 
 
 TEST_DATA_DIR = "events/test_data"
@@ -349,6 +349,9 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
             sentry_data,
             ["title", "culprit", "type", "metadata", "platform", "packages"],
         )
+        issue = event.issue
+        issue.refresh_from_db()
+        self.assertEqual(issue.level, LogLevel.ERROR)
 
     def test_dotnet_zero_division(self):
         sdk_error, sentry_json, sentry_data = self.get_json_test_data(

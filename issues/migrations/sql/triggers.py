@@ -10,7 +10,7 @@ BEGIN
 event_count := (SELECT count(*) from events_event where events_event.issue_id = new.issue_id);
 
 UPDATE issues_issue
-SET last_seen = new.created, count = event_count
+SET last_seen = new.created, level = GREATEST(new.level, level), count = event_count
 WHERE issues_issue.id = new.issue_id;
 
 IF event_count <= 100 THEN

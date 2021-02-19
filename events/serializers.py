@@ -13,7 +13,7 @@ from issues.serializers import BaseBreadcrumbsSerializer
 from environments.models import Environment
 from releases.models import Release
 from glitchtip.serializers import FlexibleDateTimeField
-from .models import Event
+from .models import Event, LogLevel
 from .fields import GenericField, ForgivingHStoreField
 from .event_tag_processors import TAG_PROCESSORS
 from .event_context_processors import EVENT_CONTEXT_PROCESSORS
@@ -205,6 +205,9 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
         culprit = eventtype.get_location(data)
         request = data.get("request")
         breadcrumbs = data.get("breadcrumbs")
+        level = None
+        if data.get("level"):
+            level = LogLevel.from_string(data["level"])
         exception = self.modify_exception(data.get("exception"))
         if request:
             headers = request.get("headers")
@@ -222,12 +225,15 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             if not project.first_event:
                 project.first_event = data.get("timestamp")
                 project.save(update_fields=["first_event"])
+            defaults = {"metadata": sanitize_bad_postgres_json(metadata)}
+            if level:
+                defaults["level"] = level
             issue, _ = Issue.objects.get_or_create(
                 title=sanitize_bad_postgres_chars(title),
                 culprit=sanitize_bad_postgres_chars(culprit),
                 project_id=project.id,
                 type=self.type,
-                defaults={"metadata": sanitize_bad_postgres_json(metadata)},
+                defaults=defaults,
             )
 
             environment = None
@@ -253,7 +259,6 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 "metadata": metadata,
                 "message": self.get_message(data),
                 "modules": data.get("modules"),
-                "level": data.get("level"),
                 "platform": data.get("platform", "other"),
                 "request": request,
                 "sdk": data.get("sdk"),
@@ -296,6 +301,8 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 "data": sanitize_bad_postgres_json(json_data),
                 "release": release,
             }
+            if level:
+                params["level"] = level
             try:
                 event = Event.objects.create(**params)
             except IntegrityError as e:

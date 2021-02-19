@@ -2,6 +2,7 @@ import uuid
 from django.db import models
 from django.contrib.postgres.fields import HStoreField
 from user_reports.models import UserReport
+from glitchtip.model_utils import FromStringIntegerChoices
 
 
 class AbstractEvent(models.Model):
@@ -29,6 +30,15 @@ class AbstractEvent(models.Model):
             return self.event_id.hex
 
 
+class LogLevel(FromStringIntegerChoices):
+    NOTSET = 0, "sample"
+    DEBUG = 1, "debug"
+    INFO = 2, "info"
+    WARNING = 3, "warning"
+    ERROR = 4, "error"
+    FATAL = 5, "fatal"
+
+
 class Event(AbstractEvent):
     """
     An individual event. An issue is a set of like-events.
@@ -37,10 +47,10 @@ class Event(AbstractEvent):
     """
 
     issue = models.ForeignKey(
-        "issues.Issue",
-        on_delete=models.CASCADE,
-        null=True,
-        help_text="Sentry calls this a group",
+        "issues.Issue", on_delete=models.CASCADE, help_text="Sentry calls this a group",
+    )
+    level = models.PositiveSmallIntegerField(
+        choices=LogLevel.choices, default=LogLevel.ERROR
     )
     errors = models.JSONField(
         null=True,
@@ -63,6 +73,7 @@ class Event(AbstractEvent):
         event = self.data
         event["event_id"] = self.event_id_hex
         event["project"] = self.issue.project_id
+        event["level"] = self.get_level_display()
         event["tags"] = self.tags.items()
         if self.errors:
             event["errors"] = self.errors

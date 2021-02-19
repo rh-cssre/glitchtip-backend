@@ -5,6 +5,7 @@ import django.contrib.postgres.operations
 from django.db import migrations, models
 import django.db.models.deletion
 import uuid
+from issues.migrations.sql.triggers import UPDATE_ISSUE_TRIGGER
 
 
 class Migration(migrations.Migration):
@@ -115,7 +116,7 @@ class Migration(migrations.Migration):
             ],
         ),
         migrations.RunSQL(
-            sql="\nDROP TRIGGER IF EXISTS event_issue_update on events_event;\nDROP FUNCTION IF EXISTS update_issue;\n\nCREATE FUNCTION update_issue() RETURNS trigger AS $$\nDECLARE event_count INT;\nDECLARE events_search_vector tsvector;\nBEGIN\n\nevent_count := (SELECT count(*) from events_event where events_event.issue_id = new.issue_id);\n\nUPDATE issues_issue\nSET last_seen = new.created, count = event_count\nWHERE issues_issue.id = new.issue_id;\n\nIF event_count <= 100 THEN\n    BEGIN\n        events_search_vector := (\n            SELECT strip(jsonb_to_tsvector('english', jsonb_agg(events_event.data), '[\"string\"]'))\n            FROM events_event\n            WHERE events_event.issue_id = new.issue_id\n        );\n\n        UPDATE issues_issue\n        SET search_vector = events_search_vector \n        where issues_issue.id = new.issue_id;\n\n        EXCEPTION WHEN program_limit_exceeded THEN\n    END;\nEND IF;\n\nRETURN new;\nEND\n$$ LANGUAGE plpgsql;;\n\n\nCREATE TRIGGER event_issue_update AFTER INSERT OR UPDATE\nON events_event FOR EACH ROW EXECUTE PROCEDURE\nupdate_issue();\n",
+            sql=UPDATE_ISSUE_TRIGGER,
             reverse_sql="DROP TRIGGER IF EXISTS event_issue_update on issues_event; DROP FUNCTION IF EXISTS update_issue;",
         ),
         migrations.AlterField(
