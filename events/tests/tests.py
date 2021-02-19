@@ -6,7 +6,7 @@ from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
 from issues.models import Issue, EventStatus
-from ..models import Event
+from ..models import Event, LogLevel
 from ..test_data.csp import mdn_sample_csp
 
 
@@ -281,3 +281,19 @@ class EventStoreTestCase(APITestCase):
         res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
         self.assertTrue(Event.objects.exists())
+
+    def test_invalid_level(self):
+        data = {
+            "exception": [{"type": "a", "value": "a", "module": None,}],
+            "culprit": "a",
+            "extra": {},
+            "event_id": "11111111111111111111111111111111",
+            "breadcrumbs": [],
+            "level": "haha",
+            "message": "a",
+        }
+
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(Event.objects.filter(level=LogLevel.ERROR).exists())
+

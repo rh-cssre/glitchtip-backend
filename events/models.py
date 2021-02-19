@@ -38,6 +38,17 @@ class LogLevel(FromStringIntegerChoices):
     ERROR = 4, "error"
     FATAL = 5, "fatal"
 
+    @classmethod
+    def from_string(cls, string: str):
+        result = super().from_string(string)
+        if result:
+            return result
+        if string == "critical":
+            return cls.FATAL
+        if string == "log":
+            return cls.INFO
+        return cls.ERROR
+
 
 class Event(AbstractEvent):
     """
