@@ -408,5 +408,5 @@ class StoreCSPReportSerializer(BaseSerializer):
 
 
 class EnvelopeHeaderSerializer(serializers.Serializer):
-    event_id = serializers.UUIDField()
+    event_id = serializers.UUIDField(required=False)
     sent_at = FlexibleDateTimeField(required=False)

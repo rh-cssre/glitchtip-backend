@@ -1,0 +1,370 @@
+[
+    {
+        "event_id": "45e4eb512da94cb2956b788e6932c2cd",
+        "sdk": {
+            "name": "sentry.java.android",
+            "version": "4.0.0",
+            "packages": [
+                {
+                    "name": "maven:sentry",
+                    "version": "4.0.0"
+                },
+                {
+                    "name": "maven:sentry-android-core",
+                    "version": "4.0.0"
+                },
+                {
+                    "name": "maven:sentry-android-ndk",
+                    "version": "4.0.0"
+                }
+            ]
+        }
+    },
+    {
+        "content_type": "application/json",
+        "type": "event",
+        "length": 5557
+    },
+    {
+        "breadcrumbs": [
+            {
+                "category": "ui.lifecycle",
+                "data": {
+                    "screen": "MainActivity",
+                    "state": "created"
+                },
+                "level": "info",
+                "timestamp": "2021-02-23T03:12:07.454Z",
+                "type": "navigation"
+            },
+            {
+                "category": "ui.lifecycle",
+                "data": {
+                    "screen": "MainActivity",
+                    "state": "started"
+                },
+                "level": "info",
+                "timestamp": "2021-02-23T03:12:07.628Z",
+                "type": "navigation"
+            },
+            {
+                "category": "app.lifecycle",
+                "data": {
+                    "state": "start"
+                },
+                "level": "info",
+                "timestamp": "2021-02-23T03:12:07.636Z",
+                "type": "session"
+            },
+            {
+                "category": "app.lifecycle",
+                "data": {
+                    "state": "foreground"
+                },
+                "level": "info",
+                "timestamp": "2021-02-23T03:12:07.637Z",
+                "type": "navigation"
+            },
+            {
+                "category": "ui.lifecycle",
+                "data": {
+                    "screen": "MainActivity",
+                    "state": "resumed"
+                },
+                "level": "info",
+                "timestamp": "2021-02-23T03:12:07.637Z",
+                "type": "navigation"
+            },
+            {
+                "category": "ui.lifecycle",
+                "data": {
+                    "screen": "MainActivity",
+                    "state": "paused"
+                },
+                "level": "info",
+                "timestamp": "2021-02-23T03:13:23.808Z",
+                "type": "navigation"
+            },
+            {
+                "category": "ui.lifecycle",
+                "data": {
+                    "screen": "MainActivity",
+                    "state": "stopped"
+                },
+                "level": "info",
+                "timestamp": "2021-02-23T03:13:24.430Z",
+                "type": "navigation"
+            },
+            {
+                "category": "ui.lifecycle",
+                "data": {
+                    "screen": "MainActivity",
+                    "state": "destroyed"
+                },
+                "level": "info",
+                "timestamp": "2021-02-23T03:13:24.437Z",
+                "type": "navigation"
+            },
+            {
+                "category": "app.lifecycle",
+                "data": {
+                    "state": "background"
+                },
+                "level": "info",
+                "timestamp": "2021-02-23T03:13:24.524Z",
+                "type": "navigation"
+            },
+            {
+                "category": "ui.lifecycle",
+                "data": {
+                    "screen": "MainActivity",
+                    "state": "created"
+                },
+                "level": "info",
+                "timestamp": "2021-02-23T03:13:25.533Z",
+                "type": "navigation"
+            }
+        ],
+        "dist": "1",
+        "exception": {
+            "values": [
+                {
+                    "module": "java.lang",
+                    "stacktrace": {
+                        "frames": [
+                            {
+                                "native": false,
+                                "filename": "ZygoteInit.java",
+                                "function": "main",
+                                "in_app": false,
+                                "lineno": 947,
+                                "module": "com.android.internal.os.ZygoteInit"
+                            },
+                            {
+                                "native": false,
+                                "filename": "RuntimeInit.java",
+                                "function": "run",
+                                "in_app": false,
+                                "lineno": 592,
+                                "module": "com.android.internal.os.RuntimeInit$MethodAndArgsCaller"
+                            },
+                            {
+                                "native": true,
+                                "filename": "Method.java",
+                                "function": "invoke",
+                                "in_app": false,
+                                "module": "java.lang.reflect.Method"
+                            },
+                            {
+                                "native": false,
+                                "filename": "ActivityThread.java",
+                                "function": "main",
+                                "in_app": false,
+                                "lineno": 7656,
+                                "module": "android.app.ActivityThread"
+                            },
+                            {
+                                "native": false,
+                                "filename": "Looper.java",
+                                "function": "loop",
+                                "in_app": false,
+                                "lineno": 223,
+                                "module": "android.os.Looper"
+                            },
+                            {
+                                "native": false,
+                                "filename": "Handler.java",
+                                "function": "dispatchMessage",
+                                "in_app": false,
+                                "lineno": 106,
+                                "module": "android.os.Handler"
+                            },
+                            {
+                                "native": false,
+                                "filename": "ActivityThread.java",
+                                "function": "handleMessage",
+                                "in_app": false,
+                                "lineno": 2066,
+                                "module": "android.app.ActivityThread$H"
+                            },
+                            {
+                                "native": false,
+                                "filename": "TransactionExecutor.java",
+                                "function": "execute",
+                                "in_app": false,
+                                "lineno": 95,
+                                "module": "android.app.servertransaction.TransactionExecutor"
+                            },
+                            {
+                                "native": false,
+                                "filename": "TransactionExecutor.java",
+                                "function": "executeCallbacks",
+                                "in_app": false,
+                                "lineno": 135,
+                                "module": "android.app.servertransaction.TransactionExecutor"
+                            },
+                            {
+                                "native": false,
+                                "filename": "LaunchActivityItem.java",
+                                "function": "execute",
+                                "in_app": false,
+                                "lineno": 85,
+                                "module": "android.app.servertransaction.LaunchActivityItem"
+                            },
+                            {
+                                "native": false,
+                                "filename": "ActivityThread.java",
+                                "function": "handleLaunchActivity",
+                                "in_app": false,
+                                "lineno": 3601,
+                                "module": "android.app.ActivityThread"
+                            },
+                            {
+                                "native": false,
+                                "filename": "ActivityThread.java",
+                                "function": "performLaunchActivity",
+                                "in_app": false,
+                                "lineno": 3422,
+                                "module": "android.app.ActivityThread"
+                            },
+                            {
+                                "native": false,
+                                "filename": "Instrumentation.java",
+                                "function": "callActivityOnCreate",
+                                "in_app": false,
+                                "lineno": 1309,
+                                "module": "android.app.Instrumentation"
+                            },
+                            {
+                                "native": false,
+                                "filename": "Activity.java",
+                                "function": "performCreate",
+                                "in_app": false,
+                                "lineno": 7984,
+                                "module": "android.app.Activity"
+                            },
+                            {
+                                "native": false,
+                                "filename": "Activity.java",
+                                "function": "performCreate",
+                                "in_app": false,
+                                "lineno": 8000,
+                                "module": "android.app.Activity"
+                            },
+                            {
+                                "native": false,
+                                "filename": "MainActivity.java",
+                                "function": "onCreate",
+                                "in_app": true,
+                                "lineno": 22,
+                                "module": "com.example.androiderrorfactory.MainActivity"
+                            }
+                        ]
+                    },
+                    "thread_id": 2,
+                    "type": "Exception",
+                    "value": "This is a test."
+                }
+            ]
+        },
+        "extra": {},
+        "fingerprint": [],
+        "platform": "java",
+        "timestamp": "2021-02-23T03:13:25.533Z",
+        "user": {
+            "id": "3968871acdaea46f"
+        },
+        "contexts": {
+            "app": {
+                "app_build": "1",
+                "app_identifier": "com.example.androiderrorfactory",
+                "app_name": "Android Error Factory",
+                "app_start_time": "2021-02-23T03:12:07.391Z",
+                "app_version": "1.0"
+            },
+            "os": {
+                "build": "sdk_gphone_x86_arm-userdebug 11 RSR1.201013.001 6903271 dev-keys",
+                "kernel_version": "5.4.61-android11-0-00791-gbad091cc4bf3-ab6833933",
+                "name": "Android",
+                "rooted": true,
+                "version": "11"
+            },
+            "device": {
+                "archs": [
+                    "x86",
+                    "armeabi-v7a",
+                    "armeabi"
+                ],
+                "battery_level": 100.0,
+                "battery_temperature": 25.0,
+                "boot_time": "2021-02-23T02:57:18.841Z",
+                "brand": "google",
+                "charging": false,
+                "connection_type": "wifi",
+                "external_free_storage": 835477504,
+                "external_storage_size": 835573760,
+                "family": "sdk_gphone_x86_arm",
+                "free_memory": 1124958208,
+                "free_storage": 5904179200,
+                "id": "3968871acdaea46f",
+                "language": "en_US",
+                "low_memory": false,
+                "manufacturer": "Google",
+                "memory_size": 2076913664,
+                "model": "sdk_gphone_x86_arm",
+                "model_id": "RSR1.201013.001",
+                "name": "sdk_gphone_x86_arm",
+                "online": true,
+                "orientation": "portrait",
+                "screen_density": 2.75,
+                "screen_dpi": 440,
+                "screen_height_pixels": 2088,
+                "screen_width_pixels": 1080,
+                "simulator": true,
+                "storage_size": 6240665600,
+                "timezone": "America/New_York"
+            }
+        },
+        "environment": "production",
+        "event_id": "45e4eb512da94cb2956b788e6932c2cd",
+        "release": "com.example.androiderrorfactory@1.0+1",
+        "sdk": {
+            "name": "sentry.java.android",
+            "packages": [
+                {
+                    "name": "maven:sentry",
+                    "version": "4.0.0"
+                },
+                {
+                    "name": "maven:sentry-android-core",
+                    "version": "4.0.0"
+                },
+                {
+                    "name": "maven:sentry-android-ndk",
+                    "version": "4.0.0"
+                }
+            ],
+            "version": "4.0.0"
+        },
+        "tags": {
+            "isSideLoaded": "true"
+        }
+    },
+    {
+        "content_type": "application/json",
+        "type": "session",
+        "length": 272
+    },
+    {
+        "sid": "cd2277eb-c49c-4780-98ba-e0faced3050b",
+        "did": "747c00a9-5685-491e-a6a3-e962f4eaf8ba",
+        "started": "2021-02-23T03:12:07.637Z",
+        "status": "ok",
+        "seq": 1614050005549,
+        "errors": 1,
+        "timestamp": "2021-02-23T03:13:25.549Z",
+        "attrs": {
+            "release": "com.example.androiderrorfactory@1.0+1"
+        }
+    }
+]

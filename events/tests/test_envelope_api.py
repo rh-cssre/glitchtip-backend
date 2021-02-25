@@ -4,9 +4,10 @@ from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
 from performance.models import TransactionEvent
+from ..models import Event
 
 
-class EventStoreTestCase(APITestCase):
+class EnvelopeStoreTestCase(APITestCase):
     def setUp(self):
         self.project = baker.make("projects.Project")
         self.projectkey = self.project.projectkey_set.first()
@@ -25,3 +26,11 @@ class EventStoreTestCase(APITestCase):
         res = self.client.generic("POST", self.url, data)
         self.assertEqual(res.status_code, 200)
         self.assertTrue(TransactionEvent.objects.exists())
+
+    def test_android_sdk_event(self):
+        data = self.get_payload(
+            "events/test_data/incoming_events/android_sdk_envelope.json"
+        )
+        res = self.client.generic("POST", self.url, data)
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(Event.objects.exists())
