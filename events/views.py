@@ -97,9 +97,7 @@ class BaseEventAPIView(APIView):
             raise exceptions.Throttled(detail="event rejected due to rate limit")
         return project
 
-
-class EventStoreAPIView(BaseEventAPIView):
-    def get_serializer_class(self, data=[]):
+    def get_event_serializer_class(self, data=[]):
         """ Determine event type and return serializer """
         if "exception" in data and data["exception"]:
             return StoreErrorSerializer
@@ -107,6 +105,23 @@ class EventStoreAPIView(BaseEventAPIView):
             return StoreCSPReportSerializer
         return StoreDefaultSerializer
 
+    def process_event(self, data, request, project):
+        set_context("incoming event", data)
+        serializer = self.get_event_serializer_class(data)(
+            data=data, context={"request": self.request, "project": project}
+        )
+        try:
+            serializer.is_valid(raise_exception=True)
+        except exceptions.ValidationError as e:
+            set_level("warning")
+            capture_exception(e)
+            logger.warning("Invalid event %s", serializer.errors)
+            return Response()
+        event = serializer.save()
+        return Response({"id": event.event_id_hex})
+
+
+class EventStoreAPIView(BaseEventAPIView):
     def post(self, request, *args, **kwargs):
         if settings.EVENT_STORE_DEBUG:
             print(json.dumps(request.data))
@@ -115,22 +130,7 @@ class EventStoreAPIView(BaseEventAPIView):
         except exceptions.AuthenticationFailed as e:
             # Replace 403 status code with 401 to match OSS Sentry
             return Response(e.detail, status=401)
-
-        set_context("incoming event", request.data)
-        serializer = self.get_serializer_class(request.data)(
-            data=request.data, context={"request": self.request, "project": project}
-        )
-
-        try:
-            serializer.is_valid(raise_exception=True)
-        except exceptions.ValidationError as e:
-            set_level("warning")
-            capture_exception(e)
-            logger.warning("Invalid event %s", serializer.errors)
-            return Response()
-
-        event = serializer.save()
-        return Response({"id": event.event_id_hex})
+        return self.process_event(request.data, request, project)
 
 
 class CSPStoreAPIView(EventStoreAPIView):
@@ -146,11 +146,6 @@ class EnvelopeAPIView(BaseEventAPIView):
     def post(self, request, *args, **kwargs):
         if settings.EVENT_STORE_DEBUG:
             print(json.dumps(request.data))
-        if (
-            settings.THROTTLE_TRANSACTION_EVENTS
-            and random.random() < settings.THROTTLE_TRANSACTION_EVENTS
-        ):
-            raise exceptions.Throttled()
         project = self.get_project(request, kwargs.get("id"))
 
         data = request.data
@@ -161,11 +156,24 @@ class EnvelopeAPIView(BaseEventAPIView):
         # Multi part envelopes are not yet supported
         message_header = data.pop(0)
         if message_header.get("type") == "transaction":
+            if (
+                settings.THROTTLE_TRANSACTION_EVENTS
+                and random.random() < settings.THROTTLE_TRANSACTION_EVENTS
+            ):
+                raise exceptions.Throttled()
             serializer = self.get_serializer_class()(
                 data=data.pop(0), context={"request": self.request, "project": project}
             )
             serializer.is_valid(raise_exception=True)
             event = serializer.save()
             return Response({"id": event.event_id_hex})
+        elif message_header.get("type") == "event":
+            event_data = data.pop(0)
+            return self.process_event(event_data, request, project)
+        elif message_header.get("type") == "session":
+            return Response(
+                {"message": "Session events are not supported at this time."},
+                status=status.HTTP_501_NOT_IMPLEMENTED,
+            )
 
         return Response(status=status.HTTP_501_NOT_IMPLEMENTED)
