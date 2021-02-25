@@ -95,8 +95,8 @@ class SentrySDKEventSerializer(BaseSerializer):
     server_name = serializers.CharField(required=False)
     sdk = serializers.JSONField(required=False)
     platform = serializers.CharField(required=False)
-    release = serializers.CharField(required=False)
-    environment = serializers.CharField(required=False)
+    release = serializers.CharField(required=False, allow_null=True)
+    environment = serializers.CharField(required=False, allow_null=True)
     _meta = serializers.JSONField(required=False)
 
 

@@ -297,3 +297,19 @@ class EventStoreTestCase(APITestCase):
         self.assertEqual(res.status_code, 200)
         self.assertTrue(Event.objects.filter(level=LogLevel.ERROR).exists())
 
+    def test_null_release(self):
+        data = {
+            "exception": [{"type": "a", "value": "a", "module": None,}],
+            "culprit": "a",
+            "extra": {},
+            "event_id": "11111111111111111111111111111111",
+            "breadcrumbs": [],
+            "level": "haha",
+            "message": "a",
+            "release": None,
+            "environment": None,
+        }
+
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(Event.objects.filter().exists())
