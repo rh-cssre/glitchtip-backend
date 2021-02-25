@@ -57,6 +57,10 @@ urlpatterns = [
         r"^favicon\.ico$",
         RedirectView.as_view(url=settings.STATIC_URL + "favicon.ico", permanent=True),
     ),
+    path(
+        "robots.txt",
+        TemplateView.as_view(template_name="robots.txt", content_type="text/plain"),
+    ),
     path("api/", RedirectView.as_view(url="/profile/auth-tokens")),
     path("api/0/", APIRootView.as_view()),
     path("api/0/", include(router.urls)),
