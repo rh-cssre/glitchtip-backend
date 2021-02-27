@@ -109,7 +109,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
     contexts = serializers.JSONField(required=False)
     level = serializers.CharField(required=False)
     logentry = serializers.JSONField(required=False)
-    message = serializers.CharField(required=False)
+    message = serializers.CharField(required=False, allow_blank=True)
     timestamp = FlexibleDateTimeField(required=False)
     transaction = serializers.CharField(
         required=False, allow_null=True, allow_blank=True

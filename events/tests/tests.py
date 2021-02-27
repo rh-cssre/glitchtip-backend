@@ -305,7 +305,7 @@ class EventStoreTestCase(APITestCase):
             "event_id": "11111111111111111111111111111111",
             "breadcrumbs": [],
             "level": "haha",
-            "message": "a",
+            "message": "",
             "release": None,
             "environment": None,
         }
