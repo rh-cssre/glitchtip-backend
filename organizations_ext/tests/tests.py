@@ -36,6 +36,13 @@ class OrganizationModelTestCase(TestCase):
         callback = settings.DJSTRIPE_SUBSCRIBER_MODEL_REQUEST_CALLBACK
         self.assertEqual(callback(request), organization)
 
+    def test_slug_reserved_words(self):
+        """ Reserve some words for frontend routing needs """
+        word = "login"
+        organization = baker.make("organizations_ext.Organization", name=word)
+        self.assertNotEqual(organization.slug, word)
+        organization = baker.make("organizations_ext.Organization", name=word)
+
 
 class OrganizationsAPITestCase(APITestCase):
     def setUp(self):

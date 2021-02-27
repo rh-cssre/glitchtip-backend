@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils.text import slugify
 from django.utils.translation import ugettext_lazy as _
 from organizations.base import (
     OrganizationBase,
@@ -144,6 +145,29 @@ class Organization(SharedBaseModel, OrganizationBase):
         default=True,
         help_text="Default for whether projects should script IP Addresses",
     )
+
+    def slugify_function(self, content):
+        reserved_words = [
+            "login",
+            "register",
+            "app",
+            "profile",
+            "organizations",
+            "settings",
+            "issues",
+            "performance",
+            "_health",
+            "rest-auth",
+            "api",
+            "accept",
+            "stripe",
+            "admin",
+            "__debug__",
+        ]
+        slug = slugify(content)
+        if slug in reserved_words:
+            return slug + "-1"
+        return slug
 
     def add_user(self, user, role=OrganizationUserRole.MEMBER):
         """
