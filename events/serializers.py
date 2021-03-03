@@ -100,6 +100,25 @@ class SentrySDKEventSerializer(BaseSerializer):
     _meta = serializers.JSONField(required=False)
 
 
+class FormattedMessageSerializer(serializers.Serializer):
+    formatted = serializers.CharField()
+    messages = serializers.CharField(required=False)
+    params = serializers.ListField(child=serializers.CharField(), required=False)
+
+    def to_internal_value(self, data):
+        value = super().to_internal_value(data)
+        return value.get("formatted")
+
+
+class MessageField(serializers.CharField):
+    def to_internal_value(self, data):
+        if isinstance(data, dict) and "formatted" in data:
+            serializer = FormattedMessageSerializer(data=data)
+            serializer.is_valid(raise_exception=True)
+            return serializer.validated_data
+        return super().to_internal_value(data)
+
+
 class StoreDefaultSerializer(SentrySDKEventSerializer):
     """
     Default serializer. Used as both a base class and for default error types
@@ -109,7 +128,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
     contexts = serializers.JSONField(required=False)
     level = serializers.CharField(required=False)
     logentry = serializers.JSONField(required=False)
-    message = serializers.CharField(required=False, allow_blank=True)
+    message = MessageField(required=False, allow_blank=True)
     timestamp = FlexibleDateTimeField(required=False)
     transaction = serializers.CharField(
         required=False, allow_null=True, allow_blank=True
@@ -181,6 +200,9 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
         return contexts
 
     def get_message(self, data):
+        """ Prefer message over logentry """
+        if "message" in data:
+            return data["message"]
         return data.get("logentry", {}).get("message", "")
 
     def get_environment(self, name: str, project):
