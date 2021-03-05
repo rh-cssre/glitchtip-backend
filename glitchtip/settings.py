@@ -95,6 +95,9 @@ def before_send(event, hint):
 SENTRY_DSN = env.str("SENTRY_DSN", None)
 # Optionally allow a different DSN for the frontend
 SENTRY_FRONTEND_DSN = env.str("SENTRY_FRONTEND_DSN", SENTRY_DSN)
+# Set traces_sample_rate to 1.0 to capture 100%. Recommended to keep this value low.
+# Disabled by default
+SENTRY_TRACES_SAMPLE_RATE = env.float("SENTRY_TRACES_SAMPLE_RATE", None)
 if SENTRY_DSN:
     release = "glitchtip@" + GLITCHTIP_VERSION if GLITCHTIP_VERSION else None
     sentry_sdk.init(
@@ -104,6 +107,7 @@ if SENTRY_DSN:
         release=release,
         environment=ENVIRONMENT,
         auto_session_tracking=False,
+        traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
     )
 
 
