@@ -123,6 +123,13 @@ urlpatterns += [
     ),
     path("docs/", schema_view.with_ui("redoc", cache_timeout=0), name="schema-redoc"),
     path("accounts/", include("allauth.urls")),  # Required for allauth
+    # These routes belong to the Angular single page app
+    re_path(r"^$", TemplateView.as_view(template_name="index.html")),
+    re_path(
+        r"^(auth|login|register|(.*)/issues|(.*)/settings|(.*)/performance|(.*)/projects|organizations|profile|accept|reset-password).*$",
+        TemplateView.as_view(template_name="index.html"),
+    ),
+    # These URLS are for generating reverse urls in django, but are not really present
     # Change the activate_url in the confirm emails
     re_path(
         r"^profile/confirm-email/(?P<key>[-:\w]+)/$",
@@ -136,12 +143,6 @@ urlpatterns += [
         name="password_reset_confirm",
     ),
     path("accept/", include(invitation_backend().get_urls())),
-    # These routes belong to the Angular single page app
-    re_path(r"^$", TemplateView.as_view(template_name="index.html")),
-    re_path(
-        r"^(auth|login|register|(.*)/issues|(.*)/settings|(.*)/performance|(.*)/projects|organizations|profile|accept|reset-password).*$",
-        TemplateView.as_view(template_name="index.html"),
-    ),
 ]
 
 if settings.BILLING_ENABLED:
