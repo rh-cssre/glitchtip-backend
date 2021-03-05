@@ -103,6 +103,7 @@ if SENTRY_DSN:
         before_send=before_send,
         release=release,
         environment=ENVIRONMENT,
+        auto_session_tracking=False,
     )
 
 
