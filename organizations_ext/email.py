@@ -11,7 +11,7 @@ def send_email_met_quota(organization):
 
     base_url = settings.GLITCHTIP_DOMAIN.geturl()
     event_limit = settings.BILLING_FREE_TIER_EVENTS
-    subscription_link = f"{base_url}/settings/{organization.slug}/subscription"
+    subscription_link = f"{base_url}/{organization.slug}/settings/subscription"
 
     context = {
         "organization_name": organization.name,

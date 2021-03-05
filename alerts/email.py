@@ -26,14 +26,14 @@ def send_email_notification(notification):
     text_content = f"Errors reported in {first_issue.project}:\n\n"
     for issue in notification.issues.all():
         text_content += f"{issue.title}\n"
-        text_content += f"{base_url}/organizations/{org_slug}/issues/{issue.id}\n\n"
+        text_content += f"{base_url}/{org_slug}/issues/{issue.id}\n\n"
 
     settings_link = (
-        f"{base_url}/settings/{org_slug}/projects/{first_issue.project.slug}"
+        f"{base_url}/{org_slug}/settings/projects/{first_issue.project.slug}"
     )
 
     if issue_count == 1:
-        issue_link = f"{base_url}/organizations/{org_slug}/issues/{first_issue.id}"
+        issue_link = f"{base_url}/{org_slug}/issues/{first_issue.id}"
         html_content = render_to_string(
             single_template_html,
             {
@@ -45,7 +45,7 @@ def send_email_notification(notification):
             },
         )
     elif issue_count > 1:
-        project_link = f"{base_url}/organizations/{org_slug}/issues?project={first_issue.project.id}"
+        project_link = f"{base_url}/{org_slug}/issues?project={first_issue.project.id}"
         html_content = render_to_string(
             multiple_template_html,
             {

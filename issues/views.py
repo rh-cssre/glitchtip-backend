@@ -209,6 +209,12 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = EventSerializer
     permission_classes = [EventPermission]
 
+    def retrieve(self, request, *args, **kwargs):
+        import time
+
+        time.sleep(3)
+        return super().retrieve(request, *args, **kwargs)
+
     def get_serializer_class(self):
         if self.action in ["retrieve", "latest"]:
             return EventDetailSerializer
@@ -236,6 +242,9 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["get"])
     def latest(self, request, *args, **kwargs):
         instance = self.get_queryset().first()
+        import time
+
+        time.sleep(3)
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 

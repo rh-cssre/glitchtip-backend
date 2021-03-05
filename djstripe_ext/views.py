@@ -106,9 +106,9 @@ class CreateStripeSubscriptionCheckout(views.APIView):
                 mode="subscription",
                 customer=customer.id,
                 success_url=domain
-                + "/settings/"
+                + "/"
                 + organization.slug
-                + "/subscription?session_id={CHECKOUT_SESSION_ID}",
+                + "/settings/subscription?session_id={CHECKOUT_SESSION_ID}",
                 cancel_url=domain + "",
             )
 
@@ -136,7 +136,7 @@ class StripeBillingPortal(views.APIView):
             session = stripe.billing_portal.Session.create(
                 api_key=STRIPE_SECRET_KEY,
                 customer=customer.id,
-                return_url=domain + "/settings/" + organization.slug + "/subscription",
+                return_url=domain + "/" + organization.slug + "/settings/subscription",
             )
             return Response(session)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
