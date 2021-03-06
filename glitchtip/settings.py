@@ -284,11 +284,11 @@ CELERY_BEAT_SCHEDULE = {
     },
     "cleanup-old-events": {
         "task": "issues.tasks.cleanup_old_events",
-        "schedule": crontab(hour=6),
+        "schedule": crontab(hour=6, minute=1),
     },
     "set-organization-throttle": {
         "task": "organizations_ext.tasks.set_organization_throttle",
-        "schedule": crontab(hour=7),
+        "schedule": crontab(hour=7, minute=1),
     },
 }
 CACHES = {"default": {"BACKEND": "redis_cache.RedisCache", "LOCATION": REDIS_URL}}
