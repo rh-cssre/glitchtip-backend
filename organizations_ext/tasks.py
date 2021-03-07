@@ -1,33 +1,43 @@
 from django.conf import settings
-from django.db.models import Count, Q, F
+from django.db.models import Count, Q, F, Subquery, OuterRef
 from celery import shared_task
+from projects.models import Project
 from .models import Organization
 from .email import send_email_met_quota
 
 
 def get_free_tier_organizations_with_event_count():
-    return Organization.objects.filter(
+    queryset = Organization.objects.filter(
         djstripe_customers__subscriptions__plan__amount=0,
         djstripe_customers__subscriptions__status="active",
-    ).annotate(
-        event_count=Count(
-            "projects__issue__event",
-            distinct=True,
+    )
+
+    projects = Project.objects.filter(organization=OuterRef("pk")).values(
+        "organization"
+    )
+    total_issue_events = projects.annotate(
+        total=Count(
+            "issue__event",
             filter=Q(
-                projects__issue__event__created__gte=F(
+                issue__event__created__gte=OuterRef(
                     "djstripe_customers__subscriptions__current_period_start"
                 )
             ),
         )
-        + Count(
-            "projects__transactionevent",
-            distinct=True,
+    ).values("total")
+    total_transaction_events = projects.annotate(
+        total=Count(
+            "transactionevent",
             filter=Q(
-                projects__transactionevent__created__gte=F(
+                transactionevent__created__gte=OuterRef(
                     "djstripe_customers__subscriptions__current_period_start"
                 )
             ),
         )
+    ).values("total")
+
+    return queryset.annotate(
+        event_count=Subquery(total_issue_events) + Subquery(total_transaction_events)
     )
 
 
