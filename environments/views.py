@@ -1,11 +1,11 @@
-from rest_framework import viewsets
+from rest_framework import viewsets, mixins
 from .models import Environment, EnvironmentProject
 from .serializers import EnvironmentSerializer, EnvironmentProjectSerializer
 from .permissions import EnvironmentPermission, EnvironmentProjectPermission
 
 
 class EnvironmentViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Environment.objects.all()
+    queryset = Environment.objects.filter(environmentproject__is_hidden=False)
     serializer_class = EnvironmentSerializer
     permission_classes = [EnvironmentPermission]
 
@@ -19,10 +19,16 @@ class EnvironmentViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset
 
 
-class EnvironmentProjectViewSet(viewsets.ReadOnlyModelViewSet):
+class EnvironmentProjectViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
     queryset = EnvironmentProject.objects.all()
     serializer_class = EnvironmentProjectSerializer
     permission_classes = [EnvironmentProjectPermission]
+    lookup_field = "environment__name"
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
