@@ -217,7 +217,9 @@ CSP_STYLE_SRC_ELEM = env.list(
     str,
     ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
 )
-CSP_FONT_SRC = env.list("CSP_FONT_SRC", str, ["'self'", "https://fonts.gstatic.com", "data:"])
+CSP_FONT_SRC = env.list(
+    "CSP_FONT_SRC", str, ["'self'", "https://fonts.gstatic.com", "data:"]
+)
 # Redoc requires blob
 CSP_WORKER_SRC = env.list("CSP_WORKER_SRC", str, ["'self'", "blob:"])
 # GlitchTip can record it's own errors
@@ -465,3 +467,4 @@ if TESTING:
     warnings.filterwarnings(
         "ignore", message="No directory at", module="whitenoise.base"
     )
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache",}}
