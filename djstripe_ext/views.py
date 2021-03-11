@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.cache import cache
 from django.http import Http404
 from rest_framework import viewsets, views, status
 from rest_framework.decorators import action
@@ -59,6 +60,10 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         if not subscription:
             return Response(0)
         organization = subscription.customer.subscriber
+        cache_key = "org_event_count" + str(organization.pk)
+        cached_total = cache.get(cache_key)
+        if cached_total is not None:
+            return Response(cached_total)
         event_count = Event.objects.filter(
             issue__project__organization=organization,
             created__gte=subscription.current_period_start,
@@ -69,7 +74,9 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
             created__gte=subscription.current_period_start,
             created__lt=subscription.current_period_end,
         ).count()
-        return Response(event_count + transaction_event_count)
+        total = event_count + transaction_event_count
+        cache.set(cache_key, total, 600)
+        return Response(total)
 
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
