@@ -288,10 +288,6 @@ CELERY_BEAT_SCHEDULE = {
         "task": "issues.tasks.cleanup_old_events",
         "schedule": crontab(hour=6, minute=1),
     },
-    "set-organization-throttle": {
-        "task": "organizations_ext.tasks.set_organization_throttle",
-        "schedule": crontab(hour=7, minute=1),
-    },
 }
 CACHES = {"default": {"BACKEND": "redis_cache.RedisCache", "LOCATION": REDIS_URL}}
 
@@ -451,6 +447,14 @@ if env.str("STRIPE_TEST_PUBLIC_KEY", None) or env.str("STRIPE_LIVE_PUBLIC_KEY", 
     STRIPE_LIVE_PUBLIC_KEY = env.str("STRIPE_LIVE_PUBLIC_KEY", None)
     STRIPE_LIVE_SECRET_KEY = env.str("STRIPE_LIVE_SECRET_KEY", None)
     DJSTRIPE_WEBHOOK_SECRET = env.str("DJSTRIPE_WEBHOOK_SECRET", None)
+    CELERY_BEAT_SCHEDULE["set-organization-throttle"] = {
+        "task": "organizations_ext.tasks.set_organization_throttle",
+        "schedule": crontab(hour=7, minute=1),
+    }
+    CELERY_BEAT_SCHEDULE["warn-organization-throttle"] = {
+        "task": "djstripe_ext.tasks.warn_organization_throttle",
+        "schedule": crontab(minute=30),
+    }
 elif TESTING:
     # Must run tests with djstripe enabled
     BILLING_ENABLED = True
