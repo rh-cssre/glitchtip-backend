@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.db.models import Count, Q, F, Subquery, OuterRef
+from django.db.models import Count, Q, Subquery, OuterRef
 from celery import shared_task
 from projects.models import Project
 from .models import Organization
