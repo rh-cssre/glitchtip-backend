@@ -17,6 +17,13 @@ def warn_organization_throttle():
 
     queryset = Organization.objects.filter(
         djstripe_customers__subscriptions__status="active",
+    ).filter(
+        Q(djstripe_customers__subscriptions__subscriptionquotawarning=None)
+        | Q(
+            djstripe_customers__subscriptions__subscriptionquotawarning__notice_last_sent__lt=F(
+                "djstripe_customers__subscriptions__current_period_start"
+            ),
+        )
     )
 
     projects = Project.objects.filter(organization=OuterRef("pk")).values(
