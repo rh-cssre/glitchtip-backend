@@ -14,7 +14,7 @@ from environments.models import Environment
 from releases.models import Release
 from glitchtip.serializers import FlexibleDateTimeField
 from .models import Event, LogLevel
-from .fields import GenericField, ForgivingHStoreField
+from .fields import GenericField, ForgivingHStoreField, ForgivingDisallowRegexField
 from .event_tag_processors import TAG_PROCESSORS
 from .event_context_processors import EVENT_CONTEXT_PROCESSORS
 
@@ -96,7 +96,9 @@ class SentrySDKEventSerializer(BaseSerializer):
     sdk = serializers.JSONField(required=False)
     platform = serializers.CharField(required=False)
     release = serializers.CharField(required=False, allow_null=True)
-    environment = serializers.CharField(required=False, allow_null=True)
+    environment = ForgivingDisallowRegexField(
+        required=False, allow_null=True, disallow_regex=r"^[^\n\r\f\/]*$"
+    )
     _meta = serializers.JSONField(required=False)
 
 
@@ -207,7 +209,8 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
 
     def get_environment(self, name: str, project):
         environment, _ = Environment.objects.get_or_create(
-            name=name, organization=project.organization
+            name=name[: Environment._meta.get_field("name").max_length],
+            organization=project.organization,
         )
         environment.projects.add(project)
         return environment
@@ -302,17 +305,16 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             handled_errors = self.context.get("handled_errors")
             if handled_errors:
                 errors = []
-                for field_name, field_error in handled_errors.items():
-                    for field_errors in field_error.values():
-                        for error in field_errors:
-                            errors.append(
-                                {
-                                    "reason": str(error),
-                                    "type": error.code,
-                                    "name": field_name,
-                                    "value": error.value,
-                                }
-                            )
+                for field_name, field_errors in handled_errors.items():
+                    for error in field_errors:
+                        errors.append(
+                            {
+                                "reason": str(error),
+                                "type": error.code,
+                                "name": field_name,
+                                "value": error.value,
+                            }
+                        )
 
             params = {
                 "event_id": data["event_id"],
