@@ -39,6 +39,7 @@ class SettingsView(APIView):
                 "sentryTracesSampleRate": settings.SENTRY_TRACES_SAMPLE_RATE,
                 "environment": settings.ENVIRONMENT,
                 "version": settings.GLITCHTIP_VERSION,
+                "iPaidForGlitchTip": settings.I_PAID_FOR_GLITCHTIP,
             }
         )
 
