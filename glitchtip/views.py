@@ -30,6 +30,7 @@ class SettingsView(APIView):
             {
                 "socialApps": social_apps,
                 "billingEnabled": billing_enabled,
+                "iPaidForGlitchTip": settings.I_PAID_FOR_GLITCHTIP,
                 "enableUserRegistration": enable_user_registration,
                 "stripePublicKey": stripe_public_key,
                 "matomoURL": settings.MATOMO_URL,
