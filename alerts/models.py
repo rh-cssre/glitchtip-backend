@@ -1,19 +1,7 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from .email import send_email_notification
-
-
-class Notification(models.Model):
-    created = models.DateField(auto_now_add=True)
-    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
-    is_sent = models.BooleanField(default=False)
-    issues = models.ManyToManyField("issues.Issue")
-
-    def send_notifications(self):
-        """ Email only for now, eventually needs to be an extendable system """
-        send_email_notification(self)
-        self.is_sent = True
-        self.save()
+from .webhooks import send_webhook_notification
 
 
 class ProjectAlert(models.Model):
@@ -36,3 +24,24 @@ class AlertRecipient(models.Model):
 
     alert = models.ForeignKey(ProjectAlert, on_delete=models.CASCADE)
     recipient_type = models.CharField(max_length=16, choices=RecipientType.choices)
+    url = models.URLField(blank=True)
+
+    def send(self, notification):
+        if self.recipient_type == self.RecipientType.EMAIL:
+            send_email_notification(notification)
+        elif self.recipient_type == self.RecipientType.WEBHOOK:
+            send_webhook_notification(notification)
+
+
+class Notification(models.Model):
+    created = models.DateField(auto_now_add=True)
+    project_alert = models.ForeignKey(ProjectAlert, on_delete=models.CASCADE)
+    is_sent = models.BooleanField(default=False)
+    issues = models.ManyToManyField("issues.Issue")
+
+    def send_notifications(self):
+        """ Email only for now, eventually needs to be an extendable system """
+        for recipient in self.project_alert.alertrecipient_set.all():
+            recipient.send(self)
+        self.is_sent = True
+        self.save()
