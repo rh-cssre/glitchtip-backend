@@ -39,7 +39,7 @@ build:
     variables:
       - $CI_COMMIT_REF_PROTECTED
   services:
-    - docker:19.03.5-dind
+    - docker:20.10.5-dind
   script:
     - apk add --no-cache docker-compose
     - docker pull $IMAGE_NAME:latest || true
