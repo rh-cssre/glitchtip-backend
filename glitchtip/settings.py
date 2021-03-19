@@ -434,6 +434,10 @@ ROCKET_CHAT_DOMAIN = env.str("ROCKET_CHAT_DOMAIN", None)
 # Is running unit test
 TESTING = len(sys.argv) > 1 and sys.argv[1] == "test"
 
+# See https://liberapay.com/GlitchTip/donate - suggested self-host donation is $5/month/user.
+# Support plans available. Email info@burkesoftware.com for more info.
+I_PAID_FOR_GLITCHTIP = env.bool("I_PAID_FOR_GLITCHTIP", False)
+
 # Max events per month for free tier
 BILLING_FREE_TIER_EVENTS = env.int("BILLING_FREE_TIER_EVENTS", 1000)
 DJSTRIPE_SUBSCRIBER_MODEL = "organizations_ext.Organization"
@@ -444,6 +448,7 @@ BILLING_ENABLED = False
 STRIPE_LIVE_MODE = env.bool("STRIPE_LIVE_MODE", False)
 if env.str("STRIPE_TEST_PUBLIC_KEY", None) or env.str("STRIPE_LIVE_PUBLIC_KEY", None):
     BILLING_ENABLED = True
+    I_PAID_FOR_GLITCHTIP = True
     INSTALLED_APPS.append("djstripe")
     INSTALLED_APPS.append("djstripe_ext")
     STRIPE_TEST_PUBLIC_KEY = env.str("STRIPE_TEST_PUBLIC_KEY", None)
