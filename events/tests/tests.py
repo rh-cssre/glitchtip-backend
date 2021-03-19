@@ -325,6 +325,17 @@ class EventStoreTestCase(APITestCase):
         res = self.client.post(self.url, data, format="json")
         self.assertTrue(Event.objects.filter(data__message="Hello").exists())
 
+    def test_invalid_message(self):
+        # It's actually accepted as is. Considered to be message: ""
+        data = {
+            "exception": [{"type": "a", "value": "a", "module": None,}],
+            "event_id": "11111111111111111111111111111111",
+            "message": {},
+        }
+
+        res = self.client.post(self.url, data, format="json")
+        self.assertTrue(Event.objects.filter(data__message="").exists())
+
     def test_long_environment(self):
         data = {
             "exception": [{"type": "a", "value": "a", "module": None,}],

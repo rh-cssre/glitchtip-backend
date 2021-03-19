@@ -105,18 +105,20 @@ class SentrySDKEventSerializer(BaseSerializer):
 
 
 class FormattedMessageSerializer(serializers.Serializer):
-    formatted = serializers.CharField()
+    formatted = serializers.CharField(
+        required=False
+    )  # Documented as required, but some Sentry SDKs don't send it
     messages = serializers.CharField(required=False)
     params = serializers.ListField(child=serializers.CharField(), required=False)
 
     def to_internal_value(self, data):
         value = super().to_internal_value(data)
-        return value.get("formatted")
+        return value.get("formatted", "")
 
 
 class MessageField(serializers.CharField):
     def to_internal_value(self, data):
-        if isinstance(data, dict) and "formatted" in data:
+        if isinstance(data, dict):
             serializer = FormattedMessageSerializer(data=data)
             serializer.is_valid(raise_exception=True)
             return serializer.validated_data
