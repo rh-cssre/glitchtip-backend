@@ -58,7 +58,9 @@ class RequestSerializer(serializers.Serializer):
     headers = serializers.DictField(required=False)
     url = serializers.CharField(required=False, allow_blank=True)
     method = serializers.CharField(required=False, allow_blank=True)
-    query_string = serializers.CharField(required=False, allow_blank=True)
+    query_string = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
 
 
 class BreadcrumbsSerializer(BaseBreadcrumbsSerializer):
