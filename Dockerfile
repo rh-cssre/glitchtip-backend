@@ -13,6 +13,8 @@ RUN poetry install --no-interaction --no-ansi $(test "$IS_CI" = "True" && echo "
 
 FROM python:3.9-slim
 
+RUN apt-get update && apt-get install -y libxml2 && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /code
 
 COPY --from=build-python /usr/local/lib/python3.9/site-packages/ /usr/local/lib/python3.9/site-packages/
