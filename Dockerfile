@@ -12,6 +12,8 @@ COPY poetry.lock pyproject.toml /code/
 RUN poetry install --no-interaction --no-ansi $(test "$IS_CI" = "True" && echo "--no-dev")
 
 FROM python:3.9-slim
+ENV PYTHONUNBUFFERED=1 \
+  PORT=8080
 
 RUN apt-get update && apt-get install -y libxml2 && apt-get clean && rm -rf /var/lib/apt/lists/*
 
