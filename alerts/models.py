@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 from .email import send_email_notification
 
 
@@ -24,3 +25,14 @@ class ProjectAlert(models.Model):
     timespan_minutes = models.PositiveSmallIntegerField(blank=True, null=True)
     quantity = models.PositiveSmallIntegerField(blank=True, null=True)
     created = models.DateTimeField(auto_now_add=True)
+
+
+class AlertRecipient(models.Model):
+    """ An asset that accepts an alert such as email, SMS, webhooks """
+
+    class RecipientType(models.TextChoices):
+        EMAIL = "email", _("Email")
+        WEBHOOK = "webhook", _("Webhook")
+
+    alert = models.ForeignKey(ProjectAlert, on_delete=models.CASCADE)
+    recipient_type = models.CharField(max_length=16, choices=RecipientType.choices)

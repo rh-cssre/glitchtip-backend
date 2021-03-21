@@ -1,5 +1,6 @@
 from django.contrib.postgres.search import SearchVectorField
 from django.contrib.postgres.indexes import GinIndex
+from django.conf import settings
 from django.db import models
 from events.models import LogLevel
 from glitchtip.model_utils import FromStringIntegerChoices
@@ -82,3 +83,6 @@ class Issue(models.Model):
         """
         if self.short_id is not None:
             return f"{self.project.slug.upper()}-{base32_encode(self.short_id)}"
+
+    def get_detail_url(self):
+        return f"{settings.GLITCHTIP_DOMAIN.geturl()}/{self.project.organization.slug}/issues/{self.pk}"
