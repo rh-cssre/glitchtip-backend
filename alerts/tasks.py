@@ -22,12 +22,12 @@ def process_alerts():
                 .filter(num_events__gte=quantity_in_timespan)
             )
             if issues:
-                notification = project.notification_set.create()
+                notification = alert.notification_set.create()
                 notification.issues.add(*issues)
-                send_email_notification.delay(notification.pk)
+                send_notification.delay(notification.pk)
 
 
 @shared_task
-def send_email_notification(notification_id: int):
+def send_notification(notification_id: int):
     notification = Notification.objects.get(pk=notification_id)
     notification.send_notifications()

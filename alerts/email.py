@@ -58,10 +58,10 @@ def send_email_notification(notification):
         )
 
     users = User.objects.filter(
-        organizations_ext_organization__projects__notification=notification
+        organizations_ext_organization__projects__projectalert__notification=notification
     ).exclude(
         Q(
-            userprojectalert__project=notification.project,
+            userprojectalert__project=notification.project_alert.project,
             userprojectalert__status=ProjectAlertStatus.OFF,
         )
         | Q(subscribe_by_default=False, userprojectalert=None),

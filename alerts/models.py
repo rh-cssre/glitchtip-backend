@@ -1,18 +1,7 @@
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 from .email import send_email_notification
-
-
-class Notification(models.Model):
-    created = models.DateField(auto_now_add=True)
-    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
-    is_sent = models.BooleanField(default=False)
-    issues = models.ManyToManyField("issues.Issue")
-
-    def send_notifications(self):
-        """ Email only for now, eventually needs to be an extendable system """
-        send_email_notification(self)
-        self.is_sent = True
-        self.save()
+from .webhooks import send_webhook_notification
 
 
 class ProjectAlert(models.Model):
@@ -24,3 +13,38 @@ class ProjectAlert(models.Model):
     timespan_minutes = models.PositiveSmallIntegerField(blank=True, null=True)
     quantity = models.PositiveSmallIntegerField(blank=True, null=True)
     created = models.DateTimeField(auto_now_add=True)
+
+
+class AlertRecipient(models.Model):
+    """ An asset that accepts an alert such as email, SMS, webhooks """
+
+    class RecipientType(models.TextChoices):
+        EMAIL = "email", _("Email")
+        WEBHOOK = "webhook", _("Webhook")
+
+    alert = models.ForeignKey(ProjectAlert, on_delete=models.CASCADE)
+    recipient_type = models.CharField(max_length=16, choices=RecipientType.choices)
+    url = models.URLField(blank=True)
+
+    def send(self, notification):
+        if self.recipient_type == self.RecipientType.EMAIL:
+            send_email_notification(notification)
+        elif self.recipient_type == self.RecipientType.WEBHOOK:
+            send_webhook_notification(notification, self.url)
+
+
+class Notification(models.Model):
+    created = models.DateField(auto_now_add=True)
+    project_alert = models.ForeignKey(ProjectAlert, on_delete=models.CASCADE)
+    is_sent = models.BooleanField(default=False)
+    issues = models.ManyToManyField("issues.Issue")
+
+    def send_notifications(self):
+        """ Email only for now, eventually needs to be an extendable system """
+        for recipient in self.project_alert.alertrecipient_set.all():
+            recipient.send(self)
+        # Temp backwards compat hack - no recipients means not set up yet
+        if self.project_alert.alertrecipient_set.all().exists() is False:
+            send_email_notification(self)
+        self.is_sent = True
+        self.save()
