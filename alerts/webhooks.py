@@ -50,7 +50,7 @@ def send_issue_as_webhook(url, issues: List["Issue"], issue_count: int = 1):
     return send_webhook(url, message, attachments)
 
 
-def send_webhook_notification(notification: "Notification"):
+def send_webhook_notification(notification: "Notification", url: str):
     issue_count = notification.issues.count()
     issues = notification.issues.all()[:3]  # Show no more than three
-    send_issue_as_webhook(notification.url, issues, issue_count)
+    send_issue_as_webhook(url, issues, issue_count)

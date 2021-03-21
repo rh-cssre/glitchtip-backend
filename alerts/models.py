@@ -30,7 +30,7 @@ class AlertRecipient(models.Model):
         if self.recipient_type == self.RecipientType.EMAIL:
             send_email_notification(notification)
         elif self.recipient_type == self.RecipientType.WEBHOOK:
-            send_webhook_notification(notification)
+            send_webhook_notification(notification, self.url)
 
 
 class Notification(models.Model):
@@ -43,5 +43,8 @@ class Notification(models.Model):
         """ Email only for now, eventually needs to be an extendable system """
         for recipient in self.project_alert.alertrecipient_set.all():
             recipient.send(self)
+        # Temp backwards compat hack - no recipients means not set up yet
+        if self.project_alert.alertrecipient_set.all().exists() is False:
+            send_email_notification(self)
         self.is_sent = True
         self.save()
