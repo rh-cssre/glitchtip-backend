@@ -25,7 +25,11 @@ class AlertAPITestCase(GlitchTipTestCase):
             "project-alerts-list",
             kwargs={"project_pk": f"{self.organization.slug}/{self.project.slug}",},
         )
-        data = {"timespan_minutes": 60, "quantity": 2}
+        data = {
+            "timespan_minutes": 60,
+            "quantity": 2,
+            "alertRecipients": [{"recipientType": "email", "url": "example.com"}],
+        }
         res = self.client.post(url, data)
         self.assertEqual(res.status_code, 201)
         project_alert = ProjectAlert.objects.all().first()
@@ -45,7 +49,11 @@ class AlertAPITestCase(GlitchTipTestCase):
         )
 
         # Test put
-        data = {"timespan_minutes": 500, "quantity": 2}
+        data = {
+            "timespan_minutes": 500,
+            "quantity": 2,
+            "alertRecipients": [{"recipientType": "email", "url": "example.com"}],
+        }
         res = self.client.put(url, data)
         self.assertEqual(res.status_code, 200)
         project_alert = ProjectAlert.objects.all().first()

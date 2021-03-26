@@ -3,14 +3,32 @@ from .models import ProjectAlert, AlertRecipient
 
 
 class AlertRecipientSerializer(serializers.ModelSerializer):
+    recipientType = serializers.CharField(source="recipientType")
+
     class Meta:
         model = AlertRecipient
-        fields = ("pk", "recipient_type", "url")
+        fields = ("pk", "recipientType", "url")
 
 
 class ProjectAlertSerializer(serializers.ModelSerializer):
-    alertrecipient_set = AlertRecipientSerializer(many=True, required=False)
+    alertRecipients = AlertRecipientSerializer(
+        source="alertrecipient_set", many=True, required=False
+    )
 
     class Meta:
         model = ProjectAlert
-        fields = ("pk", "timespan_minutes", "quantity", "alertrecipient_set")
+        fields = ("pk", "timespan_minutes", "quantity", "alertRecipients")
+
+    def create(self, validated_data):
+        import ipdb
+
+        ipdb.set_trace()
+        pass
+
+    def update(self, instance, validated_data):
+        import ipdb
+
+        ipdb.set_trace()
+        alert_recipients = validated_data.pop("alertRecipients")
+        instance = super().update(instance, validated_data)
+        return instance
