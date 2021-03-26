@@ -198,6 +198,9 @@ class IssuesAPITestCase(GlitchTipTestCase):
         self.assertEqual(len(res.data), 1)
         self.assertContains(res, issue.id)
 
+        res = self.client.get(self.url, {"project": "nothing"})
+        self.assertEqual(res.status_code, 400)
+
     def test_issue_list_filter(self):
         project1 = self.project
         project2 = baker.make("projects.Project", organization=self.organization)
