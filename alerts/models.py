@@ -26,6 +26,9 @@ class AlertRecipient(models.Model):
     recipient_type = models.CharField(max_length=16, choices=RecipientType.choices)
     url = models.URLField(blank=True)
 
+    class Meta:
+        unique_together = ("alert", "recipient_type", "url")
+
     def send(self, notification):
         if self.recipient_type == self.RecipientType.EMAIL:
             send_email_notification(notification)
