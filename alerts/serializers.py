@@ -3,7 +3,7 @@ from .models import ProjectAlert, AlertRecipient
 
 
 class AlertRecipientSerializer(serializers.ModelSerializer):
-    recipientType = serializers.CharField(source="recipientType")
+    recipientType = serializers.CharField(source="recipient_type")
 
     class Meta:
         model = AlertRecipient
@@ -20,15 +20,26 @@ class ProjectAlertSerializer(serializers.ModelSerializer):
         fields = ("pk", "timespan_minutes", "quantity", "alertRecipients")
 
     def create(self, validated_data):
-        import ipdb
-
-        ipdb.set_trace()
-        pass
+        alert_recipients = validated_data.pop("alertrecipient_set", [])
+        instance = super().create(validated_data)
+        for recipient in alert_recipients:
+            instance.alertrecipient_set.create(**recipient)
+        return instance
 
     def update(self, instance, validated_data):
-        import ipdb
-
-        ipdb.set_trace()
-        alert_recipients = validated_data.pop("alertRecipients")
+        alert_recipients = validated_data.pop("alertrecipient_set", [])
         instance = super().update(instance, validated_data)
+
+        # Create/Delete recipients as needed
+        delete_recipient_ids = set(
+            instance.alertrecipient_set.values_list("id", flat=True)
+        )
+        for recipient in alert_recipients:
+            new_recipient, created = AlertRecipient.objects.get_or_create(
+                alert=instance, **recipient
+            )
+            if not created:
+                delete_recipient_ids.discard(new_recipient.pk)
+        if delete_recipient_ids:
+            instance.alertrecipient_set.filter(pk__in=delete_recipient_ids).delete()
         return instance

@@ -52,9 +52,11 @@ class AlertAPITestCase(GlitchTipTestCase):
         data = {
             "timespan_minutes": 500,
             "quantity": 2,
-            "alertRecipients": [{"recipientType": "email", "url": "example.com"}],
+            "alertRecipients": [
+                {"recipientType": "email", "url": "https://example.com"}
+            ],
         }
-        res = self.client.put(url, data)
+        res = self.client.put(url, data, format="json")
         self.assertEqual(res.status_code, 200)
         project_alert = ProjectAlert.objects.all().first()
         self.assertEqual(project_alert.timespan_minutes, data["timespan_minutes"])
