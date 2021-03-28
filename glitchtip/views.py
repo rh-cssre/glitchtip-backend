@@ -35,7 +35,7 @@ class SettingsView(APIView):
                 "stripePublicKey": stripe_public_key,
                 "matomoURL": settings.MATOMO_URL,
                 "matomoSiteId": settings.MATOMO_SITE_ID,
-                "rocketChatDomain": settings.ROCKET_CHAT_DOMAIN,
+                "chatwootWebsiteToken": settings.CHATWOOT_WEBSITE_TOKEN,
                 "sentryDSN": settings.SENTRY_FRONTEND_DSN,
                 "sentryTracesSampleRate": settings.SENTRY_TRACES_SAMPLE_RATE,
                 "environment": settings.ENVIRONMENT,
