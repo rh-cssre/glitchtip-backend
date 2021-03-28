@@ -41,7 +41,10 @@ def send_issue_as_webhook(url, issues: List["Issue"], issue_count: int = 1):
     for issue in issues:
         attachments.append(
             WebhookAttachment(
-                title=str(issue), title_link=issue.get_detail_url(), text=issue.culprit
+                title=str(issue),
+                title_link=issue.get_detail_url(),
+                text=issue.culprit,
+                color=issue.get_hex_color(),
             )
         )
     message = "GlitchTip Alert"

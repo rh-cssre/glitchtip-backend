@@ -2,6 +2,7 @@ from unittest import mock
 from django.test import TestCase
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
+from events.models import LogLevel
 from ..tasks import process_alerts
 from ..models import AlertRecipient, Notification
 from ..webhooks import send_webhook, send_issue_as_webhook
@@ -20,9 +21,10 @@ class WebhookTestCase(TestCase):
 
     @mock.patch("requests.post")
     def test_send_issue_as_webhook(self, mock_post):
-        issue = baker.make("issues.Issue")
-        issue2 = baker.make("issues.Issue")
-        send_issue_as_webhook(TEST_URL, [issue, issue2])
+        issue = baker.make("issues.Issue", level=LogLevel.WARNING)
+        issue2 = baker.make("issues.Issue", level=LogLevel.ERROR)
+        issue3 = baker.make("issues.Issue", level=LogLevel.NOTSET)
+        send_issue_as_webhook(TEST_URL, [issue, issue2, issue3], 3)
         mock_post.assert_called_once()
 
     @mock.patch("requests.post")
