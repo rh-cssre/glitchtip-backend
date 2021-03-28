@@ -201,6 +201,36 @@ class IssuesAPITestCase(GlitchTipTestCase):
         res = self.client.get(self.url, {"project": "nothing"})
         self.assertEqual(res.status_code, 400)
 
+    def test_filter_environment(self):
+        environment1_name = "prod"
+        environment2_name = "staging"
+        issue1 = baker.make(
+            Issue, project=self.project, event_set__tags={"environment": "??"},
+        )
+        baker.make(
+            "events.Event", issue=issue1, tags={"environment": environment1_name}
+        )
+        issue2 = baker.make(
+            Issue,
+            project=self.project,
+            event_set__tags={"environment": environment2_name},
+        )
+        baker.make(
+            "events.Event", issue=issue2, tags={"environment": environment2_name}
+        )
+        baker.make(Issue, project=self.project)
+        baker.make(Issue, project=self.project, event_set__tags={"environment": "dev"})
+        baker.make(
+            Issue, project=self.project, event_set__tags={"lol": environment2_name}
+        )
+
+        res = self.client.get(
+            self.url, {"environment": [environment1_name, environment2_name]},
+        )
+        self.assertEqual(len(res.data), 2)
+        self.assertContains(res, issue1.id)
+        self.assertContains(res, issue2.id)
+
     def test_issue_list_filter(self):
         project1 = self.project
         project2 = baker.make("projects.Project", organization=self.organization)

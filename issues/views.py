@@ -88,6 +88,11 @@ class IssueViewSet(
                 # Search queries must be at end of query string, finished when parsing
                 break
 
+        environments = self.request.query_params.getlist("environment")
+        if environments:
+            qs = qs.filter(event__tags__environment__in=environments)
+            distinct = True
+
         if str(self.request.query_params.get("sort")).endswith("priority"):
             # Raw SQL must be added when sorting by priority
             # Inspired by https://stackoverflow.com/a/43788975/443457
