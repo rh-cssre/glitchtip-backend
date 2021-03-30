@@ -46,12 +46,16 @@ class SeedDataAPIView(APIView):
 
         Organization.objects.filter(name=organization_name).delete()
         organization = Organization.objects.create(name=organization_name)
-        organization.add_user(user=user)
+        orgUser = organization.add_user(user=user)
 
         Team.objects.filter(slug=team_slug).delete()
-        Team.objects.create(slug=team_slug, organization=organization)
+        team = Team.objects.create(slug=team_slug, organization=organization)
 
         Project.objects.filter(name=project_name).delete()
-        Project.objects.create(name=project_name, organization=organization)
+        project = Project.objects.create(name=project_name, organization=organization)
+
+        if (request.query_params.get("extras")):
+            team.projects.add(project)
+            team.members.add(orgUser)
 
         return Response()
