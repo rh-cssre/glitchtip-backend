@@ -25,9 +25,9 @@ class SeedDataAPIView(APIView):
         user_email = "cypresstest@example.com"
         other_user_email = "cypresstest-other@example.com"
         user_password = "hunter22"  # nosec
-        organization_name = "cypresstestorg"
+        organization_name = "Business Company, Inc."
         team_slug = "cypresstestteam"
-        project_name = "cypresstestproject"
+        project_name = "NicheScrip"
 
         User.objects.filter(email=user_email).delete()
         user = User.objects.create_user(email=user_email, password=user_password)
@@ -55,7 +55,13 @@ class SeedDataAPIView(APIView):
         project = Project.objects.create(name=project_name, organization=organization)
 
         if (request.query_params.get("extras")):
+            project_name = "SwitchGrip"
+            project2 = Project.objects.create(name=project_name, organization=organization)
+            project_name = "PitchFlip"
+            project3 = Project.objects.create(name=project_name, organization=organization, platform="JavaScript")
             team.projects.add(project)
+            team.projects.add(project2)
+            team.projects.add(project3)
             team.members.add(orgUser)
 
         return Response()
