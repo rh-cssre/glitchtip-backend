@@ -1,9 +1,9 @@
 from django.db import models
 from organizations_ext.models import Organization
+from glitchtip.base_models import CreatedModel
 
 
-class Team(models.Model):
-    created = models.DateTimeField(auto_now_add=True, db_index=True)
+class Team(CreatedModel):
     slug = models.SlugField()
     organization = models.ForeignKey(
         Organization, on_delete=models.CASCADE, related_name="teams"

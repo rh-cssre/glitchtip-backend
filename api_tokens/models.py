@@ -7,12 +7,14 @@ from django.db import models
 
 from bitfield import BitField
 
+from glitchtip.base_models import CreatedModel
+
 
 def generate_token():
     return binascii.hexlify(os.urandom(20)).decode()
 
 
-class APIToken(models.Model):
+class APIToken(CreatedModel):
     """
     Ideas borrowed from rest_framework.authtoken and sentry.apitoken
     """
@@ -42,7 +44,6 @@ class APIToken(models.Model):
             "member:admin",
         )
     )
-    created = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.token

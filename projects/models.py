@@ -4,9 +4,10 @@ from django.conf import settings
 from django.db import models
 from django.utils.text import slugify
 from django_extensions.db.fields import AutoSlugField
+from glitchtip.base_models import CreatedModel
 
 
-class Project(models.Model):
+class Project(CreatedModel):
     """
     Projects are permission based namespaces which generally
     are the top level entry point for all data.
@@ -19,7 +20,6 @@ class Project(models.Model):
         on_delete=models.CASCADE,
         related_name="projects",
     )
-    created = models.DateTimeField(auto_now_add=True, db_index=True)
     platform = models.CharField(max_length=64, blank=True, null=True)
     first_event = models.DateTimeField(null=True)
     scrub_ip_addresses = models.BooleanField(
@@ -67,13 +67,12 @@ class ProjectCounter(models.Model):
     value = models.PositiveIntegerField()
 
 
-class ProjectKey(models.Model):
+class ProjectKey(CreatedModel):
     """ Authentication key for a Project """
 
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     label = models.CharField(max_length=64, blank=True)
     public_key = models.UUIDField(default=uuid4, unique=True, editable=False)
-    created = models.DateTimeField(auto_now_add=True)
     rate_limit_count = models.PositiveSmallIntegerField(blank=True, null=True)
     rate_limit_window = models.PositiveSmallIntegerField(blank=True, null=True)
     data = models.JSONField(blank=True, null=True)

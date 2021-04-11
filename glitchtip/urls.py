@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.generic import TemplateView
@@ -78,6 +79,7 @@ urlpatterns += [
     path("api/0/", include("organizations_ext.urls")),
     path("api/0/", include("teams.urls")),
     path("api/0/", include("api_tokens.urls")),
+    path("api/0/", include("files.urls")),
     path("api/", include("events.urls")),
     path("api/embed/", include("user_reports.urls")),
     # What an oddball API endpoint
@@ -154,8 +156,12 @@ if settings.ENABLE_TEST_API:
 if settings.DEBUG:
     import debug_toolbar
 
-    urlpatterns = [
-        path("__debug__/", include(debug_toolbar.urls)),
-        # For django versions before 2.0:
-        # url(r'^__debug__/', include(debug_toolbar.urls)),
-    ] + urlpatterns
+    urlpatterns = (
+        [
+            path("__debug__/", include(debug_toolbar.urls)),
+            # For django versions before 2.0:
+            # url(r'^__debug__/', include(debug_toolbar.urls)),
+        ]
+        + urlpatterns
+        + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    )

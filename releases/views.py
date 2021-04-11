@@ -1,4 +1,5 @@
 from rest_framework import viewsets, exceptions
+from rest_framework.decorators import action
 from organizations_ext.models import Organization
 from projects.models import Project
 from .models import Release
@@ -38,3 +39,8 @@ class ReleaseViewSet(viewsets.ModelViewSet):
             raise exceptions.ValidationError("Project does not exist")
         release = serializer.save(organization=organization)
         release.projects.add(project)
+
+    @action(detail=True, methods=["post"])
+    def assemble(self, request, organization_slug: str, version: str):
+        print(version)
+        print(request.body)

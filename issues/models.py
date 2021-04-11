@@ -4,6 +4,7 @@ from django.conf import settings
 from django.db import models
 from events.models import LogLevel
 from glitchtip.model_utils import FromStringIntegerChoices
+from glitchtip.base_models import CreatedModel
 from .utils import base32_encode
 
 
@@ -20,7 +21,7 @@ class EventStatus(FromStringIntegerChoices):
     IGNORED = 2, "ignored"
 
 
-class Issue(models.Model):
+class Issue(CreatedModel):
     """
     Sentry called this a "group". A issue is a collection of events with meta data
     such as resolved status.
@@ -28,7 +29,6 @@ class Issue(models.Model):
 
     # annotations Not implemented
     # assigned_to Not implemented
-    created = models.DateTimeField(auto_now_add=True, db_index=True)
     culprit = models.CharField(max_length=1024, blank=True, null=True)
     has_seen = models.BooleanField(default=False)
     # is_bookmarked Not implement - is per user

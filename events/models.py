@@ -2,12 +2,12 @@ import uuid
 from django.db import models
 from django.contrib.postgres.fields import HStoreField
 from user_reports.models import UserReport
+from glitchtip.base_models import CreatedModel
 from glitchtip.model_utils import FromStringIntegerChoices
 
 
-class AbstractEvent(models.Model):
+class AbstractEvent(CreatedModel):
     event_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    created = models.DateTimeField(auto_now_add=True, db_index=True)
     data = models.JSONField(help_text="General event data that is searchable")
     timestamp = models.DateTimeField(
         blank=True,

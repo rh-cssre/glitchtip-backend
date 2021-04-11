@@ -158,6 +158,7 @@ INSTALLED_APPS = [
     "alerts",
     "api_tokens",
     "environments",
+    "files",
     "organizations_ext",
     "events",
     "issues",
@@ -257,7 +258,7 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 DATABASES = {
     "default": env.db(default="postgres://postgres:postgres@postgres:5432/postgres")
 }
-DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
 # We need to support both url and broken out host to support helm redis chart
 REDIS_HOST = env.str("REDIS_HOST", None)
