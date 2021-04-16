@@ -1,7 +1,8 @@
 from django.db import models
+from glitchtip.base_models import CreatedModel
 
 
-class Release(models.Model):
+class Release(CreatedModel):
     organization = models.ForeignKey(
         "organizations_ext.Organization", on_delete=models.CASCADE
     )
@@ -11,7 +12,6 @@ class Release(models.Model):
         max_length=255, null=True, blank=True, help_text="May be branch or tag name"
     )
     url = models.URLField(null=True, blank=True)
-    created = models.DateTimeField(auto_now_add=True, db_index=True)
     released = models.DateTimeField(null=True, blank=True)
     data = models.JSONField(default=dict)
     owner = models.ForeignKey(

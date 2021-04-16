@@ -1,8 +1,10 @@
 from rest_framework import viewsets, exceptions
+from rest_framework.response import Response
+from rest_framework.decorators import action
 from organizations_ext.models import Organization
 from projects.models import Project
 from .models import Release
-from .serializers import ReleaseSerializer
+from .serializers import ReleaseSerializer, AssembleSerializer
 from .permissions import ReleasePermission
 
 
@@ -36,5 +38,16 @@ class ReleaseViewSet(viewsets.ModelViewSet):
             )
         except Project.DoesNotExist:
             raise exceptions.ValidationError("Project does not exist")
+
         release = serializer.save(organization=organization)
         release.projects.add(project)
+
+    @action(detail=True, methods=["post"])
+    def assemble(self, request, organization_slug: str, version: str):
+        release = self.get_object()
+        serializer = AssembleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        print(release)
+        print(serializer.validated_data)
+        return Response({"state": "ok", "missingChunks": []})

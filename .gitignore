@@ -118,3 +118,5 @@ dmypy.json
 .pyre/
 
 docker-compose.override.yml
+dump.sql
+uploads

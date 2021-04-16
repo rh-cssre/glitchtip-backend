@@ -1,10 +1,11 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+from glitchtip.base_models import CreatedModel
 from .email import send_email_notification
 from .webhooks import send_webhook_notification
 
 
-class ProjectAlert(models.Model):
+class ProjectAlert(CreatedModel):
     """
     Example: Send notification when project has 15 events in 5 minutes.
     """
@@ -12,7 +13,6 @@ class ProjectAlert(models.Model):
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
     timespan_minutes = models.PositiveSmallIntegerField(blank=True, null=True)
     quantity = models.PositiveSmallIntegerField(blank=True, null=True)
-    created = models.DateTimeField(auto_now_add=True)
 
 
 class AlertRecipient(models.Model):
@@ -36,8 +36,7 @@ class AlertRecipient(models.Model):
             send_webhook_notification(notification, self.url)
 
 
-class Notification(models.Model):
-    created = models.DateField(auto_now_add=True)
+class Notification(CreatedModel):
     project_alert = models.ForeignKey(ProjectAlert, on_delete=models.CASCADE)
     is_sent = models.BooleanField(default=False)
     issues = models.ManyToManyField("issues.Issue")
