@@ -4,9 +4,12 @@ from io import BytesIO
 from gzip import GzipFile
 from django.conf import settings
 from django.urls import reverse
+from django.shortcuts import get_object_or_404
 from rest_framework import views, status
 from rest_framework.response import Response
+from organizations_ext.models import Organization
 from .models import FileBlob
+from .permissions import ChunkUploadPermission
 
 
 CHUNK_UPLOAD_BLOB_SIZE = 8 * 1024 * 1024  # 8MB
@@ -32,6 +35,8 @@ class GzipChunk(BytesIO):
 
 
 class ChunkUploadAPIView(views.APIView):
+    permission_classes = [ChunkUploadPermission]
+
     def get(self, request, organization_slug):
         url = settings.GLITCHTIP_DOMAIN.geturl() + reverse(
             "chunk-upload", args=[organization_slug]
@@ -53,6 +58,11 @@ class ChunkUploadAPIView(views.APIView):
     def post(self, request, organization_slug):
         logger = logging.getLogger("glitchtip.files")
         logger.info("chunkupload.start")
+
+        organization = get_object_or_404(
+            Organization, slug=organization_slug.lower(), users=self.request.user
+        )
+        self.check_object_permissions(request, organization)
 
         files = request.data.getlist("file")
         files += [GzipChunk(chunk) for chunk in request.data.getlist("file_gzip")]
@@ -96,7 +106,7 @@ class ChunkUploadAPIView(views.APIView):
 
         try:
             FileBlob.from_files(
-                zip(files, checksums), organization=organization_slug, logger=logger
+                zip(files, checksums), organization=organization, logger=logger
             )
         except IOError as err:
             logger.info(

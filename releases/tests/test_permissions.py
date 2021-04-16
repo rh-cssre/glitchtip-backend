@@ -48,6 +48,16 @@ class TeamAPIPermissionTests(APIPermissionTestCase):
         self.assertGetReqStatusCode(self.organization_detail_url, 200)
         self.assertGetReqStatusCode(self.project_detail_url, 200)
 
+    def test_assemble(self):
+        url = self.organization_detail_url + "assemble/"
+        data = {
+            "checksum": "94bc085fe32db9b4b1b82236214d65eeeeeeeeee",
+            "chunks": ["94bc085fe32db9b4b1b82236214d65eeeeeeeeee"],
+        }
+        self.assertPostReqStatusCode(url, data, 403)
+        self.auth_token.add_permission("project:write")
+        self.assertPostReqStatusCode(url, data, 200)
+
     def test_create(self):
         self.auth_token.add_permission("project:read")
         data = {"version": "new-version"}
