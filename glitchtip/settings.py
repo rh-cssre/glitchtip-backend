@@ -325,8 +325,6 @@ SITE_ID = 1
 # https://docs.djangoproject.com/en/dev/howto/static-files/
 STATIC_URL = "/static/"
 
-MEDIA_URL = "media/"  # Not used, can be anything except the STATIC_URL. Cannot be "" nor "/", but must end with a slash
-
 
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
@@ -335,8 +333,10 @@ AWS_S3_ENDPOINT_URL = env("AWS_S3_ENDPOINT_URL")
 AWS_LOCATION = env("AWS_LOCATION")
 
 if AWS_S3_ENDPOINT_URL:
-    MEDIA_URL = "https://%s/%s/" % (AWS_S3_ENDPOINT_URL, AWS_LOCATION)
+    MEDIA_URL = env.str("MEDIA_URL", "https://%s/%s/" % (AWS_S3_ENDPOINT_URL, AWS_LOCATION))
     DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+else:
+    MEDIA_URL = "media/"
 
 STATICFILES_DIRS = [
     "assets",
