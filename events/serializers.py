@@ -52,7 +52,7 @@ def sanitize_bad_postgres_json(data: Union[str, dict, list]):
 
 class RequestSerializer(serializers.Serializer):
     env = serializers.DictField(
-        child=serializers.CharField(allow_blank=True), required=False
+        child=serializers.CharField(allow_blank=True, allow_null=True), required=False
     )
     # Dict values can be both str and List[str]
     headers = serializers.DictField(required=False)

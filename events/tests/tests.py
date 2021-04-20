@@ -309,6 +309,7 @@ class EventStoreTestCase(APITestCase):
             "message": "",
             "release": None,
             "environment": None,
+            "request": {"env": {"FOO": None}},
         }
 
         res = self.client.post(self.url, data, format="json")
