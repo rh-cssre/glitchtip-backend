@@ -85,7 +85,7 @@ class EventEntriesSerializer(serializers.Serializer):
 
         request = instance.get("request")
         if request:
-            request["inferredContentType"] = request.pop("inferred_content_type")
+            request["inferredContentType"] = request.pop("inferred_content_type", None)
             entries.append({"type": "request", "data": request})
 
         message = instance.get("message")
