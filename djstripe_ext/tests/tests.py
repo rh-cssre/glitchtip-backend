@@ -123,6 +123,7 @@ class ProductAPITestCase(APITestCase):
             active=True,
             product__active=True,
             product__livemode=False,
+            product__metadata={"events": 10},
         )
         inactive_plan = baker.make(
             "djstripe.Plan",
@@ -131,6 +132,7 @@ class ProductAPITestCase(APITestCase):
             active=False,
             product__active=False,
             product__livemode=False,
+            product__metadata={"events": 10},
         )
         user = baker.make("users.user")
         self.client.force_login(user)
