@@ -81,7 +81,10 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Product.objects.filter(
-        active=True, livemode=settings.STRIPE_LIVE_MODE, plan__active=True
+        active=True,
+        livemode=settings.STRIPE_LIVE_MODE,
+        plan__active=True,
+        metadata__events__isnull=False,
     ).prefetch_related("plan_set")
     serializer_class = ProductSerializer
 
