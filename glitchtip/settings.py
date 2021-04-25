@@ -248,6 +248,7 @@ DEFAULT_FROM_EMAIL = env.str("DEFAULT_FROM_EMAIL", "webmaster@localhost")
 ANYMAIL = {
     "MAILGUN_API_KEY": env.str("MAILGUN_API_KEY", None),
     "MAILGUN_SENDER_DOMAIN": env.str("MAILGUN_SENDER_DOMAIN", None),
+    "MAILGUN_API_URL": env.str("MAILGUN_API_URL", "https://api.mailgun.net/v3")
 }
 
 ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
