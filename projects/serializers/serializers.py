@@ -19,7 +19,7 @@ class ProjectKeySerializer(serializers.ModelSerializer):
         fields = ("dateCreated", "dsn", "id", "label", "public", "projectId")
 
     def get_dsn(self, obj):
-        return {"public": obj.get_dsn()}
+        return {"public": obj.get_dsn(), "security": obj.get_dsn_security()}
 
 
 class ProjectSerializer(ProjectReferenceWithMemberSerializer):

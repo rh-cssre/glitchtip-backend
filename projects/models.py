@@ -104,7 +104,6 @@ class ProjectKey(CreatedModel):
         return self.get_dsn()
 
     def get_dsn(self):
-        key = self.public_key_hex
         urlparts = settings.GLITCHTIP_DOMAIN
 
         # If we do not have a scheme or domain/hostname, dsn is never valid
@@ -113,7 +112,20 @@ class ProjectKey(CreatedModel):
 
         return "%s://%s@%s/%s" % (
             urlparts.scheme,
-            key,
+            self.public_key_hex,
             urlparts.netloc + urlparts.path,
             self.project_id,
+        )
+
+    def get_dsn_security(self):
+        urlparts = settings.GLITCHTIP_DOMAIN
+
+        if not urlparts.netloc or not urlparts.scheme:
+            return ""
+
+        return "%s://%s/api/%s/security/?sentry_key=%s" % (
+            urlparts.scheme,
+            urlparts.netloc + urlparts.path,
+            self.project_id,
+            self.public_key_hex,
         )
