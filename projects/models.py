@@ -123,7 +123,7 @@ class ProjectKey(CreatedModel):
         if not urlparts.netloc or not urlparts.scheme:
             return ""
 
-        return "%s://%s/api/%s/security/?sentry_key=%s" % (
+        return "%s://%s/api/%s/security/?glitchtip_key=%s" % (
             urlparts.scheme,
             urlparts.netloc + urlparts.path,
             self.project_id,

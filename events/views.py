@@ -56,7 +56,13 @@ class BaseEventAPIView(APIView):
 
     @classmethod
     def auth_from_request(cls, request):
-        result = {k: request.GET[k] for k in request.GET.keys() if k[:7] == "sentry_"}
+        # Accept both sentry or glitchtip prefix.
+        # Prefer glitchtip when not using a sentry SDK but support both.
+        result = {
+            k: request.GET[k]
+            for k in request.GET.keys()
+            if k[:7] == "sentry_" or k[:10] == "glitchtip_"
+        }
 
         if request.META.get("HTTP_X_SENTRY_AUTH", "")[:7].lower() == "sentry ":
             if result:
@@ -76,7 +82,7 @@ class BaseEventAPIView(APIView):
                 "Unable to find authentication information"
             )
 
-        return result.get("sentry_key")
+        return result.get("sentry_key", result.get("glitchtip_key"))
 
     def get_project(self, request, project_id):
         sentry_key = BaseEventAPIView.auth_from_request(request)

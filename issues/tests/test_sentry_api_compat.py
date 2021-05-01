@@ -225,6 +225,20 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         self.assertEqual(res.data["entries"][0], data["entries"][0])
         self.assertEqual(res.data["entries"][1], data["entries"][1])
 
+    def test_csp_event_glitchtip_key(self):
+        """ Check compatibility for using glitchtip_key or sentry_key interchangably """
+        key = self.project.projectkey_set.first().public_key
+        csp_store_url = (
+            reverse("csp_store", args=[self.project.id]) + "?glitchtip_key=" + key.hex
+        )
+        data = mdn_sample_csp
+        res = self.client.post(csp_store_url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        event_id = res.data["id"]
+        url = self.get_project_events_detail(event_id)
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+
     def test_message_event(self):
         """ A generic message made with the Sentry SDK. Generally has less data than exceptions. """
         # Don't mimic this test, use self.get_jest_test_data instead
