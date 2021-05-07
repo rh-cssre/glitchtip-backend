@@ -4,8 +4,8 @@ from glitchtip.base_models import CreatedModel
 
 class FileBlob(CreatedModel):
     upload = models.FileField(upload_to="uploads/")
+    size = models.PositiveIntegerField(null=True)
     checksum = models.CharField(max_length=40, unique=True)
-    organizations = models.ManyToManyField("organizations_ext.Organization")
 
     @classmethod
     def from_files(cls, files, organization=None, logger=None):
@@ -24,5 +24,11 @@ class FileBlob(CreatedModel):
             blob.checksum = file_with_checksum[1]
             blob.upload.save(blob_file.name, blob_file)
             blob.save()
-            if organization:
-                blob.organizations.add(organization)
+
+
+class File(CreatedModel):
+    name = models.TextField()
+    headers = models.JSONField()
+    blobs = models.ManyToManyField(FileBlob)
+    size = models.PositiveIntegerField(null=True)
+    checksum = models.CharField(max_length=40, null=True, db_index=True)

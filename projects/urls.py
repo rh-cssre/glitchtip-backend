@@ -4,6 +4,7 @@ from issues.views import IssueViewSet, EventViewSet
 from alerts.views import ProjectAlertViewSet
 from releases.views import ReleaseViewSet
 from environments.views import EnvironmentProjectViewSet
+from files.views import FileViewSet
 from .views import ProjectViewSet, ProjectKeyViewSet, ProjectTeamViewSet
 
 router = routers.SimpleRouter()
@@ -20,7 +21,13 @@ projects_router.register(
 )
 projects_router.register(r"releases", ReleaseViewSet, basename="project-releases")
 
+releases_router = routers.NestedSimpleRouter(
+    projects_router, r"releases", lookup="release"
+)
+releases_router.register(r"files", FileViewSet, basename="files")
+
 urlpatterns = [
     path("", include(router.urls)),
     path("", include(projects_router.urls)),
+    path("", include(releases_router.urls)),
 ]
