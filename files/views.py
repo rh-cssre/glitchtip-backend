@@ -5,11 +5,10 @@ from gzip import GzipFile
 from django.conf import settings
 from django.urls import reverse
 from django.shortcuts import get_object_or_404
-from rest_framework import views, status, viewsets
+from rest_framework import views, status
 from rest_framework.response import Response
 from organizations_ext.models import Organization
-from .models import FileBlob, File
-from .serializers import FileSerializer
+from .models import FileBlob
 from .permissions import ChunkUploadPermission
 
 
@@ -117,8 +116,3 @@ class ChunkUploadAPIView(views.APIView):
 
         logger.info("chunkupload.end", extra={"status": status.HTTP_200_OK})
         return Response(status=status.HTTP_200_OK)
-
-
-class FileViewSet(viewsets.ModelViewSet):
-    queryset = File.objects.all()
-    serializer_class = FileSerializer
