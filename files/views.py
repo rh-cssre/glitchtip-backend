@@ -116,4 +116,3 @@ class ChunkUploadAPIView(views.APIView):
 
         logger.info("chunkupload.end", extra={"status": status.HTTP_200_OK})
         return Response(status=status.HTTP_200_OK)
-

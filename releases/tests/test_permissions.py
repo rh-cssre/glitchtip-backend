@@ -1,10 +1,12 @@
+from io import StringIO
 from django.urls import reverse
+from django.core.files.uploadedfile import InMemoryUploadedFile
 from model_bakery import baker
 from organizations_ext.models import OrganizationUserRole
 from glitchtip.test_utils.test_case import APIPermissionTestCase
 
 
-class TeamAPIPermissionTests(APIPermissionTestCase):
+class ReleaseAPIPermissionTests(APIPermissionTestCase):
     def setUp(self):
         self.create_user_org()
         self.set_client_credentials(self.auth_token.token)
@@ -87,3 +89,60 @@ class TeamAPIPermissionTests(APIPermissionTestCase):
 
         self.auth_token.add_permission("project:releases")
         self.assertPutReqStatusCode(self.organization_detail_url, data, 200)
+
+
+class ReleaseFileAPIPermissionTests(APIPermissionTestCase):
+    def setUp(self):
+        self.create_user_org()
+        self.set_client_credentials(self.auth_token.token)
+        self.project = baker.make("projects.Project", organization=self.organization)
+        self.release = baker.make(
+            "releases.Release", organization=self.organization, projects=[self.project]
+        )
+        self.release_file = baker.make("releases.ReleaseFile", release=self.release)
+
+        self.list_url = reverse(
+            "files-list",
+            kwargs={
+                "project_pk": self.organization.slug + "/" + self.project.slug,
+                "release_version": self.release.version,
+            },
+        )
+        self.detail_url = reverse(
+            "files-detail",
+            kwargs={
+                "project_pk": self.organization.slug + "/" + self.project.slug,
+                "release_version": self.release.version,
+                "pk": self.release_file.pk,
+            },
+        )
+
+    def test_list(self):
+        self.assertGetReqStatusCode(self.list_url, 403)
+        self.auth_token.add_permission("project:read")
+        self.assertGetReqStatusCode(self.list_url, 200)
+
+    def test_retrieve(self):
+        self.assertGetReqStatusCode(self.detail_url, 403)
+        self.auth_token.add_permission("project:read")
+        self.assertGetReqStatusCode(self.detail_url, 200)
+
+    def test_create(self):
+        self.auth_token.add_permission("project:read")
+
+        im_io = StringIO()
+        file = InMemoryUploadedFile(
+            im_io, None, "name.txt", "text/plain", len(im_io.getvalue()), None
+        )
+        data = {"name": "name", "file": file}
+
+        self.assertPostReqStatusCode(self.list_url, data, 403)
+        self.auth_token.add_permission("project:releases")
+        self.assertPostReqStatusCode(self.list_url, data, 201)
+
+    def test_destroy(self):
+        self.auth_token.add_permissions(["project:read", "project:write"])
+        self.assertDeleteReqStatusCode(self.detail_url, 403)
+
+        self.auth_token.add_permission("project:releases")
+        self.assertDeleteReqStatusCode(self.detail_url, 204)

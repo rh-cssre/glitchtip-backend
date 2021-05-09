@@ -1,3 +1,4 @@
+from hashlib import sha1
 from django.db import models
 from glitchtip.base_models import CreatedModel
 
@@ -26,6 +27,7 @@ class Release(CreatedModel):
     # authors - not implemented
     deploy_count = models.PositiveSmallIntegerField(default=0)
     # last_deploy - not implemented
+    files = models.ManyToManyField("files.File", through="ReleaseFile")
 
     class Meta:
         unique_together = ("organization", "version")
@@ -39,3 +41,25 @@ class ReleaseProject(models.Model):
 
     class Meta:
         unique_together = ("project", "release")
+
+
+class ReleaseFile(CreatedModel):
+    release = models.ForeignKey(Release, on_delete=models.CASCADE)
+    file = models.ForeignKey("files.File", on_delete=models.CASCADE)
+    ident = models.CharField(max_length=40)
+    name = models.TextField()
+
+    class Meta:
+        unique_together = (("release", "file"), ("release", "ident"))
+
+    def save(self, *args, **kwargs):
+        if not self.ident:
+            self.ident = type(self).get_ident(self.name)
+        return super().save(*args, **kwargs)
+
+    @classmethod
+    def get_ident(cls, name, dist=None):
+        if dist is not None:
+            dist_name = name + "\x00\x00" + dist
+            return sha1(dist_name.encode()).hexdigest()
+        return sha1(name.encode()).hexdigest()

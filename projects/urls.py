@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework_nested import routers
 from issues.views import IssueViewSet, EventViewSet
 from alerts.views import ProjectAlertViewSet
-from releases.views import ReleaseViewSet
+from releases.views import ReleaseViewSet, ReleaseFileViewSet
 from environments.views import EnvironmentProjectViewSet
 from .views import ProjectViewSet, ProjectKeyViewSet, ProjectTeamViewSet
 
@@ -20,7 +20,13 @@ projects_router.register(
 )
 projects_router.register(r"releases", ReleaseViewSet, basename="project-releases")
 
+releases_router = routers.NestedSimpleRouter(
+    projects_router, r"releases", lookup="release"
+)
+releases_router.register(r"files", ReleaseFileViewSet, basename="files")
+
 urlpatterns = [
     path("", include(router.urls)),
     path("", include(projects_router.urls)),
+    path("", include(releases_router.urls)),
 ]
