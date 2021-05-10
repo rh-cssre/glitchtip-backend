@@ -8,6 +8,7 @@ from drf_yasg.utils import swagger_auto_schema
 from djstripe.models import Subscription, Customer, Product
 from djstripe.settings import STRIPE_SECRET_KEY
 import stripe
+from organizations_ext.models import Organization
 from events.models import Event
 from performance.models import TransactionEvent
 from .serializers import (
@@ -47,9 +48,20 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
     def get_object(self):
         """ Get most recent by slug """
         try:
-            return (
+            subscription = (
                 self.get_queryset().filter(**self.kwargs).order_by("-created").first()
             )
+            # Check organization throttle, in case it changed recently
+            if subscription:
+                Organization.objects.filter(
+                    id=subscription.customer.subscriber_id,
+                    is_accepting_events=False,
+                    is_active=True,
+                    djstripe_customers__subscriptions__plan__amount__gt=0,
+                    djstripe_customers__subscriptions__status="active",
+                ).update(is_accepting_events=True)
+
+            return subscription
         except Subscription.DoesNotExist:
             raise Http404
 
