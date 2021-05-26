@@ -22,7 +22,7 @@ test:
     ENABLE_TEST_API: "true"
     ENABLE_OPEN_USER_REGISTRATION: "true"
   services:
-    - postgres:12
+    - postgres:13
   cache:
     key: ${CI_COMMIT_REF_SLUG}
     paths:
@@ -39,7 +39,7 @@ build:
     variables:
       - $CI_COMMIT_REF_PROTECTED
   services:
-    - docker:20.10.6-dind
+    - docker:20-dind
   script:
     - apk add --no-cache docker-compose
     - docker pull $IMAGE_NAME:latest || true
