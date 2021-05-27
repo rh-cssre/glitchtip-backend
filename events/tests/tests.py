@@ -337,6 +337,16 @@ class EventStoreTestCase(APITestCase):
         res = self.client.post(self.url, data, format="json")
         self.assertTrue(Event.objects.filter(data__message="").exists())
 
+    def test_null_message(self):
+        data = {
+            "exception": [{}],
+            "event_id": "11111111111111111111111111111111",
+            "message": None,
+        }
+
+        res = self.client.post(self.url, data, format="json")
+        self.assertTrue(Event.objects.filter(data__message=None).exists())
+
     def test_long_environment(self):
         data = {
             "exception": [{"type": "a", "value": "a", "module": None,}],
