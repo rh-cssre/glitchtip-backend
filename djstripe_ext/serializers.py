@@ -2,10 +2,10 @@ from django.core.exceptions import SuspiciousOperation
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 from djstripe.models import Plan, Customer, Product
-from djstripe.contrib.rest_framework.serializers import (
+from organizations_ext.models import OrganizationUserRole
+from .rest_framework.serializers import (
     SubscriptionSerializer as BaseSubscriptionSerializer,
 )
-from organizations_ext.models import OrganizationUserRole
 
 
 class BaseProductSerializer(ModelSerializer):
