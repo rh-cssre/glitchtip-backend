@@ -32,6 +32,7 @@ class SubscriptionAPITestCase(APITestCase):
         self.assertContains(res, subscription.id)
         self.assertNotContains(res, subscription2.id)
         self.assertNotContains(res, subscription3.id)
+        customer.delete()
 
     def test_detail(self):
         customer = baker.make("djstripe.Customer", subscriber=self.organization)
@@ -52,6 +53,7 @@ class SubscriptionAPITestCase(APITestCase):
         url = reverse("subscription-detail", args=[self.organization.slug])
         res = self.client.get(url)
         self.assertContains(res, subscription.id)
+        customer.delete()
 
     def test_events_count(self):
         customer = baker.make("djstripe.Customer", subscriber=self.organization)
@@ -76,6 +78,7 @@ class SubscriptionAPITestCase(APITestCase):
             )
         res = self.client.get(url)
         self.assertEqual(res.data, 2)
+        customer.delete()
 
     def test_events_count_without_customer(self):
         """
@@ -102,6 +105,7 @@ class SubscriptionAPITestCase(APITestCase):
         data = {"plan": plan.id, "organization": self.organization.id}
         res = self.client.post(self.url, data)
         self.assertEqual(res.data["plan"], plan.id)
+        customer.delete()
 
     def test_create_invalid_org(self):
         """ Only owners may create subscriptions """
@@ -165,6 +169,7 @@ class StripeAPITestCase(APITestCase):
 
         res = self.client.post(url, data)
         self.assertEqual(res.status_code, 200)
+        organization.delete()
 
     @skipIf(
         settings.STRIPE_TEST_PUBLIC_KEY == "fake", "requires real Stripe test API key"
@@ -178,6 +183,7 @@ class StripeAPITestCase(APITestCase):
         data = {"organization": organization.id}
         res = self.client.post(url, data)
         self.assertEqual(res.status_code, 200)
+        organization.delete()
 
 
 class SubscriptionIntegrationAPITestCase(APITestCase):
@@ -193,6 +199,9 @@ class SubscriptionIntegrationAPITestCase(APITestCase):
         self.client.force_login(self.user)
         self.list_url = reverse("subscription-list")
         self.detail_url = reverse("subscription-detail", args=[self.organization.slug])
+
+    def tearDown(self):
+        self.customer.delete()
 
     @patch("djstripe.models.Customer.subscribe")
     def test_new_org_flow(self, djstripe_customer_subscribe_mock):

@@ -56,3 +56,5 @@ class OrganizationWarnThrottlingTestCase(TestCase):
             baker.make("events.Event", issue__project=project, _quantity=9)
             warn_organization_throttle()
             self.assertEqual(len(mail.outbox), 2)
+        project.organization.delete()
+        project2.organization.delete()
