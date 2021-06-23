@@ -4,7 +4,6 @@ from django.utils import timezone
 from model_bakery import baker
 from freezegun import freeze_time
 from glitchtip import test_utils  # pylint: disable=unused-import
-from ..models import Organization
 from ..tasks import (
     set_organization_throttle,
     get_free_tier_organizations_with_event_count,
@@ -12,9 +11,6 @@ from ..tasks import (
 
 
 class OrganizationThrottlingTestCase(TestCase):
-    def tearDown(self):
-        Organization.objects.all().delete()
-
     @override_settings(BILLING_FREE_TIER_EVENTS=10)
     def test_non_subscriber_throttling(self):
         plan = baker.make("djstripe.Plan", active=True, amount=0)
