@@ -369,11 +369,11 @@ with_social = ["django-allauth (>=0.40.0,<0.45.0)"]
 
 [[package]]
 name = "dj-stripe"
-version = "2.5.0"
+version = "2.4.4"
 description = "Django + Stripe made easy"
 category = "main"
 optional = false
-python-versions = ">=3.6.2,<4.0.0"
+python-versions = ">=3.6,<4.0"
 
 [package.dependencies]
 Django = ">=2.2"
@@ -1659,7 +1659,7 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "0b4f56388130825fcec100749b222f8c7216ace303b9dcac3363a0936d5fb053"
+content-hash = "6eb56fb5c2abb9bf154923bfbe60681030d75caa4162257bbf4ab78ffc4fba2c"
 
 [metadata.files]
 amqp = [
@@ -1822,8 +1822,8 @@ dj-rest-auth = [
     {file = "dj-rest-auth-2.1.7.tar.gz", hash = "sha256:45f95fa982c41ae7ba5dee041de5dbb6e3724347796e718cf2bb5c0b681b2d10"},
 ]
 dj-stripe = [
-    {file = "dj-stripe-2.5.0.tar.gz", hash = "sha256:29dfd9288bab2bc3ac269deccba5dbe6c1e58dada02e18284c049898e4e0c6de"},
-    {file = "dj_stripe-2.5.0-py3-none-any.whl", hash = "sha256:09642d82df08de8f8c2bdbf00df4604de86f739a3fcaab8a4c1edb14e219feb9"},
+    {file = "dj-stripe-2.4.4.tar.gz", hash = "sha256:b8f8472cc904eb8e777947926ee444cdc1bb492d4d5404c410429d45f9868a87"},
+    {file = "dj_stripe-2.4.4-py3-none-any.whl", hash = "sha256:d405d5688baf40f117c4e651f3a7ff425427a054c822aa301532d6686f9c4231"},
 ]
 django = [
     {file = "Django-3.2.4-py3-none-any.whl", hash = "sha256:ea735cbbbb3b2fba6d4da4784a0043d84c67c92f1fdf15ad6db69900e792c10f"},
