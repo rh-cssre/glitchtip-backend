@@ -3,7 +3,7 @@ variables:
   COMPOSE: docker-compose -p glitchtip
   IMAGE_NAME: registry.gitlab.com/glitchtip/glitchtip-backend
   CONTAINER_TEST_IMAGE: registry.gitlab.com/glitchtip/glitchtip-backend:$CI_BUILD_REF_NAME
-  POETRY_VERSION: 1.1.6
+  POETRY_VERSION: 1.1.7
   POETRY_VIRTUALENVS_CREATE: "false"
   PIP_DISABLE_PIP_VERSION_CHECK: "on"
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
