@@ -53,6 +53,7 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path("_health/", health),
+    path("admin/", include("django_rest_mfa.mfa_admin.urls")),
     path("admin/", admin.site.urls),
     re_path(
         r"^favicon\.ico$",
@@ -80,6 +81,7 @@ urlpatterns += [
     path("api/0/", include("teams.urls")),
     path("api/0/", include("api_tokens.urls")),
     path("api/0/", include("files.urls")),
+    path("api/mfa/", include("django_rest_mfa.urls")),
     path("api/", include("events.urls")),
     path("api/embed/", include("user_reports.urls")),
     # What an oddball API endpoint

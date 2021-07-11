@@ -6,4 +6,4 @@ register = template.Library()
 
 @register.simple_tag()
 def get_domain():
-    return settings.GLITCHTIP_DOMAIN.geturl()
+    return settings.GLITCHTIP_URL.geturl()

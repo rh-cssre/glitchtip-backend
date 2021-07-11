@@ -9,7 +9,7 @@ def send_email_met_quota(organization):
 
     subject = f"Met event quota for {organization.name}"
 
-    base_url = settings.GLITCHTIP_DOMAIN.geturl()
+    base_url = settings.GLITCHTIP_URL.geturl()
     event_limit = settings.BILLING_FREE_TIER_EVENTS
     subscription_link = f"{base_url}/{organization.slug}/settings/subscription"
 

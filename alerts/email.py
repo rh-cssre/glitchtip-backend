@@ -20,7 +20,7 @@ def send_email_notification(notification):
     elif issue_count > 1:
         subject = f"{issue_count} errors reported in {first_issue.project}"
 
-    base_url = settings.GLITCHTIP_DOMAIN.geturl()
+    base_url = settings.GLITCHTIP_URL.geturl()
     org_slug = first_issue.project.organization.slug
 
     text_content = f"Errors reported in {first_issue.project}:\n\n"

@@ -11,7 +11,7 @@ def send_email_warn_quota(
 
     subject = f"Nearing event quota for {organization.name}"
 
-    base_url = settings.GLITCHTIP_DOMAIN.geturl()
+    base_url = settings.GLITCHTIP_URL.geturl()
     subscription_link = f"{base_url}/{organization.slug}/settings/subscription"
 
     context = {

@@ -7,7 +7,7 @@ from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 
 
-DOMAIN = settings.GLITCHTIP_DOMAIN.geturl()
+DOMAIN = settings.GLITCHTIP_URL.geturl()
 
 
 class GitlabConnect(SocialConnectView):
