@@ -172,6 +172,10 @@ INSTALLED_APPS = [
     "releases",
 ]
 
+# Ensure no one uses runsslserver in production
+if SECRET_KEY == "change_me" and DEBUG is True:
+    INSTALLED_APPS += ["sslserver"]
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",

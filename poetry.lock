@@ -559,6 +559,17 @@ pyotp = ">=2.6.0,<3.0.0"
 user-agents = ">=2.2.0,<3.0.0"
 
 [[package]]
+name = "django-sslserver"
+version = "0.22"
+description = "An SSL-enabled development server for Django"
+category = "dev"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+Django = ">=1.8"
+
+[[package]]
 name = "django-storages"
 version = "1.11.1"
 description = "Support for many storage backends in Django"
@@ -1676,7 +1687,7 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "c5e4aff779e68378bcbcb468400f29c49a1989d918e76e96085358b9905846cb"
+content-hash = "7ecbbbdbb0352071924866d2e62a0028586ddc487f199f432f56bb51f279fa33"
 
 [metadata.files]
 amqp = [
@@ -1897,6 +1908,9 @@ django-redis-cache = [
 django-rest-mfa = [
     {file = "django-rest-mfa-0.1.1.tar.gz", hash = "sha256:2e57c5b686a0492f3de96e71d989593d633582c1c2613f331e899ad01e5d2256"},
     {file = "django_rest_mfa-0.1.1-py3-none-any.whl", hash = "sha256:b92b7706920e563b9faaed86cf16558ce6ca2ca3822b900da6ea16af0fc4b06c"},
+]
+django-sslserver = [
+    {file = "django_sslserver-0.22-py3-none-any.whl", hash = "sha256:c598a363d2ccdc2421c08ddb3d8b0973f80e8e47a3a5b74e4a2896f21c2947c5"},
 ]
 django-storages = [
     {file = "django-storages-1.11.1.tar.gz", hash = "sha256:c823dbf56c9e35b0999a13d7e05062b837bae36c518a40255d522fbe3750fbb4"},
