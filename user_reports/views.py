@@ -86,7 +86,7 @@ class ErrorPageEmbedView(views.APIView):
             },
         )
 
-        url = settings.GLITCHTIP_DOMAIN.geturl() + request.get_full_path()
+        url = settings.GLITCHTIP_URL.geturl() + request.get_full_path()
 
         context = {
             "endpoint": mark_safe("*/" + json.dumps(url) + ";/*"),

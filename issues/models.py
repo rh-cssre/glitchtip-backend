@@ -93,4 +93,4 @@ class Issue(CreatedModel):
             return f"{self.project.slug.upper()}-{base32_encode(self.short_id)}"
 
     def get_detail_url(self):
-        return f"{settings.GLITCHTIP_DOMAIN.geturl()}/{self.project.organization.slug}/issues/{self.pk}"
+        return f"{settings.GLITCHTIP_URL.geturl()}/{self.project.organization.slug}/issues/{self.pk}"

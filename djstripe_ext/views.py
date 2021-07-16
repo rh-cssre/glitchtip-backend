@@ -118,7 +118,7 @@ class CreateStripeSubscriptionCheckout(views.APIView):
         if serializer.is_valid():
             organization = serializer.validated_data["organization"]
             customer, _ = Customer.get_or_create(subscriber=organization)
-            domain = settings.GLITCHTIP_DOMAIN.geturl()
+            domain = settings.GLITCHTIP_URL.geturl()
             session = stripe.checkout.Session.create(
                 api_key=STRIPE_SECRET_KEY,
                 payment_method_types=["card"],
@@ -154,7 +154,7 @@ class StripeBillingPortal(views.APIView):
         if serializer.is_valid():
             organization = serializer.validated_data["organization"]
             customer, _ = Customer.get_or_create(subscriber=organization)
-            domain = settings.GLITCHTIP_DOMAIN.geturl()
+            domain = settings.GLITCHTIP_URL.geturl()
             session = stripe.billing_portal.Session.create(
                 api_key=STRIPE_SECRET_KEY,
                 customer=customer.id,

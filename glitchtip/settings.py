@@ -66,10 +66,10 @@ GLITCHTIP_VERSION = env.str("GLITCHTIP_VERSION", None)
 
 # Used in email and DSN generation. Set to full domain such as https://glitchtip.example.com
 default_url = env.str(
-    "APP_URL", "http://localhost:8000"
+    "APP_URL", env.str("GLITCHTIP_DOMAIN", "http://localhost:8000")
 )  # DigitalOcean App Platform uses APP_URL
-GLITCHTIP_DOMAIN = env.url("GLITCHTIP_DOMAIN", default_url)
-if GLITCHTIP_DOMAIN.scheme not in ["http", "https"]:
+GLITCHTIP_URL = env.url("GLITCHTIP_URL", default_url)
+if GLITCHTIP_URL.scheme not in ["http", "https"]:
     raise ImproperlyConfigured("GLITCHTIP_DOMAIN must start with http or https")
 
 # Events and associated data older than this will be deleted from the database
@@ -128,6 +128,7 @@ DEBUG_TOOLBAR_PANELS = [
 # Application definition
 
 INSTALLED_APPS = [
+    "django_rest_mfa.mfa_admin",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -148,6 +149,7 @@ INSTALLED_APPS = [
     "django_celery_results",
     "django_filters",
     "django_extensions",
+    "django_rest_mfa",
     "debug_toolbar",
     "rest_framework",
     "drf_yasg",
@@ -169,6 +171,10 @@ INSTALLED_APPS = [
     "teams",
     "releases",
 ]
+
+# Ensure no one uses runsslserver in production
+if SECRET_KEY == "change_me" and DEBUG is True:
+    INSTALLED_APPS += ["sslserver"]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -486,3 +492,6 @@ if TESTING:
         "ignore", message="No directory at", module="whitenoise.base"
     )
     CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache",}}
+
+MFA_SERVER_NAME = "GlitchTip"
+FIDO_SERVER_ID = GLITCHTIP_URL.hostname

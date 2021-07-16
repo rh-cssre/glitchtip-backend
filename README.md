@@ -8,7 +8,7 @@
 
 GlitchTip is an open source, Sentry API compatible error tracking platform. It is a partial fork/mostly reimplementation of Sentry's open source codebase before it went proprietary. Its goals are to be a modern, easy-to-develop error tracking platform that respects your freedom to use it any way you wish. Some differences include:
 
-- A modern development environment with Python 3 and Django 3.1.
+- A modern development environment with Python 3 and Django 3.2.
 - Simplicity over features. We use Postgres to store error data. Our code base is a fraction of the size of Sentry and looks like a typical Django app. We leverage existing open source Django ecosystem apps whenever possible.
 - Respects your privacy. No massive JS bundles. No invasive tracking. No third party spying. Even our marketing site runs Matomo and respects Do Not Track. GlitchTip will never report home. We will never know if you run it yourself.
 - Commitment to open source. We use open source tools like GitLab whenever possible. With our MIT license, you can use it for anything you'd like and even sell it. We believe in competition and hope you make GlitchTip even better.
@@ -26,6 +26,12 @@ We use Docker for development. View our [Contributing](./CONTRIBUTING.md) docume
 3. `docker-compose run --rm web ./manage.py migrate
 
 Run tests with `docker-compose run --rm web ./manage.py test`
+
+### Run HTTPS locally for testing FIDO2 keys
+
+1. `cp docker-compose.yml docker-compose.override.yml`
+2. Edit the override file and set `command: ./manage.py runsslserver 0.0.0.0:8000`
+3. Restart docker compose services
 
 ### VS Code (Optional)
 

@@ -38,7 +38,7 @@ class ChunkUploadAPIView(views.APIView):
     permission_classes = [ChunkUploadPermission]
 
     def get(self, request, organization_slug):
-        url = settings.GLITCHTIP_DOMAIN.geturl() + reverse(
+        url = settings.GLITCHTIP_URL.geturl() + reverse(
             "chunk-upload", args=[organization_slug]
         )
         return Response(

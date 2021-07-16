@@ -6,10 +6,10 @@ authors = ["David Burke"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = "^3.7"
-Django = "^3.1"
+python = "^3.8"
+Django = "~3.2.5"
 djangorestframework = "^3.12.1"
-django-allauth = "^0.44.0"
+django-allauth = "~0.45.0"
 django-cors-headers = "^3.2.0"
 django-debug-toolbar = "^3.2"
 django-environ = "^0.4.5"
@@ -30,7 +30,7 @@ redis = "^3.3.11"
 jsonschema = "^3.2.0"
 simplejson = "^3.17.0"
 django-csp = "^3.6"
-dj-stripe = "~2.4.3"
+dj-stripe = "~2.5.1"
 django-anymail = "^8.1"
 drf-yasg = "^1.17.1"
 dj-rest-auth = "~2.1.1"
@@ -39,6 +39,7 @@ django-bitfield = "^2.0.1"
 django-ipware = "^3.0.1"
 anonymizeip = "^1.0.0"
 symbolic = "^8.0.5"
+django-rest-mfa = "^0.1.0"
 
 [tool.poetry.dev-dependencies]
 black = "^19.10b0"
@@ -52,6 +53,7 @@ model_bakery = "^1.1.1"
 tblib = "^1.7.0"
 mypy = "^0.812"
 django-stubs = "^1.7.0"
+django-sslserver = "^0.22"
 
 [build-system]
 requires = ["poetry>=0.12"]
