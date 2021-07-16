@@ -24,7 +24,7 @@ class AlertRecipient(models.Model):
 
     alert = models.ForeignKey(ProjectAlert, on_delete=models.CASCADE)
     recipient_type = models.CharField(max_length=16, choices=RecipientType.choices)
-    url = models.URLField(blank=True)
+    url = models.URLField(max_length=400, blank=True)
 
     class Meta:
         unique_together = ("alert", "recipient_type", "url")
