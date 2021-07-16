@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='alertrecipient',
             name='url',
-            field=models.URLField(blank=True, max_length=400),
+            field=models.URLField(blank=True, max_length=2000),
         ),
     ]
