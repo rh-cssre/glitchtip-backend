@@ -6,6 +6,7 @@ from django.views.generic import TemplateView
 from django.views.generic.base import RedirectView
 from rest_framework import permissions
 from rest_framework_nested import routers
+from django_rest_mfa.rest_auth_helpers.views import MFALoginView
 from organizations.backends import invitation_backend
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
@@ -91,9 +92,9 @@ urlpatterns += [
         name="event_json",
     ),
     path("api/settings/", SettingsView.as_view(), name="settings"),
+    path("rest-auth/login/", MFALoginView.as_view()),
     path("rest-auth/", include("dj_rest_auth.urls")),
     path("rest-auth/registration/", include("dj_rest_auth.registration.urls")),
-    path("api/api-auth/", include("rest_framework.urls", namespace="rest_framework")),
     re_path(
         r"^api/socialaccounts/(?P<pk>\d+)/disconnect/$",
         SocialAccountDisconnectView.as_view(),
