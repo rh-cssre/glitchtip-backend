@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers, exceptions
+from allauth.account.forms import default_token_generator
 from dj_rest_auth.serializers import PasswordResetSerializer
 from dj_rest_auth.registration.serializers import (
     SocialAccountSerializer as BaseSocialAccountSerializer,
@@ -154,6 +155,7 @@ class PasswordSetResetSerializer(PasswordResetSerializer):
             "use_https": request.is_secure(),
             "from_email": getattr(settings, "DEFAULT_FROM_EMAIL"),
             "request": request,
+            "token_generator": default_token_generator,
             "subject_template_name": "registration/password_reset_subject.txt",
             "email_template_name": "registration/password_reset_email.txt",
             "html_email_template_name": "registration/password_reset_email.html",
