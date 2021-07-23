@@ -1,5 +1,6 @@
-from django.contrib.auth.forms import PasswordResetForm, _unicode_ci_compare
+from django.contrib.auth.forms import _unicode_ci_compare
 from django.contrib.auth import get_user_model
+from dj_rest_auth.forms import PasswordResetForm
 
 UserModel = get_user_model()
 
