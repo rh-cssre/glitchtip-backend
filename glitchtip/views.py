@@ -25,7 +25,7 @@ class SettingsView(APIView):
         stripe_public_key = None
         if billing_enabled:
             stripe_public_key = STRIPE_PUBLIC_KEY
-        social_apps = SocialAppSerializer(SocialApp.objects.all(), many=True).data
+        social_apps = SocialAppSerializer(SocialApp.objects.all().order_by('name'), many=True).data
         return Response(
             {
                 "socialApps": social_apps,
