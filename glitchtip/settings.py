@@ -15,6 +15,7 @@ import sys
 import warnings
 import environ
 import sentry_sdk
+from datetime import timedelta
 from django.core.exceptions import ImproperlyConfigured
 from sentry_sdk.integrations.django import DjangoIntegration
 from celery.schedules import crontab
@@ -166,6 +167,7 @@ INSTALLED_APPS = [
     "issues",
     "users",
     "user_reports",
+    "uptime",
     "performance",
     "projects",
     "teams",
@@ -296,6 +298,10 @@ CELERY_BEAT_SCHEDULE = {
     "cleanup-old-events": {
         "task": "issues.tasks.cleanup_old_events",
         "schedule": crontab(hour=6, minute=1),
+    },
+    "uptime-dispatch-checks": {
+        "task": "uptime.tasks.dispatch_checks",
+        "schedule": timedelta(seconds=5),
     },
 }
 CACHES = {"default": {"BACKEND": "redis_cache.RedisCache", "LOCATION": REDIS_URL}}
