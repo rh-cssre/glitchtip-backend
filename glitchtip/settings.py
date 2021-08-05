@@ -423,14 +423,31 @@ SWAGGER_SETTINGS = {
 }
 
 
+LOGGING_HANDLER_CLASS = env.str('DJANGO_LOGGING_HANDLER_CLASS', 'logging.StreamHandler')
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"null": {"class": "logging.NullHandler",},},
+    "handlers": {"null": {"class": "logging.NullHandler",},
+                 "console": {"class": LOGGING_HANDLER_CLASS,},},
     "loggers": {
-        "django.security.DisallowedHost": {"handlers": ["null"], "propagate": False,},
+        "django.security.DisallowedHost": {"handlers": ["null"], "propagate": False, },
     },
+    "root": {"handlers": ["console"]},
 }
+
+if LOGGING_HANDLER_CLASS != 'console':
+    from celery.signals import after_setup_logger, after_setup_task_logger
+
+
+    @after_setup_logger.connect
+    @after_setup_task_logger.connect
+    def setup_celery_logging(logger, **kwargs):
+        from django.utils.module_loading import import_string
+        handler = import_string(LOGGING_HANDLER_CLASS)
+
+        for h in logger.handlers:
+            logger.removeHandler(h)
+        logger.addHandler(handler())
 
 
 def organization_request_callback(request):
