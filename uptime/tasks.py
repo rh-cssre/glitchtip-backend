@@ -1,6 +1,6 @@
 import asyncio
 from typing import List
-from django.db.models import F, ExpressionWrapper, DateTimeField, Subquery, OuterRef
+from django.db.models import F, Q, ExpressionWrapper, DateTimeField, Subquery, OuterRef
 from django.utils import timezone
 from celery import shared_task
 from .models import Monitor, MonitorCheck
@@ -26,7 +26,7 @@ def dispatch_checks():
             ),
             latest_check=latest_check,
         )
-        .filter(latest_check__lte=F("last_min_check"))
+        .filter(Q(latest_check__lte=F("last_min_check")) | Q(latest_check=None))
         .values_list("id", flat=True)
     )
     batch_size = 100
