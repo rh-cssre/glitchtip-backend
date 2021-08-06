@@ -1,6 +1,6 @@
 from django.contrib.auth.forms import _unicode_ci_compare
 from django.contrib.auth import get_user_model
-from dj_rest_auth.forms import PasswordResetForm
+from allauth.account.forms import ResetPasswordForm
 
 UserModel = get_user_model()
 
@@ -11,7 +11,7 @@ to set a password if they want to disconnect.
 """
 
 
-class PasswordSetAndResetForm(PasswordResetForm):
+class PasswordSetAndResetForm(ResetPasswordForm):
     def get_users(self, email):
         email_field_name = UserModel.get_email_field_name()
         active_users = UserModel._default_manager.filter(
