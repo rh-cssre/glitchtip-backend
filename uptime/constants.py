@@ -15,5 +15,6 @@ class MonitorCheckReason(models.IntegerChoices):
     TIMEOUT = 1, _("Timeout")
     STATUS = 2, _("Wrong status code")
     BODY = 3, _("Expected response not found")
-    SSL = 4, _("SSL Error")
+    SSL = 4, _("SSL error")
+    NETWORK = 5, _("Network error")
 

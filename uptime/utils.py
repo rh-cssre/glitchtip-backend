@@ -1,8 +1,10 @@
 import asyncio
+import time
 from datetime import timedelta
 from ssl import SSLError
-import time
+
 import aiohttp
+from aiohttp.client_exceptions import ClientConnectorError
 from .constants import MonitorType, MonitorCheckReason
 
 
@@ -44,6 +46,8 @@ async def fetch(session, monitor):
         monitor["reason"] = MonitorCheckReason.SSL
     except asyncio.TimeoutError:
         monitor["reason"] = MonitorCheckReason.TIMEOUT
+    except ClientConnectorError:
+        monitor["reason"] = MonitorCheckReason.NETWORK
     except OSError:
         monitor["reason"] = MonitorCheckReason.UNKNOWN
     return monitor

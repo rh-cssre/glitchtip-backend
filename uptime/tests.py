@@ -51,5 +51,6 @@ class UptimeTestCase(TestCase):
         self.assertEqual(mon.checks.count(), 1)
 
         with freeze_time("2020-01-02"):
-            dispatch_checks()
+            with self.assertNumQueries(3):
+                dispatch_checks()
         self.assertEqual(mon.checks.count(), 2)

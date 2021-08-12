@@ -1,6 +1,6 @@
 import asyncio
 from typing import List
-from django.db.models import F, ExpressionWrapper, DateTimeField, Subquery, OuterRef
+from django.db.models import F, Q, ExpressionWrapper, DateTimeField, Subquery, OuterRef
 from django.utils import timezone
 from celery import shared_task
 from .models import Monitor, MonitorCheck
@@ -26,7 +26,7 @@ def dispatch_checks():
             ),
             latest_check=latest_check,
         )
-        .filter(latest_check__lte=F("last_min_check"))
+        .filter(Q(latest_check__lte=F("last_min_check")) | Q(latest_check=None))
         .values_list("id", flat=True)
     )
     batch_size = 100
@@ -52,10 +52,19 @@ def perform_checks(monitor_ids: List[int], now=None):
     if now is None:
         now = timezone.now()
     # Convert queryset to raw list[dict] for asyncio operations
-    monitors = list(Monitor.objects.filter(pk__in=monitor_ids).values())
+    latest_is_up = Subquery(
+        MonitorCheck.objects.filter(monitor_id=OuterRef("id"))
+        .order_by("-start_check")
+        .values("is_up")[:1]
+    )
+    monitors = list(
+        Monitor.objects.filter(pk__in=monitor_ids)
+        .annotate(latest_is_up=latest_is_up)
+        .values()
+    )
     loop = asyncio.get_event_loop()
     results = loop.run_until_complete(fetch_all(monitors, loop))
-    MonitorCheck.objects.bulk_create(
+    monitor_checks = MonitorCheck.objects.bulk_create(
         [
             MonitorCheck(
                 monitor_id=result["id"],
@@ -67,3 +76,13 @@ def perform_checks(monitor_ids: List[int], now=None):
             for result in results
         ]
     )
+    for i, result in enumerate(results):
+        if result["latest_is_up"] is True and result["is_up"] is False:
+            send_monitor_notification.delay(monitor_checks[i].pk, True)
+        elif result["latest_is_up"] is False and result["is_up"] is True:
+            send_monitor_notification.delay(monitor_checks[i].pk, False)
+
+
+@shared_task
+def send_monitor_notification(monitor_check_id: int, went_down: bool):
+    check = MonitorCheck.objects.get(pk=monitor_check_id).select_related("monitor")
