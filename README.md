@@ -52,6 +52,15 @@ Now go to localhost:8089 to run the test.
 
 Locust will not be intalled to production docker images and cannot be run from them.
 
+# GCP Logging
+
+In order to enable json logging, set the environment as follows::
+```
+DJANGO_LOGGING_HANDLER_CLASS=google.cloud.logging_v2.handlers.ContainerEngineHandler
+UWSGI_LOG_ENCODER='json {"severity":"info","timestamp":${unix},"message":"${msg}"}}'
+```
+
+
 # Acknowledgements
 
 - Thank you to the Sentry team for their ongoing open source SDK work and formerly open source backend of which this project is based on.

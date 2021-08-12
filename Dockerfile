@@ -10,7 +10,6 @@ RUN pip install "poetry==$POETRY_VERSION"
 WORKDIR /code
 COPY poetry.lock pyproject.toml /code/
 RUN poetry install --no-interaction --no-ansi $(test "$IS_CI" = "True" && echo "--no-dev")
-RUN pip install google-cloud-logging
 
 FROM python:3.9-slim
 ENV PYTHONUNBUFFERED=1 \

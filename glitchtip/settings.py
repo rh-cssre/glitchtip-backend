@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/dev/ref/settings/
 """
 
+import logging
 import os
 import sys
 import warnings
@@ -430,12 +431,12 @@ LOGGING = {
     "handlers": {"null": {"class": "logging.NullHandler",},
                  "console": {"class": LOGGING_HANDLER_CLASS,},},
     "loggers": {
-        "django.security.DisallowedHost": {"handlers": ["null"], "propagate": False, },
+        "django.security.DisallowedHost": {"handlers": ["null"], "propagate": False,},
     },
     "root": {"handlers": ["console"]},
 }
 
-if LOGGING_HANDLER_CLASS != 'console':
+if LOGGING_HANDLER_CLASS is not logging.StreamHandler:
     from celery.signals import after_setup_logger, after_setup_task_logger
 
 
