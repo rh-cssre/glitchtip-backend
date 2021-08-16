@@ -1,62 +1,45 @@
 from django.db.models import Q
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.mail import EmailMultiAlternatives
-from django.template.loader import render_to_string
 from users.models import ProjectAlertStatus
+from glitchtip.email import GlitchTipEmail
 
 User = get_user_model()
 
 
-def send_email_notification(notification):
-    single_template_html = "issue-drip.html"
-    multiple_template_html = "multiple-issues-drip.html"
+class AlertEmail(GlitchTipEmail):
+    html_template_name = "alerts/issue.html"
+    text_template_name = "alerts/issue.txt"
+    subject_template_name = "alerts/issue-subject.txt"
+    notification = None
 
-    subject = "GlitchTip"
-    issue_count = notification.issues.count()
-    first_issue = notification.issues.all().first()
-    if issue_count == 1:
-        subject = f"Error in {first_issue.project}: {first_issue.title}"
-    elif issue_count > 1:
-        subject = f"{issue_count} errors reported in {first_issue.project}"
-
-    base_url = settings.GLITCHTIP_URL.geturl()
-    org_slug = first_issue.project.organization.slug
-
-    text_content = f"Errors reported in {first_issue.project}:\n\n"
-    for issue in notification.issues.all():
-        text_content += f"{issue.title}\n"
-        text_content += f"{base_url}/{org_slug}/issues/{issue.id}\n\n"
-
-    settings_link = (
-        f"{base_url}/{org_slug}/settings/projects/{first_issue.project.slug}"
-    )
-
-    if issue_count == 1:
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        notification = self.notification
+        first_issue = notification.issues.all().first()
+        base_url = settings.GLITCHTIP_URL.geturl()
+        org_slug = first_issue.project.organization.slug
         issue_link = f"{base_url}/{org_slug}/issues/{first_issue.id}"
-        html_content = render_to_string(
-            single_template_html,
-            {
-                "issue_title": first_issue.title,
-                "project_name": first_issue.project,
-                "base_url": base_url,
-                "issue_link": issue_link,
-                "project_notification_settings_link": settings_link,
-            },
+        settings_link = (
+            f"{base_url}/{org_slug}/settings/projects/{first_issue.project.slug}"
         )
-    elif issue_count > 1:
-        project_link = f"{base_url}/{org_slug}/issues?project={first_issue.project.id}"
-        html_content = render_to_string(
-            multiple_template_html,
-            {
-                "org_slug": org_slug,
-                "project_notification_settings_link": settings_link,
-                "issues": notification.issues.all(),
-                "project_name": first_issue.project,
-                "project_link": project_link,
-            },
-        )
+        context["issue_title"] = first_issue.title
+        context["project_name"] = first_issue.project
+        context["first_issue"] = first_issue
+        context["issue_link"] = issue_link
+        context["issues"] = notification.issues.all()
+        context["issue_count"] = notification.issues.count()
+        context["project_notification_settings_link"] = settings_link
+        context["org_slug"] = org_slug
+        context[
+            "project_link"
+        ] = f"{base_url}/{org_slug}/issues?project={first_issue.project.id}"
+        return context
 
+
+def send_email_notification(notification):
+    email = AlertEmail()
+    email.notification = notification
     users = User.objects.filter(
         organizations_ext_organization__projects__projectalert__notification=notification
     ).exclude(
@@ -68,8 +51,4 @@ def send_email_notification(notification):
     )
     if not users.exists():
         return
-    to = users.values_list("email", flat=True)
-    msg = EmailMultiAlternatives(subject, text_content, to=to)
-    msg.merge_data = {user.email: {"unique_id": user.id} for user in users}
-    msg.attach_alternative(html_content, "text/html")
-    msg.send()
+    email.send_users_email(users)
