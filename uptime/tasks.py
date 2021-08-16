@@ -5,6 +5,7 @@ from django.utils import timezone
 from celery import shared_task
 from .models import Monitor, MonitorCheck
 from .utils import fetch_all
+from .email import send_email_uptime_notification
 
 
 @shared_task
@@ -51,12 +52,12 @@ def perform_checks(monitor_ids: List[int], now=None):
     """
     if now is None:
         now = timezone.now()
-    # Convert queryset to raw list[dict] for asyncio operations
     latest_is_up = Subquery(
         MonitorCheck.objects.filter(monitor_id=OuterRef("id"))
         .order_by("-start_check")
         .values("is_up")[:1]
     )
+    # Convert queryset to raw list[dict] for asyncio operations
     monitors = list(
         Monitor.objects.filter(pk__in=monitor_ids)
         .annotate(latest_is_up=latest_is_up)
@@ -85,4 +86,5 @@ def perform_checks(monitor_ids: List[int], now=None):
 
 @shared_task
 def send_monitor_notification(monitor_check_id: int, went_down: bool):
-    check = MonitorCheck.objects.get(pk=monitor_check_id).select_related("monitor")
+    check = MonitorCheck.objects.select_related("monitor").get(pk=monitor_check_id)
+    send_email_uptime_notification(check, went_down)

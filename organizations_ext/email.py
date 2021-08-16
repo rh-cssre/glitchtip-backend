@@ -1,47 +1,42 @@
 from django.conf import settings
-from django.core.mail import EmailMultiAlternatives
-from django.template.loader import render_to_string
+from glitchtip.email import DetailEmail
+from .models import Organization, OrganizationUser
 
 
-def send_email_met_quota(organization):
-    template_html = "met-quota-drip.html"
-    template_txt = "met-quota-drip.txt"
+class MetQuotaEmail(DetailEmail):
+    html_template_name = "organizations/met-quota-drip.html"
+    text_template_name = "organizations/met-quota-drip.txt"
+    subject_template_name = "organizations/met-quota-drip-subject.txt"
+    model = Organization
 
-    subject = f"Met event quota for {organization.name}"
+    def get_email(self):
+        return self.object.email
 
-    base_url = settings.GLITCHTIP_URL.geturl()
-    event_limit = settings.BILLING_FREE_TIER_EVENTS
-    subscription_link = f"{base_url}/{organization.slug}/settings/subscription"
-
-    context = {
-        "organization_name": organization.name,
-        "event_limit": event_limit,
-        "subscription_link": subscription_link,
-    }
-
-    text_content = render_to_string(template_txt, context)
-    html_content = render_to_string(template_html, context)
-
-    to = [organization.email]
-    msg = EmailMultiAlternatives(subject, text_content, to=to)
-    msg.attach_alternative(html_content, "text/html")
-    msg.send()
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        base_url = settings.GLITCHTIP_URL.geturl()
+        event_limit = settings.BILLING_FREE_TIER_EVENTS
+        organization = self.object
+        subscription_link = f"{base_url}/{organization.slug}/settings/subscription"
+        context["organization_name"] = organization.name
+        context["event_limit"] = event_limit
+        context["subscription_link"] = subscription_link
+        return context
 
 
-def send_invitation_email(self, user, **kwargs):
-    template_html = "organizations/email/invite-user-drip.html"
-    template_txt = "organizations/email/invite-user-drip.txt"
+class InvitationEmail(DetailEmail):
+    html_template_name = "organizations/invite-user-drip.html"
+    text_template_name = "organizations/invite-user-drip.txt"
+    subject_template_name = "organizations/invite-user-drip-subject.txt"
+    model = OrganizationUser
 
-    context = {
-        "token": kwargs["token"],
-        "user": user,
-        "organization": kwargs["organization"],
-    }
+    def get_email(self):
+        return self.object.email
 
-    html_content = render_to_string(template_html, context)
-    text_content = render_to_string(template_txt, context)
-    subject = "You are invited to GlitchTip"
-
-    msg = EmailMultiAlternatives(subject, text_content, to=[user])
-    msg.attach_alternative(html_content, "text/html")
-    msg.send()
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        org_user = context["object"]
+        context["token"] = self.kwargs["token"]
+        context["user"] = org_user
+        context["organization"] = org_user.organization
+        return context

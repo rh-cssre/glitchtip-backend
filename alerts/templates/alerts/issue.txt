@@ -1,0 +1,13 @@
+GlitchTip
+
+{% if issue_count == 1 %}
+Issue in {{ first_issue.project }}
+{% else %}
+{{ issue_count }} errors reported in {{ first_issue.project }}
+{% endif %}
+
+{% for issue in issues %}
+{{ issue.title }} {{ base_url }}/{{ org_slug }}/issues/{{ issue.pk }}
+{% endfor %}
+
+View project {{ project_name }} at {{ project_link }}
