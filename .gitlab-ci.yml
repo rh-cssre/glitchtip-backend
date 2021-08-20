@@ -1,12 +1,10 @@
 variables:
   PROJECT_NAME: glitchtip
-  COMPOSE: docker-compose -p glitchtip
   IMAGE_NAME: registry.gitlab.com/glitchtip/glitchtip-backend
   CONTAINER_TEST_IMAGE: registry.gitlab.com/glitchtip/glitchtip-backend:$CI_BUILD_REF_NAME
-  POETRY_VERSION: 1.1.7
-  POETRY_VIRTUALENVS_CREATE: "false"
   PIP_DISABLE_PIP_VERSION_CHECK: "on"
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  POETRY_VIRTUALENVS_CREATE: "false"
   POSTGRES_HOST_AUTH_METHOD: "trust"
   DEBUG: "true"
 
@@ -29,21 +27,18 @@ test:
       - .cache/pip
   script:
     - apt-get update && apt-get install -y gcc
-    - pip install "poetry==$POETRY_VERSION"
+    - pip install poetry
     - poetry install --no-interaction --no-ansi
     - ./manage.py test
 
 build:
-  image: docker
+  image: docker:20
   only:
     variables:
       - $CI_COMMIT_REF_PROTECTED
   services:
     - docker:20-dind
   script:
-    - apk add --no-cache docker-compose
-    - docker pull $IMAGE_NAME:latest || true
-    - $COMPOSE build --build-arg IS_CI="True"
+    - docker build -t $CONTAINER_TEST_IMAGE --build-arg IS_CI="True" .
     - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN registry.gitlab.com
-    - docker tag ${PROJECT_NAME}_web ${IMAGE_NAME}:$CI_BUILD_REF_NAME
     - docker push $CONTAINER_TEST_IMAGE

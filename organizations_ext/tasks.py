@@ -3,7 +3,7 @@ from django.db.models import Count, Q, Subquery, OuterRef
 from celery import shared_task
 from projects.models import Project
 from .models import Organization
-from .email import send_email_met_quota
+from .email import MetQuotaEmail, InvitationEmail
 
 
 def get_free_tier_organizations_with_event_count():
@@ -53,7 +53,7 @@ def set_organization_throttle():
             is_accepting_events=True, event_count__gt=events_max
         ).select_related("owner__organization_user")
         for org in orgs_over_quota:
-            send_email_met_quota(org)
+            send_email_met_quota.delay(org.pk)
         orgs_over_quota.update(is_accepting_events=False)
 
         free_tier_organizations.filter(
@@ -66,3 +66,13 @@ def set_organization_throttle():
             djstripe_customers__subscriptions__plan__amount__gt=0,
             djstripe_customers__subscriptions__status="active",
         ).update(is_accepting_events=True)
+
+
+@shared_task
+def send_email_met_quota(organization_id: int):
+    MetQuotaEmail(pk=organization_id).send_email()
+
+
+@shared_task
+def send_email_invite(org_user_id: int, token: str):
+    InvitationEmail(pk=org_user_id, token=token).send_email()

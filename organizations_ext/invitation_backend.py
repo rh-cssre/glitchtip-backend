@@ -5,7 +5,7 @@ from django.utils.http import base36_to_int
 from django.utils.crypto import constant_time_compare
 from organizations.backends.defaults import InvitationBackend as BaseInvitationBackend
 from .models import Organization
-from .email import send_invitation_email
+from .tasks import send_email_invite
 
 
 REGISTRATION_TIMEOUT_DAYS = getattr(settings, "REGISTRATION_TIMEOUT_DAYS", 15)
@@ -67,5 +67,5 @@ class InvitationBackend(BaseInvitationBackend):
         kwargs.update(
             {"token": self.get_token(user), "organization": user.organization,}
         )
-        send_invitation_email(self, user, **kwargs)
+        send_email_invite.delay(user.pk, kwargs["token"])
         return True

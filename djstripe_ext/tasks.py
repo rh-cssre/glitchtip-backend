@@ -6,7 +6,7 @@ from celery import shared_task
 from organizations_ext.models import Organization
 from projects.models import Project
 from .models import SubscriptionQuotaWarning
-from .email import send_email_warn_quota
+from .email import WarnQuotaEmail
 
 
 @shared_task
@@ -68,12 +68,14 @@ def warn_organization_throttle():
 
     for org in queryset:
         subscription = org.djstripe_customers.first().subscription
-        send_email_warn_quota(
-            org, subscription, org.event_count, org.plan_event_count,
-        )
+        send_email_warn_quota.delay(subscription.pk, org.event_count)
         warning, created = SubscriptionQuotaWarning.objects.get_or_create(
             subscription=subscription
         )
         if not created:
             warning.save()
 
+
+@shared_task
+def send_email_warn_quota(subscription_id: int, event_count: int):
+    WarnQuotaEmail(pk=subscription_id, event_count=event_count).send_email()

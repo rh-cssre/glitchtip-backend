@@ -1,0 +1,1 @@
+GlitchTip: {{ monitor.name }} {{ status_msg }}

@@ -1,0 +1,5 @@
+GlitchTip Alert
+
+{{ monitor }} {{ status_msg }}
+
+{{ base_url }}
