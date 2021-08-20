@@ -30,6 +30,7 @@ class UptimeTestCase(TestCase):
     @aioresponses()
     def test_fetch_all(self, mocked):
         test_url = "https://example.com"
+        mocked.get(test_url, status=200)
         mon1 = baker.make(Monitor, url=test_url, monitor_type=MonitorType.GET)
         mocked.get(test_url, status=200)
         loop = asyncio.get_event_loop()
