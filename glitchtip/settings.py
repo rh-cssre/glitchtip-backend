@@ -302,7 +302,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     "uptime-dispatch-checks": {
         "task": "uptime.tasks.dispatch_checks",
-        "schedule": timedelta(seconds=5),
+        "schedule": timedelta(seconds=30),
     },
 }
 CACHES = {"default": {"BACKEND": "redis_cache.RedisCache", "LOCATION": REDIS_URL}}
