@@ -5,7 +5,7 @@ from django.utils import timezone
 from celery import shared_task
 from .models import Monitor, MonitorCheck
 from .utils import fetch_all
-from .email import send_email_uptime_notification
+from .email import MonitorEmail
 
 
 @shared_task
@@ -52,16 +52,9 @@ def perform_checks(monitor_ids: List[int], now=None):
     """
     if now is None:
         now = timezone.now()
-    latest_is_up = Subquery(
-        MonitorCheck.objects.filter(monitor_id=OuterRef("id"))
-        .order_by("-start_check")
-        .values("is_up")[:1]
-    )
     # Convert queryset to raw list[dict] for asyncio operations
     monitors = list(
-        Monitor.objects.filter(pk__in=monitor_ids)
-        .annotate(latest_is_up=latest_is_up)
-        .values()
+        Monitor.objects.with_check_annotations().filter(pk__in=monitor_ids).values()
     )
     loop = asyncio.get_event_loop()
     results = loop.run_until_complete(fetch_all(monitors, loop))
@@ -79,12 +72,17 @@ def perform_checks(monitor_ids: List[int], now=None):
     )
     for i, result in enumerate(results):
         if result["latest_is_up"] is True and result["is_up"] is False:
-            send_monitor_notification.delay(monitor_checks[i].pk, True)
+            send_monitor_notification.delay(
+                monitor_checks[i].pk, True, result["last_change"]
+            )
         elif result["latest_is_up"] is False and result["is_up"] is True:
-            send_monitor_notification.delay(monitor_checks[i].pk, False)
+            send_monitor_notification.delay(
+                monitor_checks[i].pk, False, result["last_change"]
+            )
 
 
 @shared_task
-def send_monitor_notification(monitor_check_id: int, went_down: bool):
-    check = MonitorCheck.objects.select_related("monitor").get(pk=monitor_check_id)
-    send_email_uptime_notification(check, went_down)
+def send_monitor_notification(monitor_check_id: int, went_down: bool, last_change):
+    MonitorEmail(
+        pk=monitor_check_id, went_down=went_down, last_change=last_change
+    ).send_users_email()

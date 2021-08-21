@@ -1,6 +1,6 @@
 from django.contrib import admin
-from django.db.models import Subquery, OuterRef
 from django.forms.models import BaseInlineFormSet
+from django.utils import timezone
 from .models import Monitor, MonitorCheck
 
 
@@ -24,25 +24,34 @@ class MonitorCheckInlineAdmin(admin.TabularInline):
 
 
 class MonitorAdmin(admin.ModelAdmin):
-    list_display = ["name", "is_up", "monitor_type", "organization", "interval"]
+    list_display = [
+        "name",
+        "is_up",
+        "time_since",
+        "monitor_type",
+        "organization",
+        "interval",
+    ]
     list_filter = ["monitor_type"]
     search_fields = ["name", "organization__name"]
     inlines = [MonitorCheckInlineAdmin]
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.annotate(
-            is_up=Subquery(
-                MonitorCheck.objects.filter(monitor_id=OuterRef("id"))
-                .order_by("-start_check")
-                .values("is_up")[:1]
-            )
-        )
+        qs = self.model.objects.with_check_annotations()
+        ordering = self.get_ordering(request)
+        if ordering:
+            qs = qs.order_by(*ordering)
+        return qs
 
     def is_up(self, obj):
-        return obj.is_up
+        return obj.latest_is_up
 
     is_up.boolean = True
+
+    def time_since(self, obj):
+        if obj.last_change:
+            now = timezone.now()
+            return now - obj.last_change
 
 
 class MonitorCheckAdmin(admin.ModelAdmin):

@@ -1,5 +1,5 @@
 GlitchTip Alert
 
-{{ monitor }} {{ status_msg }}
+{{ object.monitor }} {{ status_msg }}
 
 {{ base_url }}

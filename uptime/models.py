@@ -1,7 +1,31 @@
 from datetime import timedelta
 from django.db import models
+from django.db.models import Subquery, OuterRef
 from glitchtip.base_models import CreatedModel
 from .constants import MonitorType, MonitorCheckReason
+
+
+class MonitorManager(models.Manager):
+    def with_check_annotations(self):
+        """
+        Adds MonitorCheck annotations:
+        latest_is_up - Most recent check is_up result
+        last_change - Most recent check where is_up state changed
+        Example: Monitor state: { latest_is_up } since { last_change }
+        """
+        return self.annotate(
+            latest_is_up=Subquery(
+                MonitorCheck.objects.filter(monitor_id=OuterRef("id"))
+                .order_by("-start_check")
+                .values("is_up")[:1]
+            ),
+            last_change=Subquery(
+                MonitorCheck.objects.filter(monitor_id=OuterRef("id"))
+                .exclude(is_up=OuterRef("latest_is_up"))
+                .order_by("-start_check")
+                .values("start_check")[:1]
+            ),
+        )
 
 
 class Monitor(CreatedModel):
@@ -23,6 +47,8 @@ class Monitor(CreatedModel):
         "organizations_ext.Organization", on_delete=models.CASCADE
     )
     interval = models.DurationField(default=timedelta(minutes=1))
+
+    objects = MonitorManager()
 
     def __str__(self):
         return self.name

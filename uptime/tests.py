@@ -64,6 +64,7 @@ class UptimeTestCase(GlitchTipTestCase):
         with freeze_time("2020-01-01"):
             baker.make(
                 Monitor,
+                name=test_url,
                 url=test_url,
                 monitor_type=MonitorType.GET,
                 project=self.project,

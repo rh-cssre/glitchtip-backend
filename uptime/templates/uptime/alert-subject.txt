@@ -1,1 +1,1 @@
-GlitchTip: {{ monitor.name }} {{ status_msg }}
+GlitchTip: {{ object.monitor }} {{ status_msg }}

@@ -1,19 +1,21 @@
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
-from users.models import ProjectAlertStatus
-from glitchtip.email import GlitchTipEmail
+from users.models import ProjectAlertStatus, User
+from glitchtip.email import DetailEmail
+from .models import MonitorCheck
 
 
 User = get_user_model()
 
 
-class MonitorEmail(GlitchTipEmail):
+class MonitorEmail(DetailEmail):
     html_template_name = "uptime/alert.txt"
     text_template_name = "uptime/alert.txt"
     subject_template_name = "uptime/alert-subject.txt"
-    monitor = None
+    model = MonitorCheck
     went_down = True
+    last_change = None
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -21,25 +23,17 @@ class MonitorEmail(GlitchTipEmail):
             context["status_msg"] = _("is down")
         else:
             context["status_msg"] = _("is up")
-        context["name"] = self.monitor.name
         return context
 
-
-def send_email_uptime_notification(monitor_check, went_down: bool):
-    email = MonitorEmail()
-    monitor = monitor_check.monitor
-    email.monitor = monitor
-    email.went_down = went_down
-    users = User.objects.filter(
-        organizations_ext_organization__projects__monitor=monitor
-    ).exclude(
-        Q(
-            userprojectalert__project=monitor.project,
-            userprojectalert__status=ProjectAlertStatus.OFF,
+    def get_users(self):
+        monitor = self.object.monitor
+        return User.objects.filter(
+            organizations_ext_organization__projects__monitor=monitor
+        ).exclude(
+            Q(
+                userprojectalert__project=monitor.project,
+                userprojectalert__status=ProjectAlertStatus.OFF,
+            )
+            | Q(subscribe_by_default=False, userprojectalert=None),
         )
-        | Q(subscribe_by_default=False, userprojectalert=None),
-    )
-    if not users.exists():
-        return
-    email.send_users_email(users)
 
