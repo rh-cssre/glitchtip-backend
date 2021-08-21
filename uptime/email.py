@@ -34,7 +34,7 @@ def send_email_uptime_notification(monitor_check, went_down: bool):
         organizations_ext_organization__projects__monitor=monitor
     ).exclude(
         Q(
-            userprojectalert__project=monitor.project_alert.project,
+            userprojectalert__project=monitor.project,
             userprojectalert__status=ProjectAlertStatus.OFF,
         )
         | Q(subscribe_by_default=False, userprojectalert=None),

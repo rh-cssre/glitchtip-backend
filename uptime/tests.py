@@ -1,17 +1,17 @@
 import asyncio
 from unittest import mock
 from aioresponses import aioresponses
-from django.test import TestCase
+from django.core import mail
 from freezegun import freeze_time
 from model_bakery import baker
-from glitchtip import test_utils  # pylint: disable=unused-import
+from glitchtip.test_utils.test_case import GlitchTipTestCase
 from .tasks import dispatch_checks
 from .utils import fetch_all
 from .models import Monitor, MonitorCheck
 from .constants import MonitorType
 
 
-class UptimeTestCase(TestCase):
+class UptimeTestCase(GlitchTipTestCase):
     @mock.patch("uptime.tasks.perform_checks.run")
     def test_dispatch_checks(self, mocked):
         mock.return_value = None
@@ -55,3 +55,21 @@ class UptimeTestCase(TestCase):
             with self.assertNumQueries(3):
                 dispatch_checks()
         self.assertEqual(mon.checks.count(), 2)
+
+    @aioresponses()
+    def test_monitor_email(self, mocked):
+        self.create_user_and_project()
+        test_url = "https://example.com"
+        mocked.get(test_url, status=200)
+        with freeze_time("2020-01-01"):
+            baker.make(
+                Monitor,
+                url=test_url,
+                monitor_type=MonitorType.GET,
+                project=self.project,
+            )
+
+        mocked.get(test_url, status=500)
+        with freeze_time("2020-01-02"):
+            dispatch_checks()
+        self.assertEqual(len(mail.outbox), 1)
