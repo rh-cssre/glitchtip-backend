@@ -1,3 +1,4 @@
+import uuid
 from datetime import timedelta
 from django.db import models
 from django.db.models import Subquery, OuterRef
@@ -32,6 +33,12 @@ class Monitor(CreatedModel):
     monitor_type = models.CharField(
         max_length=12, choices=MonitorType.choices, default=MonitorType.PING
     )
+    endpoint_id = models.UUIDField(
+        blank=True,
+        null=True,
+        editable=False,
+        help_text="Used for referencing heartbeat endpoint",
+    )
     name = models.CharField(max_length=200)
     url = models.URLField(blank=True)
     expected_status = models.PositiveSmallIntegerField(default=200)
@@ -54,10 +61,13 @@ class Monitor(CreatedModel):
         return self.name
 
     def save(self, *args, **kwargs):
+        if self.monitor_type == MonitorType.HEARTBEAT and not self.endpoint_id:
+            self.endpoint_id = uuid.uuid4()
         super().save(*args, **kwargs)
         from uptime.tasks import perform_checks
 
-        perform_checks.apply_async(args=([self.pk],), countdown=1)
+        if self.monitor_type != MonitorType.HEARTBEAT:
+            perform_checks.apply_async(args=([self.pk],), countdown=1)
 
 
 class MonitorCheck(CreatedModel):

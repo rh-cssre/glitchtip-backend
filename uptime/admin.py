@@ -1,5 +1,7 @@
+from django.conf import settings
 from django.contrib import admin
 from django.forms.models import BaseInlineFormSet
+from django.urls import reverse
 from django.utils import timezone
 from .models import Monitor, MonitorCheck
 
@@ -32,6 +34,7 @@ class MonitorAdmin(admin.ModelAdmin):
         "organization",
         "interval",
     ]
+    readonly_fields = ["heartbeat_endpoint"]
     list_filter = ["monitor_type"]
     search_fields = ["name", "organization__name"]
     inlines = [MonitorCheckInlineAdmin]
@@ -52,6 +55,16 @@ class MonitorAdmin(admin.ModelAdmin):
         if obj.last_change:
             now = timezone.now()
             return now - obj.last_change
+
+    def heartbeat_endpoint(self, obj):
+        if obj.endpoint_id:
+            return settings.GLITCHTIP_URL.geturl() + reverse(
+                "heartbeat-check",
+                kwargs={
+                    "organization_slug": obj.organization.slug,
+                    "endpoint_id": obj.endpoint_id,
+                },
+            )
 
 
 class MonitorCheckAdmin(admin.ModelAdmin):

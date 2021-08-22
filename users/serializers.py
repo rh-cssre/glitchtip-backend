@@ -1,17 +1,16 @@
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
-from rest_framework import serializers, exceptions
-from allauth.account.forms import default_token_generator
+from rest_framework import serializers
 from dj_rest_auth.serializers import PasswordResetSerializer
 from dj_rest_auth.registration.serializers import (
     SocialAccountSerializer as BaseSocialAccountSerializer,
 )
-from allauth.socialaccount.models import SocialApp
+from allauth.account.forms import default_token_generator
 from allauth.account.adapter import get_adapter
 from allauth.account import app_settings
 from allauth.account.utils import filter_users_by_email
 from allauth.account.models import EmailAddress
-from .utils import is_user_registration_open
+from allauth.socialaccount.models import SocialApp
 from .models import User
 from .forms import PasswordSetAndResetForm
 

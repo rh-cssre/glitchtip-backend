@@ -2,6 +2,7 @@ import asyncio
 from unittest import mock
 from aioresponses import aioresponses
 from django.core import mail
+from django.urls import reverse
 from freezegun import freeze_time
 from model_bakery import baker
 from glitchtip.test_utils.test_case import GlitchTipTestCase
@@ -86,3 +87,42 @@ class UptimeTestCase(GlitchTipTestCase):
             dispatch_checks()
         self.assertEqual(len(mail.outbox), 2)
         self.assertIn("is up", mail.outbox[1].body)
+
+    def test_heartbeat(self):
+        self.create_user_and_project()
+        with freeze_time("2020-01-01"):
+            monitor = baker.make(
+                Monitor, monitor_type=MonitorType.HEARTBEAT, project=self.project,
+            )
+            url = reverse(
+                "heartbeat-check",
+                kwargs={
+                    "organization_slug": monitor.organization.slug,
+                    "endpoint_id": monitor.endpoint_id,
+                },
+            )
+            self.assertFalse(monitor.checks.exists())
+            self.client.post(url)
+            self.assertTrue(monitor.checks.filter(is_up=True).exists())
+            dispatch_checks()
+        self.assertTrue(monitor.checks.filter(is_up=True).exists())
+        self.assertEqual(len(mail.outbox), 0)
+
+        with freeze_time("2020-01-02"):
+            dispatch_checks()
+        self.assertEqual(len(mail.outbox), 1)
+
+        with freeze_time("2020-01-03"):
+            dispatch_checks()  # Still down
+        self.assertEqual(len(mail.outbox), 1)
+
+        with freeze_time("2020-01-04"):
+            self.client.post(url)  # Back up
+        self.assertEqual(len(mail.outbox), 2)
+
+    def test_heartbeat_grace_period(self):
+        # Don't alert users when heartbeat check has never come in
+        self.create_user_and_project()
+        baker.make(Monitor, monitor_type=MonitorType.HEARTBEAT, project=self.project)
+        dispatch_checks()
+        self.assertEqual(len(mail.outbox), 0)
