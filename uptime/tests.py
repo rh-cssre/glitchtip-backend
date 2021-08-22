@@ -74,3 +74,15 @@ class UptimeTestCase(GlitchTipTestCase):
         with freeze_time("2020-01-02"):
             dispatch_checks()
         self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("is down", mail.outbox[0].body)
+
+        mocked.get(test_url, status=500)
+        with freeze_time("2020-01-03"):
+            dispatch_checks()
+        self.assertEqual(len(mail.outbox), 1)
+
+        mocked.get(test_url, status=200)
+        with freeze_time("2020-01-04"):
+            dispatch_checks()
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertIn("is up", mail.outbox[1].body)

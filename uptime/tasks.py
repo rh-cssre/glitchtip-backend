@@ -2,6 +2,7 @@ import asyncio
 from typing import List
 from django.db.models import F, Q, ExpressionWrapper, DateTimeField, Subquery, OuterRef
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from celery import shared_task
 from .models import Monitor, MonitorCheck
 from .utils import fetch_all
@@ -82,7 +83,9 @@ def perform_checks(monitor_ids: List[int], now=None):
 
 
 @shared_task
-def send_monitor_notification(monitor_check_id: int, went_down: bool, last_change):
+def send_monitor_notification(monitor_check_id: int, went_down: bool, last_change: str):
     MonitorEmail(
-        pk=monitor_check_id, went_down=went_down, last_change=last_change
+        pk=monitor_check_id,
+        went_down=went_down,
+        last_change=parse_datetime(last_change) if last_change else None,
     ).send_users_email()

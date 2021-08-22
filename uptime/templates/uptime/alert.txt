@@ -2,4 +2,9 @@ GlitchTip Alert
 
 {{ object.monitor }} {{ status_msg }}
 
+URL: {{ object.monitor.url }}{% if object.reason %}
+Reason: {{ object.get_reason_display }}{% endif %}
+When: {{ object.start_check }}{% if time_since_last_change %}
+It was {% if object.is_up %}down{% else %}up{% endif %} for {{ time_since_last_change }}{% endif %}
+
 {{ base_url }}

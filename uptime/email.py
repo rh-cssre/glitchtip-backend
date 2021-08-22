@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db.models import Q
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from users.models import ProjectAlertStatus, User
 from glitchtip.email import DetailEmail
@@ -23,6 +24,8 @@ class MonitorEmail(DetailEmail):
             context["status_msg"] = _("is down")
         else:
             context["status_msg"] = _("is up")
+        if self.last_change:
+            context["time_since_last_change"] = timezone.now() - self.last_change
         return context
 
     def get_users(self):
