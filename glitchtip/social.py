@@ -55,7 +55,12 @@ class MFASocialLoginView(SocialLoginView):
 
     def get_response(self):
         if getattr(self.user, "mfa", False):
-            return Response({"requires_mfa": True})
+            user_key_types = (
+                self.user.userkey_set.all()
+                .values_list("key_type", flat=True)
+                .distinct()
+            )
+            return Response({"requires_mfa": True, "valid_auth": user_key_types})
         return super().get_response()
 
 
