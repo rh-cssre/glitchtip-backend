@@ -4,7 +4,12 @@ from rest_framework.decorators import action
 from organizations_ext.models import Organization
 from projects.models import Project
 from .models import Release, ReleaseFile
-from .serializers import ReleaseSerializer, ReleaseFileSerializer, AssembleSerializer
+from .serializers import (
+    ReleaseSerializer,
+    ReleaseUpdateSerializer,
+    ReleaseFileSerializer,
+    AssembleSerializer,
+)
 from .permissions import ReleasePermission, ReleaseFilePermission
 
 
@@ -14,6 +19,12 @@ class ReleaseViewSet(viewsets.ModelViewSet):
     permission_classes = [ReleasePermission]
     lookup_field = "version"
     lookup_value_regex = "[^/]+"
+
+    def get_serializer_class(self):
+        serializer_class = self.serializer_class
+        if self.request.method == "PUT":
+            serializer_class = ReleaseUpdateSerializer
+        return serializer_class
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:

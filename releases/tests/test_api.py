@@ -36,6 +36,20 @@ class ReleaseAPITestCase(GlitchTipTestCase):
         res = self.client.get(url)
         self.assertContains(res, release.version)
 
+    def test_finalize(self):
+        release = baker.make("releases.Release", organization=self.organization)
+        url = reverse(
+            "organization-releases-detail",
+            kwargs={
+                "organization_slug": release.organization.slug,
+                "version": release.version,
+            },
+        )
+        data = {"projects": ["fun"], "dateReleased": "2021-09-04T14:08:57.388525996Z"}
+        res = self.client.put(url, data)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["dateReleased"], "2021-09-04T14:08:57.388525Z")
+
     def test_destroy(self):
         release1 = baker.make("releases.Release", organization=self.organization)
         url = reverse(

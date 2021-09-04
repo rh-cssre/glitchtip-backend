@@ -8,6 +8,7 @@ from .models import Release, ReleaseFile
 
 class ReleaseSerializer(serializers.ModelSerializer):
     dateCreated = serializers.DateTimeField(source="created", read_only=True)
+    dateReleased = serializers.DateTimeField(source="released", required=False)
     shortVersion = serializers.CharField(source="version", read_only=True)
     deployCount = serializers.IntegerField(source="deploy_count", read_only=True)
     projects = ProjectReferenceSerializer(many=True, read_only=True)
@@ -19,6 +20,7 @@ class ReleaseSerializer(serializers.ModelSerializer):
             "data",
             "deployCount",
             "dateCreated",
+            "dateReleased",
             "version",
             "shortVersion",
             "projects",
@@ -32,6 +34,10 @@ class ReleaseSerializer(serializers.ModelSerializer):
             version=version, organization=organization, defaults=validated_data
         )
         return instance
+
+
+class ReleaseUpdateSerializer(ReleaseSerializer):
+    version = serializers.CharField(read_only=True)
 
 
 class ReleaseFileSerializer(serializers.ModelSerializer):
