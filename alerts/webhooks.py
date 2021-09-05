@@ -18,14 +18,33 @@ class WebhookAttachment:
 
 
 @dataclass
+class MSTeamsSection:
+    """
+    Similar to WebhookAttachment but for MS Teams
+    https://docs.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/connectors-using?tabs=cURL
+    """
+
+    activityTitle: str
+    activitySubtitle: str
+
+
+@dataclass
 class WebhookPayload:
     alias: str
     text: str
     attachments: List[WebhookAttachment]
+    sections: List[MSTeamsSection]
 
 
-def send_webhook(url: str, message: str, attachments: List[WebhookAttachment] = []):
-    data = WebhookPayload(alias="GlitchTip", text=message, attachments=attachments)
+def send_webhook(
+    url: str,
+    message: str,
+    attachments: List[WebhookAttachment] = [],
+    sections: List[MSTeamsSection] = [],
+):
+    data = WebhookPayload(
+        alias="GlitchTip", text=message, attachments=attachments, sections=sections
+    )
     response = requests.post(url, json=asdict(data))
     return response
 
@@ -38,6 +57,7 @@ def send_issue_as_webhook(url, issues: List["Issue"], issue_count: int = 1):
     issue_count - total issues, may be greater than len(issues)
     """
     attachments: List[WebhookAttachment] = []
+    sections: List[MSTeamsSection] = []
     for issue in issues:
         attachments.append(
             WebhookAttachment(
@@ -47,10 +67,16 @@ def send_issue_as_webhook(url, issues: List["Issue"], issue_count: int = 1):
                 color=issue.get_hex_color(),
             )
         )
+        sections.append(
+            MSTeamsSection(
+                activityTitle=str(issue),
+                activitySubtitle=f"[View Issue {issue.short_id_display}]({issue.get_detail_url()})",
+            )
+        )
     message = "GlitchTip Alert"
     if issue_count > 1:
         message += f" ({issue_count} issues)"
-    return send_webhook(url, message, attachments)
+    return send_webhook(url, message, attachments, sections)
 
 
 def send_webhook_notification(notification: "Notification", url: str):

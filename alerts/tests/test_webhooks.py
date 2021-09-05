@@ -21,8 +21,8 @@ class WebhookTestCase(TestCase):
 
     @mock.patch("requests.post")
     def test_send_issue_as_webhook(self, mock_post):
-        issue = baker.make("issues.Issue", level=LogLevel.WARNING)
-        issue2 = baker.make("issues.Issue", level=LogLevel.ERROR)
+        issue = baker.make("issues.Issue", level=LogLevel.WARNING, short_id=1)
+        issue2 = baker.make("issues.Issue", level=LogLevel.ERROR, short_id=2)
         issue3 = baker.make("issues.Issue", level=LogLevel.NOTSET)
         send_issue_as_webhook(TEST_URL, [issue, issue2, issue3], 3)
         mock_post.assert_called_once()
