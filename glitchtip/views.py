@@ -25,7 +25,9 @@ class SettingsView(APIView):
         stripe_public_key = None
         if billing_enabled:
             stripe_public_key = STRIPE_PUBLIC_KEY
-        social_apps = SocialAppSerializer(SocialApp.objects.all().order_by('name'), many=True).data
+        social_apps = SocialAppSerializer(
+            SocialApp.objects.all().order_by("name"), many=True
+        ).data
         return Response(
             {
                 "socialApps": social_apps,
@@ -33,8 +35,8 @@ class SettingsView(APIView):
                 "iPaidForGlitchTip": settings.I_PAID_FOR_GLITCHTIP,
                 "enableUserRegistration": enable_user_registration,
                 "stripePublicKey": stripe_public_key,
-                "matomoURL": settings.MATOMO_URL,
-                "matomoSiteId": settings.MATOMO_SITE_ID,
+                "plausibleURL": settings.PLAUSIBLE_URL,
+                "plausibleDomain": settings.PLAUSIBLE_DOMAIN,
                 "chatwootWebsiteToken": settings.CHATWOOT_WEBSITE_TOKEN,
                 "sentryDSN": settings.SENTRY_FRONTEND_DSN,
                 "sentryTracesSampleRate": settings.SENTRY_TRACES_SAMPLE_RATE,

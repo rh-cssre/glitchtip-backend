@@ -234,15 +234,15 @@ CSP_FONT_SRC = env.list(
 CSP_WORKER_SRC = env.list("CSP_WORKER_SRC", str, ["'self'", "blob:"])
 # GlitchTip can record it's own errors
 CSP_CONNECT_SRC = env.list(
-    "CSP_CONNECT_SRC", str, ["'self'", "https://app.glitchtip.com"]
+    "CSP_CONNECT_SRC", str, ["'self'", "https://*.glitchtip.com"]
 )
-# Needed for Matomo and Stripe for SaaS use cases. Both are disabled by default.
+# Needed for Analytics and Stripe for SaaS use cases. Both are disabled by default.
 CSP_SCRIPT_SRC = env.list(
     "CSP_SCRIPT_SRC",
     str,
-    ["'self'", "https://matomo.glitchtip.com", "https://js.stripe.com"],
+    ["'self'", "https://*.glitchtip.com", "https://js.stripe.com"],
 )
-CSP_IMG_SRC = env.list("CSP_IMG_SRC", str, ["'self'", "https://matomo.glitchtip.com"])
+CSP_IMG_SRC = env.list("CSP_IMG_SRC", str, ["'self'"])
 CSP_FRAME_SRC = env.list("CSP_FRAME_SRC", str, ["'self'", "https://js.stripe.com"])
 # Consider tracking CSP reports with GlitchTip itself
 CSP_REPORT_URI = env.tuple("CSP_REPORT_URI", str, None)
@@ -424,12 +424,14 @@ SWAGGER_SETTINGS = {
 }
 
 
-LOGGING_HANDLER_CLASS = env.str('DJANGO_LOGGING_HANDLER_CLASS', 'logging.StreamHandler')
+LOGGING_HANDLER_CLASS = env.str("DJANGO_LOGGING_HANDLER_CLASS", "logging.StreamHandler")
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"null": {"class": "logging.NullHandler",},
-                 "console": {"class": LOGGING_HANDLER_CLASS,},},
+    "handlers": {
+        "null": {"class": "logging.NullHandler",},
+        "console": {"class": LOGGING_HANDLER_CLASS,},
+    },
     "loggers": {
         "django.security.DisallowedHost": {"handlers": ["null"], "propagate": False,},
     },
@@ -439,11 +441,11 @@ LOGGING = {
 if LOGGING_HANDLER_CLASS is not logging.StreamHandler:
     from celery.signals import after_setup_logger, after_setup_task_logger
 
-
     @after_setup_logger.connect
     @after_setup_task_logger.connect
     def setup_celery_logging(logger, **kwargs):
         from django.utils.module_loading import import_string
+
         handler = import_string(LOGGING_HANDLER_CLASS)
 
         for h in logger.handlers:
@@ -460,9 +462,9 @@ def organization_request_callback(request):
         ).first()
 
 
-# Set to track activity with Matomo
-MATOMO_URL = env.str("MATOMO_URL", default=None)
-MATOMO_SITE_ID = env.str("MATOMO_SITE_ID", default=None)
+# Set to track activity with Plausible
+PLAUSIBLE_URL = env.str("PLAUSIBLE_URL", default=None)
+PLAUSIBLE_DOMAIN = env.str("PLAUSIBLE_DOMAIN", default=None)
 
 # Set to chatwoot website token to enable live help widget. Assumes app.chatwoot.com.
 CHATWOOT_WEBSITE_TOKEN = env.str("CHATWOOT_WEBSITE_TOKEN", None)

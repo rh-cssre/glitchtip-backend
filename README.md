@@ -10,7 +10,7 @@ GlitchTip is an open source, Sentry API compatible error tracking platform. It i
 
 - A modern development environment with Python 3 and Django 3.2.
 - Simplicity over features. We use Postgres to store error data. Our code base is a fraction of the size of Sentry and looks like a typical Django app. We leverage existing open source Django ecosystem apps whenever possible.
-- Respects your privacy. No massive JS bundles. No invasive tracking. No third party spying. Even our marketing site runs Matomo and respects Do Not Track. GlitchTip will never report home. We will never know if you run it yourself.
+- Respects your privacy. No massive JS bundles. No invasive tracking. No third party spying. Our marketing site only the privacy-focused Plausible analytics. Self hosted GlitchTip will never report home. We will never know if you run it yourself.
 - Commitment to open source. We use open source tools like GitLab whenever possible. With our MIT license, you can use it for anything you'd like and even sell it. We believe in competition and hope you make GlitchTip even better.
 
 Project status: Stable. Open an issue and say hello if you'd like to help. We are able to process basic error requests from the open source Sentry client tools. More features are on the way.
@@ -55,14 +55,14 @@ Locust will not be intalled to production docker images and cannot be run from t
 # GCP Logging
 
 In order to enable json logging, set the environment as follows::
+
 ```
 DJANGO_LOGGING_HANDLER_CLASS=google.cloud.logging_v2.handlers.ContainerEngineHandler
 UWSGI_LOG_ENCODER='json {"severity":"info","timestamp":${unix},"message":"${msg}"}}'
 ```
 
-
 # Acknowledgements
 
 - Thank you to the Sentry team for their ongoing open source SDK work and formerly open source backend of which this project is based on.
-- We use Rocket Chat for embedded support on glitchtip.com and in app
-- Matomo is used for analytics and is not shared with any third party
+- We use element.io for internal chat and public gitter room
+- Plausible Analytics is used for analytics
