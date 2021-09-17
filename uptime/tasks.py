@@ -1,5 +1,6 @@
 import asyncio
 from typing import List
+from django.db import transaction
 from django.db.models import F, Q, ExpressionWrapper, DateTimeField, Subquery, OuterRef
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -20,26 +21,29 @@ def dispatch_checks():
         .order_by("-start_check")
         .values("start_check")[:1]
     )
-    monitor_ids = (
-        Monitor.objects.filter(organization__is_accepting_events=True)
-        .annotate(
-            last_min_check=ExpressionWrapper(
-                now - F("interval"), output_field=DateTimeField()
-            ),
-            latest_check=latest_check,
+    # Use of atomic solves iterator() with pgbouncer InvalidCursorName issue
+    # https://docs.djangoproject.com/en/3.2/ref/databases/#transaction-pooling-server-side-cursors
+    with transaction.atomic():
+        monitor_ids = (
+            Monitor.objects.filter(organization__is_accepting_events=True)
+            .annotate(
+                last_min_check=ExpressionWrapper(
+                    now - F("interval"), output_field=DateTimeField()
+                ),
+                latest_check=latest_check,
+            )
+            .filter(Q(latest_check__lte=F("last_min_check")) | Q(latest_check=None))
+            .values_list("id", flat=True)
         )
-        .filter(Q(latest_check__lte=F("last_min_check")) | Q(latest_check=None))
-        .values_list("id", flat=True)
-    )
-    batch_size = 100
-    batch_ids = []
-    for i, monitor_id in enumerate(monitor_ids.iterator(), 1):
-        batch_ids.append(monitor_id)
-        if i % batch_size == 0:
+        batch_size = 100
+        batch_ids = []
+        for i, monitor_id in enumerate(monitor_ids.iterator(), 1):
+            batch_ids.append(monitor_id)
+            if i % batch_size == 0:
+                perform_checks.delay(batch_ids, now)
+                batch_ids = []
+        if len(batch_ids) > 0:
             perform_checks.delay(batch_ids, now)
-            batch_ids = []
-    if len(batch_ids) > 0:
-        perform_checks.delay(batch_ids, now)
 
 
 @shared_task

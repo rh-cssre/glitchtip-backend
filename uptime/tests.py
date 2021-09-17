@@ -53,7 +53,7 @@ class UptimeTestCase(GlitchTipTestCase):
         self.assertEqual(mon.checks.count(), 1)
 
         with freeze_time("2020-01-02"):
-            with self.assertNumQueries(3):
+            with self.assertNumQueries(5):
                 dispatch_checks()
         self.assertEqual(mon.checks.count(), 2)
 
