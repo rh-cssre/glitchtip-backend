@@ -127,6 +127,9 @@ class CreateStripeSubscriptionCheckout(views.APIView):
                 ],
                 mode="subscription",
                 customer=customer.id,
+                automatic_tax={"enabled": settings.STRIPE_AUTOMATIC_TAX,},
+                customer_update={"address": "auto", "name": "auto"},
+                tax_id_collection={"enabled": True,},
                 success_url=domain
                 + "/"
                 + organization.slug
