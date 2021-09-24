@@ -47,7 +47,10 @@ class EventEntriesSerializer(serializers.Serializer):
             # if any frame is "in_app" set this to True
             exception["hasSystemFrames"] = False
             for value in exception["values"]:
-                if "stacktrace" in value and "frames" in value["stacktrace"]:
+                if (
+                    value.get("stacktrace", None) is not None
+                    and "frames" in value["stacktrace"]
+                ):
                     for frame in value["stacktrace"]["frames"]:
                         if frame.get("in_app") == True:
                             exception["hasSystemFrames"] = True
