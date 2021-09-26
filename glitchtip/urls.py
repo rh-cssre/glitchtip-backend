@@ -83,6 +83,7 @@ urlpatterns += [
     path("api/0/", include("api_tokens.urls")),
     path("api/0/", include("files.urls")),
     path("api/0/", include("uptime.urls")),
+    path("api/0/", include("glitchtip.wizard.urls")),
     path("api/mfa/", include("django_rest_mfa.urls")),
     path("api/", include("events.urls")),
     path("api/embed/", include("user_reports.urls")),

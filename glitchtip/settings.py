@@ -414,6 +414,7 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
         "glitchtip.authentication.BearerTokenAuthentication",
     ],
+    "DEFAULT_THROTTLE_RATES": {"anon": "100/minute"},
 }
 
 DRF_YASG_EXCLUDE_VIEWS = [
