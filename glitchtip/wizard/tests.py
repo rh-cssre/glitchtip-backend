@@ -29,3 +29,6 @@ class WizardTestCase(GlitchTipTestCase):
         key = SETUP_WIZARD_CACHE_KEY + wizard_hash
         self.assertTrue(cache.get(key)["apiKeys"])
         self.assertTrue(self.user.apitoken_set.exists())
+
+        res = self.client.get(self.url + wizard_hash + "/")
+        self.assertEqual(res.status_code, 200)
