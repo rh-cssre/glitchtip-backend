@@ -234,10 +234,20 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
         culprit = eventtype.get_location(data)
         request = data.get("request")
         breadcrumbs = data.get("breadcrumbs")
+        exception = data.get("exception")
         level = None
         if data.get("level"):
             level = LogLevel.from_string(data["level"])
-        exception = self.modify_exception(data.get("exception"))
+        if (
+            data.get("stacktrace")
+            and exception
+            and len(exception.get("values", 0)) > 0
+            and not exception["values"][0].get("stacktrace")
+        ):
+            # stacktrace is deprecated, but supported at this time
+            # Assume it's for the first exception value
+            exception["values"][0]["stacktrace"] = data.get("stacktrace")
+        exception = self.modify_exception(exception)
         if request:
             headers = request.get("headers")
             if headers:
@@ -352,6 +362,9 @@ class StoreErrorSerializer(StoreDefaultSerializer):
 
     type = EventType.ERROR
     exception = serializers.JSONField(required=False)
+    stacktrace = serializers.JSONField(
+        required=False, help_text="Deprecated but supported at this time"
+    )
 
 
 class StoreCSPReportSerializer(BaseSerializer):
