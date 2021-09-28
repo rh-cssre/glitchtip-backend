@@ -81,3 +81,10 @@ class ProjectSerializer(ProjectReferenceWithMemberSerializer):
 
     def get_isPublic(self, obj):
         return False
+
+
+class ProjectWithKeysSerializer(ProjectSerializer):
+    keys = ProjectKeySerializer(many=True, source="projectkey_set")
+
+    class Meta(ProjectSerializer.Meta):
+        fields = ProjectSerializer.Meta.fields + ("keys",)

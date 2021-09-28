@@ -1,13 +1,17 @@
 import string
+from collections import namedtuple
 from django.core.cache import cache
 from django.utils.crypto import get_random_string
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
-from .serializers import SetupWizardSerializer
+from api_tokens.models import APIToken
+from projects.models import Project
+from .serializers import SetupWizardSerializer, SetupWizardResultSerializer
 
 SETUP_WIZARD_CACHE_KEY = "setup-wizard-keys:v1:"
 SETUP_WIZARD_CACHE_TIMEOUT = 600
+SETUP_WIZARD_CACHE_EMPTY = "empty"
 
 
 class SetupWizardView(APIView):
@@ -30,7 +34,7 @@ class SetupWizardView(APIView):
                 64, allowed_chars=string.ascii_lowercase + string.digits
             )
             key = SETUP_WIZARD_CACHE_KEY + wizard_hash
-            cache.set(key, "empty", SETUP_WIZARD_CACHE_TIMEOUT)
+            cache.set(key, SETUP_WIZARD_CACHE_EMPTY, SETUP_WIZARD_CACHE_TIMEOUT)
             return Response({"hash": wizard_hash})
         else:
             key = SETUP_WIZARD_CACHE_KEY + wizard_hash
@@ -38,7 +42,7 @@ class SetupWizardView(APIView):
 
             if wizard_data is None:
                 return Response(status=404)
-            elif wizard_data == "empty":
+            elif wizard_data == SETUP_WIZARD_CACHE_EMPTY:
                 return Response(status=400)
 
             return Response(wizard_data)
@@ -61,10 +65,21 @@ class SetupWizardSetTokenView(APIView):
         if wizard_data is None:
             return Response(status=400)
 
-        import ipdb
+        organizations = request.user.organizations_ext_organization.all()
+        projects = Project.objects.filter(organization__in=organizations)[:50]
 
-        ipdb.set_trace()
+        scope = getattr(APIToken.scopes, "project:releases")
+        tokens = request.user.apitoken_set.filter(scopes=scope)
+        if not tokens:
+            token = request.user.apitoken_set.create(scopes=scope)
+        else:
+            token = tokens[0]
 
-        result = {"apiKeys": None, "projects": None}
-        cache.set(key, result, SETUP_WIZARD_CACHE_TIMEOUT)
+        SetupWizardResult = namedtuple("SetupWizardResult", ("apiKeys", "projects"))
+        response_serializer = SetupWizardResultSerializer(
+            SetupWizardResult(apiKeys=token, projects=projects),
+            context={"request": request},
+        )
+
+        cache.set(key, response_serializer.data, SETUP_WIZARD_CACHE_TIMEOUT)
         return Response()
