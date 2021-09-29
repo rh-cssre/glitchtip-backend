@@ -1,0 +1,410 @@
+{
+  "eventID": "af7344af737b4811b76fc343679d6e0d",
+  "dist": null,
+  "userReport": null,
+  "projectID": "11",
+  "previousEventID": null,
+  "message": "(UndefinedFunctionError function FakeModule.fake_function/0 is undefined (module FakeModule is not available))",
+  "id": "5218",
+  "size": 6167,
+  "errors": [],
+  "culprit": "FakeModule.fake_function/0",
+  "title": "UndefinedFunctionError: function FakeModule.fake_function/0 is undefined (module FakeModule is not available)",
+  "platform": "elixir",
+  "location": "lib/glitchtip_error_factory_web/controllers/home_controller.ex",
+  "nextEventID": null,
+  "type": "error",
+  "metadata": {
+    "function": "GlitchtipErrorFactoryWeb.HomeController.action/2",
+    "type": "UndefinedFunctionError",
+    "value": "function FakeModule.fake_function/0 is undefined (module FakeModule is not available)",
+    "filename": "lib/glitchtip_error_factory_web/controllers/home_controller.ex"
+  },
+  "groupingConfig": { "id": "legacy:2019-03-12" },
+  "crashFile": null,
+  "tags": [
+    { "value": "Firefox 92.0", "key": "browser", "_meta": null },
+    { "value": "Firefox", "key": "browser.name", "_meta": null },
+    { "value": "dev", "key": "environment", "_meta": null },
+    { "value": "error", "key": "level", "_meta": null },
+    { "value": "Ubuntu", "key": "os.name", "_meta": null },
+    { "value": "08e6ad5340a9", "key": "server_name", "_meta": null },
+    { "value": "http://localhost:4000/", "key": "url", "_meta": null },
+    {
+      "query": "user.ip:172.22.0.1",
+      "value": "ip:172.22.0.1",
+      "key": "user",
+      "_meta": null
+    }
+  ],
+  "dateCreated": "2021-09-28T18:57:46Z",
+  "dateReceived": "2021-09-28T19:00:07.232Z",
+  "user": {
+    "username": null,
+    "name": null,
+    "ip_address": "172.22.0.1",
+    "email": null,
+    "data": {},
+    "id": null
+  },
+  "entries": [
+    {
+      "type": "message",
+      "data": {
+        "formatted": "(UndefinedFunctionError function FakeModule.fake_function/0 is undefined (module FakeModule is not available))"
+      }
+    },
+    {
+      "type": "exception",
+      "data": {
+        "values": [
+          {
+            "stacktrace": {
+              "frames": [
+                {
+                  "function": ":proc_lib.init_p_do_apply/3",
+                  "colNo": null,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "proc_lib",
+                  "lineNo": 226,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "proc_lib.erl",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "proc_lib.erl",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": ":cowboy_stream_h.request_process/3",
+                  "colNo": null,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "cowboy_stream_h",
+                  "lineNo": 295,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "/app/deps/cowboy/src/cowboy_stream_h.erl",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/app/deps/cowboy/src/cowboy_stream_h.erl",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": ":cowboy_stream_h.execute/3",
+                  "colNo": null,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "cowboy_stream_h",
+                  "lineNo": 306,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "/app/deps/cowboy/src/cowboy_stream_h.erl",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/app/deps/cowboy/src/cowboy_stream_h.erl",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": ":cowboy_handler.execute/2",
+                  "colNo": null,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "cowboy_handler",
+                  "lineNo": 37,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "/app/deps/cowboy/src/cowboy_handler.erl",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/app/deps/cowboy/src/cowboy_handler.erl",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "Phoenix.Endpoint.Cowboy2Handler.init/4",
+                  "colNo": null,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "Elixir.Phoenix.Endpoint.Cowboy2Handler",
+                  "lineNo": 43,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "lib/phoenix/endpoint/cowboy2_handler.ex",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "lib/phoenix/endpoint/cowboy2_handler.ex",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "GlitchtipErrorFactoryWeb.Endpoint.call/2",
+                  "colNo": null,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "Elixir.GlitchtipErrorFactoryWeb.Endpoint",
+                  "lineNo": 1,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "lib/glitchtip_error_factory_web/endpoint.ex",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "lib/glitchtip_error_factory_web/endpoint.ex",
+                  "platform": null,
+                  "context": [
+                    [1, "defmodule GlitchtipErrorFactoryWeb.Endpoint do"],
+                    [2, "  use Sentry.PlugCapture"],
+                    [
+                      3,
+                      "  use Phoenix.Endpoint, otp_app: :glitchtip_error_factory"
+                    ],
+                    [4, ""]
+                  ],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "GlitchtipErrorFactoryWeb.Endpoint.\"call (overridable 4)\"/2",
+                  "colNo": null,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "Elixir.GlitchtipErrorFactoryWeb.Endpoint",
+                  "lineNo": 136,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "lib/plug/debugger.ex",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "lib/plug/debugger.ex",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "GlitchtipErrorFactoryWeb.Endpoint.\"call (overridable 3)\"/2",
+                  "colNo": null,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "Elixir.GlitchtipErrorFactoryWeb.Endpoint",
+                  "lineNo": 1,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "lib/glitchtip_error_factory_web/endpoint.ex",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "lib/glitchtip_error_factory_web/endpoint.ex",
+                  "platform": null,
+                  "context": [
+                    [1, "defmodule GlitchtipErrorFactoryWeb.Endpoint do"],
+                    [2, "  use Sentry.PlugCapture"],
+                    [
+                      3,
+                      "  use Phoenix.Endpoint, otp_app: :glitchtip_error_factory"
+                    ],
+                    [4, ""]
+                  ],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "GlitchtipErrorFactoryWeb.Endpoint.plug_builder_call/2",
+                  "colNo": null,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "Elixir.GlitchtipErrorFactoryWeb.Endpoint",
+                  "lineNo": 1,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "lib/glitchtip_error_factory_web/endpoint.ex",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "lib/glitchtip_error_factory_web/endpoint.ex",
+                  "platform": null,
+                  "context": [
+                    [1, "defmodule GlitchtipErrorFactoryWeb.Endpoint do"],
+                    [2, "  use Sentry.PlugCapture"],
+                    [
+                      3,
+                      "  use Phoenix.Endpoint, otp_app: :glitchtip_error_factory"
+                    ],
+                    [4, ""]
+                  ],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "Phoenix.Router.__call__/2",
+                  "colNo": null,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "Elixir.Phoenix.Router",
+                  "lineNo": 355,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "lib/phoenix/router.ex",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "lib/phoenix/router.ex",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "GlitchtipErrorFactoryWeb.HomeController.phoenix_controller_pipeline/2",
+                  "colNo": null,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "Elixir.GlitchtipErrorFactoryWeb.HomeController",
+                  "lineNo": 1,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "lib/glitchtip_error_factory_web/controllers/home_controller.ex",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "lib/glitchtip_error_factory_web/controllers/home_controller.ex",
+                  "platform": null,
+                  "context": [
+                    [1, "defmodule GlitchtipErrorFactoryWeb.HomeController do"],
+                    [2, "  use GlitchtipErrorFactoryWeb, :controller"],
+                    [3, ""],
+                    [4, "  def index(conn, _params) do"]
+                  ],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "GlitchtipErrorFactoryWeb.HomeController.action/2",
+                  "colNo": null,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "Elixir.GlitchtipErrorFactoryWeb.HomeController",
+                  "lineNo": 1,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "lib/glitchtip_error_factory_web/controllers/home_controller.ex",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "lib/glitchtip_error_factory_web/controllers/home_controller.ex",
+                  "platform": null,
+                  "context": [
+                    [1, "defmodule GlitchtipErrorFactoryWeb.HomeController do"],
+                    [2, "  use GlitchtipErrorFactoryWeb, :controller"],
+                    [3, ""],
+                    [4, "  def index(conn, _params) do"]
+                  ],
+                  "symbolAddr": null
+                },
+                {
+                  "function": "FakeModule.fake_function/0",
+                  "colNo": null,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "Elixir.FakeModule",
+                  "lineNo": null,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": null,
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": null,
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                }
+              ],
+              "framesOmitted": null,
+              "registers": null,
+              "hasSystemFrames": false
+            },
+            "module": null,
+            "rawStacktrace": null,
+            "mechanism": null,
+            "threadId": null,
+            "value": "function FakeModule.fake_function/0 is undefined (module FakeModule is not available)",
+            "type": "UndefinedFunctionError"
+          }
+        ],
+        "excOmitted": null,
+        "hasSystemFrames": false
+      }
+    },
+    {
+      "type": "request",
+      "data": {
+        "fragment": "",
+        "cookies": [],
+        "inferredContentType": null,
+        "env": {
+          "REMOTE_ADDR": "172.22.0.1",
+          "REMOTE_PORT": 46540,
+          "SERVER_NAME": "localhost",
+          "SERVER_PORT": 4000,
+          "REQUEST_ID": "FqkRZUiQv2bmx68AAAAE"
+        },
+        "headers": [
+          [
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+          ],
+          ["Accept-Encoding", "gzip, deflate"],
+          ["Accept-Language", "en-US,en;q=0.5"],
+          ["Cache-Control", "max-age=0"],
+          ["Connection", "keep-alive"],
+          ["Dnt", "1"],
+          ["Host", "localhost:4000"],
+          ["Upgrade-Insecure-Requests", "1"],
+          [
+            "User-Agent",
+            "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:92.0) Gecko/20100101 Firefox/92.0"
+          ]
+        ],
+        "url": "http://localhost:4000/",
+        "query": [],
+        "data": {},
+        "method": "GET"
+      }
+    }
+  ],
+  "packages": { "certifi": "2.6.1", "cowboy": "2.9.0" },
+  "sdk": {
+    "version": "5.0 (X11; Ubuntu; Linux x86_64; rv:92.0) Gecko/20100101 Firefox/92.0",
+    "name": "Mozilla",
+    "upstream": { "url": null, "isNewer": false, "name": "Mozilla" }
+  },
+  "_meta": {
+    "user": null,
+    "context": null,
+    "entries": {},
+    "contexts": null,
+    "message": null,
+    "packages": null,
+    "tags": {},
+    "sdk": null
+  },
+  "contexts": {
+    "os": { "type": "os", "name": "Ubuntu" },
+    "browser": { "version": "92.0", "type": "browser", "name": "Firefox" }
+  },
+  "fingerprints": ["7d9c682e16e183bc46698a56bf3c9364"],
+  "context": {},
+  "release": null,
+  "groupID": "297"
+}

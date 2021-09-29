@@ -1,0 +1,219 @@
+{
+  "breadcrumbs": [],
+  "culprit": "FakeModule.fake_function/0",
+  "environment": "dev",
+  "event_id": "af7344af737b4811b76fc343679d6e0d",
+  "exception": [
+    {
+      "module": null,
+      "type": "UndefinedFunctionError",
+      "value": "function FakeModule.fake_function/0 is undefined (module FakeModule is not available)"
+    }
+  ],
+  "extra": {},
+  "fingerprint": ["{{ default }}"],
+  "level": "error",
+  "message": "(UndefinedFunctionError function FakeModule.fake_function/0 is undefined (module FakeModule is not available))",
+  "modules": {
+    "certifi": "2.6.1",
+    "cowboy": "2.9.0"
+  },
+  "platform": "elixir",
+  "release": null,
+  "request": {
+    "cookies": {},
+    "data": {},
+    "env": {
+      "REMOTE_ADDR": "172.22.0.1",
+      "REMOTE_PORT": 46540,
+      "REQUEST_ID": "FqkRZUiQv2bmx68AAAAE",
+      "SERVER_NAME": "localhost",
+      "SERVER_PORT": 4000
+    },
+    "headers": {
+      "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "accept-encoding": "gzip, deflate",
+      "accept-language": "en-US,en;q=0.5",
+      "cache-control": "max-age=0",
+      "connection": "keep-alive",
+      "dnt": "1",
+      "host": "localhost:4000",
+      "upgrade-insecure-requests": "1",
+      "user-agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:92.0) Gecko/20100101 Firefox/92.0"
+    },
+    "method": "GET",
+    "query_string": "",
+    "url": "http://localhost:4000/"
+  },
+  "server_name": "08e6ad5340a9",
+  "stacktrace": {
+    "frames": [
+      {
+        "context_line": null,
+        "filename": "proc_lib.erl",
+        "function": ":proc_lib.init_p_do_apply/3",
+        "in_app": false,
+        "lineno": 226,
+        "module": "proc_lib",
+        "post_context": [],
+        "pre_context": [],
+        "vars": {}
+      },
+      {
+        "context_line": null,
+        "filename": "/app/deps/cowboy/src/cowboy_stream_h.erl",
+        "function": ":cowboy_stream_h.request_process/3",
+        "in_app": false,
+        "lineno": 295,
+        "module": "cowboy_stream_h",
+        "post_context": [],
+        "pre_context": [],
+        "vars": {}
+      },
+      {
+        "context_line": null,
+        "filename": "/app/deps/cowboy/src/cowboy_stream_h.erl",
+        "function": ":cowboy_stream_h.execute/3",
+        "in_app": false,
+        "lineno": 306,
+        "module": "cowboy_stream_h",
+        "post_context": [],
+        "pre_context": [],
+        "vars": {}
+      },
+      {
+        "context_line": null,
+        "filename": "/app/deps/cowboy/src/cowboy_handler.erl",
+        "function": ":cowboy_handler.execute/2",
+        "in_app": false,
+        "lineno": 37,
+        "module": "cowboy_handler",
+        "post_context": [],
+        "pre_context": [],
+        "vars": {}
+      },
+      {
+        "context_line": null,
+        "filename": "lib/phoenix/endpoint/cowboy2_handler.ex",
+        "function": "Phoenix.Endpoint.Cowboy2Handler.init/4",
+        "in_app": false,
+        "lineno": 43,
+        "module": "Elixir.Phoenix.Endpoint.Cowboy2Handler",
+        "post_context": [],
+        "pre_context": [],
+        "vars": {}
+      },
+      {
+        "context_line": "defmodule GlitchtipErrorFactoryWeb.Endpoint do",
+        "filename": "lib/glitchtip_error_factory_web/endpoint.ex",
+        "function": "GlitchtipErrorFactoryWeb.Endpoint.call/2",
+        "in_app": false,
+        "lineno": 1,
+        "module": "Elixir.GlitchtipErrorFactoryWeb.Endpoint",
+        "post_context": [
+          "  use Sentry.PlugCapture",
+          "  use Phoenix.Endpoint, otp_app: :glitchtip_error_factory",
+          ""
+        ],
+        "pre_context": [],
+        "vars": {}
+      },
+      {
+        "context_line": null,
+        "filename": "lib/plug/debugger.ex",
+        "function": "GlitchtipErrorFactoryWeb.Endpoint.\"call (overridable 4)\"/2",
+        "in_app": false,
+        "lineno": 136,
+        "module": "Elixir.GlitchtipErrorFactoryWeb.Endpoint",
+        "post_context": [],
+        "pre_context": [],
+        "vars": {}
+      },
+      {
+        "context_line": "defmodule GlitchtipErrorFactoryWeb.Endpoint do",
+        "filename": "lib/glitchtip_error_factory_web/endpoint.ex",
+        "function": "GlitchtipErrorFactoryWeb.Endpoint.\"call (overridable 3)\"/2",
+        "in_app": false,
+        "lineno": 1,
+        "module": "Elixir.GlitchtipErrorFactoryWeb.Endpoint",
+        "post_context": [
+          "  use Sentry.PlugCapture",
+          "  use Phoenix.Endpoint, otp_app: :glitchtip_error_factory",
+          ""
+        ],
+        "pre_context": [],
+        "vars": {}
+      },
+      {
+        "context_line": "defmodule GlitchtipErrorFactoryWeb.Endpoint do",
+        "filename": "lib/glitchtip_error_factory_web/endpoint.ex",
+        "function": "GlitchtipErrorFactoryWeb.Endpoint.plug_builder_call/2",
+        "in_app": false,
+        "lineno": 1,
+        "module": "Elixir.GlitchtipErrorFactoryWeb.Endpoint",
+        "post_context": [
+          "  use Sentry.PlugCapture",
+          "  use Phoenix.Endpoint, otp_app: :glitchtip_error_factory",
+          ""
+        ],
+        "pre_context": [],
+        "vars": {}
+      },
+      {
+        "context_line": null,
+        "filename": "lib/phoenix/router.ex",
+        "function": "Phoenix.Router.__call__/2",
+        "in_app": false,
+        "lineno": 355,
+        "module": "Elixir.Phoenix.Router",
+        "post_context": [],
+        "pre_context": [],
+        "vars": {}
+      },
+      {
+        "context_line": "defmodule GlitchtipErrorFactoryWeb.HomeController do",
+        "filename": "lib/glitchtip_error_factory_web/controllers/home_controller.ex",
+        "function": "GlitchtipErrorFactoryWeb.HomeController.phoenix_controller_pipeline/2",
+        "in_app": false,
+        "lineno": 1,
+        "module": "Elixir.GlitchtipErrorFactoryWeb.HomeController",
+        "post_context": [
+          "  use GlitchtipErrorFactoryWeb, :controller",
+          "",
+          "  def index(conn, _params) do"
+        ],
+        "pre_context": [],
+        "vars": {}
+      },
+      {
+        "context_line": "defmodule GlitchtipErrorFactoryWeb.HomeController do",
+        "filename": "lib/glitchtip_error_factory_web/controllers/home_controller.ex",
+        "function": "GlitchtipErrorFactoryWeb.HomeController.action/2",
+        "in_app": false,
+        "lineno": 1,
+        "module": "Elixir.GlitchtipErrorFactoryWeb.HomeController",
+        "post_context": [
+          "  use GlitchtipErrorFactoryWeb, :controller",
+          "",
+          "  def index(conn, _params) do"
+        ],
+        "pre_context": [],
+        "vars": {}
+      },
+      {
+        "context_line": null,
+        "filename": null,
+        "function": "FakeModule.fake_function/0",
+        "in_app": false,
+        "lineno": null,
+        "module": "Elixir.FakeModule",
+        "post_context": [],
+        "pre_context": [],
+        "vars": {}
+      }
+    ]
+  },
+  "tags": {},
+  "timestamp": "2021-09-28T18:57:46",
+  "user": {}
+}

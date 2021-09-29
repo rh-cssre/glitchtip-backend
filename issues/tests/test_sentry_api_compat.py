@@ -449,3 +449,15 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         res = self.client.get(url)
         self.assertCompareData(res.json(), sentry_data, ["context", "user"])
 
+    def test_elixir_stacktrace(self):
+        """ The elixir SDK does things differently """
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data("elixir_error")
+        res = self.client.post(self.event_store_url, sdk_error, format="json")
+        event = Event.objects.get(pk=res.data["id"])
+        event_json = event.event_json()
+        self.assertCompareData(
+            event_json["exception"]["values"][0],
+            sentry_json["exception"]["values"][0],
+            ["type", "values", "exception"],
+        )
+
