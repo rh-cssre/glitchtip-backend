@@ -19,7 +19,11 @@ class ProjectKeySerializer(serializers.ModelSerializer):
         fields = ("dateCreated", "dsn", "id", "label", "public", "projectId")
 
     def get_dsn(self, obj):
-        return {"public": obj.get_dsn(), "security": obj.get_dsn_security()}
+        return {
+            "public": obj.get_dsn(),
+            "secret": obj.get_dsn(),  # Deprecated but required for @sentry/wizard
+            "security": obj.get_dsn_security(),
+        }
 
 
 class ProjectSerializer(ProjectReferenceWithMemberSerializer):
@@ -81,3 +85,10 @@ class ProjectSerializer(ProjectReferenceWithMemberSerializer):
 
     def get_isPublic(self, obj):
         return False
+
+
+class ProjectWithKeysSerializer(ProjectSerializer):
+    keys = ProjectKeySerializer(many=True, source="projectkey_set")
+
+    class Meta(ProjectSerializer.Meta):
+        fields = ProjectSerializer.Meta.fields + ("keys",)
