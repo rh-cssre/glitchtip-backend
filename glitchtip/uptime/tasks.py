@@ -63,6 +63,9 @@ def perform_checks(monitor_ids: List[int], now=None):
     )
     loop = asyncio.get_event_loop()
     results = loop.run_until_complete(fetch_all(monitors, loop))
+    # import ipdb
+
+    # ipdb.set_trace()
     monitor_checks = MonitorCheck.objects.bulk_create(
         [
             MonitorCheck(

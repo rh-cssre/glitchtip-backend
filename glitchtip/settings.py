@@ -168,7 +168,7 @@ INSTALLED_APPS = [
     "issues",
     "users",
     "user_reports",
-    "uptime",
+    "glitchtip.uptime",
     "performance",
     "projects",
     "teams",
@@ -301,7 +301,7 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=6, minute=1),
     },
     "uptime-dispatch-checks": {
-        "task": "uptime.tasks.dispatch_checks",
+        "task": "glitchtip.uptime.tasks.dispatch_checks",
         "schedule": timedelta(seconds=30),
     },
 }
