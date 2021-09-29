@@ -5,6 +5,7 @@ from organizations.base import (
     OrganizationBase,
     OrganizationUserBase,
     OrganizationOwnerBase,
+    OrganizationInvitationBase,
 )
 from organizations.abstract import SharedBaseModel
 from organizations.fields import SlugField
@@ -256,3 +257,7 @@ class OrganizationUser(SharedBaseModel, OrganizationUserBase):
 
 class OrganizationOwner(OrganizationOwnerBase):
     """ Only usage is for billing contact currently """
+
+
+class OrganizationInvitation(OrganizationInvitationBase):
+    """ Required to exist for django-organizations """

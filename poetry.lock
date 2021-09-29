@@ -597,14 +597,15 @@ python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*"
 
 [[package]]
 name = "django-organizations"
-version = "1.1.2"
+version = "2.0.1"
 description = "Group accounts for Django"
 category = "main"
 optional = false
 python-versions = "*"
 
 [package.dependencies]
-Django = ">=1.8.0"
+Django = ">=2.2.0"
+six = "*"
 
 [[package]]
 name = "django-redis-cache"
@@ -1960,7 +1961,7 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "4819eaddd34701efbc2659ebcac084c1af5ea192268f4328a43d1026bb6ee3f3"
+content-hash = "4f583ccfb91a69629dfe67195f3bb32a04c1ca0b941150ad5d548a0d8c37f674"
 
 [metadata.files]
 aiohttp = [
@@ -2288,8 +2289,8 @@ django-ipware = [
     {file = "django_ipware-4.0.0-py2.py3-none-any.whl", hash = "sha256:116bd0d7940f09bf7ffd465943992e23d87e772a9d6c0d3a57b74040589a383b"},
 ]
 django-organizations = [
-    {file = "django-organizations-1.1.2.tar.gz", hash = "sha256:798af83f3072b476832fa6a0a476ef18d43674a7071644d7364b86f52f41c33f"},
-    {file = "django_organizations-1.1.2-py2.py3-none-any.whl", hash = "sha256:d3d84da2d0199780db076e253b5a738a9518684fce26a229fd298172f55b7ea1"},
+    {file = "django-organizations-2.0.1.tar.gz", hash = "sha256:2f1d9febaa6c9d169a0d48b0228245d2fae16df3a124219008712c62895cc328"},
+    {file = "django_organizations-2.0.1-py2.py3-none-any.whl", hash = "sha256:cbf0348728efb68b42a0849ce30f62cd9b5c48e66fce8173aaf061035ce54978"},
 ]
 django-redis-cache = [
     {file = "django-redis-cache-3.0.0.tar.gz", hash = "sha256:9a2eebef421d996a82098a19d17ff6b321265cd73178fa398913019764e8394a"},
