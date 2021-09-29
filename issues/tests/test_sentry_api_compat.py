@@ -349,6 +349,18 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
                 "breadcrumbs",
             ],
         )
+        self.assertCompareData(
+            event_json["request"],
+            sentry_json["request"],
+            [
+                "url",
+                # "headers",
+                "method",
+                "env",
+                "query_string",
+                "inferred_content_type",
+            ],
+        )
         self.assertEqual(
             event_json["datetime"][:22],
             sentry_json["datetime"][:22],

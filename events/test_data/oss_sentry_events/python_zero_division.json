@@ -377,7 +377,11 @@
           ]
         ],
         "url": "http://localhost:8001/divide-zero/",
-        "query": [],
+        "query": [
+          ["foo", "bar"],
+          ["foo", "bars"],
+          ["lol", "ha"]
+        ],
         "data": null,
         "method": "GET"
       }

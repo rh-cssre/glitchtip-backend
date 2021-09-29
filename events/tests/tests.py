@@ -367,3 +367,29 @@ class EventStoreTestCase(APITestCase):
         res = self.client.post(self.url, data, format="json")
         self.assertTrue(Event.objects.filter().exists())
         self.assertFalse(Environment.objects.exists())
+
+    def test_query_string_formats(self):
+        data = {
+            "event_id": "11111111111111111111111111111111",
+            "exception": [{"type": "a", "value": "a", "module": None,}],
+            "request": {"method": "GET", "query_string": {"search": "foo"},},
+        }
+        self.client.post(self.url, data, format="json")
+        data = {
+            "event_id": "11111111111111111111111111111112",
+            "exception": [{"type": "a", "value": "a", "module": None,}],
+            "request": {"query_string": "search=foo",},
+        }
+        self.client.post(self.url, data, format="json")
+        data = {
+            "event_id": "11111111111111111111111111111113",
+            "exception": [{"type": "a", "value": "a", "module": None,}],
+            "request": {"query_string": [["search", "foo"]]},
+        }
+        self.client.post(self.url, data, format="json")
+        self.assertEqual(
+            Event.objects.filter(
+                data__request__query_string=[["search", "foo"]]
+            ).count(),
+            3,
+        )

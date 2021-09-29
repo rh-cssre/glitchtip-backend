@@ -14,7 +14,12 @@ from environments.models import Environment
 from releases.models import Release
 from glitchtip.serializers import FlexibleDateTimeField
 from .models import Event, LogLevel
-from .fields import GenericField, ForgivingHStoreField, ForgivingDisallowRegexField
+from .fields import (
+    GenericField,
+    ForgivingHStoreField,
+    ForgivingDisallowRegexField,
+    QueryStringField,
+)
 from .event_tag_processors import TAG_PROCESSORS
 from .event_context_processors import EVENT_CONTEXT_PROCESSORS
 
@@ -58,9 +63,7 @@ class RequestSerializer(serializers.Serializer):
     headers = serializers.DictField(required=False)
     url = serializers.CharField(required=False, allow_blank=True)
     method = serializers.CharField(required=False, allow_blank=True)
-    query_string = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True
-    )
+    query_string = QueryStringField(required=False, allow_null=True)
 
 
 class BreadcrumbsSerializer(BaseBreadcrumbsSerializer):

@@ -227,7 +227,7 @@
   "extra": { "sys.argv": ["./manage.py", "runserver", "0.0.0.0:8001"] },
   "request": {
     "url": "http://localhost:8001/divide-zero/",
-    "query_string": "",
+    "query_string": "foo=bar&foo=bars&lol=ha",
     "method": "GET",
     "env": { "SERVER_NAME": "2f96b0310f37", "SERVER_PORT": "8001" },
     "headers": {

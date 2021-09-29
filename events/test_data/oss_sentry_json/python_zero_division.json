@@ -278,6 +278,11 @@
     ],
     "method": "GET",
     "env": { "SERVER_NAME": "2f96b0310f37", "SERVER_PORT": "8001" },
+    "query_string": [
+      ["foo", "bar"],
+      ["foo", "bars"],
+      ["lol", "ha"]
+    ],
     "inferred_content_type": "text/plain"
   },
   "sdk": {

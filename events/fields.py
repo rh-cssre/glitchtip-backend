@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from urllib.parse import parse_qs
 from typing import List
 import re
 from rest_framework import serializers
@@ -74,3 +75,30 @@ class ForgivingDisallowRegexField(ForgivingFieldMixin, serializers.CharField):
                 self.update_handled_errors_context([error])
                 return None
         return data
+
+
+class QueryStringField(serializers.ListField):
+    """
+    Can be given as unparsed string, dictionary, or list of tuples
+    Should store as List[List[str]] where inner List is always of length 2
+    """
+
+    child = serializers.ListField(child=serializers.CharField())
+
+    def to_internal_value(self, data):
+        if isinstance(data, str) and data:
+            qs = parse_qs(data)
+            result = []
+            for key, values in qs.items():
+                for value in values:
+                    result.append([key, value])
+            return result
+        elif isinstance(data, dict):
+            return [[key, value] for key, value in data.items()]
+        elif isinstance(data, list):
+            result = []
+            for item in data:
+                if isinstance(item, list) and len(item) >= 2:
+                    result.append(item[:2])
+            return result
+        return None
