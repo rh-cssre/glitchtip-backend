@@ -220,6 +220,7 @@ class IssueSerializer(serializers.ModelSerializer):
         source="userreport_set.count", read_only=True
     )
     userCount = serializers.IntegerField(default=0, read_only=True)
+    matchingEventId = serializers.SerializerMethodField()
 
     class Meta:
         model = Issue
@@ -251,6 +252,7 @@ class IssueSerializer(serializers.ModelSerializer):
             "type",
             "userReportCount",
             "userCount",
+            "matchingEventId",
         )
         read_only_fields = (
             "annotations",
@@ -280,7 +282,18 @@ class IssueSerializer(serializers.ModelSerializer):
         )
 
     def to_representation(self, obj):
-        """ Workaround for a field called "type" """
+        """ Workaround for "type" and "matchingEventId" fields """
         primitive_repr = super().to_representation(obj)
         primitive_repr["type"] = obj.get_type_display()
+
+        if primitive_repr["matchingEventId"] is None:
+            del primitive_repr["matchingEventId"]
+
         return primitive_repr
+
+    def get_matchingEventId(self, obj):
+        matching_event_id = self.context.get("matching_event_id")
+        if matching_event_id:
+            return matching_event_id
+
+        return None

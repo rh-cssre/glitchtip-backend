@@ -1,4 +1,5 @@
 import shlex
+import uuid
 from typing import List
 from django.db import connection
 from django.db.models.expressions import RawSQL
@@ -50,7 +51,7 @@ class IssueViewSet(
     ordering_fields = ["last_seen", "created", "count", "priority"]
     page_size_query_param = "limit"
 
-    def get_queryset(self):
+    def _get_queryset_base(self):
         if not self.request.user.is_authenticated:
             return self.queryset.none()
         qs = (
@@ -65,6 +66,27 @@ class IssueViewSet(
             )
         if "project_slug" in self.kwargs:
             qs = qs.filter(project__slug=self.kwargs["project_slug"],)
+
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        try:
+            event_id = uuid.UUID(self.request.GET.get("query", ""))
+        except ValueError:
+            event_id = None
+
+        if event_id and self.request.user.is_authenticated:
+            issues = list(self._get_queryset_base().filter(event__event_id=event_id))
+            if issues:
+                serializer = IssueSerializer(
+                    issues, many=True, context={"matching_event_id": event_id.hex}
+                )
+                return Response(serializer.data, headers={"X-Sentry-Direct-Hit": "1"})
+
+        return super().list(request, *args, **kwargs)
+
+    def get_queryset(self):
+        qs = self._get_queryset_base()
 
         distinct = False
         queries = shlex.split(self.request.GET.get("query", ""))
