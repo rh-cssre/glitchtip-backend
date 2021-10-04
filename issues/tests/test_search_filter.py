@@ -176,6 +176,8 @@ class SearchTestCase(GlitchTipTestCase):
         res = self.client.get(self.url + "?query=is:unresolved apple+sauce")
         self.assertContains(res, event.issue.title)
         self.assertNotContains(res, other_event.issue.title)
+        self.assertNotContains(res, "matchingEventId")
+        self.assertNotIn("X-Sentry-Direct-Hit", res.headers)
 
         res = self.client.get(self.url + "?query=is:unresolved apple sauce")
         self.assertContains(res, event.issue.title)
@@ -184,3 +186,10 @@ class SearchTestCase(GlitchTipTestCase):
         res = self.client.get(self.url + '?query=is:unresolved "apple sauce"')
         self.assertContains(res, event.issue.title)
         self.assertNotContains(res, other_event.issue.title)
+
+        res = self.client.get(self.url + "?query=" + event2.event_id.hex)
+        self.assertContains(res, event.issue.title)
+        self.assertNotContains(res, other_event.issue.title)
+        self.assertContains(res, "matchingEventId")
+        self.assertContains(res, event2.event_id.hex)
+        self.assertEqual(res.headers.get("X-Sentry-Direct-Hit"), "1")
