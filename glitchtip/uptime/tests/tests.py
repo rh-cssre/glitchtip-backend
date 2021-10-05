@@ -6,14 +6,14 @@ from django.urls import reverse
 from freezegun import freeze_time
 from model_bakery import baker
 from glitchtip.test_utils.test_case import GlitchTipTestCase
-from .tasks import dispatch_checks
-from .utils import fetch_all
-from .models import Monitor, MonitorCheck
-from .constants import MonitorType
+from ..tasks import dispatch_checks
+from ..utils import fetch_all
+from ..models import Monitor, MonitorCheck
+from ..constants import MonitorType
 
 
 class UptimeTestCase(GlitchTipTestCase):
-    @mock.patch("uptime.tasks.perform_checks.run")
+    @mock.patch("glitchtip.uptime.tasks.perform_checks.run")
     def test_dispatch_checks(self, mocked):
         mock.return_value = None
         test_url = "https://example.com"

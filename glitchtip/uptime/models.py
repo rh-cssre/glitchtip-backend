@@ -64,7 +64,7 @@ class Monitor(CreatedModel):
         if self.monitor_type == MonitorType.HEARTBEAT and not self.endpoint_id:
             self.endpoint_id = uuid.uuid4()
         super().save(*args, **kwargs)
-        from uptime.tasks import perform_checks
+        from glitchtip.uptime.tasks import perform_checks
 
         if self.monitor_type != MonitorType.HEARTBEAT:
             perform_checks.apply_async(args=([self.pk],), countdown=1)
