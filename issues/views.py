@@ -101,7 +101,7 @@ class IssueViewSet(
                 elif query_name == "has":
                     qs = qs.filter(tags__has_key=query_value)
                 else:
-                    qs = qs.filter(tags__contains={query_name: query_value})
+                    qs = qs.filter(tags__contains={query_name: [query_value]})
             if len(query_part) == 1:
                 search_query = " ".join(queries[i:])
                 qs = qs.filter(search_vector=search_query)
@@ -110,7 +110,6 @@ class IssueViewSet(
 
         environments = self.request.query_params.getlist("environment")
         if environments:
-            print(environments)
             qs = qs.filter(tags__environment__contains=environments)
 
         if str(self.request.query_params.get("sort")).endswith("priority"):
