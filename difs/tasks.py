@@ -9,6 +9,8 @@ from symbolic import (
     Archive,
 )
 from .models import DebugInformationFile
+from events.models import Event
+from .stacktrace_processor import StacktraceProcessor
 
 
 def getLogger():
@@ -45,6 +47,44 @@ def difs_assemble(project_slug, name, checksum, chunks, debug_id):
         getLogger().error(f"difs_assemble: Checksum mismatched: {name}")
     except Exception as e:
         getLogger().error(f"difs_assemble: {e}")
+
+
+@shared_task
+def difs_resolve_stacktrace(event_id):
+    try:
+        event = Event.objects.get(event_id=event_id)
+        event_json = event.data
+        exception = event_json.get("exception")
+
+        if exception is None:
+            # It is not a crash report event
+            return
+
+        project_id = event.issue.project_id
+
+        difs = DebugInformationFile.objects.filter(
+            project_id=project_id).order_by("-created")
+        resolved_stracktrackes = []
+
+        for dif in difs:
+            blobs = dif.file.blobs.all()
+            with difs_concat_file_blobs_to_disk(blobs) as symbol_file:
+                remapped_stacktrace = StacktraceProcessor.resolve_stacktrace(
+                    event_json,
+                    symbol_file.name
+                )
+                if (remapped_stacktrace is not None and
+                        remapped_stacktrace.score > 0):
+                    resolved_stracktrackes.append(remapped_stacktrace)
+        if len(resolved_stracktrackes) > 0:
+            best_remapped_stacktrace = max(
+                resolved_stracktrackes, key=lambda item: item.score)
+            StacktraceProcessor.update_frames(
+                event, best_remapped_stacktrace.frames)
+            event.save()
+
+    except Exception as e:
+        getLogger().error(f"Error: difs_resolve_stacktrace: {e}")
 
 
 def difs_get_file_from_chunks(checksum, chunks):
