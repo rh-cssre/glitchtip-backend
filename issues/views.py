@@ -88,7 +88,6 @@ class IssueViewSet(
     def get_queryset(self):
         qs = self._get_queryset_base()
 
-        distinct = False
         queries = shlex.split(self.request.GET.get("query", ""))
         # First look for structured queries
         for i, query in enumerate(queries):
@@ -100,10 +99,9 @@ class IssueViewSet(
                 if query_name == "is":
                     qs = qs.filter(status=EventStatus.from_string(query_value))
                 elif query_name == "has":
-                    qs = qs.filter(event__tags__has_key=query_value)
+                    qs = qs.filter(tags__has_key=query_value)
                 else:
-                    qs = qs.filter(event__tags__contains={query_name: query_value})
-                    distinct = True
+                    qs = qs.filter(tags__contains={query_name: query_value})
             if len(query_part) == 1:
                 search_query = " ".join(queries[i:])
                 qs = qs.filter(search_vector=search_query)
@@ -112,8 +110,8 @@ class IssueViewSet(
 
         environments = self.request.query_params.getlist("environment")
         if environments:
-            qs = qs.filter(event__tags__environment__in=environments)
-            distinct = True
+            print(environments)
+            qs = qs.filter(tags__environment__contains=environments)
 
         if str(self.request.query_params.get("sort")).endswith("priority"):
             # Raw SQL must be added when sorting by priority
@@ -129,9 +127,6 @@ class IssueViewSet(
             .defer("search_vector")
             .prefetch_related("userreport_set")
         )
-
-        if distinct:
-            qs = qs.distinct()
 
         return qs
 

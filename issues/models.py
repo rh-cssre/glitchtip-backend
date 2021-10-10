@@ -37,6 +37,7 @@ class Issue(CreatedModel):
         choices=LogLevel.choices, default=LogLevel.ERROR
     )
     metadata = models.JSONField()
+    tags = models.JSONField(default=dict)
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
     title = models.CharField(max_length=255)
     type = models.PositiveSmallIntegerField(
