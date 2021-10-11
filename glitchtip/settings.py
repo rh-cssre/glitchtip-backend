@@ -173,6 +173,7 @@ INSTALLED_APPS = [
     "projects",
     "teams",
     "releases",
+    "difs"
 ]
 
 # Ensure no one uses runsslserver in production
