@@ -1,5 +1,6 @@
 """ Port of sentry.api.endpoints.debug_files.DifAssembleEndpoint """
 from django.shortcuts import get_object_or_404
+from django.conf import settings
 from rest_framework.response import Response
 from organizations_ext.models import Organization
 from projects.models import Project
@@ -19,6 +20,9 @@ class DifsAssembleAPIView(views.APIView):
     permission_classes = [DifsAssemblePermission]
 
     def post(self, request, organization_slug, project_slug):
+        if settings.GLITCHTIP_ENABLE_DIFS != True:
+            raise exceptions.PermissionDenied()
+
         organization = get_object_or_404(
             Organization,
             slug=organization_slug.lower(),
@@ -84,4 +88,6 @@ class ProjectReprocessingAPIView(views.APIView):
     permission_classes = [ProjectReprocessingPermission]
 
     def post(self, request, organization_slug, project_slug):
+        if settings.GLITCHTIP_ENABLE_DIFS != True:
+            raise exceptions.PermissionDenied()
         return Response()

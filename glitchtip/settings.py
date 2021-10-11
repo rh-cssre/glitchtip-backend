@@ -82,6 +82,7 @@ EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
 # Throttle % of all transaction events. Not intended for general use. May change without warning.
 THROTTLE_TRANSACTION_EVENTS = env.float("THROTTLE_TRANSACTION_EVENTS", None)
 
+GLITCHTIP_ENABLE_DIFS = env.bool("GLITCHTIP_ENABLE_DIFS", False)
 
 # GlitchTip can track GlitchTip's own errors.
 # If enabling this, use a different server to avoid infinite loops.

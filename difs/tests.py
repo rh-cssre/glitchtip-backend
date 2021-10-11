@@ -1,5 +1,6 @@
 import tempfile
 from django.core.files import File as DjangoFile
+from django.conf import settings
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from difs.tasks import (
     difs_create_file_from_chunks,
@@ -28,6 +29,10 @@ class DifsAssembleAPITestCase(GlitchTipTestCase):
                 "chunks": self.chunks
             }
         }
+        settings.GLITCHTIP_ENABLE_DIFS = True
+
+    def tearDown(self):
+        settings.GLITCHTIP_ENABLE_DIFS = False
 
     def test_difs_assemble_with_dif_existed(self):
         file = baker.make(
