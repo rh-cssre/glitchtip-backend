@@ -11,6 +11,7 @@ from symbolic import (
 from .models import DebugInformationFile
 from events.models import Event
 from .stacktrace_processor import StacktraceProcessor
+from django.conf import settings
 
 
 def getLogger():
@@ -47,6 +48,10 @@ def difs_assemble(project_slug, name, checksum, chunks, debug_id):
         getLogger().error(f"difs_assemble: Checksum mismatched: {name}")
     except Exception as e:
         getLogger().error(f"difs_assemble: {e}")
+
+def difs_run_resolve_stacktrace(event_id):
+    if settings.GLITCHTIP_ENABLE_DIFS:
+        difs_resolve_stacktrace.delay(event_id)
 
 
 @shared_task
