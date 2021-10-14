@@ -40,6 +40,13 @@ class MFAAccountAdapter(DefaultAccountAdapter):
         else:
             super().login(request, user)
 
+    def new_user(self, request):
+        user = super().new_user(request)
+        tags = request.POST.get("tags")
+        if tags:
+            user.set_register_analytics_tags(tags)
+        return user
+
     def get_login_redirect_url(self, request):
         """Ignore login redirect when not logged in"""
         try:

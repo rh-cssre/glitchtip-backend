@@ -1,4 +1,3 @@
-from urllib import parse
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
@@ -138,7 +137,7 @@ class UserSerializer(serializers.ModelSerializer):
 class RegisterSerializer(BaseRegisterSerializer):
     tags = serializers.CharField(
         write_only=True,
-        allow_blank=False,
+        allow_blank=True,
         required=False,
         help_text="Additional UTM (analytics) data",
     )
@@ -146,12 +145,7 @@ class RegisterSerializer(BaseRegisterSerializer):
     def custom_signup(self, request, user):
         tags = self.validated_data.get("tags")
         if tags:
-            parsed_tags = parse.parse_qsl(tags.strip("?"))
-            if user.analytics is None:
-                user.analytics = {}
-            user.analytics["register"] = {
-                tag[0]: tag[1] for tag in parsed_tags if tag[0].startswith("utm_")
-            }
+            user.set_register_analytics_tags(tags)
             user.save(update_fields=["analytics"])
 
 
