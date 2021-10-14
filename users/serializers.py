@@ -1,9 +1,11 @@
+from urllib import parse
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from dj_rest_auth.serializers import PasswordResetSerializer
 from dj_rest_auth.registration.serializers import (
     SocialAccountSerializer as BaseSocialAccountSerializer,
+    RegisterSerializer as BaseRegisterSerializer,
 )
 from allauth.account.forms import default_token_generator
 from allauth.account.adapter import get_adapter
@@ -131,6 +133,26 @@ class UserSerializer(serializers.ModelSerializer):
             "hasPasswordAuth",
             "email",
         )
+
+
+class RegisterSerializer(BaseRegisterSerializer):
+    tags = serializers.CharField(
+        write_only=True,
+        allow_blank=False,
+        required=False,
+        help_text="Additional UTM (analytics) data",
+    )
+
+    def custom_signup(self, request, user):
+        tags = self.validated_data.get("tags")
+        if tags:
+            parsed_tags = parse.parse_qsl(tags.strip("?"))
+            if user.analytics is None:
+                user.analytics = {}
+            user.analytics["register"] = {
+                tag[0]: tag[1] for tag in parsed_tags if tag[0].startswith("utm_")
+            }
+            user.save(update_fields=["analytics"])
 
 
 class UserNotificationsSerializer(serializers.ModelSerializer):

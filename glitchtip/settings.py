@@ -174,7 +174,7 @@ INSTALLED_APPS = [
     "projects",
     "teams",
     "releases",
-    "difs"
+    "difs",
 ]
 
 # Ensure no one uses runsslserver in production
@@ -384,6 +384,9 @@ REST_AUTH_SERIALIZERS = {
     "USER_DETAILS_SERIALIZER": "users.serializers.UserSerializer",
     "TOKEN_SERIALIZER": "users.serializers.NoopTokenSerializer",
     "PASSWORD_RESET_SERIALIZER": "users.serializers.PasswordSetResetSerializer",
+}
+REST_AUTH_REGISTER_SERIALIZERS = {
+    "REGISTER_SERIALIZER": "users.serializers.RegisterSerializer",
 }
 REST_AUTH_TOKEN_MODEL = "users.utils.NoopModel"
 REST_AUTH_TOKEN_CREATOR = "users.utils.noop_token_creator"

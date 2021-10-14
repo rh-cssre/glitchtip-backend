@@ -53,6 +53,7 @@ class User(AbstractBaseUser, PermissionsMixin):
             "Unselect this instead of deleting accounts."
         ),
     )
+    analytics = models.JSONField(null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     subscribe_by_default = models.BooleanField(
         default=True,
