@@ -53,7 +53,9 @@ class MFAAccountAdapter(DefaultAccountAdapter):
 
 
 class SocialLoginSerializer(BaseSocialLoginSerializer):
-    tags = serializers.CharField(allow_blank=True, required=False, write_only=True)
+    tags = serializers.CharField(
+        allow_blank=True, required=False, allow_null=True, write_only=True
+    )
 
 
 class MFASocialLoginView(SocialLoginView):
