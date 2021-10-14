@@ -1,3 +1,4 @@
+from urllib import parse
 from django.db import models
 from django.contrib.auth.models import (
     BaseUserManager,
@@ -53,6 +54,7 @@ class User(AbstractBaseUser, PermissionsMixin):
             "Unselect this instead of deleting accounts."
         ),
     )
+    analytics = models.JSONField(null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     subscribe_by_default = models.BooleanField(
         default=True,
@@ -78,6 +80,17 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def auth_token(self):
         return None
+
+    def set_register_analytics_tags(self, tags: str):
+        """
+        Set UTM querystring to user's analytics field
+        """
+        parsed_tags = parse.parse_qsl(tags.strip("?"))
+        if self.analytics is None:
+            self.analytics = {}
+        self.analytics["register"] = {
+            tag[0]: tag[1] for tag in parsed_tags if tag[0].startswith("utm_")
+        }
 
 
 class ProjectAlertStatus(models.IntegerChoices):

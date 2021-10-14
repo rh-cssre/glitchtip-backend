@@ -1,7 +1,11 @@
 from django.conf import settings
 from django.contrib.auth import get_backends
+from rest_framework import serializers
 from rest_framework.response import Response
 from dj_rest_auth.registration.views import SocialConnectView, SocialLoginView
+from dj_rest_auth.registration.serializers import (
+    SocialLoginSerializer as BaseSocialLoginSerializer,
+)
 from django_rest_mfa.helpers import has_mfa
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.account.auth_backends import AuthenticationBackend
@@ -48,8 +52,21 @@ class MFAAccountAdapter(DefaultAccountAdapter):
             pass
 
 
+class SocialLoginSerializer(BaseSocialLoginSerializer):
+    tags = serializers.CharField(
+        allow_blank=True, required=False, allow_null=True, write_only=True
+    )
+
+
 class MFASocialLoginView(SocialLoginView):
+    serializer_class = SocialLoginSerializer
+
     def process_login(self):
+        tags = self.serializer.validated_data.get("tags")
+        if tags and self.user.analytics is None:
+            self.user.set_register_analytics_tags(tags)
+            self.user.save(update_fields=["analytics"])
+
         if not getattr(self.user, "mfa", False):
             super().process_login()
 

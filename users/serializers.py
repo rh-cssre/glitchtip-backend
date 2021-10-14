@@ -4,6 +4,7 @@ from rest_framework import serializers
 from dj_rest_auth.serializers import PasswordResetSerializer
 from dj_rest_auth.registration.serializers import (
     SocialAccountSerializer as BaseSocialAccountSerializer,
+    RegisterSerializer as BaseRegisterSerializer,
 )
 from allauth.account.forms import default_token_generator
 from allauth.account.adapter import get_adapter
@@ -131,6 +132,21 @@ class UserSerializer(serializers.ModelSerializer):
             "hasPasswordAuth",
             "email",
         )
+
+
+class RegisterSerializer(BaseRegisterSerializer):
+    tags = serializers.CharField(
+        write_only=True,
+        allow_blank=True,
+        required=False,
+        help_text="Additional UTM (analytics) data",
+    )
+
+    def custom_signup(self, request, user):
+        tags = self.validated_data.get("tags")
+        if tags:
+            user.set_register_analytics_tags(tags)
+            user.save(update_fields=["analytics"])
 
 
 class UserNotificationsSerializer(serializers.ModelSerializer):
