@@ -306,6 +306,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "performance.tasks.cleanup_old_transaction_events",
         "schedule": crontab(hour=6, minute=10),
     },
+    "cleanup-old-monitor-checks": {
+        "task": "glitchtip.uptime.tasks.cleanup_old_monitor_checks",
+        "schedule": crontab(hour=6, minute=20),
+    },
     "uptime-dispatch-checks": {
         "task": "glitchtip.uptime.tasks.dispatch_checks",
         "schedule": timedelta(seconds=30),
