@@ -1,3 +1,4 @@
+import collections
 from django.contrib.postgres.search import SearchVectorField
 from django.contrib.postgres.indexes import GinIndex
 from django.conf import settings
@@ -96,3 +97,19 @@ class Issue(CreatedModel):
 
     def get_detail_url(self):
         return f"{settings.GLITCHTIP_URL.geturl()}/{self.project.organization.slug}/issues/{self.pk}"
+
+    def update_index(self, commit=True):
+        """ Update search index/tag aggregations """
+        tags = (
+            self.event_set.all()
+            .order_by("tags")
+            .values_list("tags", flat=True)
+            .distinct()
+        )
+        super_dict = collections.defaultdict(set)
+        for tag in tags:
+            for key, value in tag.items():
+                super_dict[key].add(value)
+        self.tags = {k: list(v) for k, v in super_dict.items()}
+        if commit:
+            self.save(update_fields=["tags"])

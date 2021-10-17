@@ -3,6 +3,7 @@ from django.utils import timezone
 from freezegun import freeze_time
 from model_bakery import baker
 from glitchtip.test_utils.test_case import GlitchTipTestCase
+from ..tasks import update_search_index_all_issues
 
 
 class FilterTestCase(GlitchTipTestCase):
@@ -36,6 +37,8 @@ class FilterTestCase(GlitchTipTestCase):
         event2 = baker.make(
             "events.Event", issue__project=self.project, tags={tag_name: "BananaOS 7"}
         )
+        update_search_index_all_issues()
+
         res = self.client.get(self.url + f'?query={tag_name}:"Linux+Vista" foo:bar')
         self.assertContains(res, event.issue.title)
         self.assertNotContains(res, event2.issue.title)
@@ -78,6 +81,7 @@ class FilterTestCase(GlitchTipTestCase):
             issue__project=self.project,
             tags={tag_mythic_animal: tag_value_firefox, tag_browser: tag_value_chrome},
         )
+        update_search_index_all_issues()
 
         res = self.client.get(self.url + f'?query={tag_browser}:"{tag_value_firefox}"')
         self.assertContains(res, event_only_firefox.issue.title)
@@ -155,6 +159,7 @@ class FilterTestCase(GlitchTipTestCase):
             tags={tag_browser: tag_value2},
             _quantity=5,
         )
+        update_search_index_all_issues()
 
         res = self.client.get(self.url + f'?query={tag_browser}:"{tag_value}"')
         self.assertEqual(len(res.data), 1)

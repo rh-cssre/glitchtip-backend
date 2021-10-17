@@ -10,6 +10,7 @@ from sentry.eventtypes.error import ErrorEvent
 from sentry.eventtypes.base import DefaultEvent
 from issues.models import EventType, Issue
 from issues.serializers import BaseBreadcrumbsSerializer
+from issues.tasks import update_search_index_issue
 from environments.models import Environment
 from releases.models import Release
 from glitchtip.serializers import FlexibleDateTimeField
@@ -285,7 +286,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             tags = self.generate_tags(data, tags)
             defaults["tags"] = {tag[0]: [tag[1]] for tag in tags}
 
-            issue, _ = Issue.objects.get_or_create(
+            issue, issue_created = Issue.objects.get_or_create(
                 title=sanitize_bad_postgres_chars(title),
                 culprit=sanitize_bad_postgres_chars(culprit),
                 project_id=project.id,
@@ -356,6 +357,8 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 raise e
 
         issue.check_for_status_update()
+        if not issue_created:
+            update_search_index_issue.delay(issue.pk)
 
         return event
 

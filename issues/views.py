@@ -1,6 +1,5 @@
 import shlex
 import uuid
-from typing import List
 from django.db import connection
 from django.db.models.expressions import RawSQL
 from django.shortcuts import get_object_or_404
@@ -110,7 +109,7 @@ class IssueViewSet(
 
         environments = self.request.query_params.getlist("environment")
         if environments:
-            qs = qs.filter(tags__environment__contains=environments)
+            qs = qs.filter(tags__environment__has_any_keys=environments)
 
         if str(self.request.query_params.get("sort")).endswith("priority"):
             # Raw SQL must be added when sorting by priority

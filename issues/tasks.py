@@ -15,3 +15,16 @@ def cleanup_old_events():
     qs._raw_delete(qs.db)
     # Do not optimize Issue with raw_delete as it has FK references to it.
     Issue.objects.filter(event=None).delete()
+
+
+@shared_task
+def update_search_index_all_issues():
+    """ Very slow, force reindex of all issues """
+    for issue in Issue.objects.all():
+        issue.update_index()
+
+
+@shared_task
+def update_search_index_issue(issue_id: int):
+    issue = Issue.objects.get(pk=issue_id)
+    issue.update_index()
