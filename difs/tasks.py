@@ -119,7 +119,8 @@ def difs_extract_metadata_from_file(file):
                     "code_id": obj.code_id,
                     "debug_id": obj.debug_id,
                     "kind": obj.kind,
-                    "features": list(obj.features)
+                    "features": list(obj.features),
+                    "symbol_type": "native"
                 }
                 for obj in archive.iter_objects()
             ]
@@ -141,6 +142,7 @@ def difs_create_difs(project, name, file):
         arch = metadata["arch"]
         kind = metadata["kind"]
         features = metadata["features"]
+        symbol_type = metadata["symbol_type"]
 
         dif = DebugInformationFile(
             project=project,
@@ -151,7 +153,8 @@ def difs_create_difs(project, name, file):
                 "debug_id": debug_id,
                 "code_id": code_id,
                 "kind": kind,
-                "features": features
+                "features": features,
+                "symbol_type": symbol_type
             }
         )
         dif.save()

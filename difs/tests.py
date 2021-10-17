@@ -8,9 +8,12 @@ from difs.tasks import (
     difs_concat_file_blobs_to_disk,
     ChecksumMismatched
 )
+from django.core.files.uploadedfile import SimpleUploadedFile
 from files.models import File
 from model_bakery import baker
 from hashlib import sha1
+import contextlib
+from unittest.mock import patch, MagicMock
 
 
 class DifsAssembleAPITestCase(GlitchTipTestCase):
@@ -101,6 +104,137 @@ class DifsAssembleAPITestCase(GlitchTipTestCase):
                                     format='json'
                                     )
         self.assertEqual(response.data, expected_response)
+
+
+class DsymsAPIViewTestCase(GlitchTipTestCase):
+    def setUp(self):
+        self.create_user_and_project()
+        self.url = f"/api/0/projects/{self.organization.slug}/{self.project.slug}/files/dsyms/"  # noqa
+        self.uuid = "afb116cf-efec-49af-a7fe-281ac680d8a0"
+        self.checksum = "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+        settings.GLITCHTIP_ENABLE_DIFS = True
+
+    def tearDown(self):
+        settings.GLITCHTIP_ENABLE_DIFS = False
+
+    @contextlib.contextmanager
+    def patch(self):
+        proguard_file = MagicMock()
+        proguard_file.read.return_value = b""
+
+        uploaded_zip_file = MagicMock()
+        uploaded_zip_file.namelist.return_value = iter(
+            [f"proguard/{self.uuid}.txt"])
+        uploaded_zip_file.open.return_value.__enter__.return_value = proguard_file  # noqa
+
+        with patch('zipfile.is_zipfile', return_value=True), \
+                patch('zipfile.ZipFile') as ZipFile:
+
+            ZipFile.return_value.__enter__.return_value = uploaded_zip_file
+            yield
+
+    def test_post(self):
+        """
+        It should return the expected response
+        """
+        upload_file = SimpleUploadedFile(
+            "example.zip",
+            b"random_content",
+            content_type="multipart/form-data"
+        )
+        data = {
+            "file": upload_file
+        }
+
+        with self.patch():
+            response = self.client.post(self.url, data)
+
+        expected_response = [{
+            "id": response.data[0]["id"],
+            "debugId": self.uuid,
+            "cpuName": "any",
+            'objectName': 'proguard-mapping',
+            'symbolType': 'proguard',
+            'headers': {'Content-Type': 'text/x-proguard+plain'},
+            'size': 0,
+            'sha1': self.checksum,
+            "dateCreated": response.data[0]["dateCreated"],
+            "data": {
+                "features": ["mapping"]
+            }
+        }]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data, expected_response)
+
+    def test_post_existing_file(self):
+        """
+        It should success and return the expected response
+        """
+
+        baker.make(
+            "files.FileBlob",
+            checksum=self.checksum
+        )
+
+        fileobj = baker.make(
+            "files.File",
+            checksum=self.checksum
+        )
+
+        dif = baker.make(
+            "difs.DebugInformationFile",
+            file=fileobj,
+            project=self.project
+        )
+
+        upload_file = SimpleUploadedFile(
+            "example.zip",
+            b"random_content",
+            content_type="multipart/form-data"
+        )
+        data = {
+            "file": upload_file
+        }
+
+        with self.patch():
+            response = self.client.post(self.url, data)
+
+        expected_response = [{
+            "id": dif.id,
+            "debugId": self.uuid,
+            "cpuName": "any",
+            'objectName': 'proguard-mapping',
+            'symbolType': 'proguard',
+            'headers': {'Content-Type': 'text/x-proguard+plain'},
+            'size': 0,
+            'sha1': 'da39a3ee5e6b4b0d3255bfef95601890afd80709',
+            "dateCreated": response.data[0]["dateCreated"],
+            "data": {
+                "features": ["mapping"]
+            }
+        }]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data, expected_response)
+
+    def test_post_invalid_zip_file(self):
+        upload_file = SimpleUploadedFile(
+            "example.zip",
+            b"random_content",
+            content_type="multipart/form-data"
+        )
+        data = {
+            "file": upload_file
+        }
+        response = self.client.post(self.url, data)
+
+        expected_response = {"error": "Invalid file type uploaded"}
+
+        self.assertEqual(response.data, expected_response)
+        self.assertEqual(response.status_code, 400)
 
 
 class DifsTasksTestCase(GlitchTipTestCase):
