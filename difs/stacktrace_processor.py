@@ -1,6 +1,8 @@
 import copy
 import logging
-from symbolic import Archive, SymCache, parse_addr
+from symbolic import (
+    Archive, SymCache, parse_addr, ProguardMapper
+)
 from symbolic.demangle import demangle_name
 
 alternative_arch = {
@@ -39,7 +41,7 @@ def digest_symbol(symbol):
 
 
 def getLogger():
-    return logging.getLogger("glitchtip.difs")  # FIXME
+    return logging.getLogger("glitchtip.difs")
 
 
 class StacktraceProcessor:
@@ -50,6 +52,14 @@ class StacktraceProcessor:
 
     def __init__(self):
         pass
+
+    @classmethod
+    def is_supported(cls, event_json, dif):
+        if cls.is_android_event(event_json):
+            return dif.is_proguard_mapping()
+
+        # It need more data to determine the exact condition
+        return True
 
     @classmethod
     def resolve_stacktrace(cls, event, symbol_file):
@@ -69,6 +79,57 @@ class StacktraceProcessor:
             getLogger().error(f"StacktraceProcessor: Invalid event: {event}")
             return
 
+        if cls.is_android_event(event):
+            return cls.resolve_proguard_stacktrace(stacktrace, symbol_file)
+
+        return cls.resolve_native_stacktrace(
+            stacktrace,
+            symbol_file,
+            arch=arch
+        )
+
+    @classmethod
+    def resolve_proguard_stacktrace(cls, stacktrace, symbol_file):
+        try:
+            mapper = ProguardMapper.open(symbol_file)
+        except Exception as e:
+            getLogger().error(
+                f"StacktraceProcessor: Open symbol file failed: {e}")
+            return
+
+        try:
+            frames = stacktrace.get("frames")
+            score = 0
+            resolved_frames = copy.copy(frames)
+            for index, frame in enumerate(frames):
+                frame = copy.copy(frame)
+                module = frame.get("module")
+                function = frame.get("function")
+                lineno = frame.get("lineno")
+                if lineno is None:
+                    continue
+                result = mapper.remap_frame(module, function, lineno)
+                if len(result) > 0:
+                    remapped_frame = result[0]
+                    frame["resolved"] = True
+                    frame["filename"] = remapped_frame.file
+                    frame["lineNo"] = remapped_frame.line
+                    frame["function"] = remapped_frame.method
+                    frame["module"] = remapped_frame.class_name
+                    score = score + 1
+
+                resolved_frames[index] = frame
+
+            return ResolvedStacktrace(
+                score=score,
+                frames=resolved_frames
+            )
+
+        except Exception as e:
+            getLogger().error(f"StacktraceProcessor: Unexpected error: {e}")
+
+    @classmethod
+    def resolve_native_stacktrace(cls, stacktrace, symbol_file, arch=None):
         # Open symbol file
         try:
             archive = Archive.open(symbol_file)
@@ -76,7 +137,8 @@ class StacktraceProcessor:
             obj = find_arch_object(archive, arch)
             sym_cache = SymCache.from_object(obj)
         except Exception as e:
-            getLogger().error(f"StacktraceProcessor: Open symbol file failed: {e}")
+            getLogger().error(
+                f"StacktraceProcessor: Open symbol file failed: {e}")
             return
 
         try:
@@ -122,3 +184,10 @@ class StacktraceProcessor:
         except Exception as e:
             getLogger().error(f"StacktraceProcessor: Unexpected error: {e}")
             pass
+
+    @classmethod
+    def is_android_event(cls, event):
+        try:
+            return event["contexts"]["os"]["name"] == "Android"
+        except Exception:
+            return False

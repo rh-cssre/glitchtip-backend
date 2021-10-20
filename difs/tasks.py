@@ -8,9 +8,9 @@ from hashlib import sha1
 from symbolic import (
     Archive,
 )
-from .models import DebugInformationFile
+from difs.models import DebugInformationFile
 from events.models import Event
-from .stacktrace_processor import StacktraceProcessor
+from difs.stacktrace_processor import StacktraceProcessor
 from django.conf import settings
 
 
@@ -49,6 +49,7 @@ def difs_assemble(project_slug, name, checksum, chunks, debug_id):
     except Exception as e:
         getLogger().error(f"difs_assemble: {e}")
 
+
 def difs_run_resolve_stacktrace(event_id):
     if settings.GLITCHTIP_ENABLE_DIFS:
         difs_resolve_stacktrace.delay(event_id)
@@ -72,6 +73,8 @@ def difs_resolve_stacktrace(event_id):
         resolved_stracktrackes = []
 
         for dif in difs:
+            if StacktraceProcessor.is_supported(event_json, dif) is False:
+                continue
             blobs = dif.file.blobs.all()
             with difs_concat_file_blobs_to_disk(blobs) as symbol_file:
                 remapped_stacktrace = StacktraceProcessor.resolve_stacktrace(

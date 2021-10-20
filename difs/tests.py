@@ -16,6 +16,24 @@ import contextlib
 from unittest.mock import patch, MagicMock
 
 
+class DebugInformationFileModelTestCase(GlitchTipTestCase):
+
+    def test_is_proguard(self):
+        dif = baker.make(
+            "difs.DebugInformationFile"
+        )
+
+        self.assertEqual(dif.is_proguard_mapping(), False)
+
+        dif = baker.make(
+            "difs.DebugInformationFile",
+            data={
+                "symbol_type": "proguard"
+            }
+        )
+        self.assertEqual(dif.is_proguard_mapping(), True)
+
+
 class DifsAssembleAPITestCase(GlitchTipTestCase):
     def setUp(self):
         self.create_user_and_project()

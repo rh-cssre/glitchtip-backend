@@ -19,3 +19,9 @@ class DebugInformationFile(CreatedModel):
     file = models.ForeignKey("files.File", on_delete=models.CASCADE)
 
     data = models.JSONField(null=True, blank=True)
+
+    def is_proguard_mapping(self):
+        try:
+            return self.data["symbol_type"] == "proguard"
+        except Exception:
+            return False
