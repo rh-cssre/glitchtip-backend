@@ -25,7 +25,7 @@ class HeartBeatCheckView(CreateAPIView):
 
 
 class MonitorViewSet(viewsets.ModelViewSet):
-    queryset = Monitor.objects.all()
+    queryset = Monitor.objects.with_check_annotations()
     serializer_class = MonitorSerializer
 
     def get_queryset(self):

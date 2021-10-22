@@ -16,6 +16,16 @@ class HeartBeatCheckSerializer(serializers.ModelSerializer):
 
 
 class MonitorSerializer(serializers.ModelSerializer):
+    is_up = serializers.SerializerMethodField()
+    last_change = serializers.SerializerMethodField()
+
+    def get_is_up(self, obj):
+        return obj.latest_is_up
+    
+    def get_last_change(self, obj):
+        if obj.last_change:
+            return obj.last_change.isoformat().replace("+00:00", "Z")
+    
     class Meta:
         model = Monitor
         fields = (
@@ -32,4 +42,6 @@ class MonitorSerializer(serializers.ModelSerializer):
             "project",
             "organization",
             "interval",
+            "is_up",
+            "last_change",
         )
