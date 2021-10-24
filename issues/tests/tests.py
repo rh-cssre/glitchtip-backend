@@ -420,5 +420,6 @@ class IssuesAPITestCase(GlitchTipTestCase):
         baker.make("events.Event", issue=issue, level=1)
         baker.make("events.Event", issue=issue, level=3)
         baker.make("events.Event", issue=issue, level=2)
+        Issue.update_index(issue.pk)
         issue.refresh_from_db()
         self.assertEqual(issue.level, 3)

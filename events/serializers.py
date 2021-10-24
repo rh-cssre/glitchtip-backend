@@ -268,7 +268,9 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             if not project.first_event:
                 project.first_event = data.get("timestamp")
                 project.save(update_fields=["first_event"])
-            defaults = {"metadata": sanitize_bad_postgres_json(metadata)}
+            defaults = {
+                "metadata": sanitize_bad_postgres_json(metadata),
+            }
             if level:
                 defaults["level"] = level
 
@@ -357,8 +359,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 raise e
 
         issue.check_for_status_update()
-        if not issue_created:
-            update_search_index_issue.delay(issue.pk)
+        update_search_index_issue(args=[issue.pk, issue_created], countdown=10)
 
         return event
 

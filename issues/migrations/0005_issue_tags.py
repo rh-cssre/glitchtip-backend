@@ -2,11 +2,12 @@
 
 import collections
 from django.db import migrations, models
+from .sql.triggers import UPDATE_ISSUE_TRIGGER
 
 
 def forwards_func(apps, schema_editor):
     Issue = apps.get_model("issues", "Issue")
-    for issue in Issue.objects.all():
+    for issue in Issue.objects.all()[:5000]:
         tags = (
             issue.event_set.all()
             .order_by("tags")
@@ -35,5 +36,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="issue", name="tags", field=models.JSONField(default=dict),
         ),
+        migrations.RunSQL(UPDATE_ISSUE_TRIGGER, UPDATE_ISSUE_TRIGGER),
         migrations.RunPython(forwards_func, noop),
     ]

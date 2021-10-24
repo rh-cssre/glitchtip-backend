@@ -3,6 +3,7 @@ from django.contrib.postgres.search import SearchVectorField
 from django.contrib.postgres.indexes import GinIndex
 from django.conf import settings
 from django.db import models
+from django.db.models import Max, Count
 from events.models import LogLevel
 from glitchtip.model_utils import FromStringIntegerChoices
 from glitchtip.base_models import CreatedModel
@@ -98,18 +99,41 @@ class Issue(CreatedModel):
     def get_detail_url(self):
         return f"{settings.GLITCHTIP_URL.geturl()}/{self.project.organization.slug}/issues/{self.pk}"
 
-    def update_index(self, commit=True):
-        """ Update search index/tag aggregations """
-        tags = (
-            self.event_set.all()
-            .order_by("tags")
-            .values_list("tags", flat=True)
-            .distinct()
+    @classmethod
+    def update_index(cls, issue_id: int, skip_tags=False):
+        """
+        Update search index/tag aggregations
+        """
+        vector_query = """SELECT strip(jsonb_to_tsvector('english', jsonb_agg(data), '["string"]')) from (SELECT events_event.data from events_event where issue_id = %s limit 100) as data"""
+        issue = (
+            cls.objects.extra(
+                select={"new_vector": vector_query}, select_params=(issue_id,)
+            )
+            .annotate(
+                new_count=Count("event"),
+                new_last_seen=Max("event__created"),
+                new_level=Max("event__level"),
+            )
+            .defer("search_vector")
+            .get(pk=issue_id)
         )
-        super_dict = collections.defaultdict(set)
-        for tag in tags:
-            for key, value in tag.items():
-                super_dict[key].add(value)
-        self.tags = {k: list(v) for k, v in super_dict.items()}
-        if commit:
-            self.save(update_fields=["tags"])
+        issue.search_vector = issue.new_vector
+        issue.last_seen = issue.new_last_seen
+        issue.count = issue.new_count
+        issue.level = issue.new_level
+
+        update_fields = ["search_vector", "last_seen", "count", "level"]
+        if not skip_tags:
+            update_fields.append("tags")
+            tags = (
+                issue.event_set.all()
+                .order_by("tags")
+                .values_list("tags", flat=True)
+                .distinct()
+            )
+            super_dict = collections.defaultdict(set)
+            for tag in tags:
+                for key, value in tag.items():
+                    super_dict[key].add(value)
+            issue.tags = {k: list(v) for k, v in super_dict.items()}
+        issue.save(update_fields=update_fields)
