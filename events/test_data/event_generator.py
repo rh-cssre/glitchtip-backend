@@ -2,6 +2,7 @@ import copy
 import uuid
 import string
 import random
+import itertools
 from django.utils import timezone
 from . import django_error_factory
 from .csp import mdn_sample_csp
@@ -37,4 +38,14 @@ def generate_random_event(unique_issue=False):
     event = random.choice(events)  # nosec
     result = make_event_unique(event, unique_issue)
 
+    return result
+
+
+def get_seeded_benchmark_events(quantity=100, seed=1337):
+    """Non-random events that attempt to simulate common use cases"""
+    random.seed(seed)
+    result = []
+    for i in range(quantity):
+        every_other = i % 2
+        result.append(generate_random_event(every_other))
     return result
