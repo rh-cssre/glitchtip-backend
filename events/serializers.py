@@ -10,6 +10,7 @@ from sentry.eventtypes.error import ErrorEvent
 from sentry.eventtypes.base import DefaultEvent
 from issues.models import EventType, Issue
 from issues.serializers import BaseBreadcrumbsSerializer
+from issues.tasks import update_search_index_issue
 from environments.models import Environment
 from releases.models import Release
 from glitchtip.serializers import FlexibleDateTimeField
@@ -267,16 +268,11 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             if not project.first_event:
                 project.first_event = data.get("timestamp")
                 project.save(update_fields=["first_event"])
-            defaults = {"metadata": sanitize_bad_postgres_json(metadata)}
+            defaults = {
+                "metadata": sanitize_bad_postgres_json(metadata),
+            }
             if level:
                 defaults["level"] = level
-            issue, _ = Issue.objects.get_or_create(
-                title=sanitize_bad_postgres_chars(title),
-                culprit=sanitize_bad_postgres_chars(culprit),
-                project_id=project.id,
-                type=self.type,
-                defaults=defaults,
-            )
 
             environment = None
             if data.get("environment"):
@@ -284,14 +280,21 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             release = None
             if data.get("release"):
                 release = self.get_release(data["release"], project)
-
             tags = []
             if environment:
                 tags.append(("environment", environment.name))
             if release:
                 tags.append(("release", release.version))
             tags = self.generate_tags(data, tags)
-            tags = {tag[0]: tag[1] for tag in tags}
+            defaults["tags"] = {tag[0]: [tag[1]] for tag in tags}
+
+            issue, issue_created = Issue.objects.get_or_create(
+                title=sanitize_bad_postgres_chars(title),
+                culprit=sanitize_bad_postgres_chars(culprit),
+                project_id=project.id,
+                type=self.type,
+                defaults=defaults,
+            )
 
             json_data = {
                 "breadcrumbs": breadcrumbs,
@@ -336,7 +339,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             params = {
                 "event_id": data["event_id"],
                 "issue": issue,
-                "tags": tags,
+                "tags": {tag[0]: tag[1] for tag in tags},
                 "errors": errors,
                 "timestamp": data.get("timestamp"),
                 "data": sanitize_bad_postgres_json(json_data),
@@ -356,6 +359,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 raise e
 
         issue.check_for_status_update()
+        update_search_index_issue(args=[issue.pk, issue_created], countdown=10)
 
         return event
 

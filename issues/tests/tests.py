@@ -3,6 +3,7 @@ from django.shortcuts import reverse
 from model_bakery import baker
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.models import Issue, EventStatus
+from ..tasks import update_search_index_all_issues
 
 
 class EventTestCase(GlitchTipTestCase):
@@ -135,7 +136,7 @@ class IssuesAPITestCase(GlitchTipTestCase):
         events = baker.make("events.Event", issue=issue, _quantity=2)
         res = self.client.get(self.url)
         self.assertEqual(
-            res.data[0]["lastSeen"][:25], events[1].created.isoformat()[:25]
+            res.data[0]["lastSeen"][:20], events[1].created.isoformat()[:20]
         )
 
     def test_issue_delete(self):
@@ -208,6 +209,9 @@ class IssuesAPITestCase(GlitchTipTestCase):
             Issue, project=self.project, event_set__tags={"environment": "??"},
         )
         baker.make(
+            Issue, project=self.project, event_set__tags={"foos": environment1_name},
+        )
+        baker.make(
             "events.Event", issue=issue1, tags={"environment": environment1_name}
         )
         issue2 = baker.make(
@@ -223,6 +227,7 @@ class IssuesAPITestCase(GlitchTipTestCase):
         baker.make(
             Issue, project=self.project, event_set__tags={"lol": environment2_name}
         )
+        update_search_index_all_issues()
 
         res = self.client.get(
             self.url, {"environment": [environment1_name, environment2_name]},
@@ -256,6 +261,7 @@ class IssuesAPITestCase(GlitchTipTestCase):
 
         baker.make("events.Event", issue=issue2, _quantity=2)
         baker.make("events.Event", issue=issue1)
+        update_search_index_all_issues()
 
         res = self.client.get(self.url)
         self.assertEqual(res.data[0]["id"], issue1.id)
@@ -275,9 +281,11 @@ class IssuesAPITestCase(GlitchTipTestCase):
             Issue, status=EventStatus.RESOLVED, project=self.project
         )
         unresolved_issue = baker.make(
-            Issue, status=EventStatus.UNRESOLVED, project=self.project
+            Issue,
+            status=EventStatus.UNRESOLVED,
+            project=self.project,
+            tags={"platform": "Linux"},
         )
-        baker.make("events.Event", issue=unresolved_issue, tags={"platform": "Linux"})
         res = self.client.get(self.url, {"query": "is:unresolved has:platform"})
         self.assertEqual(len(res.data), 1)
         self.assertContains(res, unresolved_issue.title)
@@ -413,5 +421,6 @@ class IssuesAPITestCase(GlitchTipTestCase):
         baker.make("events.Event", issue=issue, level=1)
         baker.make("events.Event", issue=issue, level=3)
         baker.make("events.Event", issue=issue, level=2)
+        Issue.update_index(issue.pk)
         issue.refresh_from_db()
         self.assertEqual(issue.level, 3)
