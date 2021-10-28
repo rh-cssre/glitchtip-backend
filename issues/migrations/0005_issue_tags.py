@@ -3,6 +3,7 @@
 import collections
 from django.db import migrations, models
 from .sql.triggers import UPDATE_ISSUE_TRIGGER
+from .sql.functions import GENERATE_ISSUE_TSVECTOR
 
 
 def forwards_func(apps, schema_editor):
@@ -37,5 +38,6 @@ class Migration(migrations.Migration):
             model_name="issue", name="tags", field=models.JSONField(default=dict),
         ),
         migrations.RunSQL(UPDATE_ISSUE_TRIGGER, UPDATE_ISSUE_TRIGGER),
+        migrations.RunSQL(GENERATE_ISSUE_TSVECTOR, GENERATE_ISSUE_TSVECTOR),
         migrations.RunPython(forwards_func, noop),
     ]

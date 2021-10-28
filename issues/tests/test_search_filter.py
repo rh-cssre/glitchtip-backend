@@ -3,6 +3,7 @@ from django.utils import timezone
 from freezegun import freeze_time
 from model_bakery import baker
 from glitchtip.test_utils.test_case import GlitchTipTestCase
+from issues.tasks import update_search_index_all_issues
 from ..tasks import update_search_index_all_issues
 
 
@@ -178,6 +179,8 @@ class SearchTestCase(GlitchTipTestCase):
             "events.Event", issue=event.issue, data={"name": "apple sauce"}
         )
         other_event = baker.make("events.Event", issue__project=self.project)
+        update_search_index_all_issues()
+
         res = self.client.get(self.url + "?query=is:unresolved apple+sauce")
         self.assertContains(res, event.issue.title)
         self.assertNotContains(res, other_event.issue.title)

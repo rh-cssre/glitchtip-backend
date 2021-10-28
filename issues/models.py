@@ -4,6 +4,7 @@ from django.contrib.postgres.indexes import GinIndex
 from django.conf import settings
 from django.db import models
 from django.db.models import Max, Count
+from django.db.utils import InternalError
 from events.models import LogLevel
 from glitchtip.model_utils import FromStringIntegerChoices
 from glitchtip.base_models import CreatedModel
@@ -104,7 +105,7 @@ class Issue(CreatedModel):
         """
         Update search index/tag aggregations
         """
-        vector_query = """SELECT strip(jsonb_to_tsvector('english', jsonb_agg(data), '["string"]')) from (SELECT events_event.data from events_event where issue_id = %s limit 100) as data"""
+        vector_query = """SELECT generate_issue_tsvector(jsonb_agg(data)) from (SELECT events_event.data from events_event where issue_id = %s limit 200) as data"""
         issue = (
             cls.objects.extra(
                 select={"new_vector": vector_query}, select_params=(issue_id,)
@@ -117,12 +118,20 @@ class Issue(CreatedModel):
             .defer("search_vector")
             .get(pk=issue_id)
         )
-        issue.search_vector = issue.new_vector
-        issue.last_seen = issue.new_last_seen
-        issue.count = issue.new_count
-        issue.level = issue.new_level
 
-        update_fields = ["search_vector", "last_seen", "count", "level"]
+        update_fields = ["last_seen", "count", "level"]
+        if (
+            issue.new_vector
+        ):  # This check is important, because generate_issue_tsvector returns null on size limit
+            update_fields.append("search_vector")
+            issue.search_vector = issue.new_vector
+        if issue.new_last_seen:
+            issue.last_seen = issue.new_last_seen
+        if issue.new_count:
+            issue.count = issue.new_count
+        if issue.new_level:
+            issue.level = issue.new_level
+
         if not skip_tags:
             update_fields.append("tags")
             tags = (
