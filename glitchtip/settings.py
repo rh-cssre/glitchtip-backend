@@ -526,6 +526,7 @@ elif TESTING:
     STRIPE_TEST_SECRET_KEY = "sk_test_fake"  # nosec
     DJSTRIPE_WEBHOOK_SECRET = "whsec_fake"  # nosec
 
+CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", False)
 if TESTING:
     CELERY_TASK_ALWAYS_EAGER = True
     STATICFILES_STORAGE = None
