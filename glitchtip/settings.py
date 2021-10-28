@@ -534,6 +534,7 @@ if TESTING:
     warnings.filterwarnings(
         "ignore", message="No directory at", module="whitenoise.base"
     )
+if CELERY_TASK_ALWAYS_EAGER:
     CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache",}}
 
 MFA_SERVER_NAME = "GlitchTip"
