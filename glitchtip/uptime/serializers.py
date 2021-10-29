@@ -1,3 +1,4 @@
+from django.core import exceptions
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -20,12 +21,18 @@ class MonitorSerializer(serializers.ModelSerializer):
     last_change = serializers.SerializerMethodField()
 
     def get_is_up(self, obj):
-        return obj.latest_is_up
+        try: 
+            return obj.latest_is_up
+        except:
+            return None
     
     def get_last_change(self, obj):
-        if obj.last_change:
-            return obj.last_change.isoformat().replace("+00:00", "Z")
-    
+        try:
+            if obj.last_change:
+                return obj.last_change.isoformat().replace("+00:00", "Z")
+        except:
+            return None
+
     class Meta:
         model = Monitor
         fields = (
@@ -45,3 +52,4 @@ class MonitorSerializer(serializers.ModelSerializer):
             "is_up",
             "last_change",
         )
+        read_only_fields = ("organization",)

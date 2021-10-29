@@ -2,6 +2,7 @@ from django.shortcuts import reverse
 from model_bakery import baker
 
 from glitchtip.test_utils.test_case import GlitchTipTestCase
+from glitchtip.uptime.models import Monitor
 
 
 class UptimeAPITestCase(GlitchTipTestCase):
@@ -28,3 +29,21 @@ class UptimeAPITestCase(GlitchTipTestCase):
         # endpoint once we create it
         self.assertEqual(res.data[0]["is_up"], True)
         self.assertEqual(res.data[0]["last_change"], "2021-09-19T15:39:31Z")
+
+    def test_create(self):
+        url = reverse(
+            "organization-monitors-list",
+            kwargs={"organization_slug": self.organization.slug},
+        )
+        data = {
+            "monitor_type": "ping",
+            "name": "Test",
+            "url": "https://www.google.com",
+            "expected_status": 200,
+            "interval": "00:01:00",
+        }
+        res = self.client.post(url, data)
+        self.assertEqual(res.status_code, 201)
+        monitor = Monitor.objects.all().first()
+        self.assertEqual(monitor.monitor_type, data["monitor_type"])
+        self.assertEqual(monitor.organization, self.organization)
