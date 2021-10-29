@@ -41,9 +41,11 @@ class UptimeAPITestCase(GlitchTipTestCase):
             "url": "https://www.google.com",
             "expected_status": 200,
             "interval": "00:01:00",
+            "project": self.project.pk
         }
         res = self.client.post(url, data)
         self.assertEqual(res.status_code, 201)
         monitor = Monitor.objects.all().first()
         self.assertEqual(monitor.monitor_type, data["monitor_type"])
         self.assertEqual(monitor.organization, self.organization)
+        self.assertEqual(monitor.project, self.project)
