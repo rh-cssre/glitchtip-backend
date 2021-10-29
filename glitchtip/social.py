@@ -1,20 +1,19 @@
-from django.conf import settings
-from django.contrib.auth import get_backends
-from rest_framework import serializers
-from rest_framework.response import Response
-from dj_rest_auth.registration.views import SocialConnectView, SocialLoginView
-from dj_rest_auth.registration.serializers import (
-    SocialLoginSerializer as BaseSocialLoginSerializer,
-)
-from django_rest_mfa.helpers import has_mfa
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.account.auth_backends import AuthenticationBackend
+from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from allauth.socialaccount.providers.gitlab.views import GitLabOAuth2Adapter
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.microsoft.views import MicrosoftGraphOAuth2Adapter
-from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
-
+from dj_rest_auth.registration.serializers import (
+    SocialLoginSerializer as BaseSocialLoginSerializer,
+)
+from dj_rest_auth.registration.views import SocialConnectView, SocialLoginView
+from django.conf import settings
+from django.contrib.auth import get_backends
+from django_rest_mfa.helpers import has_mfa
+from rest_framework import serializers
+from rest_framework.response import Response
 
 DOMAIN = settings.GLITCHTIP_URL.geturl()
 
@@ -29,7 +28,7 @@ class MFAAccountAdapter(DefaultAccountAdapter):
         if not hasattr(user, "backend"):
             backends = get_backends()
             backend = None
-            for b in backends:
+            for b in backends:  # pylint: disable=invalid-name
                 if isinstance(b, AuthenticationBackend):
                     # prefer our own backend
                     backend = b

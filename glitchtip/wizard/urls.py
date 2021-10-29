@@ -1,5 +1,6 @@
 from django.urls import path, re_path
-from .views import SetupWizardView, SetupWizardSetTokenView
+
+from .views import SetupWizardSetTokenView, SetupWizardView
 
 urlpatterns = [
     path("wizard/", SetupWizardView.as_view(), name="setup-wizard"),

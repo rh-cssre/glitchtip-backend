@@ -1,15 +1,18 @@
 import asyncio
 from unittest import mock
+
 from aioresponses import aioresponses
 from django.core import mail
 from django.urls import reverse
 from freezegun import freeze_time
 from model_bakery import baker
+
 from glitchtip.test_utils.test_case import GlitchTipTestCase
+
+from ..constants import MonitorType
+from ..models import Monitor, MonitorCheck
 from ..tasks import dispatch_checks
 from ..utils import fetch_all
-from ..models import Monitor, MonitorCheck
-from ..constants import MonitorType
 
 
 class UptimeTestCase(GlitchTipTestCase):

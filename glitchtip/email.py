@@ -1,9 +1,9 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
 from django.views.generic.base import ContextMixin
 from django.views.generic.detail import SingleObjectMixin
-from django.template.loader import render_to_string
 
 User = get_user_model()
 

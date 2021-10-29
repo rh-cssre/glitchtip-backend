@@ -2,10 +2,11 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from users.models import ProjectAlertStatus, User
-from glitchtip.email import DetailEmail
-from .models import MonitorCheck
 
+from glitchtip.email import DetailEmail
+from users.models import ProjectAlertStatus, User
+
+from .models import MonitorCheck
 
 User = get_user_model()
 
@@ -39,4 +40,3 @@ class MonitorEmail(DetailEmail):
             )
             | Q(subscribe_by_default=False, userprojectalert=None),
         )
-

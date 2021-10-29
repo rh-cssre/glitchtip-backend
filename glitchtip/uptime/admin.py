@@ -3,13 +3,15 @@ from django.contrib import admin
 from django.forms.models import BaseInlineFormSet
 from django.urls import reverse
 from django.utils import timezone
+
 from .models import Monitor, MonitorCheck
 
 
 class MonitorCheckInlineFormSet(BaseInlineFormSet):
     def get_queryset(self):
         if not hasattr(self, "_queryset"):
-            self._queryset = super().get_queryset()[:50]
+            # pylint: disable=attribute-defined-outside-init
+            self._queryset = super().get_queryset()[:50]  # noqa
         return self._queryset
 
 
