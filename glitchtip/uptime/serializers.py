@@ -35,8 +35,6 @@ class MonitorSerializer(serializers.ModelSerializer):
         except:
             return None
 
-# dateCreated = serializers.DateTimeField(source="created", read_only=True)
-
     class Meta:
         model = Monitor
         fields = (
