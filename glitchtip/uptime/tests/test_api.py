@@ -55,9 +55,9 @@ class UptimeAPITestCase(GlitchTipTestCase):
         )
         
         monitor = baker.make(
-            "uptime.Monitor", 
-            organization=self.organization, 
-            url="http://example.com", 
+            "uptime.Monitor",
+            organization=self.organization,
+            url="http://example.com",
             environment=environment
         )
 
@@ -77,3 +77,40 @@ class UptimeAPITestCase(GlitchTipTestCase):
         self.assertEqual(res.data["isUp"], True)
         self.assertEqual(res.data["lastChange"], "2021-09-19T15:39:31Z")
         self.assertEqual(res.data["environment"], environment.pk)
+
+
+    def test_list_isolation(self):
+        """ Users should only access monitors in their organization """
+        url = reverse(
+            "organization-monitors-list",
+            kwargs={"organization_slug": self.organization.slug},
+        )
+        
+        user2 = baker.make("users.user")
+        org2 = baker.make("organizations_ext.Organization")
+        org2.add_user(user2)
+        monitor1 = baker.make("uptime.Monitor", organization=self.organization)
+        monitor2 = baker.make("uptime.Monitor", organization=org2)
+
+        res = self.client.get(url)
+        self.assertContains(res, monitor1.name)
+        self.assertNotContains(res, monitor2.name)
+
+    def test_create_isolation(self):
+        """ Users should only make monitors in their organization """
+        org2 = baker.make("organizations_ext.Organization")
+
+        url = reverse(
+            "organization-monitors-list",
+            kwargs={"organization_slug": org2.slug},
+        )
+        data = {
+            "monitorType": "ping",
+            "name": "Test",
+            "url": "https://www.google.com",
+            "expectedStatus": 200,
+            "interval": "00:01:00",
+            "project": self.project.pk
+        }
+        res = self.client.post(url, data)
+        self.assertEqual(res.status_code, 400)

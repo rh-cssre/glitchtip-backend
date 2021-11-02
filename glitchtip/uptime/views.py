@@ -30,7 +30,6 @@ class MonitorViewSet(viewsets.ModelViewSet):
     serializer_class = MonitorSerializer
 
     def get_queryset(self):
-        print("querying")
         if not self.request.user.is_authenticated:
             return self.queryset.none()
 
@@ -43,10 +42,10 @@ class MonitorViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         try:
             organization = Organization.objects.get(
-                slug=self.kwargs.get("organization_slug")
+                slug=self.kwargs.get("organization_slug"),
+                users=self.request.user
             )
         except Organization.DoesNotExist:
-            raise exceptions.ValidationError("Organization does not exist")
+            raise exceptions.ValidationError("Organization not found")
         serializer.save(organization=organization)
-
 

@@ -23,17 +23,13 @@ class MonitorSerializer(serializers.ModelSerializer):
     expectedStatus = serializers.IntegerField(source="expected_status")
 
     def get_isUp(self, obj):
-        try: 
+        if hasattr(obj, "latest_is_up"):
             return obj.latest_is_up
-        except:
-            return None
     
     def get_lastChange(self, obj):
-        try:
+        if hasattr(obj, "last_change"):
             if obj.last_change:
                 return obj.last_change.isoformat().replace("+00:00", "Z")
-        except:
-            return None
 
     class Meta:
         model = Monitor
@@ -54,4 +50,4 @@ class MonitorSerializer(serializers.ModelSerializer):
             "isUp",
             "lastChange",
         )
-        read_only_fields = ("organization",)
+        read_only_fields = ("organization", "isUp", "lastChange", "endpoint_id", "created")
