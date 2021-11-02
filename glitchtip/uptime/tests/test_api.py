@@ -51,14 +51,16 @@ class UptimeAPITestCase(GlitchTipTestCase):
         self.assertEqual(monitor.project, self.project)
 
     def test_monitor_retrieve(self):
-        # environment_project = baker.make(
-        #     "environments.EnvironmentProject",
-        #     project=self.project,
-        #     environment__organization=self.organization,
-        # )
+
+        environment = baker.make(
+            "environments.Environment", organization=self.organization
+        )
         
         monitor = baker.make(
-            "uptime.Monitor", organization=self.organization, url="http://example.com"
+            "uptime.Monitor", 
+            organization=self.organization, 
+            url="http://example.com", 
+            environment=environment
         )
 
         baker.make(
@@ -76,3 +78,4 @@ class UptimeAPITestCase(GlitchTipTestCase):
         res = self.client.get(url)
         self.assertEqual(res.data["isUp"], True)
         self.assertEqual(res.data["lastChange"], "2021-09-19T15:39:31Z")
+        self.assertEqual(res.data["environment"], environment.pk)
