@@ -49,17 +49,4 @@ class MonitorViewSet(viewsets.ModelViewSet):
             raise exceptions.ValidationError("Organization does not exist")
         serializer.save(organization=organization)
 
-    #     except Organization.DoesNotExist:
-    #         raise exceptions.ValidationError("Organization does not exist")
-    #     serializer.save(organization=organization)
 
-        #    def perform_create(self, serializer):
-        # try:
-        #     project = Project.objects.get(
-        #         slug=self.kwargs.get("project_slug"),
-        #         team__members__user=self.request.user,
-        #         organization__slug=self.kwargs.get("organization_slug"),
-        #     )
-        # except Project.DoesNotExist:
-        #     raise exceptions.ValidationError("Organization does not exist")
-        # serializer.save(project=project)
