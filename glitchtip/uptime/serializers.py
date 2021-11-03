@@ -23,6 +23,8 @@ class MonitorSerializer(serializers.ModelSerializer):
     monitorType = serializers.CharField(source="monitor_type")
     expectedStatus = serializers.IntegerField(source="expected_status")
     heartbeatEndpoint = serializers.SerializerMethodField()
+    projectName = serializers.SerializerMethodField()
+    envName = serializers.SerializerMethodField()
 
     def get_isUp(self, obj):
         if hasattr(obj, "latest_is_up"):
@@ -42,6 +44,14 @@ class MonitorSerializer(serializers.ModelSerializer):
                     "endpoint_id": obj.endpoint_id,
                 },
             )
+    
+    def get_projectName(self, obj):
+        if obj.project:
+            return obj.project.name
+    
+    def get_envName(self, obj):
+        if obj.environment:
+            return obj.environment.name
 
     class Meta:
         model = Monitor
@@ -62,6 +72,8 @@ class MonitorSerializer(serializers.ModelSerializer):
             "isUp",
             "lastChange",
             "heartbeatEndpoint",
+            "projectName",
+            "envName",
         )
         read_only_fields = (
             "organization",
@@ -70,4 +82,6 @@ class MonitorSerializer(serializers.ModelSerializer):
             "endpoint_id",
             "created",
             "heartbeatEndpoint",
+            "projectName",
+            "envName",
             )
