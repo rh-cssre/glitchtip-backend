@@ -1,4 +1,4 @@
-FROM python:3.9 as build-python
+FROM python:3.10 as build-python
 ARG IS_CI
 ENV PYTHONUNBUFFERED=1 \
   PORT=8080 \
@@ -10,15 +10,15 @@ WORKDIR /code
 COPY poetry.lock pyproject.toml /code/
 RUN poetry install --no-interaction --no-ansi $(test "$IS_CI" = "True" && echo "--no-dev")
 
-FROM python:3.9-slim
+FROM python:3.10-slim
 ENV PYTHONUNBUFFERED=1 \
   PORT=8080
 
-RUN apt-get update && apt-get install -y libxml2 && apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y libxml2 libpq5 && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /code
 
-COPY --from=build-python /usr/local/lib/python3.9/site-packages/ /usr/local/lib/python3.9/site-packages/
+COPY --from=build-python /usr/local/lib/python3.10/site-packages/ /usr/local/lib/python3.10/site-packages/
 COPY --from=build-python /usr/local/bin/ /usr/local/bin/
 
 EXPOSE 8080
