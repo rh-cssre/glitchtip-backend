@@ -14,7 +14,7 @@ include:
   - template: Secret-Detection.gitlab-ci.yml
 
 test:
-  image: python:3.10-slim
+  image: python:3.10
   variables:
     SECRET_KEY: testing
     ENABLE_TEST_API: "true"
@@ -26,7 +26,6 @@ test:
     paths:
       - .cache/pip
   script:
-    - apt-get update && apt-get install -y gcc
     - pip install poetry
     - poetry install --no-interaction --no-ansi
     - ./manage.py test
