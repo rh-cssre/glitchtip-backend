@@ -54,6 +54,7 @@ build:
 
 test_build:
   image: docker:20
+  stage: build
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   services:
