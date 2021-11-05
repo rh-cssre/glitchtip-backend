@@ -22,6 +22,7 @@ from .serializers import (
 )
 from .parsers import EnvelopeParser
 from .negotiation import IgnoreClientContentNegotiation
+from difs.tasks import difs_run_resolve_stacktrace
 
 
 logger = logging.getLogger(__name__)
@@ -124,6 +125,7 @@ class BaseEventAPIView(APIView):
             logger.warning("Invalid event %s", serializer.errors)
             return Response()
         event = serializer.save()
+        difs_run_resolve_stacktrace(event.event_id)
         return Response({"id": event.event_id_hex})
 
 
