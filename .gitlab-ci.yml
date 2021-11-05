@@ -44,8 +44,6 @@ build:
   image: docker:20
   rules:
     - if: '$CI_PIPELINE_SOURCE != "merge_request_event" && $CI_COMMIT_REF_PROTECTED == "true"'
-      when: always
-    - when: never
   services:
     - docker:20-dind
   script:
@@ -58,8 +56,6 @@ test_build:
   stage: build
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: always
-    - when: never
   services:
     - docker:20-dind
   script:
