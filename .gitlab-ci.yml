@@ -38,7 +38,7 @@ lint:
     - pip install poetry
     - poetry install --no-interaction --no-ansi
     - isort --check glitchtip
-    - pylint --load-plugins=pylint_django --django-settings-module=glitchtip.settings --disable=R glitchtip
+    # - pylint --load-plugins=pylint_django --django-settings-module=glitchtip.settings --disable=R glitchtip
 
 build:
   image: docker:20
