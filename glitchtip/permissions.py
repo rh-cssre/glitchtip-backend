@@ -8,6 +8,8 @@ class ScopedPermission(BasePermission):
     Fall back to checking for user authentication
     """
 
+    scope_map = {}
+
     def get_allowed_scopes(self, request, view):
         try:
             return self.scope_map[request.method]
@@ -22,7 +24,7 @@ class ScopedPermission(BasePermission):
         return bool(request.user and request.user.is_authenticated)
 
     def get_user_scopes(self, obj, user):
-        pass
+        return set()
 
     def has_object_permission(self, request, view, obj):
         allowed_scopes = self.get_allowed_scopes(request, view)

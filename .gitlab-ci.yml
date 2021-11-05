@@ -30,11 +30,19 @@ test:
     - poetry install --no-interaction --no-ansi
     - ./manage.py test
 
+lint:
+  image: python:3.9-slim
+  script:
+    - apt-get update && apt-get install -y gcc
+    - pip install poetry
+    - poetry install --no-interaction --no-ansi
+    - isort --check glitchtip
+    # - pylint --load-plugins=pylint_django --django-settings-module=glitchtip.settings --disable=R glitchtip
+
 build:
   image: docker:20
   rules:
-    - if: '$CI_PIPELINE_SOURCE != "merge_request_event"'
-    - if: '$CI_COMMIT_REF_PROTECTED == "true"'
+    - if: '$CI_PIPELINE_SOURCE != "merge_request_event" && $CI_COMMIT_REF_PROTECTED == "true"'
   services:
     - docker:20-dind
   script:
@@ -44,6 +52,7 @@ build:
 
 test_build:
   image: docker:20
+  stage: build
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   services:

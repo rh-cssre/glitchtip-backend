@@ -1,16 +1,17 @@
 import asyncio
 from datetime import timedelta
 from typing import List
-from django.db import transaction
-from django.db.models import F, Q, ExpressionWrapper, DateTimeField, Subquery, OuterRef
+
+from celery import shared_task
 from django.conf import settings
+from django.db import transaction
+from django.db.models import DateTimeField, ExpressionWrapper, F, OuterRef, Q, Subquery
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from celery import shared_task
+from .email import MonitorEmail
 from .models import Monitor, MonitorCheck
 from .utils import fetch_all
-from .email import MonitorEmail
 
 
 @shared_task
@@ -103,4 +104,5 @@ def cleanup_old_monitor_checks():
     """ Delete older checks and associated data  """
     days = settings.GLITCHTIP_MAX_EVENT_LIFE_DAYS
     qs = MonitorCheck.objects.filter(created__lt=timezone.now() - timedelta(days=days))
-    qs._raw_delete(qs.db)
+    # pylint: disable=protected-access
+    qs._raw_delete(qs.db)  # noqa

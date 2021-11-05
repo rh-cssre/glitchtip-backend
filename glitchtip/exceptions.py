@@ -6,4 +6,3 @@ class ConflictException(exceptions.APIException):
     status_code = status.HTTP_409_CONFLICT
     default_detail = _("Already present!")
     default_code = "already_present"
-

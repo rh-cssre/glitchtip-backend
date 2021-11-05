@@ -1,7 +1,9 @@
-from django.urls import reverse
 from django.core.cache import cache
+from django.urls import reverse
+
 from glitchtip.test_utils.test_case import GlitchTipTestCase
-from .views import SETUP_WIZARD_CACHE_KEY, SETUP_WIZARD_CACHE_EMPTY
+
+from .views import SETUP_WIZARD_CACHE_EMPTY, SETUP_WIZARD_CACHE_KEY
 
 
 class WizardTestCase(GlitchTipTestCase):

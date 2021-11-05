@@ -1,27 +1,28 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import path, include, re_path
+from django.urls import include, path, re_path
 from django.views.generic import TemplateView
 from django.views.generic.base import RedirectView
+from django_rest_mfa.rest_auth_helpers.views import MFALoginView
+from drf_yasg import openapi
+from drf_yasg.views import get_schema_view
+from organizations.backends import invitation_backend
 from rest_framework import permissions
 from rest_framework_nested import routers
-from django_rest_mfa.rest_auth_helpers.views import MFALoginView
-from organizations.backends import invitation_backend
-from drf_yasg.views import get_schema_view
-from drf_yasg import openapi
+
+from api_tokens.urls import router as apiTokensRouter
 from issues.urls import router as issuesRouter
 from issues.views import EventJsonView
+from organizations_ext.urls import router as organizationsRouter
 from projects.urls import router as projectsRouter
 from teams.urls import router as teamsRouter
-from organizations_ext.urls import router as organizationsRouter
 from users.urls import router as usersRouter
-from api_tokens.urls import router as apiTokensRouter
 from users.views import SocialAccountDisconnectView
-from . import social
-from .yasg import CustomOpenAPISchemaGenerator
-from .views import SettingsView, health, APIRootView
 
+from . import social
+from .views import APIRootView, SettingsView, health
+from .yasg import CustomOpenAPISchemaGenerator
 
 router = routers.DefaultRouter()
 router.registry.extend(projectsRouter.registry)

@@ -14,12 +14,13 @@ import logging
 import os
 import sys
 import warnings
+from datetime import timedelta
+
 import environ
 import sentry_sdk
-from datetime import timedelta
+from celery.schedules import crontab
 from django.core.exceptions import ImproperlyConfigured
 from sentry_sdk.integrations.django import DjangoIntegration
-from celery.schedules import crontab
 
 env = environ.Env(
     ALLOWED_HOSTS=(list, ["*"]),
@@ -46,7 +47,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # See https://docs.djangoproject.com/en/dev/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env("SECRET_KEY")
+SECRET_KEY = env.str("SECRET_KEY", "change_me")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")

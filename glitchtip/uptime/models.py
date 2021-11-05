@@ -1,9 +1,12 @@
 import uuid
 from datetime import timedelta
+
 from django.db import models
-from django.db.models import Subquery, OuterRef
+from django.db.models import OuterRef, Subquery
+
 from glitchtip.base_models import CreatedModel
-from .constants import MonitorType, MonitorCheckReason
+
+from .constants import MonitorCheckReason, MonitorType
 
 
 class MonitorManager(models.Manager):
@@ -64,6 +67,7 @@ class Monitor(CreatedModel):
         if self.monitor_type == MonitorType.HEARTBEAT and not self.endpoint_id:
             self.endpoint_id = uuid.uuid4()
         super().save(*args, **kwargs)
+        # pylint: disable=import-outside-toplevel
         from glitchtip.uptime.tasks import perform_checks
 
         if self.monitor_type != MonitorType.HEARTBEAT:

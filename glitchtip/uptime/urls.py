@@ -1,6 +1,6 @@
 from django.urls import path
-from .views import HeartBeatCheckView
 
+from .views import HeartBeatCheckView
 
 urlpatterns = [
     path(
@@ -9,4 +9,3 @@ urlpatterns = [
         name="heartbeat-check",
     ),
 ]
-

@@ -1,5 +1,5 @@
 from django.conf import settings
-from drf_yasg.generators import OpenAPISchemaGenerator, EndpointEnumerator
+from drf_yasg.generators import EndpointEnumerator, OpenAPISchemaGenerator
 from drf_yasg.inspectors import SwaggerAutoSchema
 
 
