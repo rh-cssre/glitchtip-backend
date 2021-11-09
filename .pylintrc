@@ -1,3 +1,7 @@
 [MASTER]
 disable=
     C0114, # missing-module-docstring
+    missing-class-docstring,
+    missing-function-docstring,
+    abstract-method,
+    unused-argument

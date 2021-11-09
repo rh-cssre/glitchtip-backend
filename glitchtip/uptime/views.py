@@ -1,6 +1,7 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, viewsets
 from rest_framework.generics import CreateAPIView
+
 from .models import Monitor
 from .serializers import HeartBeatCheckSerializer, MonitorSerializer
 from .tasks import send_monitor_notification

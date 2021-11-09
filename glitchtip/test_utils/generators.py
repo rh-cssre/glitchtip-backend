@@ -1,5 +1,5 @@
 from model_bakery import baker
-from model_bakery.random_gen import gen_slug, gen_datetime, gen_integer, gen_related
+from model_bakery.random_gen import gen_datetime, gen_integer, gen_related, gen_slug
 
 
 def currency_code():

@@ -2,10 +2,12 @@
   "python.formatting.provider": "black",
   "python.linting.pylintArgs": [
     "--enable=W0614",
+    "--django-settings-module=glitchtip.settings",
     "--load-plugins",
     "pylint_django"
   ],
   "python.linting.enabled": true,
   "python.linting.pylintEnabled": true,
-  "editor.formatOnSave": true
+  "editor.formatOnSave": true,
+  "files.trimTrailingWhitespace": true
 }

@@ -1,6 +1,7 @@
 from django.utils.translation import gettext_lazy as _
-from rest_framework.authentication import TokenAuthentication
 from rest_framework import exceptions
+from rest_framework.authentication import TokenAuthentication
+
 from api_tokens.models import APIToken
 
 

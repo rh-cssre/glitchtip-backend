@@ -1,13 +1,16 @@
 import string
 from collections import namedtuple
+
 from django.core.cache import cache
 from django.utils.crypto import get_random_string
-from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
+from rest_framework.views import APIView
+
 from api_tokens.models import APIToken
 from projects.models import Project
-from .serializers import SetupWizardSerializer, SetupWizardResultSerializer
+
+from .serializers import SetupWizardResultSerializer, SetupWizardSerializer
 
 SETUP_WIZARD_CACHE_KEY = "setup-wizard-keys:v1:"
 SETUP_WIZARD_CACHE_TIMEOUT = 600

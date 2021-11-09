@@ -1,5 +1,7 @@
-from rest_framework.test import APITestCase
+# pylint: disable=attribute-defined-outside-init,invalid-name
 from model_bakery import baker
+from rest_framework.test import APITestCase
+
 from organizations_ext.models import OrganizationUserRole
 
 

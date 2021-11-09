@@ -1,12 +1,13 @@
+from allauth.socialaccount.models import SocialApp
 from django.conf import settings
 from django.http import HttpResponse
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny
-from allauth.socialaccount.models import SocialApp
-from users.utils import is_user_registration_open
-from users.serializers import SocialAppSerializer, UserSerializer
+
 from api_tokens.serializers import APITokenAuthScopesSerializer
+from users.serializers import SocialAppSerializer, UserSerializer
+from users.utils import is_user_registration_open
 
 try:
     from djstripe.settings import STRIPE_PUBLIC_KEY
@@ -19,7 +20,7 @@ class SettingsView(APIView):
 
     permission_classes = [AllowAny]
 
-    def get(self, request, format=None):
+    def get(self, request, *args, **kwargs):
         billing_enabled = settings.BILLING_ENABLED
         enable_user_registration = is_user_registration_open()
         stripe_public_key = None
@@ -49,7 +50,7 @@ class SettingsView(APIView):
 class APIRootView(APIView):
     """ /api/0/ gives information about the server and current user """
 
-    def get(self, request, format=None):
+    def get(self, request, *args, **kwargs):
         user_data = None
         auth_data = None
         if request.user.is_authenticated:

@@ -5,8 +5,8 @@ from ssl import SSLError
 
 import aiohttp
 from aiohttp.client_exceptions import ClientConnectorError
-from .constants import MonitorType, MonitorCheckReason
 
+from .constants import MonitorCheckReason, MonitorType
 
 DEFAULT_TIMEOUT = 10
 DEFAULT_PING_TIMEOUT = 1

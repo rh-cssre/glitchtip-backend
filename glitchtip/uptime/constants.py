@@ -17,4 +17,3 @@ class MonitorCheckReason(models.IntegerChoices):
     BODY = 3, _("Expected response not found")
     SSL = 4, _("SSL error")
     NETWORK = 5, _("Network error")
-

@@ -19,4 +19,5 @@ app.autodiscover_tasks()
 
 @app.task(bind=True)
 def debug_task(self):
+    # pylint: disable=consider-using-f-string
     print("Request: {0!r}".format(self.request))
