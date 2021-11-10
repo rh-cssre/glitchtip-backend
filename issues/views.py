@@ -56,7 +56,7 @@ class IssueViewSet(
         qs = (
             super()
             .get_queryset()
-            .filter(project__team__members__user=self.request.user)
+            .filter(project__organization__users=self.request.user)
         )
 
         if "organization_slug" in self.kwargs:

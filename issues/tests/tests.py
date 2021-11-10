@@ -119,6 +119,28 @@ class IssuesAPITestCase(GlitchTipTestCase):
         self.assertNotContains(res, not_my_issue.title)
         self.assertEqual(res.get("X-Hits"), "1")
 
+    def test_no_duplicate_issues(self):
+        """
+        Addresses https://gitlab.com/glitchtip/glitchtip-backend/-/issues/109
+        Ensure issues can be filtered by org membership but not duplicated
+        """
+        baker.make("issues.Issue", project=self.project)
+        team2 = baker.make("teams.Team", organization=self.organization)
+        team2.members.add(self.org_user)
+        self.project.team_set.add(team2)
+
+        res = self.client.get(self.url)
+        self.assertEqual(len(res.data), 1)
+
+        team2.delete()
+        self.team.delete()
+        res = self.client.get(self.url)
+        self.assertEqual(len(res.data), 1)
+
+        self.org_user.delete()
+        res = self.client.get(self.url)
+        self.assertEqual(len(res.data), 0)
+
     def test_issue_retrieve(self):
         issue = baker.make("issues.Issue", project=self.project)
         not_my_issue = baker.make("issues.Issue")
