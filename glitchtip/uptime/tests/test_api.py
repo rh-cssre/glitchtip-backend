@@ -2,6 +2,7 @@ from django.shortcuts import reverse
 from model_bakery import baker
 
 from glitchtip.test_utils.test_case import GlitchTipTestCase
+from glitchtip.uptime.constants import MonitorType
 from glitchtip.uptime.models import Monitor
 
 
@@ -77,6 +78,34 @@ class UptimeAPITestCase(GlitchTipTestCase):
         self.assertEqual(res.data["isUp"], True)
         self.assertEqual(res.data["lastChange"], "2021-09-19T15:39:31Z")
         self.assertEqual(res.data["environment"], environment.pk)
+
+    def test_monitor_update(self):
+
+        monitor = baker.make(
+            "uptime.Monitor",
+            organization=self.organization,
+            url="http://example.com",
+            interval="60",
+            monitor_type="Ping",
+            expected_status="200"
+        )
+
+        url = reverse(
+            "organization-monitors-detail",
+            kwargs={"organization_slug": self.organization.slug, "pk": monitor.pk},
+        )
+
+        data = {
+            "name": "New name",
+            "url": "https://differentexample.com",
+            "monitorType": "GET",
+            "expectedStatus": "200",
+            "interval": "60"
+        }
+
+        res = self.client.put(url, data, format="json")
+        self.assertEqual(res.data["monitorType"], "GET")
+        self.assertEqual(res.data["url"], "https://differentexample.com")
 
 
     def test_list_isolation(self):
