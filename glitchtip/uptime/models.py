@@ -1,9 +1,10 @@
 import uuid
 from datetime import timedelta
 
-from django.db import models
 from django.core.validators import MaxValueValidator
-from django.db.models import Subquery, OuterRef
+from django.db import models
+from django.db.models import OuterRef, Subquery
+
 from glitchtip.base_models import CreatedModel
 
 from .constants import MonitorCheckReason, MonitorType

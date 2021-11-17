@@ -44,7 +44,7 @@ class UptimeAPITestCase(GlitchTipTestCase):
         res = self.client.post(url, data)
         self.assertEqual(res.status_code, 201)
         monitor = Monitor.objects.all().first()
-        self.assertEqual(monitor.monitor_type, data["monitorType"])
+        self.assertEqual(monitor.name, data["name"])
         self.assertEqual(monitor.organization, self.organization)
         self.assertEqual(monitor.project, self.project)
 
@@ -53,7 +53,7 @@ class UptimeAPITestCase(GlitchTipTestCase):
         environment = baker.make(
             "environments.Environment", organization=self.organization
         )
-        
+
         monitor = baker.make(
             "uptime.Monitor",
             organization=self.organization,
@@ -85,7 +85,7 @@ class UptimeAPITestCase(GlitchTipTestCase):
             "organization-monitors-list",
             kwargs={"organization_slug": self.organization.slug},
         )
-        
+
         user2 = baker.make("users.user")
         org2 = baker.make("organizations_ext.Organization")
         org2.add_user(user2)
@@ -105,7 +105,7 @@ class UptimeAPITestCase(GlitchTipTestCase):
             kwargs={"organization_slug": org2.slug},
         )
         data = {
-            "monitorType": "ping",
+            "monitorType": "Ping",
             "name": "Test",
             "url": "https://www.google.com",
             "expectedStatus": 200,
