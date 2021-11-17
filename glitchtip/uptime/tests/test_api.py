@@ -34,7 +34,7 @@ class UptimeAPITestCase(GlitchTipTestCase):
             kwargs={"organization_slug": self.organization.slug},
         )
         data = {
-            "monitorType": "ping",
+            "monitorType": "Ping",
             "name": "Test",
             "url": "https://www.google.com",
             "expectedStatus": 200,

@@ -1,8 +1,7 @@
 from django.core import exceptions
 from django.utils import timezone
 from rest_framework import serializers
-
-from .models import Monitor, MonitorCheck
+from .models import Monitor, MonitorCheck, MonitorType
 from django.urls import reverse
 from django.conf import settings
 
@@ -16,11 +15,30 @@ class HeartBeatCheckSerializer(serializers.ModelSerializer):
         fields = ("is_up", "start_check")
         read_only_fields = ("is_up",)
 
+# Taken from the issues serializer. Wasn't sure if I should import it or copy it.
+class DisplayChoiceField(serializers.ChoiceField):
+    """
+    ChoiceField that represents choice only as display value
+    Useful if the API should only deal with display values
+    """
+
+    def to_representation(self, value):
+        return self.choices[value]
+
+    def to_internal_value(self, data):
+        if data == "" and self.allow_blank:
+            return ""
+
+        choice_strings_to_values = {value: key for key, value in self.choices.items()}
+        try:
+            return choice_strings_to_values[str(data)]
+        except KeyError:
+            self.fail("invalid_choice", input=data)
 
 class MonitorSerializer(serializers.ModelSerializer):
     isUp = serializers.SerializerMethodField()
     lastChange = serializers.SerializerMethodField()
-    monitorType = serializers.CharField(source="monitor_type")
+    monitorType = DisplayChoiceField(choices=MonitorType.choices, source="monitor_type")
     expectedStatus = serializers.IntegerField(source="expected_status")
     heartbeatEndpoint = serializers.SerializerMethodField()
     projectName = serializers.SerializerMethodField()
@@ -29,7 +47,7 @@ class MonitorSerializer(serializers.ModelSerializer):
     def get_isUp(self, obj):
         if hasattr(obj, "latest_is_up"):
             return obj.latest_is_up
-    
+
     def get_lastChange(self, obj):
         if hasattr(obj, "last_change"):
             if obj.last_change:
@@ -44,11 +62,11 @@ class MonitorSerializer(serializers.ModelSerializer):
                     "endpoint_id": obj.endpoint_id,
                 },
             )
-    
+
     def get_projectName(self, obj):
         if obj.project:
             return obj.project.name
-    
+
     def get_envName(self, obj):
         if obj.environment:
             return obj.environment.name

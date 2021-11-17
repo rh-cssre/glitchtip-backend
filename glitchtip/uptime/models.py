@@ -2,8 +2,8 @@ import uuid
 from datetime import timedelta
 
 from django.db import models
-from django.db.models import OuterRef, Subquery
-
+from django.core.validators import MaxValueValidator
+from django.db.models import Subquery, OuterRef
 from glitchtip.base_models import CreatedModel
 
 from .constants import MonitorCheckReason, MonitorType
@@ -56,7 +56,10 @@ class Monitor(CreatedModel):
     organization = models.ForeignKey(
         "organizations_ext.Organization", on_delete=models.CASCADE
     )
-    interval = models.DurationField(default=timedelta(minutes=1))
+    interval = models.DurationField(
+        default=timedelta(minutes=1),
+        validators=[MaxValueValidator(timedelta(hours=23, minutes=59, seconds=59))]
+        )
 
     objects = MonitorManager()
 
