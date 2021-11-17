@@ -17,7 +17,6 @@ class HeartBeatCheckSerializer(serializers.ModelSerializer):
         fields = ("is_up", "start_check")
         read_only_fields = ("is_up",)
 
-# Taken from the issues serializer. Wasn't sure if I should import it or copy it.
 class DisplayChoiceField(serializers.ChoiceField):
     """
     ChoiceField that represents choice only as display value

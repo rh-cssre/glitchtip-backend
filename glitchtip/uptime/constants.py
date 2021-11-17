@@ -3,11 +3,11 @@ from django.utils.translation import gettext_lazy as _
 
 
 class MonitorType(models.TextChoices):
-    PING = "ping", _("Ping")
-    GET = "get", _("GET")
-    POST = "post", _("POST")
-    SSL = "ssl", _("SSL")
-    HEARTBEAT = "heartbeat", _("Heartbeat")
+    PING = "ping", ("Ping")
+    GET = "get", ("GET")
+    POST = "post", ("POST")
+    SSL = "ssl", ("SSL")
+    HEARTBEAT = "heartbeat", ("Heartbeat")
 
 
 class MonitorCheckReason(models.IntegerChoices):
