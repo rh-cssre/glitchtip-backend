@@ -1,15 +1,18 @@
 version: "3.7"
-x-environment: &default-environment
+x-environment:
+  &default-environment
   DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
   SECRET_KEY: change_me
   ENABLE_OPEN_USER_REGISTRATION: "true"
   ENABLE_TEST_API: "true"
   DEBUG: "true"
   EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
-x-depends_on: &default-depends_on
+x-depends_on:
+  &default-depends_on
   - postgres
   - redis
-x-volumes: &default-volumes
+x-volumes:
+  &default-volumes
   - .:/code
 services:
   postgres:
@@ -28,7 +31,7 @@ services:
     environment: *default-environment
   worker:
     build: .
-    command: celery -A glitchtip worker -B -l INFO
+    command: celery -A glitchtip worker -B -s /tmp/celerybeat-schedule -l INFO
     depends_on: *default-depends_on
     volumes: *default-volumes
     environment: *default-environment

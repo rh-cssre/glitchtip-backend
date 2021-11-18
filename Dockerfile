@@ -25,4 +25,7 @@ EXPOSE 8080
 
 COPY . /code/
 
+RUN useradd -u 5000 app && chown app:app /code
+USER app:app
+
 CMD ["./bin/start.sh"]
