@@ -1,6 +1,8 @@
 from django.shortcuts import get_object_or_404
-from rest_framework import permissions, viewsets
+from rest_framework import exceptions, permissions, viewsets
 from rest_framework.generics import CreateAPIView
+
+from organizations_ext.models import Organization
 
 from .models import Monitor
 from .serializers import HeartBeatCheckSerializer, MonitorSerializer
@@ -25,7 +27,7 @@ class HeartBeatCheckView(CreateAPIView):
 
 
 class MonitorViewSet(viewsets.ModelViewSet):
-    queryset = Monitor.objects.all()
+    queryset = Monitor.objects.with_check_annotations()
     serializer_class = MonitorSerializer
 
     def get_queryset(self):
@@ -37,3 +39,14 @@ class MonitorViewSet(viewsets.ModelViewSet):
         if organization_slug:
             queryset = queryset.filter(organization__slug=organization_slug)
         return queryset
+
+    def perform_create(self, serializer):
+        try:
+            organization = Organization.objects.get(
+                slug=self.kwargs.get("organization_slug"),
+                users=self.request.user
+            )
+        except Organization.DoesNotExist:
+            raise exceptions.ValidationError("Organization not found")
+        serializer.save(organization=organization)
+

@@ -8,6 +8,7 @@ from users.models import User
 from organizations_ext.models import Organization
 from teams.models import Team
 from projects.models import Project
+from glitchtip.uptime.models import Monitor
 
 
 class SeedDataAPIView(APIView):
@@ -53,6 +54,16 @@ class SeedDataAPIView(APIView):
 
         Project.objects.filter(name=project_name).delete()
         project = Project.objects.create(name=project_name, organization=organization)
+
+        Monitor.objects.filter(name="cytestmonitor").delete()
+        Monitor.objects.create(
+            name = "cytestmonitor",
+            organization=organization,
+            project=project,
+            url="https://www.google.com",
+            monitor_type="Ping",
+            interval="00:01:00"
+        )
 
         if (request.query_params.get("extras")):
             project_name = "SwitchGrip"
