@@ -12,7 +12,7 @@ User = get_user_model()
 
 
 class MonitorEmail(DetailEmail):
-    html_template_name = "uptime/alert.txt"
+    html_template_name = "uptime/alert.html"
     text_template_name = "uptime/alert.txt"
     subject_template_name = "uptime/alert-subject.txt"
     model = MonitorCheck
