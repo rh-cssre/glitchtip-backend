@@ -5,4 +5,4 @@ CONCURRENCY="${CONCURRENCY:-2}"
 
 echo "Start celery with CONCURRENCY: $CONCURRENCY"
 
-exec celery -A glitchtip worker -l info -B --concurrency=$CONCURRENCY
+exec celery -A glitchtip worker -l info -B -s /tmp/celerybeat-schedule --concurrency=$CONCURRENCY
