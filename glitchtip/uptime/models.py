@@ -44,10 +44,9 @@ class Monitor(CreatedModel):
         help_text="Used for referencing heartbeat endpoint",
     )
     name = models.CharField(max_length=200)
-    url = models.URLField(blank=True)
+    url = models.URLField(max_length=2000, blank=True)
     expected_status = models.PositiveSmallIntegerField(default=200)
     expected_body = models.CharField(max_length=2000, blank=True)
-    ip_address = models.GenericIPAddressField(blank=True, null=True)
     environment = models.ForeignKey(
         "environments.Environment", on_delete=models.SET_NULL, null=True, blank=True,
     )
@@ -59,8 +58,8 @@ class Monitor(CreatedModel):
     )
     interval = models.DurationField(
         default=timedelta(minutes=1),
-        validators=[MaxValueValidator(timedelta(hours=23, minutes=59, seconds=59))]
-        )
+        validators=[MaxValueValidator(timedelta(hours=23, minutes=59, seconds=59))],
+    )
 
     objects = MonitorManager()
 

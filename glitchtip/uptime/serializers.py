@@ -18,6 +18,7 @@ class HeartBeatCheckSerializer(serializers.ModelSerializer):
         fields = ("is_up", "start_check")
         read_only_fields = ("is_up",)
 
+
 class MonitorSerializer(serializers.ModelSerializer):
     isUp = serializers.SerializerMethodField()
     lastChange = serializers.SerializerMethodField()
@@ -65,7 +66,6 @@ class MonitorSerializer(serializers.ModelSerializer):
             "url",
             "expectedStatus",
             "expected_body",
-            "ip_address",
             "environment",
             "project",
             "organization",
@@ -85,4 +85,4 @@ class MonitorSerializer(serializers.ModelSerializer):
             "heartbeatEndpoint",
             "projectName",
             "envName",
-            )
+        )
