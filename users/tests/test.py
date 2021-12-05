@@ -79,6 +79,19 @@ class UsersTestCase(GlitchTipTestCase):
         res = self.client.get(url)
         self.assertContains(res, self.user.email)
 
+    def test_destroy(self):
+        other_user = baker.make("users.user")
+        url = reverse("user-detail", args=[other_user.pk])
+        res = self.client.delete(url)
+        self.assertEqual(
+            res.status_code, 404, "User should not be able to delete other users"
+        )
+
+        url = reverse("user-detail", args=[self.user.pk])
+        res = self.client.delete(url)
+        self.assertEqual(res.status_code, 204)
+        self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
+
     def test_organization_members_list(self):
         other_user = baker.make("users.user")
         other_organization = baker.make("organizations_ext.Organization")
