@@ -1,5 +1,6 @@
 from django.conf import settings
-from django.db.models import Count, Q, Subquery, OuterRef
+from django.db.models import Count, F, Q, Subquery, OuterRef
+from django.db.models.functions import Coalesce
 from celery import shared_task
 from projects.models import Project
 from .models import Organization
@@ -37,7 +38,10 @@ def get_free_tier_organizations_with_event_count():
     ).values("total")
 
     return queryset.annotate(
-        event_count=Subquery(total_issue_events) + Subquery(total_transaction_events)
+        uptime_check_event_count=Count("monitor__checks"),
+        event_count=Coalesce(Subquery(total_issue_events), 0)
+        + Coalesce(Subquery(total_transaction_events), 0)
+        + F("uptime_check_event_count"),
     )
 
 

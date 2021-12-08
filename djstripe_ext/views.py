@@ -11,6 +11,7 @@ import stripe
 from organizations_ext.models import Organization
 from events.models import Event
 from performance.models import TransactionEvent
+from glitchtip.uptime.models import MonitorCheck
 from .serializers import (
     SubscriptionSerializer,
     CreateSubscriptionSerializer,
@@ -86,7 +87,12 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
             created__gte=subscription.current_period_start,
             created__lt=subscription.current_period_end,
         ).count()
-        total = event_count + transaction_event_count
+        uptime_check_event_count = MonitorCheck.objects.filter(
+            monitor__organization=organization,
+            created__gte=subscription.current_period_start,
+            created__lt=subscription.current_period_end,
+        ).count()
+        total = event_count + transaction_event_count + uptime_check_event_count
         cache.set(cache_key, total, 600)
         return Response(total)
 
