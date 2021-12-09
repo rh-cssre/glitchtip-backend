@@ -9,8 +9,8 @@ from organizations_ext.models import Organization
 from .models import Monitor, MonitorCheck
 from .serializers import (
     HeartBeatCheckSerializer,
-    MonitorSerializer,
     MonitorCheckSerializer,
+    MonitorSerializer,
 )
 from .tasks import send_monitor_notification
 
