@@ -58,7 +58,7 @@ class UptimeAPITestCase(GlitchTipTestCase):
                 )
         with freeze_time(current_time):
             res = self.client.get(self.list_url)
-        print(len(res.data[0]["checks"]))
+        self.assertEqual(len(res.data[0]["checks"]), 61)
 
     def test_create(self):
         data = {
