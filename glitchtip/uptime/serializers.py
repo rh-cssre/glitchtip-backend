@@ -1,5 +1,4 @@
 from django.conf import settings
-from django.core import exceptions
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import serializers
@@ -8,13 +7,22 @@ from rest_framework.fields import ChoiceField
 from .models import Monitor, MonitorCheck, MonitorType
 
 
-class HeartBeatCheckSerializer(serializers.ModelSerializer):
+class MonitorCheckSerializer(serializers.ModelSerializer):
+    isUp = serializers.BooleanField(source="is_up")
+    startCheck = serializers.DateTimeField(source="start_check")
+    responseTime = serializers.DurationField(source="response_time")
+
+    class Meta:
+        model = MonitorCheck
+        fields = ("isUp", "startCheck", "reason", "responseTime")
+
+
+class HeartBeatCheckSerializer(MonitorCheckSerializer):
     start_check = serializers.DateTimeField(
         default=timezone.now, help_text="Optional, set server check start time."
     )
 
-    class Meta:
-        model = MonitorCheck
+    class Meta(MonitorCheckSerializer.Meta):
         fields = ("is_up", "start_check")
         read_only_fields = ("is_up",)
 
@@ -27,6 +35,7 @@ class MonitorSerializer(serializers.ModelSerializer):
     heartbeatEndpoint = serializers.SerializerMethodField()
     projectName = serializers.SerializerMethodField()
     envName = serializers.SerializerMethodField()
+    checks = MonitorCheckSerializer(many=True, read_only=True)
 
     def get_isUp(self, obj):
         if hasattr(obj, "latest_is_up"):
@@ -62,6 +71,7 @@ class MonitorSerializer(serializers.ModelSerializer):
             "monitorType",
             "endpoint_id",
             "created",
+            "checks",
             "name",
             "url",
             "expectedStatus",
