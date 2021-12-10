@@ -5,7 +5,7 @@ from teams.views import NestedTeamViewSet
 from environments.views import EnvironmentViewSet
 from releases.views import ReleaseViewSet
 from performance.views import TransactionViewSet
-from glitchtip.uptime.views import MonitorViewSet
+from glitchtip.uptime.views import MonitorViewSet, MonitorCheckViewSet
 from glitchtip.routers import BulkSimpleRouter
 from .views import (
     OrganizationViewSet,
@@ -47,9 +47,17 @@ organizations_router.register(
     r"monitors", MonitorViewSet, basename="organization-monitors"
 )
 
+organizations_monitors_router = routers.NestedSimpleRouter(
+    organizations_router, r"monitors", lookup="monitor"
+)
+organizations_monitors_router.register(
+    r"checks", MonitorCheckViewSet, basename="organization-monitor-checks"
+)
+
 urlpatterns = [
     path("", include(router.urls)),
     path("", include(organizations_router.urls)),
+    path("", include(organizations_monitors_router.urls)),
     path(
         "accept/<int:org_user_id>/<token>/",
         AcceptInviteView.as_view(),

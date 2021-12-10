@@ -1,17 +1,20 @@
 import json
 from datetime import timedelta
+
 from django.core import mail
-from django.utils import timezone
 from django.shortcuts import reverse
-from model_bakery import baker
+from django.utils import timezone
 from freezegun import freeze_time
+from model_bakery import baker
+
 from glitchtip import test_utils  # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.models import EventStatus, Issue
-from users.models import ProjectAlertStatus
 from organizations_ext.models import OrganizationUserRole
-from ..tasks import process_alerts
+from users.models import ProjectAlertStatus
+
 from ..models import Notification
+from ..tasks import process_alerts
 
 
 class AlertTestCase(GlitchTipTestCase):

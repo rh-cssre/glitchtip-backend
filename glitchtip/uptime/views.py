@@ -1,11 +1,17 @@
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import exceptions, permissions, viewsets
 from rest_framework.generics import CreateAPIView
 
 from organizations_ext.models import Organization
 
-from .models import Monitor
-from .serializers import HeartBeatCheckSerializer, MonitorSerializer
+from .models import Monitor, MonitorCheck
+from .serializers import (
+    HeartBeatCheckSerializer,
+    MonitorCheckSerializer,
+    MonitorSerializer,
+)
 from .tasks import send_monitor_notification
 
 
@@ -38,15 +44,40 @@ class MonitorViewSet(viewsets.ModelViewSet):
         organization_slug = self.kwargs.get("organization_slug")
         if organization_slug:
             queryset = queryset.filter(organization__slug=organization_slug)
+
+        queryset = queryset.prefetch_related(
+            Prefetch(
+                "checks",
+                queryset=MonitorCheck.objects.filter(
+                    created__gte=timezone.now() - timezone.timedelta(hours=1)
+                ),
+            )
+        ).distinct()
         return queryset
 
     def perform_create(self, serializer):
         try:
             organization = Organization.objects.get(
-                slug=self.kwargs.get("organization_slug"),
-                users=self.request.user
+                slug=self.kwargs.get("organization_slug"), users=self.request.user
             )
         except Organization.DoesNotExist:
             raise exceptions.ValidationError("Organization not found")
         serializer.save(organization=organization)
 
+
+class MonitorCheckViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = MonitorCheck.objects.all()
+    serializer_class = MonitorCheckSerializer
+
+    def get_queryset(self):
+        if not self.request.user.is_authenticated:
+            return self.queryset.none()
+
+        queryset = self.queryset.filter(monitor__organization__users=self.request.user)
+        organization_slug = self.kwargs.get("organization_slug")
+        if organization_slug:
+            queryset = queryset.filter(monitor__organization__slug=organization_slug)
+        monitor_pk = self.kwargs.get("monitor_pk")
+        if monitor_pk:
+            queryset = queryset.filter(monitor__pk=monitor_pk)
+        return queryset
