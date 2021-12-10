@@ -103,10 +103,10 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
                     organization__slug=org_slug
                 )
             except ObjectDoesNotExist:
-                raise PermissionDenied("User is not member of this organization")
+                raise PermissionDenied("Not a member of this organization")
             if user_org_user.role < OrganizationUserRole.MANAGER:
                 raise PermissionDenied(
-                    "User must be manager or higher to add organization members"
+                    "Must be manager or higher to add/remove organization members"
                 )
         return super().check_permissions(request)
 
