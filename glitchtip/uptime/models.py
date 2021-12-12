@@ -98,7 +98,7 @@ class MonitorCheck(CreatedModel):
         ordering = ("-created",)
 
     def __str__(self):
-        return f"{self.monitor}: {self.up_or_down}"
+        return self.up_or_down
 
     @property
     def up_or_down(self):
