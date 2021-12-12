@@ -1,14 +1,25 @@
 from django.contrib import admin
-from django.db.models import Sum, Count, Subquery, OuterRef
+from django.conf import settings
+from django.db.models import Count, OuterRef, Subquery, Sum
 from django.utils.html import format_html
 from organizations.base_admin import (
     BaseOrganizationAdmin,
     BaseOrganizationUserAdmin,
     BaseOwnerInline,
 )
-from projects.models import Project
+
 from performance.models import TransactionEvent
-from .models import Organization, OrganizationUser, OrganizationOwner
+from projects.models import Project
+
+from .models import Organization, OrganizationOwner, OrganizationUser
+
+
+ORGANIZATION_LIST_FILTER = (
+    "is_active",
+    "is_accepting_events",
+)
+if settings.BILLING_ENABLED:
+    ORGANIZATION_LIST_FILTER += ("djstripe_customers__subscriptions__plan__product",)
 
 
 class OwnerInline(BaseOwnerInline):
@@ -33,11 +44,7 @@ class OrganizationAdmin(BaseOrganizationAdmin):
         "total_events",
     ]
     readonly_fields = ("customers",)
-    list_filter = (
-        "is_active",
-        "is_accepting_events",
-        "djstripe_customers__subscriptions__plan__product",
-    )
+    list_filter = ORGANIZATION_LIST_FILTER
     inlines = [OrganizationUserInline, OwnerInline]
     show_full_result_count = False
 
