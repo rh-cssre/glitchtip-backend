@@ -25,8 +25,7 @@ EXPOSE 8080
 
 COPY . /code/
 
-# Breaking change - uncomment in 1.10
-#RUN useradd -u 5000 app && chown app:app /code
-#USER app:app
+RUN useradd -u 5000 app && chown app:app /code
+USER app:app
 
 CMD ["./bin/start.sh"]
