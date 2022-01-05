@@ -18,7 +18,7 @@ class UserRegistrationTestCase(APITestCase):
             "password2": "hunter222",
         }
         res = self.client.post(url, data)
-        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.status_code, 204)
 
     def test_create_user_with_tags(self):
         url = reverse("rest_register")
@@ -29,7 +29,7 @@ class UserRegistrationTestCase(APITestCase):
             "tags": "?utm_campaign=test&utm_source=test&utm_medium=test&utm_medium=test",
         }
         res = self.client.post(url, data)
-        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.status_code, 204)
         self.assertTrue(
             User.objects.filter(analytics__register__utm_campaign="test").exists()
         )
@@ -45,12 +45,12 @@ class UserRegistrationTestCase(APITestCase):
         }
         org_data = {"name": "test"}
         res = self.client.post(url, data)
-        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.status_code, 204)
         baker.make("organizations_ext.Organization")
         data["email"] = "another@example.com"
         with override_settings(ENABLE_OPEN_USER_REGISTRATION=False):
             res = self.client.post(url, data)
-            self.assertEqual(res.status_code, 201)
+            self.assertEqual(res.status_code, 204)
             # Can't make more organizations outside of Django Admin
             user = User.objects.first()
             self.client.force_login(user)
