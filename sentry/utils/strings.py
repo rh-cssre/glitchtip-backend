@@ -1,4 +1,4 @@
-from django.utils.encoding import smart_text
+from django.utils.encoding import smart_str
 
 
 def truncatechars(value: str, chars=100):
@@ -9,4 +9,4 @@ def truncatechars(value: str, chars=100):
 def strip(value):
     if not value:
         return ""
-    return smart_text(value).strip()
+    return smart_str(value).strip()

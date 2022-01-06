@@ -6,7 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from drf_yasg.utils import swagger_auto_schema
 from djstripe.models import Subscription, Customer, Product
-from djstripe.settings import STRIPE_SECRET_KEY
+from djstripe.settings import djstripe_settings
 import stripe
 from organizations_ext.models import Organization
 from events.models import Event
@@ -126,7 +126,7 @@ class CreateStripeSubscriptionCheckout(views.APIView):
             customer, _ = Customer.get_or_create(subscriber=organization)
             domain = settings.GLITCHTIP_URL.geturl()
             session = stripe.checkout.Session.create(
-                api_key=STRIPE_SECRET_KEY,
+                api_key=djstripe_settings.STRIPE_SECRET_KEY,
                 payment_method_types=["card"],
                 line_items=[
                     {"price": serializer.validated_data["plan"].id, "quantity": 1,}
@@ -165,7 +165,7 @@ class StripeBillingPortal(views.APIView):
             customer, _ = Customer.get_or_create(subscriber=organization)
             domain = settings.GLITCHTIP_URL.geturl()
             session = stripe.billing_portal.Session.create(
-                api_key=STRIPE_SECRET_KEY,
+                api_key=djstripe_settings.STRIPE_SECRET_KEY,
                 customer=customer.id,
                 return_url=domain + "/" + organization.slug + "/settings/subscription",
             )

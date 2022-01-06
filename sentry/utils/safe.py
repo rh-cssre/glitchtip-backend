@@ -1,6 +1,6 @@
 import collections
 import json
-from django.utils.encoding import force_text
+from django.utils.encoding import force_str
 from sentry.utils.strings import truncatechars
 
 
@@ -67,7 +67,7 @@ def trim(
             v = value[k]
             trim_v = trim(v, _size=_size, **options)
             result[k] = trim_v
-            _size += len(force_text(trim_v)) + 1
+            _size += len(force_str(trim_v)) + 1
             if _size >= max_size:
                 break
 
@@ -77,7 +77,7 @@ def trim(
         for v in value:
             trim_v = trim(v, _size=_size, **options)
             result.append(trim_v)
-            _size += len(force_text(trim_v))
+            _size += len(force_str(trim_v))
             if _size >= max_size:
                 break
         if isinstance(value, tuple):

@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db.models import Count, Q, F, Subquery, OuterRef, IntegerField
 from django.db.models.functions import Cast
-from django.contrib.postgres.fields.jsonb import KeyTextTransform
+from django.db.models.fields.json import KeyTextTransform
 from celery import shared_task
 from organizations_ext.models import Organization
 from projects.models import Project
