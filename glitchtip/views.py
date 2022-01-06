@@ -10,7 +10,7 @@ from users.serializers import SocialAppSerializer, UserSerializer
 from users.utils import is_user_registration_open
 
 try:
-    from djstripe.settings import STRIPE_PUBLIC_KEY
+    from djstripe.settings import djstripe_settings
 except ImportError:
     pass
 
@@ -25,7 +25,7 @@ class SettingsView(APIView):
         enable_user_registration = is_user_registration_open()
         stripe_public_key = None
         if billing_enabled:
-            stripe_public_key = STRIPE_PUBLIC_KEY
+            stripe_public_key = djstripe_settings.STRIPE_PUBLIC_KEY
         social_apps = SocialAppSerializer(
             SocialApp.objects.all().order_by("name"), many=True
         ).data
