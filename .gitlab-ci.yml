@@ -31,9 +31,8 @@ test:
     - ./manage.py test
 
 lint:
-  image: python:3.9-slim
+  image: python:3.10
   script:
-    - apt-get update && apt-get install -y gcc
     - pip install poetry
     - poetry install --no-interaction --no-ansi
     - isort --check glitchtip

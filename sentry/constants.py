@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from collections import OrderedDict, namedtuple
 from django.conf import settings
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
 # from sentry.utils.integrationdocs import load_doc
 # from sentry.utils.geo import rust_geoip
