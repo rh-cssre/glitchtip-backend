@@ -75,7 +75,10 @@ class SubscriptionAPITestCase(APITestCase):
                 "performance.TransactionEvent", project__organization=self.organization
             )
         res = self.client.get(url)
-        self.assertEqual(res.data, 2)
+        self.assertEqual(
+            res.data,
+            {"eventCount": 1, "transactionEventCount": 1, "uptimeCheckEventCount": 0},
+        )
 
     def test_events_count_without_customer(self):
         """
@@ -87,7 +90,7 @@ class SubscriptionAPITestCase(APITestCase):
             + "events_count/"
         )
         res = self.client.get(url)
-        self.assertEqual(res.data, 0)
+        self.assertEqual(sum(res.data.values()), 0)
 
     @patch("djstripe.models.Customer.subscribe")
     def test_create(self, djstripe_customer_subscribe_mock):
