@@ -6,6 +6,7 @@ from organizations_ext.models import OrganizationUserRole
 from .rest_framework.serializers import (
     SubscriptionSerializer as BaseSubscriptionSerializer,
 )
+import logging
 
 
 class BaseProductSerializer(ModelSerializer):
@@ -64,7 +65,7 @@ class CreateSubscriptionSerializer(PlanForOrganizationSerializer):
                 "Cannot subscribe to non-free plan without payment"
             )
         customer, _ = Customer.get_or_create(subscriber=organization)
-        subscription = customer.subscribe(plan)
+        subscription = customer.subscribe(items=[{"plan": plan.id}])
         return {
             "plan": plan,
             "organization": organization,
