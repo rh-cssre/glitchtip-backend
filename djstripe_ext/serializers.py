@@ -6,7 +6,6 @@ from organizations_ext.models import OrganizationUserRole
 from .rest_framework.serializers import (
     SubscriptionSerializer as BaseSubscriptionSerializer,
 )
-import logging
 
 
 class BaseProductSerializer(ModelSerializer):
