@@ -35,3 +35,7 @@ The following naming conventions are applied:
 ### Porting Sentry Code to GlitchTip
 
 GlitchTip has a "sentry" module for code ported from open source Sentry. Run it through `2to3` to make it Python 3 compatible and use it only as needed. Keeping the sentry module namespace makes porting easier.
+
+### Legacy Sentry SDK Client support
+
+The GlitchTip core team at this time is not interested in legacy sdk client support. Merge requests are accepted and welcome. Open legacy client feature requests along with intention to implement or interest in funding development.
