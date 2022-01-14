@@ -26,13 +26,15 @@ class AlertAPITestCase(GlitchTipTestCase):
             kwargs={"project_pk": f"{self.organization.slug}/{self.project.slug}",},
         )
         data = {
+            "name": "foo",
             "timespan_minutes": 60,
             "quantity": 2,
+            "uptime": True,
             "alertRecipients": [{"recipientType": "email", "url": "example.com"}],
         }
         res = self.client.post(url, data)
         self.assertEqual(res.status_code, 201)
-        project_alert = ProjectAlert.objects.all().first()
+        project_alert = ProjectAlert.objects.filter(name="foo", uptime=True).first()
         self.assertEqual(project_alert.timespan_minutes, data["timespan_minutes"])
         self.assertEqual(project_alert.project, self.project)
 
