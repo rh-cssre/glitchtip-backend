@@ -10,9 +10,13 @@ class ProjectAlert(CreatedModel):
     Example: Send notification when project has 15 events in 5 minutes.
     """
 
+    name = models.CharField(max_length=255, blank=True)
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
     timespan_minutes = models.PositiveSmallIntegerField(blank=True, null=True)
     quantity = models.PositiveSmallIntegerField(blank=True, null=True)
+    uptime = models.BooleanField(
+        default=False, help_text="Send alert on any uptime monitor check failure"
+    )
 
 
 class AlertRecipient(models.Model):

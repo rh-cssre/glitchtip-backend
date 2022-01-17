@@ -17,7 +17,14 @@ class ProjectAlertSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProjectAlert
-        fields = ("pk", "timespan_minutes", "quantity", "alertRecipients")
+        fields = (
+            "pk",
+            "name",
+            "timespan_minutes",
+            "quantity",
+            "uptime",
+            "alertRecipients",
+        )
 
     def create(self, validated_data):
         alert_recipients = validated_data.pop("alertrecipient_set", [])
