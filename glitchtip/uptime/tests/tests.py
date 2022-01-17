@@ -73,6 +73,12 @@ class UptimeTestCase(GlitchTipTestCase):
                 monitor_type=MonitorType.GET,
                 project=self.project,
             )
+            baker.make(
+                "alerts.AlertRecipient",
+                alert__uptime=True,
+                alert__project=self.project,
+                recipient_type="email",
+            )
 
         mocked.get(test_url, status=500)
         with freeze_time("2020-01-02"):
@@ -96,6 +102,12 @@ class UptimeTestCase(GlitchTipTestCase):
         with freeze_time("2020-01-01"):
             monitor = baker.make(
                 Monitor, monitor_type=MonitorType.HEARTBEAT, project=self.project,
+            )
+            baker.make(
+                "alerts.AlertRecipient",
+                alert__uptime=True,
+                alert__project=self.project,
+                recipient_type="email",
             )
             url = reverse(
                 "heartbeat-check",
