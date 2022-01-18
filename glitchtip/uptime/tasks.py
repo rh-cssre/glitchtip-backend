@@ -12,6 +12,7 @@ from django.utils.dateparse import parse_datetime
 from alerts.models import AlertRecipient
 from .email import MonitorEmail
 from .models import Monitor, MonitorCheck
+from .webhooks import send_uptime_as_webhook
 from .utils import fetch_all
 
 
@@ -103,6 +104,10 @@ def send_monitor_notification(monitor_check_id: int, went_down: bool, last_chang
                 went_down=went_down,
                 last_change=parse_datetime(last_change) if last_change else None,
             ).send_users_email()
+        elif recipient.recipient_type == AlertRecipient.RecipientType.WEBHOOK:
+            send_uptime_as_webhook(
+                recipient.url, monitor_check_id, went_down, last_change
+            )
 
 
 @shared_task

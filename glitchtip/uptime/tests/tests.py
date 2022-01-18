@@ -61,7 +61,8 @@ class UptimeTestCase(GlitchTipTestCase):
         self.assertEqual(mon.checks.count(), 2)
 
     @aioresponses()
-    def test_monitor_email(self, mocked):
+    @mock.patch("requests.post")
+    def test_monitor_notifications(self, mocked, mock_post):
         self.create_user_and_project()
         test_url = "https://example.com"
         mocked.get(test_url, status=200)
@@ -79,12 +80,20 @@ class UptimeTestCase(GlitchTipTestCase):
                 alert__project=self.project,
                 recipient_type="email",
             )
+            baker.make(
+                "alerts.AlertRecipient",
+                alert__uptime=True,
+                alert__project=self.project,
+                recipient_type="webhook",
+                url="https://example.com",
+            )
 
         mocked.get(test_url, status=500)
         with freeze_time("2020-01-02"):
             dispatch_checks()
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("is down", mail.outbox[0].body)
+        mock_post.assert_called_once()
 
         mocked.get(test_url, status=500)
         with freeze_time("2020-01-03"):
