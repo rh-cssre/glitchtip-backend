@@ -71,30 +71,39 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         """ Get event count for current billing period """
         subscription = self.get_object()
         if not subscription:
-            return Response(0)
+            return Response(
+                {
+                    "eventCount": 0,
+                    "transactionEventCount": 0,
+                    "uptimeCheckEventCount": 0,
+                }
+            )
         organization = subscription.customer.subscriber
         cache_key = "org_event_count" + str(organization.pk)
-        cached_total = cache.get(cache_key)
-        if cached_total is not None:
-            return Response(cached_total)
-        event_count = Event.objects.filter(
-            issue__project__organization=organization,
-            created__gte=subscription.current_period_start,
-            created__lt=subscription.current_period_end,
-        ).count()
-        transaction_event_count = TransactionEvent.objects.filter(
-            project__organization=organization,
-            created__gte=subscription.current_period_start,
-            created__lt=subscription.current_period_end,
-        ).count()
-        uptime_check_event_count = MonitorCheck.objects.filter(
-            monitor__organization=organization,
-            created__gte=subscription.current_period_start,
-            created__lt=subscription.current_period_end,
-        ).count()
-        total = event_count + transaction_event_count + uptime_check_event_count
-        cache.set(cache_key, total, 600)
-        return Response(total)
+        data = cache.get(cache_key)
+        if data is None:
+            event_count = Event.objects.filter(
+                issue__project__organization=organization,
+                created__gte=subscription.current_period_start,
+                created__lt=subscription.current_period_end,
+            ).count()
+            transaction_event_count = TransactionEvent.objects.filter(
+                project__organization=organization,
+                created__gte=subscription.current_period_start,
+                created__lt=subscription.current_period_end,
+            ).count()
+            uptime_check_event_count = MonitorCheck.objects.filter(
+                monitor__organization=organization,
+                created__gte=subscription.current_period_start,
+                created__lt=subscription.current_period_end,
+            ).count()
+            data = {
+                "eventCount": event_count,
+                "transactionEventCount": transaction_event_count,
+                "uptimeCheckEventCount": uptime_check_event_count,
+            }
+            cache.set(cache_key, data, 600)
+        return Response(data)
 
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
