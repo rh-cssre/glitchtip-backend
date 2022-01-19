@@ -1,11 +1,13 @@
-from typing import List
 from datetime import datetime
+from typing import List
+
 from alerts.webhooks import (
+    MSTeamsSection,
     WebhookAttachment,
     WebhookPayload,
-    MSTeamsSection,
     send_webhook,
 )
+
 from .models import MonitorCheck
 
 

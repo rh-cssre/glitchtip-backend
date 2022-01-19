@@ -10,10 +10,11 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from alerts.models import AlertRecipient
+
 from .email import MonitorEmail
 from .models import Monitor, MonitorCheck
-from .webhooks import send_uptime_as_webhook
 from .utils import fetch_all
+from .webhooks import send_uptime_as_webhook
 
 
 @shared_task
