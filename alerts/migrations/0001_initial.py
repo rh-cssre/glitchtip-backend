@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("projects", "0001_initial"),
-        ("issues", "0001_squashed_0004_auto_20200612_0027"),
+        ("issues", "0001_squashed_0010_auto_20210117_1543"),
     ]
 
     operations = [

@@ -9,25 +9,44 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('issues', '0002_auto_20200714_1333'),
-        ('projects', '0003_projectcounter'),
+        ("issues", "0001_squashed_0010_auto_20210117_1543"),
+        ("projects", "0003_projectcounter"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='UserReport',
+            name="UserReport",
             fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('event_id', models.UUIDField()),
-                ('name', models.CharField(max_length=128)),
-                ('email', models.EmailField(max_length=254)),
-                ('comments', models.TextField()),
-                ('created', models.DateTimeField(auto_now_add=True, db_index=True)),
-                ('issue', models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, to='issues.Issue')),
-                ('project', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='projects.Project')),
+                (
+                    "id",
+                    models.AutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("event_id", models.UUIDField()),
+                ("name", models.CharField(max_length=128)),
+                ("email", models.EmailField(max_length=254)),
+                ("comments", models.TextField()),
+                ("created", models.DateTimeField(auto_now_add=True, db_index=True)),
+                (
+                    "issue",
+                    models.ForeignKey(
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="issues.Issue",
+                    ),
+                ),
+                (
+                    "project",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="projects.Project",
+                    ),
+                ),
             ],
-            options={
-                'unique_together': {('project', 'event_id')},
-            },
+            options={"unique_together": {("project", "event_id")},},
         ),
     ]

@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("releases", "0002_auto_20201227_1518"),
-        ("issues", "0009_auto_20201229_1622"),
+        ("issues", "0001_squashed_0010_auto_20210117_1543"),
     ]
 
     state_operations = [

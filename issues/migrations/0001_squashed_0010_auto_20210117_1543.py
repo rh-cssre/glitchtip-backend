@@ -10,20 +10,6 @@ import uuid
 
 
 class Migration(migrations.Migration):
-
-    replaces = [
-        ("issues", "0001_squashed_0004_auto_20200612_0027"),
-        ("issues", "0002_auto_20200714_1333"),
-        ("issues", "0003_auto_20200731_1531"),
-        ("issues", "0004_auto_20200804_0053"),
-        ("issues", "0005_auto_20200805_0107"),
-        ("issues", "0006_auto_20201027_0018"),
-        ("issues", "0007_auto_20201113_1843"),
-        ("issues", "0008_event_release"),
-        ("issues", "0009_auto_20201229_1622"),
-        ("issues", "0010_auto_20210117_1543"),
-    ]
-
     initial = True
 
     dependencies = [
