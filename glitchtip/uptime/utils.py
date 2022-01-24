@@ -8,8 +8,8 @@ from aiohttp.client_exceptions import ClientConnectorError
 
 from .constants import MonitorCheckReason, MonitorType
 
-DEFAULT_TIMEOUT = 10
-DEFAULT_PING_TIMEOUT = 10
+DEFAULT_TIMEOUT = 30
+DEFAULT_PING_TIMEOUT = 30
 DEFAULT_AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT)
 PING_AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=DEFAULT_PING_TIMEOUT)
 
