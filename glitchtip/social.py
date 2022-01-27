@@ -2,7 +2,6 @@ from allauth.account.adapter import DefaultAccountAdapter
 from allauth.account.auth_backends import AuthenticationBackend
 from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from allauth.socialaccount.providers.gitlab.views import GitLabOAuth2Adapter
-from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.microsoft.views import MicrosoftGraphOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.serializers import (
@@ -14,6 +13,7 @@ from django.contrib.auth import get_backends
 from django_rest_mfa.helpers import has_mfa
 from rest_framework import serializers
 from rest_framework.response import Response
+from .constants import SOCIAL_ADAPTER_MAP
 
 DOMAIN = settings.GLITCHTIP_URL.geturl()
 
@@ -58,10 +58,17 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
 
 
 class GenericMFAMixin:
+    client_class = OAuth2Client  # Needed for Github. Would this ever break a provider?
+
     @property
     def callback_url(self):
         provider_id = self.adapter_class.provider_id
         return DOMAIN + "/auth/" + provider_id
+
+    @property
+    def adapter_class(self):
+        provider = self.kwargs.get("provider")
+        return SOCIAL_ADAPTER_MAP[provider]
 
 
 class GlitchTipSocialConnectView(GenericMFAMixin, SocialConnectView):
@@ -89,37 +96,3 @@ class MFASocialLoginView(GenericMFAMixin, SocialLoginView):
             )
             return Response({"requires_mfa": True, "valid_auth": user_key_types})
         return super().get_response()
-
-
-class GitlabConnect(GlitchTipSocialConnectView):
-    adapter_class = GitLabOAuth2Adapter
-
-
-class GitlabLogin(MFASocialLoginView):
-    adapter_class = GitLabOAuth2Adapter
-
-
-class GithubConnect(GlitchTipSocialConnectView):
-    adapter_class = GitHubOAuth2Adapter
-    client_class = OAuth2Client
-
-
-class GithubLogin(MFASocialLoginView):
-    adapter_class = GitHubOAuth2Adapter
-    client_class = OAuth2Client
-
-
-class GoogleConnect(GlitchTipSocialConnectView):
-    adapter_class = GoogleOAuth2Adapter
-
-
-class GoogleLogin(MFASocialLoginView):
-    adapter_class = GoogleOAuth2Adapter
-
-
-class MicrosoftConnect(SocialConnectView):
-    adapter_class = MicrosoftGraphOAuth2Adapter
-
-
-class MicrosoftLogin(MFASocialLoginView):
-    adapter_class = MicrosoftGraphOAuth2Adapter
