@@ -27,7 +27,9 @@ class SettingsView(APIView):
         if billing_enabled:
             stripe_public_key = djstripe_settings.STRIPE_PUBLIC_KEY
         social_apps = SocialAppSerializer(
-            SocialApp.objects.all().order_by("name"), many=True
+            SocialApp.objects.all().order_by("name"),
+            many=True,
+            context={"request": request},
         ).data
         return Response(
             {

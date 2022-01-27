@@ -50,7 +50,7 @@ Locust is built into the dev dependencies. To run with Locust run
 
 Now go to localhost:8089 to run the test.
 
-Locust will not be intalled to production docker images and cannot be run from them.
+Locust will not be installed to production docker images and cannot be run from them.
 
 # GCP Logging
 

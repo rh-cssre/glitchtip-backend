@@ -1,20 +1,25 @@
+from allauth.account import app_settings
+from allauth.account.adapter import get_adapter
+from allauth.account.forms import default_token_generator
+from allauth.account.models import EmailAddress
+from allauth.account.utils import filter_users_by_email
+from allauth.socialaccount import providers
+from allauth.socialaccount.models import SocialApp
+from dj_rest_auth.registration.serializers import (
+    RegisterSerializer as BaseRegisterSerializer,
+)
+from dj_rest_auth.registration.serializers import (
+    SocialAccountSerializer as BaseSocialAccountSerializer,
+)
+from dj_rest_auth.serializers import PasswordResetSerializer
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
-from dj_rest_auth.serializers import PasswordResetSerializer
-from dj_rest_auth.registration.serializers import (
-    SocialAccountSerializer as BaseSocialAccountSerializer,
-    RegisterSerializer as BaseRegisterSerializer,
-)
-from allauth.account.forms import default_token_generator
-from allauth.account.adapter import get_adapter
-from allauth.account import app_settings
-from allauth.account.utils import filter_users_by_email
-from allauth.account.models import EmailAddress
-from allauth.socialaccount.models import SocialApp
-from glitchtip.constants import PROVIDER_MAP
-from .models import User
+
+from glitchtip.constants import SOCIAL_ADAPTER_MAP
+
 from .forms import PasswordSetAndResetForm
+from .models import User
 
 
 class SocialAccountSerializer(BaseSocialAccountSerializer):
@@ -45,15 +50,22 @@ class SocialAccountSerializer(BaseSocialAccountSerializer):
 
 class SocialAppSerializer(serializers.ModelSerializer):
     authorize_url = serializers.SerializerMethodField()
+    scopes = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialApp
-        fields = ("provider", "name", "client_id", "authorize_url")
+        fields = ("provider", "name", "client_id", "authorize_url", "scopes")
 
     def get_authorize_url(self, obj):
-        provider = PROVIDER_MAP.get(obj.provider, None)
-        if provider:
-            return provider.authorize_url
+        adapter = SOCIAL_ADAPTER_MAP.get(obj.provider, None)
+        if adapter:
+            return adapter.authorize_url
+
+    def get_scopes(self, obj):
+        request = self.context.get("request")
+        if request:
+            provider = providers.registry.by_id(obj.provider, request)
+            return provider.get_scope(request)
 
 
 class ConfirmEmailAddressSerializer(serializers.Serializer):
