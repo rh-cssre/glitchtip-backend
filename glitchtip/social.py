@@ -57,7 +57,18 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
     )
 
 
-class MFASocialLoginView(SocialLoginView):
+class GenericMFAMixin:
+    @property
+    def callback_url(self):
+        provider_id = self.adapter_class.provider_id
+        return DOMAIN + "/auth/" + provider_id
+
+
+class GlitchTipSocialConnectView(GenericMFAMixin, SocialConnectView):
+    pass
+
+
+class MFASocialLoginView(GenericMFAMixin, SocialLoginView):
     serializer_class = SocialLoginSerializer
 
     def process_login(self):
@@ -80,7 +91,7 @@ class MFASocialLoginView(SocialLoginView):
         return super().get_response()
 
 
-class GitlabConnect(SocialConnectView):
+class GitlabConnect(GlitchTipSocialConnectView):
     adapter_class = GitLabOAuth2Adapter
 
 
@@ -88,19 +99,17 @@ class GitlabLogin(MFASocialLoginView):
     adapter_class = GitLabOAuth2Adapter
 
 
-class GithubConnect(SocialConnectView):
+class GithubConnect(GlitchTipSocialConnectView):
     adapter_class = GitHubOAuth2Adapter
     client_class = OAuth2Client
-    callback_url = DOMAIN + "/auth/github"
 
 
 class GithubLogin(MFASocialLoginView):
     adapter_class = GitHubOAuth2Adapter
     client_class = OAuth2Client
-    callback_url = DOMAIN + "/auth/github"
 
 
-class GoogleConnect(SocialConnectView):
+class GoogleConnect(GlitchTipSocialConnectView):
     adapter_class = GoogleOAuth2Adapter
 
 

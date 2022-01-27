@@ -12,6 +12,7 @@ from allauth.account import app_settings
 from allauth.account.utils import filter_users_by_email
 from allauth.account.models import EmailAddress
 from allauth.socialaccount.models import SocialApp
+from glitchtip.constants import PROVIDER_MAP
 from .models import User
 from .forms import PasswordSetAndResetForm
 
@@ -43,9 +44,16 @@ class SocialAccountSerializer(BaseSocialAccountSerializer):
 
 
 class SocialAppSerializer(serializers.ModelSerializer):
+    authorize_url = serializers.SerializerMethodField()
+
     class Meta:
         model = SocialApp
-        fields = ("provider", "name", "client_id")
+        fields = ("provider", "name", "client_id", "authorize_url")
+
+    def get_authorize_url(self, obj):
+        provider = PROVIDER_MAP.get(obj.provider, None)
+        if provider:
+            return provider.authorize_url
 
 
 class ConfirmEmailAddressSerializer(serializers.Serializer):
