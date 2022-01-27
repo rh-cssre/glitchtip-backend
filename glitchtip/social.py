@@ -13,6 +13,7 @@ from django.contrib.auth import get_backends
 from django_rest_mfa.helpers import has_mfa
 from rest_framework import serializers
 from rest_framework.response import Response
+
 from .constants import SOCIAL_ADAPTER_MAP
 
 DOMAIN = settings.GLITCHTIP_URL.geturl()
