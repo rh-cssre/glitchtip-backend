@@ -142,11 +142,16 @@ INSTALLED_APPS = [
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
+    "allauth.socialaccount.providers.amazon",
+    "allauth.socialaccount.providers.amazon_cognito",
+    "allauth.socialaccount.providers.digitalocean",
     "allauth.socialaccount.providers.gitea",
     "allauth.socialaccount.providers.github",
     "allauth.socialaccount.providers.gitlab",
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.microsoft",
+    "allauth.socialaccount.providers.nextcloud",
+    "allauth.socialaccount.providers.okta",
     "anymail",
     "corsheaders",
     "django_celery_results",
@@ -388,6 +393,9 @@ SOCIALACCOUNT_PROVIDERS = {}
 GITLAB_URL = env.url("SOCIALACCOUNT_PROVIDERS_gitlab_GITLAB_URL", None)
 if GITLAB_URL:
     SOCIALACCOUNT_PROVIDERS["gitlab"] = {"GITLAB_URL": GITLAB_URL.geturl()}
+GITEA_URL = env.url("SOCIALACCOUNT_PROVIDERS_gitea_GITEA_URL", None)
+if GITEA_URL:
+    SOCIALACCOUNT_PROVIDERS["gittea"] = {"GITEA_URL": GITEA_URL.geturl()}
 
 OLD_PASSWORD_FIELD_ENABLED = True
 LOGOUT_ON_PASSWORD_CHANGE = False
