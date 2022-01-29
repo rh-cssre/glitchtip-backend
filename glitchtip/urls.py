@@ -104,31 +104,10 @@ urlpatterns += [
         SocialAccountDisconnectView.as_view(),
         name="social_account_disconnect",
     ),
-    path("rest-auth/gitlab/", social.GitlabLogin.as_view(), name="gitlab_login"),
+    path("rest-auth/<slug:provider>/", social.MFASocialLoginView().as_view()),
     path(
-        "rest-auth/gitlab/connect/",
-        social.GitlabConnect.as_view(),
-        name="gitlab_connect",
-    ),
-    path("rest-auth/github/", social.GithubLogin.as_view(), name="github_login"),
-    path(
-        "rest-auth/github/connect/",
-        social.GithubConnect.as_view(),
-        name="github_connect",
-    ),
-    path("rest-auth/google/", social.GoogleLogin.as_view(), name="google_login"),
-    path(
-        "rest-auth/google/connect/",
-        social.GoogleConnect.as_view(),
-        name="google_connect",
-    ),
-    path(
-        "rest-auth/microsoft/", social.MicrosoftLogin.as_view(), name="microsoft_login"
-    ),
-    path(
-        "rest-auth/microsoft/connect/",
-        social.MicrosoftConnect.as_view(),
-        name="microsoft_connect",
+        "rest-auth/<slug:provider>/connect/",
+        social.GlitchTipSocialConnectView().as_view(),
     ),
     path("docs/", schema_view.with_ui("redoc", cache_timeout=0), name="schema-redoc"),
     path("accounts/", include("allauth.urls")),  # Required for allauth

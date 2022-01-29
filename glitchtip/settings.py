@@ -142,10 +142,13 @@ INSTALLED_APPS = [
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
-    "allauth.socialaccount.providers.gitlab",
+    "allauth.socialaccount.providers.digitalocean",
+    "allauth.socialaccount.providers.gitea",
     "allauth.socialaccount.providers.github",
+    "allauth.socialaccount.providers.gitlab",
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.microsoft",
+    "allauth.socialaccount.providers.nextcloud",
     "anymail",
     "corsheaders",
     "django_celery_results",
@@ -383,6 +386,16 @@ ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_ADAPTER = "glitchtip.social.MFAAccountAdapter"
 INVITATION_BACKEND = "organizations_ext.invitation_backend.InvitationBackend"
+SOCIALACCOUNT_PROVIDERS = {}
+GITLAB_URL = env.url("SOCIALACCOUNT_PROVIDERS_gitlab_GITLAB_URL", None)
+if GITLAB_URL:
+    SOCIALACCOUNT_PROVIDERS["gitlab"] = {"GITLAB_URL": GITLAB_URL.geturl()}
+GITEA_URL = env.url("SOCIALACCOUNT_PROVIDERS_gitea_GITEA_URL", None)
+if GITEA_URL:
+    SOCIALACCOUNT_PROVIDERS["gittea"] = {"GITEA_URL": GITEA_URL.geturl()}
+NEXTCLOUD_URL = env.url("SOCIALACCOUNT_PROVIDERS_nextcloud_SERVER", None)
+if NEXTCLOUD_URL:
+    SOCIALACCOUNT_PROVIDERS["nextcloud"] = {"SERVER": NEXTCLOUD_URL.geturl()}
 
 OLD_PASSWORD_FIELD_ENABLED = True
 LOGOUT_ON_PASSWORD_CHANGE = False
