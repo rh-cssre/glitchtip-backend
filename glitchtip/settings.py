@@ -365,6 +365,7 @@ if AWS_S3_ENDPOINT_URL:
     DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 else:
     MEDIA_URL = "media/"
+MEDIA_ROOT = env.str("MEDIA_ROOT", "")
 
 STATICFILES_DIRS = [
     "assets",

@@ -458,12 +458,11 @@ with_social = ["django-allauth (>=0.40.0,<0.48.0)"]
 
 [[package]]
 name = "dj-stripe"
-version = "2.7.0-alpha.1"
+version = "2.6.0"
 description = "Django + Stripe made easy"
 category = "main"
 optional = false
-python-versions = "^3.7.12"
-develop = false
+python-versions = ">=3.7.12,<4.0.0"
 
 [package.dependencies]
 django = ">=3.2.5"
@@ -472,12 +471,6 @@ stripe = ">=2.48.0"
 
 [package.extras]
 docs = ["mkdocs (>=1.1.2,<2.0.0)", "mkdocstrings (>=0.16.0,<0.17.0)", "mkdocs-material (>=7.2.8,<8.0.0)", "mkdocs-autorefs (>=0.3.0,<0.4.0)", "mike (>=1.1.2,<2.0.0)"]
-
-[package.source]
-type = "git"
-url = "https://github.com/dj-stripe/dj-stripe.git"
-reference = "master"
-resolved_reference = "c75ad6c8cb49db2a8b303fc07b82c842f41cf0f9"
 
 [[package]]
 name = "django"
@@ -2108,7 +2101,7 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "ab04a23deb1d5281d4da83d7b5e175f4e436b309b6a8817dff71fd08989c8c89"
+content-hash = "fb59dca8df0cc9dbaa0dbbe6577b756d5593885b1f7485bedafe1378c7e7ef59"
 
 [metadata.files]
 aiohttp = [
@@ -2449,7 +2442,10 @@ defusedxml = [
 dj-rest-auth = [
     {file = "dj-rest-auth-2.2.2.tar.gz", hash = "sha256:fda25a777ac23bc2561f2579de5c45f058d0f1d27410469d5b321c353c4822ad"},
 ]
-dj-stripe = []
+dj-stripe = [
+    {file = "dj-stripe-2.6.0.tar.gz", hash = "sha256:c587e7c1585fd3c279d287732ddc3b89b96382e4fe7fa9217e4d53d16b8ae64a"},
+    {file = "dj_stripe-2.6.0-py3-none-any.whl", hash = "sha256:1fea6f69e21053bf70d60b40a306578ddc2dda7f0e7998b70f58960112ccc63b"},
+]
 django = [
     {file = "Django-4.0.1-py3-none-any.whl", hash = "sha256:7cd8e8a3ed2bc0dfda05ce1e53a9c81b30eefd7aa350e538a18884475e4d4ce2"},
     {file = "Django-4.0.1.tar.gz", hash = "sha256:2485eea3cc4c3bae13080dee866ebf90ba9f98d1afe8fda89bfb0eb2e218ef86"},
