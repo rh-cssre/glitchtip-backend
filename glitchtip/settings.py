@@ -412,8 +412,8 @@ REST_AUTH_REGISTER_SERIALIZERS = {
 REST_AUTH_TOKEN_MODEL = None
 REST_AUTH_TOKEN_CREATOR = "users.utils.noop_token_creator"
 
-# By default (False) only the first user may register and create an organization
-# Other users must be invited. Intended for private instances
+# By default (False) only the first user, superuser, or organization owners may register
+# and create an organization. Other users must be invited. Intended for private instances
 ENABLE_OPEN_USER_REGISTRATION = env.bool("ENABLE_OPEN_USER_REGISTRATION", False)
 
 AUTHENTICATION_BACKENDS = (
@@ -538,6 +538,7 @@ elif TESTING:
     STRIPE_TEST_PUBLIC_KEY = "fake"
     STRIPE_TEST_SECRET_KEY = "sk_test_fake"  # nosec
     DJSTRIPE_WEBHOOK_SECRET = "whsec_fake"  # nosec
+    logging.disable(logging.WARNING)
 
 CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", False)
 if TESTING:
