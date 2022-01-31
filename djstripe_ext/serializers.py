@@ -64,7 +64,7 @@ class CreateSubscriptionSerializer(PlanForOrganizationSerializer):
                 "Cannot subscribe to non-free plan without payment"
             )
         customer, _ = Customer.get_or_create(subscriber=organization)
-        subscription = customer.subscribe(plan)
+        subscription = customer.subscribe(items=[{"plan": plan}])
         return {
             "plan": plan,
             "organization": organization,
