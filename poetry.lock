@@ -475,9 +475,9 @@ docs = ["mkdocs (>=1.1.2,<2.0.0)", "mkdocstrings (>=0.16.0,<0.17.0)", "mkdocs-ma
 
 [package.source]
 type = "git"
-url = "https://github.com/jamesrkiger/dj-stripe.git"
+url = "https://github.com/arnav13081994/dj-stripe.git"
 reference = "revert_latest_invoice"
-resolved_reference = "40ea34369b65698b98afb6ecd668302a809022f9"
+resolved_reference = "0929f9584247358a5765dc4b158ca1d2db24a0a5"
 
 [[package]]
 name = "django"
@@ -2108,7 +2108,7 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "35128061484b6ea699fde139c5c048935f429ebc4cc49b8953082a31e9ad4e0b"
+content-hash = "77623198a5d6f45d68ff8625b14c55396eb4fea88f76a48d9d8c25ec7732ea80"
 
 [metadata.files]
 aiohttp = [
