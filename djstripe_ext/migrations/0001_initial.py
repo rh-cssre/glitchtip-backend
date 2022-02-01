@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('djstripe', '0007_2_4'),
+        ('djstripe', '0001_initial'),
     ]
 
     operations = [
