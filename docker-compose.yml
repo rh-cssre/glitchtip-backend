@@ -24,6 +24,7 @@ services:
     image: redis
   web:
     build: .
+    user: root  # Allows for usage of ipdb, apt, etc in dev
     command: ./manage.py runserver 0.0.0.0:8000
     depends_on: *default-depends_on
     volumes: *default-volumes
