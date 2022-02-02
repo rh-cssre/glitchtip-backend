@@ -29,7 +29,7 @@ django-redis-cache = "^3.0.0"
 jsonschema = "^3.2.0"
 simplejson = "^3.17.0"
 django-csp = "^3.6"
-dj-stripe = { git = "https://github.com/arnav13081994/dj-stripe.git", branch = "revert_latest_invoice" }
+dj-stripe = { git = "https://github.com/arnav13081994/dj-stripe.git", branch = "fix_customer_subscription_issue" }
 django-anymail = "^8.1"
 drf-yasg = "^1.17.1"
 dj-rest-auth = "~2.2.1"
