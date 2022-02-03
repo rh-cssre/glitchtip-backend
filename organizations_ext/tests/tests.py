@@ -3,7 +3,7 @@ from django.shortcuts import reverse
 from django.test import TestCase, RequestFactory
 from rest_framework.test import APITestCase
 from model_bakery import baker
-from organizations_ext.models import OrganizationUser
+from organizations_ext.models import OrganizationUser, OrganizationUserRole
 from glitchtip import test_utils  # pylint: disable=unused-import
 
 
@@ -78,3 +78,27 @@ class OrganizationsAPITestCase(APITestCase):
         self.assertEqual(
             OrganizationUser.objects.filter(organization__name=data["name"]).count(), 1
         )
+
+    def test_organizations_create_closed_registration(self):
+        data = {"name": "test"}
+
+        with self.settings(ENABLE_OPEN_USER_REGISTRATION=False):
+            res = self.client.post(self.url, data)
+        self.assertEqual(res.status_code, 201)
+
+    def test_organizations_create_closed_registration_failure(self):
+        data = {"name": "test"}
+        self.organization.organization_users.all().update(
+            role=OrganizationUserRole.MANAGER
+        )
+
+        with self.settings(ENABLE_OPEN_USER_REGISTRATION=False):
+            res = self.client.post(self.url, data)
+        self.assertEqual(res.status_code, 403)
+
+        self.user.is_superuser = True
+        self.user.save()
+
+        with self.settings(ENABLE_OPEN_USER_REGISTRATION=False):
+            res = self.client.post(self.url, data)
+        self.assertEqual(res.status_code, 201)
