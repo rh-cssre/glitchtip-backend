@@ -39,12 +39,12 @@ lint:
     # - pylint --load-plugins=pylint_django --django-settings-module=glitchtip.settings --disable=R glitchtip
 
 build:
-  image: docker:20
+  image: jdrouet/docker-with-buildx:stable
   rules:
     - if: '$CI_PIPELINE_SOURCE != "merge_request_event" && $CI_COMMIT_REF_PROTECTED == "true"'
   services:
-    - docker:20-dind
+    - docker:dind
   script:
-    - docker build -t $CONTAINER_TEST_IMAGE --build-arg IS_CI="True" .
+    - docker buildx create --use
     - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN registry.gitlab.com
-    - docker push $CONTAINER_TEST_IMAGE
+    - docker buildx build --push --platform linux/arm64/v8,linux/amd64 -t $CONTAINER_TEST_IMAGE --build-arg IS_CI="True" .
