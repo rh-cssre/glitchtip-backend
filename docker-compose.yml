@@ -6,6 +6,7 @@ x-environment:
   ENABLE_OPEN_USER_REGISTRATION: "true"
   ENABLE_TEST_API: "true"
   DEBUG: "true"
+  MEDIA_ROOT: "/tmp/"
   EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
 x-depends_on:
   &default-depends_on
