@@ -46,4 +46,5 @@ build:
     - docker:20-dind
   script:
     - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN registry.gitlab.com
-    - docker build --push -t $CONTAINER_TEST_IMAGE --build-arg IS_CI="True" .
+    - docker build -t $CONTAINER_TEST_IMAGE --build-arg IS_CI="True" .
+    - docker push $CONTAINER_TEST_IMAGE
