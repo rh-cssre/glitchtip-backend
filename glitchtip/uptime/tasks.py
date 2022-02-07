@@ -9,9 +9,12 @@ from django.db.models import DateTimeField, ExpressionWrapper, F, OuterRef, Q, S
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
+from alerts.models import AlertRecipient
+
 from .email import MonitorEmail
 from .models import Monitor, MonitorCheck
 from .utils import fetch_all
+from .webhooks import send_uptime_as_webhook
 
 
 @shared_task
@@ -92,11 +95,20 @@ def perform_checks(monitor_ids: List[int], now=None):
 
 @shared_task
 def send_monitor_notification(monitor_check_id: int, went_down: bool, last_change: str):
-    MonitorEmail(
-        pk=monitor_check_id,
-        went_down=went_down,
-        last_change=parse_datetime(last_change) if last_change else None,
-    ).send_users_email()
+    recipients = AlertRecipient.objects.filter(
+        alert__project__monitor__checks=monitor_check_id, alert__uptime=True
+    )
+    for recipient in recipients:
+        if recipient.recipient_type == AlertRecipient.RecipientType.EMAIL:
+            MonitorEmail(
+                pk=monitor_check_id,
+                went_down=went_down,
+                last_change=parse_datetime(last_change) if last_change else None,
+            ).send_users_email()
+        elif recipient.recipient_type == AlertRecipient.RecipientType.WEBHOOK:
+            send_uptime_as_webhook(
+                recipient.url, monitor_check_id, went_down, last_change
+            )
 
 
 @shared_task
