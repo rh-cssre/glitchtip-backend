@@ -20,9 +20,9 @@ def send_uptime_as_webhook(
     monitor_check = MonitorCheck.objects.get(pk=monitor_check_id)
     monitor = monitor_check.monitor
 
-    message = str(went_down)
-    attachment = WebhookAttachment(monitor, monitor.get_detail_url(), message)
-    section = MSTeamsSection(str(monitor), message)
+    message = "The monitored site has gone down." if went_down else "The monitored site is back up."
+    attachment = WebhookAttachment(str(monitor.name), monitor.get_detail_url(), message)
+    section = MSTeamsSection(str(monitor.name), message)
 
     message = "GlitchTip Uptime Alert"
     return send_webhook(url, message, [attachment], [section])
