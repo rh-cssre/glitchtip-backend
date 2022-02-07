@@ -104,7 +104,7 @@ class UptimeTestCase(GlitchTipTestCase):
         with freeze_time("2020-01-04"):
             dispatch_checks()
         self.assertEqual(len(mail.outbox), 2)
-        self.assertIn("is up", mail.outbox[1].body)
+        self.assertIn("is back up", mail.outbox[1].body)
 
     def test_heartbeat(self):
         self.create_user_and_project()
