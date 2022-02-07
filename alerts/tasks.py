@@ -7,11 +7,13 @@ from .models import Notification
 
 
 @shared_task
-def process_alerts():
+def process_event_alerts():
     """ Inspect alerts and determine if new notifications need sent """
     now = timezone.now()
     for project in Project.objects.all():
-        for alert in project.projectalert_set.all():
+        for alert in project.projectalert_set.filter(
+            quantity__isnull=False, timespan_minutes__isnull=False
+        ):
             start_time = now - timedelta(minutes=alert.timespan_minutes)
             quantity_in_timespan = alert.quantity
             issues = (

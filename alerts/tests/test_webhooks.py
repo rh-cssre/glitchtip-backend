@@ -3,7 +3,7 @@ from django.test import TestCase
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
 from events.models import LogLevel
-from ..tasks import process_alerts
+from ..tasks import process_event_alerts
 from ..models import AlertRecipient, Notification
 from ..webhooks import send_webhook, send_issue_as_webhook
 
@@ -42,11 +42,11 @@ class WebhookTestCase(TestCase):
         issue = baker.make("issues.Issue", project=project)
 
         baker.make("events.Event", issue=issue)
-        process_alerts()
+        process_event_alerts()
         self.assertEqual(Notification.objects.count(), 0)
 
         baker.make("events.Event", issue=issue)
-        process_alerts()
+        process_event_alerts()
         self.assertEqual(
             Notification.objects.filter(
                 project_alert__alertrecipient__recipient_type=AlertRecipient.RecipientType.WEBHOOK
