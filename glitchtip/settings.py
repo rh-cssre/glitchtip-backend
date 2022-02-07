@@ -297,7 +297,7 @@ CELERY_RESULT_BACKEND = "django-db"
 CELERY_CACHE_BACKEND = "django-cache"
 CELERY_BEAT_SCHEDULE = {
     "send-alert-notifications": {
-        "task": "alerts.tasks.process_alerts",
+        "task": "alerts.tasks.process_event_alerts",
         "schedule": 60,
     },
     "cleanup-old-events": {

@@ -14,7 +14,7 @@ from organizations_ext.models import OrganizationUserRole
 from users.models import ProjectAlertStatus
 
 from ..models import Notification
-from ..tasks import process_alerts
+from ..tasks import process_event_alerts
 
 
 class AlertTestCase(GlitchTipTestCase):
@@ -34,22 +34,22 @@ class AlertTestCase(GlitchTipTestCase):
         baker.make("events.Event", issue=issue)
 
         # Not sufficient events to create alert
-        process_alerts()
+        process_event_alerts()
         self.assertEqual(Notification.objects.count(), 0)
 
         baker.make("events.Event", issue=issue, _quantity=9)
 
-        process_alerts()
+        process_event_alerts()
         self.assertEqual(Notification.objects.count(), 1)
 
         # Notifications have a cooldown time equal to alert timespan
-        process_alerts()
+        process_event_alerts()
         self.assertEqual(Notification.objects.count(), 1)
 
         # Notifications should not happen again for same issue
         with freeze_time(self.now + timedelta(minutes=11)):
             baker.make("events.Event", issue=issue, _quantity=10)
-            process_alerts()
+            process_event_alerts()
         self.assertEqual(Notification.objects.count(), 1)
         self.assertEqual(len(mail.outbox), 1)
 
@@ -68,10 +68,10 @@ class AlertTestCase(GlitchTipTestCase):
         baker.make("events.Event", issue=issue, _quantity=4)
         with freeze_time(self.now + timedelta(minutes=5)):
             baker.make("events.Event", issue=issue, _quantity=4)
-            process_alerts()
+            process_event_alerts()
         with freeze_time(self.now + timedelta(minutes=11)):
             baker.make("events.Event", issue=issue, _quantity=4)
-            process_alerts()
+            process_event_alerts()
 
         # Not sufficient rate of events to trigger alert.
         self.assertEqual(Notification.objects.count(), 0)
@@ -79,7 +79,7 @@ class AlertTestCase(GlitchTipTestCase):
         # time 12: 4 more events (16 total, 12 in past 10 minutes)
         with freeze_time(self.now + timedelta(minutes=12)):
             baker.make("events.Event", issue=issue, _quantity=4)
-            process_alerts()
+            process_event_alerts()
         self.assertEqual(Notification.objects.count(), 1)
 
     def test_alert_one_event(self):
@@ -89,7 +89,7 @@ class AlertTestCase(GlitchTipTestCase):
         )
         issue = baker.make("issues.Issue", project=self.project)
         baker.make("events.Event", issue=issue)
-        process_alerts()
+        process_event_alerts()
         self.assertEqual(Notification.objects.count(), 1)
 
     def test_alert_on_regression(self):
@@ -108,7 +108,7 @@ class AlertTestCase(GlitchTipTestCase):
         self.client.post(url, data, format="json")
 
         # First alert
-        process_alerts()
+        process_event_alerts()
         self.assertEqual(len(mail.outbox), 1)
 
         # Mark resolved
@@ -119,7 +119,7 @@ class AlertTestCase(GlitchTipTestCase):
         # Send a second event
         data["event_id"] = "cf536c31b68a473f97e579507ce155e4"
         self.client.post(url, data, format="json")
-        process_alerts()
+        process_event_alerts()
         self.assertEqual(len(mail.outbox), 2)
 
 
@@ -158,7 +158,7 @@ class AlertWithUserProjectAlert(GlitchTipTestCase):
         )
 
         baker.make("events.Event", issue__project=self.project)
-        process_alerts()
+        process_event_alerts()
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(len(mail.outbox[0].merge_data), 2)
 
@@ -170,7 +170,7 @@ class AlertWithUserProjectAlert(GlitchTipTestCase):
         )
 
         baker.make("events.Event", issue__project=self.project)
-        process_alerts()
+        process_event_alerts()
         self.assertEqual(len(mail.outbox), 0)
 
     def test_alert_enabled_subscribe_by_default_override_false(self):
@@ -186,5 +186,5 @@ class AlertWithUserProjectAlert(GlitchTipTestCase):
             status=ProjectAlertStatus.ON,
         )
         baker.make("events.Event", issue__project=self.project)
-        process_alerts()
+        process_event_alerts()
         self.assertEqual(len(mail.outbox), 1)
