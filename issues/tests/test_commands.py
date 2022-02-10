@@ -15,11 +15,6 @@ class CommandsTestCase(TestCase):
         management.call_command("make_sample_issues")
         self.assertEqual(Event.objects.all().count(), 1)
 
-    def test_make_bulk_events(self):
-        """ Default is 10,000 events """
-        management.call_command("make_bulk_events", quantity=10000)
-        self.assertEqual(Event.objects.all().count(), 10000)
-
     def test_make_sample_issues_multiple(self):
         """ Default is one random event """
         management.call_command("make_sample_issues", quantity=10)
