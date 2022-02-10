@@ -4,13 +4,12 @@ from model_bakery.random_gen import gen_json, gen_slug
 
 from events.models import Event
 from events.test_data import event_generator
-from events.views import EventStoreAPIView
 from issues.models import Issue
 from issues.tasks import update_search_index_issue
 from organizations_ext.models import Organization
 from projects.models import Project
 
-from . import bulk_event_data
+from events.test_data import bulk_event_data
 
 baker.generators.add("organizations.fields.SlugField", gen_slug)
 baker.generators.add("django.db.models.JSONField", gen_json)
@@ -34,12 +33,8 @@ class Command(BaseCommand):
         culprit = issue_data.get("culprit")
         metadata = issue_data.get("metadata")
         issue, issue_created = Issue.objects.get_or_create(
-            title=title,
-            culprit=culprit,
-            metadata=metadata,
-            project=project,
+            title=title, culprit=culprit, metadata=metadata, project=project,
         )
-
 
         if options["quantity"] is None or options["quantity"] < 10000:
             options["quantity"] = 10000
@@ -50,11 +45,10 @@ class Command(BaseCommand):
             for _ in range(10000):
                 event = Event(
                     data=event_generator.make_event_unique(bulk_event_data.large_event),
-                    issue=issue
+                    issue=issue,
                 )
                 event_list.append(event)
             Event.objects.bulk_create(event_list)
-
 
         update_search_index_issue(args=[issue.pk, issue_created])
         self.stdout.write(
