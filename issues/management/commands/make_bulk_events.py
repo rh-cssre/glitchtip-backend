@@ -16,10 +16,11 @@ baker.generators.add("django.db.models.JSONField", gen_json)
 
 
 class Command(BaseCommand):
-    help = "Create an issue with 10,000 or more large events for dev and demonstration purposes"
+    help = "Create an issue with a large number of events for dev and demonstration purposes"
 
     def add_arguments(self, parser):
-        parser.add_argument("quantity", nargs="?", type=int)
+        parser.add_argument("quantity", nargs="?", type=int, default=10000)
+        parser.add_argument("batch_size", nargs="?", type=int, default=10000)
 
     def handle(self, *args, **options):
         organization = Organization.objects.first()
@@ -36,21 +37,28 @@ class Command(BaseCommand):
             title=title, culprit=culprit, metadata=metadata, project=project,
         )
 
-        if options["quantity"] is None or options["quantity"] < 10000:
-            options["quantity"] = 10000
         quantity = options["quantity"]
-        batches = quantity // 10000
+        batch_size = options["batch_size"]
+
+        if quantity < batch_size:
+            batches = 1
+        else:
+            batches = quantity // batch_size
+
         for _ in range(batches):
+            if quantity < batch_size:
+                batch_size = quantity
             event_list = []
-            for _ in range(10000):
+            for _ in range(batch_size):
                 event = Event(
                     data=event_generator.make_event_unique(bulk_event_data.large_event),
                     issue=issue,
                 )
                 event_list.append(event)
             Event.objects.bulk_create(event_list)
+            quantity -= batch_size
 
         update_search_index_issue(args=[issue.pk, issue_created])
         self.stdout.write(
-            self.style.SUCCESS('Successfully created "%s" events' % quantity)
+            self.style.SUCCESS('Successfully created "%s" events' % options["quantity"])
         )
