@@ -2,7 +2,7 @@ import random
 from django.core import management
 from django.test import TestCase
 from events.models import Event
-
+from django.utils import timezone
 
 class CommandsTestCase(TestCase):
     def setUp(self):
@@ -12,6 +12,14 @@ class CommandsTestCase(TestCase):
         """ Default is one random event """
         management.call_command("make_sample_issues")
         self.assertEqual(Event.objects.all().count(), 1)
+
+    def test_make_bulk_issues(self):
+        """ Default is one random event """
+        start = timezone.now()
+        management.call_command("make_bulk_issues", quantity=10000)
+        end = timezone.now()
+        print(end - start)
+        self.assertEqual(Event.objects.all().count(), 10000)
 
     def test_make_sample_issues_multiple(self):
         """ Default is one random event """
