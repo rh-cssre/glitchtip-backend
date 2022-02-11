@@ -200,8 +200,10 @@ class DisplayChoiceField(serializers.ChoiceField):
 class IssueSerializer(serializers.ModelSerializer):
     annotations = serializers.JSONField(default=list, read_only=True)
     assignedTo = serializers.CharField(default=None, read_only=True)
+    count = serializers.CharField(read_only=True)
     firstSeen = serializers.DateTimeField(source="created", read_only=True)
     hasSeen = serializers.BooleanField(source="has_seen", read_only=True)
+    id = serializers.CharField(read_only=True)
     isBookmarked = serializers.BooleanField(default=False, read_only=True)
     isPublic = serializers.BooleanField(source="is_public", read_only=True)
     isSubscribed = serializers.BooleanField(default=False, read_only=True)

@@ -5,6 +5,8 @@ from .models import Team
 class RelatedTeamSerializer(serializers.ModelSerializer):
     """ Less detailed team serializer intended for nested relations """
 
+    id = serializers.CharField(read_only=True)
+
     class Meta:
         model = Team
         fields = (

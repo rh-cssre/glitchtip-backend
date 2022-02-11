@@ -9,6 +9,8 @@ class ProjectReferenceSerializer(serializers.ModelSerializer):
     - /api/0/projects/<org-slug>/project-slug>/issues/
     """
 
+    id = serializers.CharField(read_only=True)
+
     class Meta:
         model = Project
         fields = ("platform", "slug", "id", "name")
