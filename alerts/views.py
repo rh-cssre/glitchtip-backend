@@ -6,7 +6,7 @@ from .permissions import ProjectAlertPermission
 
 
 class ProjectAlertViewSet(viewsets.ModelViewSet):
-    queryset = ProjectAlert.objects.all()
+    queryset = ProjectAlert.objects.distinct()
     serializer_class = ProjectAlertSerializer
     permission_classes = [ProjectAlertPermission]
 
@@ -21,7 +21,7 @@ class ProjectAlertViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         try:
-            project = Project.objects.get(
+            project = Project.objects.distinct().get(
                 slug=self.kwargs.get("project_slug"),
                 team__members__user=self.request.user,
                 organization__slug=self.kwargs.get("organization_slug"),
