@@ -286,16 +286,16 @@ class IssuesAPITestCase(GlitchTipTestCase):
         update_search_index_all_issues()
 
         res = self.client.get(self.url)
-        self.assertEqual(res.data[0]["id"], issue1.id)
+        self.assertEqual(res.data[0]["id"], str(issue1.id))
 
         res = self.client.get(self.url + "?sort=-count")
-        self.assertEqual(res.data[0]["id"], issue2.id)
+        self.assertEqual(res.data[0]["id"], str(issue2.id))
 
         res = self.client.get(self.url + "?sort=priority")
-        self.assertEqual(res.data[0]["id"], issue3.id)
+        self.assertEqual(res.data[0]["id"], str(issue3.id))
 
         res = self.client.get(self.url + "?sort=-priority")
-        self.assertEqual(res.data[0]["id"], issue2.id)
+        self.assertEqual(res.data[0]["id"], str(issue2.id))
 
     def test_filter_is_status(self):
         """ Match sentry's usage of "is" for status filtering """
