@@ -265,10 +265,19 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         res = self.client.get(self.get_project_events_detail(event.pk))
 
         self.assertEqual(res.status_code, 200)
+        self.assertCompareData(event_json, sentry_json, ["logentry", "title"])
         self.assertCompareData(
             res.data,
             sentry_data,
-            ["title", "culprit", "type", "metadata", "platform", "packages"],
+            [
+                "title",
+                "logentry",
+                "culprit",
+                "type",
+                "metadata",
+                "platform",
+                "packages",
+            ],
         )
 
     def test_go_file_not_found(self):

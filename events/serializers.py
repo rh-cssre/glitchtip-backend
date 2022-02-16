@@ -129,6 +129,20 @@ class MessageField(serializers.CharField):
         return super().to_internal_value(data)
 
 
+class LogEntrySerializer(serializers.Serializer):
+    formatted = serializers.CharField(required=False)
+    message = serializers.CharField(required=False)
+    params = serializers.JSONField(required=False)
+
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        if not data.get("formatted") and data.get("params"):
+            params = data["params"]
+            if isinstance(params, list):
+                data["formatted"] = data["message"] % tuple(data["params"])
+        return data
+
+
 class StoreDefaultSerializer(SentrySDKEventSerializer):
     """
     Default serializer. Used as both a base class and for default error types
@@ -137,7 +151,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
     type = EventType.DEFAULT
     contexts = serializers.JSONField(required=False)
     level = serializers.CharField(required=False)
-    logentry = serializers.JSONField(required=False)
+    logentry = LogEntrySerializer(required=False)
     message = MessageField(required=False, allow_blank=True, allow_null=True)
     timestamp = FlexibleDateTimeField(required=False)
     transaction = serializers.CharField(
@@ -313,6 +327,8 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
 
             if environment:
                 json_data["environment"] = environment.name
+            if data.get("logentry"):
+                json_data["logentry"] = data.get("logentry")
 
             extra = data.get("extra")
             if extra:
