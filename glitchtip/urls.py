@@ -79,6 +79,7 @@ urlpatterns += [
     path("api/0/", include("projects.urls")),
     path("api/0/", include("issues.urls")),
     path("api/0/", include("users.urls")),
+    path("api/0/", include("glitchtip.stats.urls")),
     path("api/0/", include("organizations_ext.urls")),
     path("api/0/", include("teams.urls")),
     path("api/0/", include("api_tokens.urls")),
