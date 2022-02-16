@@ -1,6 +1,7 @@
 from django.shortcuts import reverse
 from django.utils import timezone
 from model_bakery import baker
+
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 
 

@@ -1,12 +1,14 @@
 from datetime import timedelta
+
 from django.db import connection
 from rest_framework import views
 from rest_framework.response import Response
 from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
-from projects.models import Project
-from organizations_ext.permissions import OrganizationPermission
-from .serializers import StatsV2Serializer
 
+from organizations_ext.permissions import OrganizationPermission
+from projects.models import Project
+
+from .serializers import StatsV2Serializer
 
 EVENT_TIME_SERIES_SQL = """
 SELECT gs.ts, count(event.created)
