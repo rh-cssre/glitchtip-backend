@@ -258,20 +258,12 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
 
     def test_python_logging(self):
         """ Test Sentry SDK logging integration based event """
-        # Don't mimic this test, use self.get_jest_test_data instead
-        sdk_error = self.get_json_data(
-            "events/test_data/incoming_events/python_logging.json"
-        )
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data("python_logging")
         res = self.client.post(self.event_store_url, sdk_error, format="json")
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(Event.objects.count(), 1)
-        event_id = res.data["id"]
+        event = Event.objects.get(pk=res.data["id"])
+        event_json = event.event_json()
+        res = self.client.get(self.get_project_events_detail(event.pk))
 
-        sentry_data = self.get_json_data(
-            "events/test_data/oss_sentry_events/python_logging.json"
-        )
-        url = self.get_project_events_detail(event_id)
-        res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
         self.assertCompareData(
             res.data,
