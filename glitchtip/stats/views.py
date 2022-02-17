@@ -17,7 +17,7 @@ LEFT JOIN events_event event
 ON event.created >= gs.ts AND event.created < gs.ts +  interval '1 hour'
 LEFT JOIN issues_issue issue
 ON event.issue_id = issue.id or event is null
-WHERE issue.project_id IN (%s)
+WHERE issue.project_id IN %s
 GROUP BY gs.ts ORDER BY gs.ts;
 """
 
