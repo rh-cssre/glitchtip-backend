@@ -122,6 +122,19 @@ class AlertTestCase(GlitchTipTestCase):
         process_event_alerts()
         self.assertEqual(len(mail.outbox), 2)
 
+    def test_alert_subscription_default_scope(self):
+        """ Subscribe by default should not result in alert emails for non-team members """
+        baker.make(
+            "alerts.ProjectAlert", project=self.project, timespan_minutes=1, quantity=1,
+        )
+
+        user2 = baker.make("users.user")
+        self.organization.add_user(user2, OrganizationUserRole.MEMBER)
+
+        baker.make("events.Event", issue__project=self.project)
+        process_event_alerts()
+        self.assertNotIn(user2.email, mail.outbox[0].to)
+
 
 class AlertWithUserProjectAlert(GlitchTipTestCase):
     def setUp(self):
@@ -188,3 +201,22 @@ class AlertWithUserProjectAlert(GlitchTipTestCase):
         baker.make("events.Event", issue__project=self.project)
         process_event_alerts()
         self.assertEqual(len(mail.outbox), 1)
+
+    def test_user_project_alert_scope(self):
+        """ User project alert should not result in alert emails for non-team members """
+        baker.make(
+            "alerts.ProjectAlert", project=self.project, timespan_minutes=1, quantity=1,
+        )
+
+        user2 = baker.make("users.user")
+        self.organization.add_user(user2, OrganizationUserRole.MEMBER)
+
+        baker.make(
+            "users.UserProjectAlert",
+            user=user2,
+            project=self.project,
+            status=ProjectAlertStatus.ON,
+        )
+        baker.make("events.Event", issue__project=self.project)
+        process_event_alerts()
+        self.assertNotIn(user2.email, mail.outbox[0].to)
