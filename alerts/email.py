@@ -41,7 +41,7 @@ def send_email_notification(notification):
     email = AlertEmail()
     email.notification = notification
     users = User.objects.filter(
-        organizations_ext_organization__projects__projectalert__notification=notification
+        organizations_ext_organizationuser__team__projects__projectalert__notification=notification
     ).exclude(
         Q(
             userprojectalert__project=notification.project_alert.project,
