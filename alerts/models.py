@@ -46,7 +46,6 @@ class Notification(CreatedModel):
     issues = models.ManyToManyField("issues.Issue")
 
     def send_notifications(self):
-        """ Email only for now, eventually needs to be an extendable system """
         for recipient in self.project_alert.alertrecipient_set.all():
             recipient.send(self)
         # Temp backwards compat hack - no recipients means not set up yet

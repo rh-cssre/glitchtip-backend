@@ -49,6 +49,7 @@ def send_email_notification(notification):
         )
         | Q(subscribe_by_default=False, userprojectalert=None),
     )
+    users = users.distinct()
     if not users.exists():
         return
     email.send_users_email(users)

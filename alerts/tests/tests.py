@@ -128,12 +128,25 @@ class AlertTestCase(GlitchTipTestCase):
             "alerts.ProjectAlert", project=self.project, timespan_minutes=1, quantity=1,
         )
 
+        # user2 is an org member but not in a relevant team, should not receive alerts
         user2 = baker.make("users.user")
-        self.organization.add_user(user2, OrganizationUserRole.MEMBER)
+        org_user2 = self.organization.add_user(user2, OrganizationUserRole.MEMBER)
+        team2 = baker.make("teams.Team", organization=self.organization)
+        team2.members.add(org_user2)
+
+        # user3 is in team3 which should receive alerts
+        user3 = baker.make("users.user")
+        org_user3 = self.organization.add_user(user3, OrganizationUserRole.MEMBER)
+        self.team.members.add(org_user3)
+        team3 = baker.make("teams.Team", organization=self.organization)
+        team3.members.add(org_user3)
+        team3.projects.add(self.project)
 
         baker.make("events.Event", issue__project=self.project)
         process_event_alerts()
         self.assertNotIn(user2.email, mail.outbox[0].to)
+        self.assertIn(user3.email, mail.outbox[0].to)
+        self.assertEqual(len(mail.outbox[0].to), 2)  # Ensure no duplicate emails
 
 
 class AlertWithUserProjectAlert(GlitchTipTestCase):
