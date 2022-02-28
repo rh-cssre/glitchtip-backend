@@ -9,9 +9,27 @@ from glitchtip.base_models import CreatedModel
 from .exceptions import AssembleChecksumMismatch
 
 
+def _get_size_and_checksum(fileobj):
+    size = 0
+    checksum = sha1()
+    while True:
+        chunk = fileobj.read(65536)
+        if not chunk:
+            break
+        size += len(chunk)
+        checksum.update(chunk)
+    return size, checksum.hexdigest()
+
+
 class FileBlob(CreatedModel):
     """
     Port of sentry.models.file.FileBlog with some simplifications
+
+    OSS Sentry stores files in file blob chunks. Where one file gets saved as many blobs.
+    GlitchTip uses Django FileField and does chunk files. At this time, GlitchTip attempts to
+    support both situations for compatibility. A file upload is saved as just one blob, as though
+    the blob chunk size is infinite. In the future it may either support chunked blobs fully or
+    eliminate naive chunking support entirely.
     """
 
     blob = models.FileField(upload_to="uploads/file_blobs")
@@ -70,16 +88,24 @@ class File(CreatedModel):
     checksum = models.CharField(max_length=40, null=True, db_index=True)
 
     def put_django_file(self, fileobj):
+        """ Save a Django File object as a File Blob """
         self.size = fileobj.size
         file_blob = FileBlob.from_file(fileobj)
         self.checksum = file_blob.checksum
         self.save()
 
     def putfile(self, fileobj):
-        contents = fileobj.read()
-        file_blob = FileBlob.from_file(FileObj(contents))
-        self.checksum = file_blob.checksum
+        """ Save a file-like object as a File Blob """
+        size, checksum = _get_size_and_checksum(fileobj)
+        fileobj.seek(0)
+        file_blob, _ = FileBlob.objects.get_or_create(
+            defaults={"blob": FileObj(fileobj, name=checksum)},
+            size=size,
+            checksum=checksum,
+        )
+        self.checksum = checksum
         self.save()
+        self.blobs.add(file_blob)
 
     def _get_chunked_blob(
         self, mode=None, prefetch=False, prefetch_to=None, delete=True

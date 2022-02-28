@@ -127,24 +127,13 @@ def assemble_artifacts(organization, version, checksum, chunks):
             # "dist": dist,
         }
 
-        # Release files must have unique names within their release
-        # and dist. If a matching file already exists, replace its
-        # file with the new one; otherwise create it.
-        try:
-            release_file = ReleaseFile.objects.get(**kwargs)
-        except ReleaseFile.DoesNotExist:
-            try:
-                with transaction.atomic():
-                    ReleaseFile.objects.create(file=file, **kwargs)
-            except IntegrityError:
-                # NB: This indicates a race, where another assemble task or
-                # file upload job has just created a conflicting file. Since
-                # we're upserting here anyway, yield to the faster actor and
-                # do not try again.
-                file.delete()
-        else:
+        release_file, created = ReleaseFile.objects.get_or_create(
+            release=release, name=artifact_url, defaults={"file": file}
+        )
+        if not created:
             old_file = release_file.file
-            release_file.update(file=file)
+            release_file.file = file
+            release_file.save(update_fields=["file"])
             old_file.delete()
 
     set_assemble_status(
