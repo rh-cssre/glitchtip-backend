@@ -42,13 +42,4 @@ class MonitorEmail(DetailEmail):
         return context
 
     def get_users(self):
-        monitor = self.object.monitor
-        return User.objects.filter(
-            organizations_ext_organization__projects__monitor=monitor
-        ).exclude(
-            Q(
-                userprojectalert__project=monitor.project,
-                userprojectalert__status=ProjectAlertStatus.OFF,
-            )
-            | Q(subscribe_by_default=False, userprojectalert=None),
-        )
+        return User.objects.get_email_recipients(self.object.monitor, alert_type="Monitor")

@@ -1,5 +1,6 @@
 from urllib import parse
 from django.db import models
+from django.db.models import Q
 from django.contrib.auth.models import (
     BaseUserManager,
     AbstractBaseUser,
@@ -36,6 +37,25 @@ class UserManager(BaseUserManager):
         if extra_fields.get("is_superuser") is not True:
             raise ValueError("Superuser must have is_superuser=True.")
         return self.create_user(email, password, **extra_fields)
+
+    def get_email_recipients(self, alert, alert_type="Event"):
+        if alert_type == "Event":
+            project = alert.project_alert.project
+            users = User.objects.filter(
+                organizations_ext_organizationuser__team__projects__projectalert__notification=alert
+            )
+        else:
+            project = alert.project
+            users = User.objects.filter(
+                organizations_ext_organizationuser__team__projects__monitor=alert
+            )
+        return users.exclude(
+            Q(
+                userprojectalert__project=project,
+                userprojectalert__status=ProjectAlertStatus.OFF,
+            )
+            | Q(subscribe_by_default=False, userprojectalert=None),
+        ).distinct()
 
 
 class User(AbstractBaseUser, PermissionsMixin):

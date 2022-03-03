@@ -10,6 +10,8 @@ from model_bakery import baker
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 
 from ..constants import MonitorType
+from organizations_ext.models import OrganizationUserRole
+from users.models import ProjectAlertStatus
 from ..models import Monitor, MonitorCheck
 from ..tasks import dispatch_checks
 from ..utils import fetch_all
@@ -105,6 +107,89 @@ class UptimeTestCase(GlitchTipTestCase):
             dispatch_checks()
         self.assertEqual(len(mail.outbox), 2)
         self.assertIn("is back up", mail.outbox[1].body)
+
+    @aioresponses()
+    def test_notification_default_scope(self, mocked):
+        """ Subscribe by default should not result in alert emails for non-team members """
+        self.create_user_and_project()
+        test_url = "https://example.com"
+
+        # user2 is an org member but not in a relevant team, should not receive alerts
+        user2 = baker.make("users.user")
+        org_user2 = self.organization.add_user(user2, OrganizationUserRole.MEMBER)
+        team2 = baker.make("teams.Team", organization=self.organization)
+        team2.members.add(org_user2)
+
+        # user3 is in team3 which should receive alerts
+        user3 = baker.make("users.user")
+        org_user3 = self.organization.add_user(user3, OrganizationUserRole.MEMBER)
+        self.team.members.add(org_user3)
+        team3 = baker.make("teams.Team", organization=self.organization)
+        team3.members.add(org_user3)
+        team3.projects.add(self.project)
+
+        baker.make(
+            "alerts.AlertRecipient",
+            alert__uptime=True,
+            alert__project=self.project,
+            recipient_type="email",
+        )
+
+        mocked.get(test_url, status=200)
+        with freeze_time("2020-01-01"):
+            baker.make(
+                Monitor,
+                name=test_url,
+                url=test_url,
+                monitor_type=MonitorType.GET,
+                project=self.project,
+            )
+
+        mocked.get(test_url, status=500)
+        with self.assertNumQueries(12):
+            with freeze_time("2020-01-02"):
+                dispatch_checks()
+            self.assertNotIn(user2.email, mail.outbox[0].to)
+            self.assertIn(user3.email, mail.outbox[0].to)
+            self.assertEqual(len(mail.outbox[0].to), 2)
+
+    @aioresponses()
+    def test_user_project_alert_scope(self, mocked):
+        """ User project alert should not result in alert emails for non-team members """
+        self.create_user_and_project()
+        test_url = "https://example.com"
+        baker.make(
+            "alerts.AlertRecipient",
+            alert__uptime=True,
+            alert__project=self.project,
+            recipient_type="email",
+        )
+
+        user2 = baker.make("users.user")
+        self.organization.add_user(user2, OrganizationUserRole.MEMBER)
+
+        baker.make(
+            "users.UserProjectAlert",
+            user=user2,
+            project=self.project,
+            status=ProjectAlertStatus.ON,
+        )
+
+        mocked.get(test_url, status=200)
+        with freeze_time("2020-01-01"):
+            baker.make(
+                Monitor,
+                name=test_url,
+                url=test_url,
+                monitor_type=MonitorType.GET,
+                project=self.project,
+            )
+
+        mocked.get(test_url, status=500)
+        with self.assertNumQueries(12):
+            with freeze_time("2020-01-02"):
+                dispatch_checks()
+            self.assertNotIn(user2.email, mail.outbox[0].to)
 
     def test_heartbeat(self):
         self.create_user_and_project()
