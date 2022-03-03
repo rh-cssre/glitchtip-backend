@@ -8,10 +8,10 @@ from freezegun import freeze_time
 from model_bakery import baker
 
 from glitchtip.test_utils.test_case import GlitchTipTestCase
-
-from ..constants import MonitorType
 from organizations_ext.models import OrganizationUserRole
 from users.models import ProjectAlertStatus
+
+from ..constants import MonitorType
 from ..models import Monitor, MonitorCheck
 from ..tasks import dispatch_checks
 from ..utils import fetch_all

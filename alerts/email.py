@@ -1,8 +1,9 @@
-from django.db.models import Q
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from users.models import ProjectAlertStatus
+from django.db.models import Q
+
 from glitchtip.email import GlitchTipEmail
+from users.models import ProjectAlertStatus
 
 User = get_user_model()
 
