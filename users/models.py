@@ -39,18 +39,23 @@ class UserManager(BaseUserManager):
             raise ValueError("Superuser must have is_superuser=True.")
         return self.create_user(email, password, **extra_fields)
 
-    def get_email_recipients(self, alert, alert_type="Event"):
-        if alert_type == "Event":
-            project = alert.project_alert.project
-            users = User.objects.filter(
-                organizations_ext_organizationuser__team__projects__projectalert__notification=alert
-            )
-        else:
-            project = alert.project
-            users = User.objects.filter(
-                organizations_ext_organizationuser__team__projects__monitor=alert
-            )
-        return users.exclude(
+    def alert_notification_recipients(self, notification):
+        """ Distinct users associated with a project notification who should receive alerts """
+        queryset = self.filter(
+            organizations_ext_organizationuser__team__projects__projectalert__notification=notification
+        )
+        return self._exclude_recipients(queryset, notification.project_alert.project)
+
+    def uptime_monitor_recipients(self, monitor):
+        """ Distinct users associated with a project uptime monitor who should receive alerts """
+        queryset = self.filter(
+            organizations_ext_organizationuser__team__projects__monitor=monitor
+        )
+        return self._exclude_recipients(queryset, monitor.project)
+
+    def _exclude_recipients(self, queryset, project):
+        """ Exclude from queryset users who have a preference not to receive notifications """
+        return queryset.exclude(
             Q(
                 userprojectalert__project=project,
                 userprojectalert__status=ProjectAlertStatus.OFF,

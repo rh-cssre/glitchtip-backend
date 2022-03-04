@@ -41,4 +41,4 @@ class MonitorEmail(DetailEmail):
         return context
 
     def get_users(self):
-        return User.objects.get_email_recipients(self.object.monitor, alert_type="Monitor")
+        return User.objects.uptime_monitor_recipients(self.object.monitor)
