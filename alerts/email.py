@@ -1,7 +1,6 @@
-from django.db.models import Q
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from users.models import ProjectAlertStatus
+
 from glitchtip.email import GlitchTipEmail
 
 User = get_user_model()
@@ -40,16 +39,7 @@ class AlertEmail(GlitchTipEmail):
 def send_email_notification(notification):
     email = AlertEmail()
     email.notification = notification
-    users = User.objects.filter(
-        organizations_ext_organizationuser__team__projects__projectalert__notification=notification
-    ).exclude(
-        Q(
-            userprojectalert__project=notification.project_alert.project,
-            userprojectalert__status=ProjectAlertStatus.OFF,
-        )
-        | Q(subscribe_by_default=False, userprojectalert=None),
-    )
-    users = users.distinct()
+    users = User.objects.alert_notification_recipients(notification)
     if not users.exists():
         return
     email.send_users_email(users)

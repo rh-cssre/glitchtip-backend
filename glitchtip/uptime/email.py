@@ -1,11 +1,10 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from glitchtip.email import DetailEmail
-from users.models import ProjectAlertStatus, User
+from users.models import User
 
 from .models import MonitorCheck
 
@@ -42,13 +41,4 @@ class MonitorEmail(DetailEmail):
         return context
 
     def get_users(self):
-        monitor = self.object.monitor
-        return User.objects.filter(
-            organizations_ext_organization__projects__monitor=monitor
-        ).exclude(
-            Q(
-                userprojectalert__project=monitor.project,
-                userprojectalert__status=ProjectAlertStatus.OFF,
-            )
-            | Q(subscribe_by_default=False, userprojectalert=None),
-        )
+        return User.objects.uptime_monitor_recipients(self.object.monitor)
