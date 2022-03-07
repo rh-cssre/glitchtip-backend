@@ -67,7 +67,7 @@ class ReleaseViewSet(viewsets.ModelViewSet):
         checksum = serializer.validated_data.get("checksum", None)
         chunks = serializer.validated_data.get("chunks", [])
 
-        assemble_artifacts_task(
+        assemble_artifacts_task.delay(
             org_id=organization.id, version=version, checksum=checksum, chunks=chunks,
         )
 
