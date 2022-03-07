@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from organizations_ext.models import Organization
 from projects.models import Project
+from files.tasks import assemble_artifacts_task
 from .models import Release, ReleaseFile
 from .serializers import (
     ReleaseSerializer,
@@ -36,13 +37,16 @@ class ReleaseViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(organization__slug=organization_slug)
         return queryset
 
-    def perform_create(self, serializer):
+    def get_organization(self):
         try:
-            organization = Organization.objects.get(
+            return Organization.objects.get(
                 slug=self.kwargs.get("organization_slug"), users=self.request.user,
             )
         except Organization.DoesNotExist:
             raise exceptions.ValidationError("Organization does not exist")
+
+    def perform_create(self, serializer):
+        organization = self.get_organization()
         try:
             project = Project.objects.get(
                 slug=self.kwargs.get("project_slug"), organization=organization,
@@ -55,10 +59,19 @@ class ReleaseViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def assemble(self, request, organization_slug: str, version: str):
+        organization = self.get_organization()
         release = self.get_object()
         serializer = AssembleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        checksum = serializer.validated_data.get("checksum", None)
+        chunks = serializer.validated_data.get("chunks", [])
+
+        assemble_artifacts_task.delay(
+            org_id=organization.id, version=version, checksum=checksum, chunks=chunks,
+        )
+
+        # TODO should return more state's
         return Response({"state": "ok", "missingChunks": []})
 
 

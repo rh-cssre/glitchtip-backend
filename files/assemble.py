@@ -1,0 +1,213 @@
+""" Partial port of sentry/tasks/assemble.py """
+from enum import Enum
+import hashlib
+import shutil
+import tempfile
+from os import path
+import json
+from django.core.cache import cache
+from django.core.files import File
+from django.db import transaction, IntegrityError
+from organizations_ext.models import Organization
+from releases.models import Release, ReleaseFile
+from sentry.utils.zip import safe_extract_zip
+from .models import File, FileBlob
+from .exceptions import AssembleChecksumMismatch, AssembleArtifactsError
+
+
+MAX_FILE_SIZE = 2 ** 31  # 2GB is the maximum offset supported by fileblob
+
+
+class ChunkFileState(Enum):
+    OK = "ok"  # File in database
+    NOT_FOUND = "not_found"  # File not found in database
+    CREATED = "created"  # File was created in the request and send to the worker for assembling
+    ASSEMBLING = "assembling"  # File still being processed by worker
+    ERROR = "error"  # Error happened during assembling
+
+
+class AssembleTask(Enum):
+    DIF = "project.dsym"  # Debug file upload
+    ARTIFACTS = "organization.artifacts"  # Release file upload
+
+
+def _get_cache_key(task, scope, checksum):
+    """Computes the cache key for assemble status.
+
+    ``task`` must be one of the ``AssembleTask`` values. The scope can be the
+    identifier of any model, such as the organization or project that this task
+    is performed under.
+
+    ``checksum`` should be the SHA1 hash of the main file that is being
+    assembled.
+    """
+    return (
+        "assemble-status:%s"
+        % hashlib.sha1(
+            ("%s|%s|%s" % (scope, checksum.encode("ascii"), task)).encode()
+        ).hexdigest()
+    )
+
+
+def set_assemble_status(
+    task: AssembleTask, scope, checksum, state: ChunkFileState, detail=None
+):
+    """
+    Updates the status of an assembling task. It is cached for 10 minutes.
+    """
+    cache_key = _get_cache_key(task, scope, checksum)
+    cache.set(cache_key, (state, detail), 600)
+
+
+def assemble_artifacts(organization, version, checksum, chunks):
+    set_assemble_status(
+        AssembleTask.ARTIFACTS, organization.pk, checksum, ChunkFileState.ASSEMBLING
+    )
+    # Assemble the chunks into a temporary file
+    rv = assemble_file(
+        AssembleTask.ARTIFACTS,
+        organization,
+        "release-artifacts.zip",
+        checksum,
+        chunks,
+        file_type="release.bundle",
+    )
+
+    if rv is None:
+        return
+
+    bundle, temp_file = rv
+    scratchpad = tempfile.mkdtemp()
+
+    try:
+        safe_extract_zip(temp_file, scratchpad, strip_toplevel=False)
+    except BaseException as ex:
+        raise AssembleArtifactsError("failed to extract bundle") from ex
+
+    try:
+        manifest_path = path.join(scratchpad, "manifest.json")
+        with open(manifest_path, "rb") as manifest:
+            manifest = json.loads(manifest.read())
+    except BaseException as ex:
+        raise AssembleArtifactsError("failed to open release manifest") from ex
+
+    if organization.slug != manifest.get("org"):
+        raise AssembleArtifactsError("organization does not match uploaded bundle")
+
+    release_name = manifest.get("release")
+    if release_name != version:
+        raise AssembleArtifactsError("release does not match uploaded bundle")
+
+    try:
+        release = organization.release_set.get(version=release_name)
+    except Release.DoesNotExist as ex:
+        raise AssembleArtifactsError("release does not exist") from ex
+
+    # Sentry would add dist to release here
+
+    artifacts = manifest.get("files", {})
+    for rel_path, artifact in artifacts.items():
+        artifact_url = artifact.get("url", rel_path)
+        artifact_basename = artifact_url.rsplit("/", 1)[-1]
+
+        file = File.objects.create(
+            name=artifact_basename,
+            type="release.file",
+            headers=artifact.get("headers", {}),
+        )
+
+        full_path = path.join(scratchpad, rel_path)
+        with open(full_path, "rb") as fp:
+            file.putfile(fp)
+
+        kwargs = {
+            "organization_id": organization.id,
+            "release": release,
+            "name": artifact_url,
+            # "dist": dist,
+        }
+
+        release_file, created = ReleaseFile.objects.get_or_create(
+            release=release, name=artifact_url, defaults={"file": file}
+        )
+        if not created:
+            old_file = release_file.file
+            release_file.file = file
+            release_file.save(update_fields=["file"])
+            old_file.delete()
+
+    set_assemble_status(
+        AssembleTask.ARTIFACTS, organization.pk, checksum, ChunkFileState.OK
+    )
+    shutil.rmtree(scratchpad)
+    bundle.delete()
+
+
+def assemble_file(
+    task: AssembleTask,
+    organization: Organization,
+    name: str,
+    checksum,
+    chunks,
+    file_type,
+):
+    """
+    Verifies and assembles a file model from chunks.
+
+    This downloads all chunks from blob store to verify their integrity and
+    associates them with a created file model. Additionally, it assembles the
+    full file in a temporary location and verifies the complete content hash.
+
+    Returns a tuple ``(File, TempFile)`` on success, or ``None`` on error.
+    """
+    # Load all FileBlobs from db since we can be sure here we already own all
+    # chunks need to build the file
+    file_blobs = FileBlob.objects.filter(checksum__in=chunks).values_list(
+        "id", "checksum", "size"
+    )
+
+    # Reject all files that exceed the maximum allowed size for this
+    # organization. This value cannot be
+    file_size = sum(x[2] for x in file_blobs)
+    if file_size > MAX_FILE_SIZE:
+        set_assemble_status(
+            task,
+            organization.id,
+            checksum,
+            ChunkFileState.ERROR,
+            detail="File exceeds maximum size",
+        )
+        return
+
+    # Sanity check.  In case not all blobs exist at this point we have a
+    # race condition.
+    if set(x[1] for x in file_blobs) != set(chunks):
+        set_assemble_status(
+            task,
+            organization.id,
+            checksum,
+            ChunkFileState.ERROR,
+            detail="Not all chunks available for assembling",
+        )
+        return
+
+    # Ensure blobs are in the order and duplication in which they were
+    # transmitted. Otherwise, we would assemble the file in the wrong order.
+    ids_by_checksum = {chks: id for id, chks, _ in file_blobs}
+    file_blob_ids = [ids_by_checksum[c] for c in chunks]
+
+    file = File.objects.create(name=name, checksum=checksum, type=file_type)
+    try:
+        temp_file = file.assemble_from_file_blob_ids(file_blob_ids, checksum)
+    except AssembleChecksumMismatch:
+        file.delete()
+        set_assemble_status(
+            task,
+            organization.id,
+            checksum,
+            ChunkFileState.ERROR,
+            detail="Reported checksum mismatch",
+        )
+    else:
+        file.save()
+        return file, temp_file
