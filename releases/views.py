@@ -35,6 +35,9 @@ class ReleaseViewSet(viewsets.ModelViewSet):
         organization_slug = self.kwargs.get("organization_slug")
         if organization_slug:
             queryset = queryset.filter(organization__slug=organization_slug)
+        project_slug = self.kwargs.get("project_slug")
+        if project_slug:
+            queryset = queryset.filter(projects__slug=project_slug)
         return queryset
 
     def get_organization(self):
