@@ -8,7 +8,7 @@ ENV PYTHONUNBUFFERED=1 \
 RUN pip install poetry
 WORKDIR /code
 COPY poetry.lock pyproject.toml /code/
-RUN poetry install --no-interaction --no-ansi $(test "$IS_CI" = "True" && echo "--no-dev") && test "$IS_CI" = "True" && pip install psycopg2
+RUN poetry install --no-interaction --no-ansi $(test "$IS_CI" = "True" && echo "--no-dev") && test "$IS_CI" = "True" && pip install psycopg2 || true
 
 FROM python:3.10-slim
 ENV PYTHONUNBUFFERED=1 \
