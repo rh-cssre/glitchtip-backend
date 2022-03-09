@@ -1478,7 +1478,7 @@ test = ["ipaddress", "mock", "unittest2", "enum34", "pywin32", "wmi"]
 name = "psycopg2-binary"
 version = "2.9.3"
 description = "psycopg2 - Python-PostgreSQL Database Adapter"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.6"
 
@@ -2087,7 +2087,7 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "ae52fa084de8140167af9b665a5645c72e33c2bb3acdceda04bc0d69151a2507"
+content-hash = "5fccf43e778f73076b576f4dbe6a737706d3bd9f9f6de6619634251d05ec57eb"
 
 [metadata.files]
 aiohttp = [
