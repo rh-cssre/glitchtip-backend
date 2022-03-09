@@ -12,6 +12,7 @@ class ReleaseAPIPermissionTests(APIPermissionTestCase):
         self.set_client_credentials(self.auth_token.token)
         self.project = baker.make("projects.Project", organization=self.organization)
         self.release = baker.make("releases.Release", organization=self.organization)
+        self.release.projects.add(self.project)
 
         self.organization_list_url = reverse(
             "organization-releases-list",
