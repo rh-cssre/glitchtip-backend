@@ -33,7 +33,10 @@ env = environ.Env(
     DEBUG=(bool, False),
     DEBUG_TOOLBAR=(bool, False),
     STATIC_URL=(str, "/"),
-    STATICFILES_STORAGE=(str, "glitchtip.settings.NoSourceMapsStorage",),
+    STATICFILES_STORAGE=(
+        str,
+        "glitchtip.settings.NoSourceMapsStorage",
+    ),
 )
 path = environ.Path()
 
@@ -317,7 +320,12 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": timedelta(seconds=30),
     },
 }
-CACHES = {"default": {"BACKEND": "redis_cache.RedisCache", "LOCATION": REDIS_URL}}
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+    }
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/dev/ref/settings/#auth-password-validators
@@ -326,9 +334,15 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+    },
 ]
 
 
@@ -456,11 +470,18 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "handlers": {
-        "null": {"class": "logging.NullHandler",},
-        "console": {"class": LOGGING_HANDLER_CLASS,},
+        "null": {
+            "class": "logging.NullHandler",
+        },
+        "console": {
+            "class": LOGGING_HANDLER_CLASS,
+        },
     },
     "loggers": {
-        "django.security.DisallowedHost": {"handlers": ["null"], "propagate": False,},
+        "django.security.DisallowedHost": {
+            "handlers": ["null"],
+            "propagate": False,
+        },
     },
     "root": {"handlers": ["console"]},
 }
@@ -481,7 +502,7 @@ if LOGGING_HANDLER_CLASS is not logging.StreamHandler:
 
 
 def organization_request_callback(request):
-    """ Gets an organization instance from the id passed through ``request``"""
+    """Gets an organization instance from the id passed through ``request``"""
     user = request.user
     if user:
         return user.organizations_ext_organization.filter(
@@ -549,7 +570,11 @@ if TESTING:
         "ignore", message="No directory at", module="whitenoise.base"
     )
 if CELERY_TASK_ALWAYS_EAGER:
-    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache",}}
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        }
+    }
 
 MFA_SERVER_NAME = "GlitchTip"
 FIDO_SERVER_ID = GLITCHTIP_URL.hostname
