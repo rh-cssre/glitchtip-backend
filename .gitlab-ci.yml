@@ -13,6 +13,10 @@ include:
   - template: Dependency-Scanning.gitlab-ci.yml
   - template: Secret-Detection.gitlab-ci.yml
 
+workflow:
+  rules:
+    - when: always
+
 test:
   image: python:3.10
   variables:
