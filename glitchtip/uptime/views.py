@@ -1,4 +1,4 @@
-from django.db.models import Prefetch
+from django.db.models import OuterRef, Prefetch, Subquery
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import exceptions, permissions, viewsets
@@ -45,11 +45,13 @@ class MonitorViewSet(viewsets.ModelViewSet):
         if organization_slug:
             queryset = queryset.filter(organization__slug=organization_slug)
 
+        subqueryset = Subquery(MonitorCheck.objects.filter(monitor=OuterRef('monitor')).values_list('id', flat=True)[:60])
+
         queryset = queryset.prefetch_related(
             Prefetch(
                 "checks",
                 queryset=MonitorCheck.objects.filter(
-                    created__gte=timezone.now() - timezone.timedelta(hours=1)
+                    id__in=subqueryset
                 ),
             )
         ).distinct()
