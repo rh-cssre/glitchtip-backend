@@ -37,6 +37,7 @@ env = environ.Env(
         str,
         "glitchtip.settings.NoSourceMapsStorage",
     ),
+    ENABLE_OBSERVABILITY_API=(bool, False),
 )
 path = environ.Path()
 
@@ -142,6 +143,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.sites",
     "django.contrib.postgres",
+    "django_prometheus",
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
@@ -186,6 +188,8 @@ INSTALLED_APPS = [
 if SECRET_KEY == "change_me" and DEBUG is True:
     INSTALLED_APPS += ["sslserver"]
 
+ENABLE_OBSERVABILITY_API = env("ENABLE_OBSERVABILITY_API")
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -201,6 +205,10 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "sentry.middleware.proxy.DecompressBodyMiddleware",
 ]
+
+if ENABLE_OBSERVABILITY_API:
+    MIDDLEWARE.insert(0, 'django_prometheus.middleware.PrometheusBeforeMiddleware')
+    MIDDLEWARE.append("django_prometheus.middleware.PrometheusAfterMiddleware")
 
 ROOT_URLCONF = "glitchtip.urls"
 

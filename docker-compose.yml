@@ -1,18 +1,16 @@
 version: "3.7"
-x-environment:
-  &default-environment
+x-environment: &default-environment
   DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
   SECRET_KEY: change_me
   ENABLE_OPEN_USER_REGISTRATION: "true"
   ENABLE_TEST_API: "true"
   DEBUG: "true"
   EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
-x-depends_on:
-  &default-depends_on
+  ENABLE_OBSERVABILITY_API: "true"
+x-depends_on: &default-depends_on
   - postgres
   - redis
-x-volumes:
-  &default-volumes
+x-volumes: &default-volumes
   - .:/code
 services:
   postgres:
@@ -23,7 +21,7 @@ services:
     image: redis
   web:
     build: .
-    user: root  # Allows for usage of ipdb, apt, etc in dev
+    user: root # Allows for usage of ipdb, apt, etc in dev
     command: ./manage.py runserver 0.0.0.0:8000
     depends_on: *default-depends_on
     volumes: *default-volumes
