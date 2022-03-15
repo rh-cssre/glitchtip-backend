@@ -105,7 +105,7 @@ class BaseEventAPIView(APIView):
         return project
 
     def get_event_serializer_class(self, data=[]):
-        """ Determine event type and return serializer """
+        """Determine event type and return serializer"""
         if "exception" in data and data["exception"]:
             return StoreErrorSerializer
         if "platform" not in data:
