@@ -15,9 +15,6 @@ class TransactionGroup(CreatedModel):
 
 
 class TransactionEvent(AbstractEvent):
-    project = models.ForeignKey(
-        "projects.Project", on_delete=models.CASCADE
-    )  # TODO delete in favor of group
     group = models.ForeignKey(TransactionGroup, on_delete=models.CASCADE)
     trace_id = models.UUIDField(db_index=True)
     transaction = models.CharField(max_length=1024)

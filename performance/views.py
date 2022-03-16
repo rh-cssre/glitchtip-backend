@@ -11,15 +11,15 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         if not self.request.user.is_authenticated:
             return self.queryset.none()
-        # Performance optimization, override ORM to force two queries
+        # Performance optimization, force two queries
         projects = list(
             Project.objects.filter(team__members__user=self.request.user).values_list(
                 "pk", flat=True
             )
         )
-        qs = super().get_queryset().filter(project__pk__in=projects)
+        qs = super().get_queryset().filter(group__project__pk__in=projects)
         if "organization_slug" in self.kwargs:
             qs = qs.filter(
-                project__organization__slug=self.kwargs["organization_slug"],
+                group__project__organization__slug=self.kwargs["organization_slug"],
             )
         return qs
