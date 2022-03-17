@@ -42,11 +42,10 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
     transaction = serializers.CharField()
 
     def create(self, data):
-        project = self.context.get("project")
         trace_id = data["contexts"]["trace"]["trace_id"]
 
         group, _ = TransactionGroup.objects.get_or_create(
-            project=project,
+            project=self.context.get("project"),
             title=data["transaction"],
             op=data["contexts"]["trace"]["op"],
             method=data["request"].get("method"),
@@ -63,7 +62,6 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
             event_id=data["event_id"],
             timestamp=data["timestamp"],
             start_timestamp=data["start_timestamp"],
-            project=project,
         )
 
         first_span = SpanSerializer(

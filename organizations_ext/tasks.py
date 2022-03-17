@@ -28,9 +28,9 @@ def get_free_tier_organizations_with_event_count():
     ).values("total")
     total_transaction_events = projects.annotate(
         total=Count(
-            "transactionevent",
+            "transactiongroup__transactionevent",
             filter=Q(
-                transactionevent__created__gte=OuterRef(
+                transactiongroup__transactionevent__created__gte=OuterRef(
                     "djstripe_customers__subscriptions__current_period_start"
                 )
             ),
