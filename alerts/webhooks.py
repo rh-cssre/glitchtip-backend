@@ -9,12 +9,21 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class WebhookAttachmentField:
+    title: str
+    value: str
+    short: bool
+
+
+@dataclass
 class WebhookAttachment:
     title: str
     title_link: str
     text: str
     image_url: Optional[str] = None
     color: Optional[str] = None
+    fields: Optional[List[WebhookAttachmentField]] = None
+    mrkdown_in: Optional[List[str]] = None
 
 
 @dataclass
@@ -59,12 +68,39 @@ def send_issue_as_webhook(url, issues: List["Issue"], issue_count: int = 1):
     attachments: List[WebhookAttachment] = []
     sections: List[MSTeamsSection] = []
     for issue in issues:
+        fields = [
+            WebhookAttachmentField(
+                title="Project",
+                value=issue.project.name,
+                short=True,
+            )
+        ]
+        environment = issue.tags.get("environment")
+        if environment:
+            fields.append(
+                WebhookAttachmentField(
+                    title="Environment",
+                    value=environment[0],
+                    short=True,
+                )
+            )
+        release = issue.tags.get("release")
+        if release:
+            fields.append(
+                WebhookAttachmentField(
+                    title="Release",
+                    value=release[0],
+                    short=False,
+                )
+            )
         attachments.append(
             WebhookAttachment(
+                mrkdown_in=["text"],
                 title=str(issue),
                 title_link=issue.get_detail_url(),
                 text=issue.culprit,
                 color=issue.get_hex_color(),
+                fields=fields,
             )
         )
         sections.append(
