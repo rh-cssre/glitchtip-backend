@@ -13,6 +13,9 @@ class TransactionGroup(CreatedModel):
     class Meta:
         unique_together = (("title", "project", "op", "method"),)
 
+    def __str__(self):
+        return self.title
+
 
 class TransactionEvent(AbstractEvent):
     group = models.ForeignKey(TransactionGroup, on_delete=models.CASCADE)
@@ -22,6 +25,9 @@ class TransactionEvent(AbstractEvent):
 
     class Meta:
         ordering = ["-created"]
+
+    def __str__(self):
+        return str(self.trace_id)
 
 
 class Span(CreatedModel):
@@ -35,3 +41,6 @@ class Span(CreatedModel):
     timestamp = models.DateTimeField()
     tags = HStoreField(default=dict)
     data = HStoreField(default=dict)
+
+    def __str__(self):
+        return self.span_id

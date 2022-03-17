@@ -4,6 +4,17 @@ from glitchtip.serializers import FlexibleDateTimeField
 from .models import TransactionEvent, TransactionGroup, Span
 
 
+class TransactionGroupSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TransactionGroup
+        fields = [
+            "title",
+            "project",
+            "op",
+            "method",
+        ]
+
+
 class SpanSerializer(serializers.ModelSerializer):
     class Meta:
         model = Span
@@ -17,18 +28,6 @@ class SpanSerializer(serializers.ModelSerializer):
             "tags",
             "data",
         ]
-
-    # data = serializers.JSONField(required=False)
-    # description = serializers.CharField(required=False)
-    # op = serializers.CharField(required=False)
-    # parent_span_id = serializers.CharField(required=False)
-    # span_id = serializers.CharField(required=False)
-    # start_timestamp = FlexibleDateTimeField()
-    # status = serializers.CharField(required=False)
-    # tags = serializers.JSONField(required=False)
-    # timestamp = FlexibleDateTimeField()
-    # trace_id = serializers.UUIDField()
-    # same_process_as_parent = serializers.BooleanField(required=False)
 
 
 class TransactionEventSerializer(SentrySDKEventSerializer):
