@@ -12,7 +12,8 @@ class TransactionAPITestCase(GlitchTipTestCase):
             "organization-transactions-list",
             kwargs={"organization_slug": self.organization.slug},
         )
-        transaction = baker.make("performance.TransactionEvent", project=self.project)
+        transaction = baker.make(
+            "performance.TransactionEvent", group__project=self.project
+        )
         res = self.client.get(url)
         self.assertContains(res, transaction.transaction)
-

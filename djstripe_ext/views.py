@@ -88,7 +88,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
                 created__lt=subscription.current_period_end,
             ).count()
             transaction_event_count = TransactionEvent.objects.filter(
-                project__organization=organization,
+                group__project__organization=organization,
                 created__gte=subscription.current_period_start,
                 created__lt=subscription.current_period_end,
             ).count()
