@@ -40,7 +40,7 @@ class Span(CreatedModel):
     start_timestamp = models.DateTimeField()
     timestamp = models.DateTimeField()
     tags = HStoreField(default=dict)
-    data = HStoreField(default=dict)
+    data = models.JSONField(default=dict)
 
     def __str__(self):
         return self.span_id
