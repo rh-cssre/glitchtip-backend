@@ -5,22 +5,21 @@ from events.models import AbstractEvent
 
 
 class TransactionGroup(CreatedModel):
-    title = models.CharField(max_length=1024)
+    transaction = models.CharField(max_length=1024)
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
     op = models.CharField(max_length=255)
     method = models.CharField(max_length=255, null=True, blank=True)
 
     class Meta:
-        unique_together = (("title", "project", "op", "method"),)
+        unique_together = (("transaction", "project", "op", "method"),)
 
     def __str__(self):
-        return self.title
+        return self.transaction
 
 
 class TransactionEvent(AbstractEvent):
     group = models.ForeignKey(TransactionGroup, on_delete=models.CASCADE)
     trace_id = models.UUIDField(db_index=True)
-    transaction = models.CharField(max_length=1024)
     start_timestamp = models.DateTimeField()
 
     class Meta:

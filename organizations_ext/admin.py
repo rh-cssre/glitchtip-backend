@@ -87,7 +87,7 @@ class OrganizationAdmin(BaseOrganizationAdmin):
             "total"
         )
         total_transaction_events = projects.annotate(
-            total=Count("transactionevent")
+            total=Count("transactiongroup__transactionevent")
         ).values("total")
 
         queryset = queryset.annotate(

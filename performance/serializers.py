@@ -8,7 +8,7 @@ class TransactionGroupSerializer(serializers.ModelSerializer):
     class Meta:
         model = TransactionGroup
         fields = [
-            "title",
+            "transaction",
             "project",
             "op",
             "method",
@@ -46,7 +46,7 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
 
         group, _ = TransactionGroup.objects.get_or_create(
             project=self.context.get("project"),
-            title=data["transaction"],
+            transaction=data["transaction"],
             op=data["contexts"]["trace"]["op"],
             method=data["request"].get("method"),
         )
@@ -58,7 +58,6 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
                 "platform": data.get("platform"),
             },
             trace_id=trace_id,
-            transaction=data["transaction"],
             event_id=data["event_id"],
             timestamp=data["timestamp"],
             start_timestamp=data["start_timestamp"],
@@ -92,4 +91,4 @@ class TransactionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TransactionEvent
-        fields = ("eventId", "transaction", "timestamp", "startTimestamp")
+        fields = ("eventId", "timestamp", "startTimestamp")

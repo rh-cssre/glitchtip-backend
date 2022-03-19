@@ -78,9 +78,8 @@ def generate_fake_transaction_event(project, start_timestamp):
     method = None
     if op == "http.server":
         method = generate_random_method()
-    title = generate_random_transaction()
     group, _ = TransactionGroup.objects.get_or_create(
-        title=title,
+        transaction=generate_random_transaction(),
         project=project,
         op=op,
         method=method,
@@ -88,7 +87,6 @@ def generate_fake_transaction_event(project, start_timestamp):
     return TransactionEvent(
         group=group,
         trace_id=uuid.uuid4(),
-        transaction=title,
         start_timestamp=start_timestamp,
         data={},
         timestamp=generate_random_timestamp(start_timestamp),

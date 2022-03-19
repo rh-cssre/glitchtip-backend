@@ -4,8 +4,8 @@ from .models import TransactionGroup, TransactionEvent, Span
 
 
 class TransactionGroupAdmin(admin.ModelAdmin):
-    search_fields = ["title", "op", "project__organization__name"]
-    list_display = ["title", "project", "op", "method", "avg_duration"]
+    search_fields = ["transaction", "op", "project__organization__name"]
+    list_display = ["transaction", "project", "op", "method", "avg_duration"]
     list_filter = ["created", "op", "method"]
     autocomplete_fields = ["project"]
 
@@ -42,8 +42,12 @@ class SpanInline(admin.TabularInline):
 
 
 class TransactionEventAdmin(admin.ModelAdmin):
-    search_fields = ["trace_id", "transaction", "group__project__organization__name"]
-    list_display = ["trace_id", "transaction", "timestamp", "duration"]
+    search_fields = [
+        "trace_id",
+        "group__transaction",
+        "group__project__organization__name",
+    ]
+    list_display = ["trace_id", "group", "timestamp", "duration"]
     list_filter = ["created"]
     inlines = [SpanInline]
     can_delete = False
