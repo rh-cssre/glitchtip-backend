@@ -16,4 +16,4 @@ class TransactionAPITestCase(GlitchTipTestCase):
             "performance.TransactionEvent", group__project=self.project
         )
         res = self.client.get(url)
-        self.assertContains(res, transaction.transaction)
+        self.assertContains(res, transaction.event_id)

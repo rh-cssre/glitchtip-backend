@@ -189,6 +189,8 @@ if SECRET_KEY == "change_me" and DEBUG is True:
     INSTALLED_APPS += ["sslserver"]
 
 ENABLE_OBSERVABILITY_API = env("ENABLE_OBSERVABILITY_API")
+# Workaround https://github.com/korfuri/django-prometheus/issues/34
+PROMETHEUS_EXPORT_MIGRATIONS = False
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
