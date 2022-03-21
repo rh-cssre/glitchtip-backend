@@ -1,4 +1,6 @@
+import datetime
 from django.shortcuts import reverse
+from django.utils import timezone
 from model_bakery import baker
 from freezegun import freeze_time
 from glitchtip.test_utils.test_case import GlitchTipTestCase
@@ -35,16 +37,33 @@ class TransactionGroupAPITestCase(GlitchTipTestCase):
 
     def test_filter_then_average(self):
         group = baker.make("performance.TransactionGroup", project=self.project)
-        with freeze_time("2022-01-01"):
+        now = timezone.now()
+        last_minute = now - datetime.timedelta(minutes=1)
+        with freeze_time(last_minute):
             transaction1 = baker.make(
-                "performance.TransactionEvent", group=group, timestamp="2022-01-01"
+                "performance.TransactionEvent",
+                group=group,
+                start_timestamp=last_minute,
+                timestamp=last_minute + datetime.timedelta(seconds=5),
             )
         transaction2 = baker.make(
-            "performance.TransactionEvent", group=group, timestamp="2022-01-01"
+            "performance.TransactionEvent",
+            group=group,
+            start_timestamp=now,
+            timestamp=now + datetime.timedelta(seconds=1),
         )
-        import ipdb
+        res = self.client.get(self.list_url)
+        self.assertEqual(res.data[0]["avg_duration"], "00:00:03")
 
-        ipdb.set_trace()
+        res = self.client.get(
+            self.list_url
+            + "?start="
+            + transaction2.created.replace(microsecond=0)
+            .replace(tzinfo=None)
+            .isoformat()
+            + "Z"
+        )
+        self.assertEqual(res.data[0]["avg_duration"], "00:00:01")
 
 
 class SpanAPITestCase(GlitchTipTestCase):

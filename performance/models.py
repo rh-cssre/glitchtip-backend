@@ -5,14 +5,15 @@ from glitchtip.base_models import CreatedModel
 from events.models import AbstractEvent
 
 
+avg_transactionevent_time = Avg(
+    F("transactionevent__timestamp") - F("transactionevent__start_timestamp"),
+    distinct=True,
+)
+
+
 class TransactionGroupManager(models.Manager):
     def with_avgs(self):
-        return self.annotate(
-            avg_duration=Avg(
-                F("transactionevent__timestamp")
-                - F("transactionevent__start_timestamp")
-            )
-        )
+        return self.annotate(avg_duration=avg_transactionevent_time)
 
 
 class TransactionGroup(CreatedModel):

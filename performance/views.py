@@ -1,4 +1,6 @@
 from rest_framework import viewsets
+from rest_framework.filters import OrderingFilter
+from django_filters.rest_framework import DjangoFilterBackend
 from projects.models import Project
 from .models import TransactionEvent, TransactionGroup, Span
 from .serializers import (
@@ -6,11 +8,16 @@ from .serializers import (
     TransactionGroupSerializer,
     SpanSerializer,
 )
+from .filters import TransactionGroupFilter
 
 
 class TransactionGroupViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = TransactionGroup.objects.with_avgs()
+    queryset = TransactionGroup.objects.all()
     serializer_class = TransactionGroupSerializer
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_class = TransactionGroupFilter
+    ordering = ["-created"]
+    ordering_fields = ["created", "avg_duration"]
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
