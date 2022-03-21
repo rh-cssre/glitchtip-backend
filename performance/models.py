@@ -1,7 +1,18 @@
 from django.db import models
+from django.db.models import F, Avg
 from django.contrib.postgres.fields import HStoreField
 from glitchtip.base_models import CreatedModel
 from events.models import AbstractEvent
+
+
+class TransactionGroupManager(models.Manager):
+    def with_avgs(self):
+        return self.annotate(
+            avg_duration=Avg(
+                F("transactionevent__timestamp")
+                - F("transactionevent__start_timestamp")
+            )
+        )
 
 
 class TransactionGroup(CreatedModel):
@@ -9,6 +20,7 @@ class TransactionGroup(CreatedModel):
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
     op = models.CharField(max_length=255)
     method = models.CharField(max_length=255, null=True, blank=True)
+    objects = TransactionGroupManager()
 
     class Meta:
         unique_together = (("transaction", "project", "op", "method"),)

@@ -9,7 +9,7 @@ from .serializers import (
 
 
 class TransactionGroupViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = TransactionGroup.objects.all()
+    queryset = TransactionGroup.objects.with_avgs()
     serializer_class = TransactionGroupSerializer
 
     def get_queryset(self):

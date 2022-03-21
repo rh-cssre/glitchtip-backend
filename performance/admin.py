@@ -13,14 +13,16 @@ class TransactionGroupAdmin(admin.ModelAdmin):
         return obj.avg_duration
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        qs = qs.annotate(
-            avg_duration=Avg(
-                F("transactionevent__timestamp")
-                - F("transactionevent__start_timestamp")
+        return (
+            super()
+            .get_queryset(request)
+            .annotate(
+                avg_duration=Avg(
+                    F("transactionevent__timestamp")
+                    - F("transactionevent__start_timestamp")
+                )
             )
         )
-        return qs
 
 
 class SpanInline(admin.TabularInline):

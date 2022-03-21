@@ -5,6 +5,8 @@ from .models import TransactionEvent, TransactionGroup, Span
 
 
 class TransactionGroupSerializer(serializers.ModelSerializer):
+    avg_duration = serializers.DurationField(read_only=True)
+
     class Meta:
         model = TransactionGroup
         fields = [
@@ -12,6 +14,7 @@ class TransactionGroupSerializer(serializers.ModelSerializer):
             "project",
             "op",
             "method",
+            "avg_duration",
         ]
 
 
