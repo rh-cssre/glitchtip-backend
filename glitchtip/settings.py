@@ -67,7 +67,7 @@ if POD_IP:
 
 
 ENVIRONMENT = env.str("ENVIRONMENT", None)
-GLITCHTIP_VERSION = env.str("GLITCHTIP_VERSION", None)
+GLITCHTIP_VERSION = env.str("GLITCHTIP_VERSION", "0.0.0-unknown")
 
 # Used in email and DSN generation. Set to full domain such as https://glitchtip.example.com
 default_url = env.str(
