@@ -285,6 +285,18 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 DATABASES = {
     "default": env.db(default="postgres://postgres:postgres@postgres:5432/postgres")
 }
+# Support setting DATABASES in parts in order to get values from the postgresql helm chart
+DATABASE_HOST = env.str("DATABASE_HOST", None)
+DATABASE_PASSWORD = env.str("DATABASE_PASSWORD", None)
+if DATABASE_HOST and DATABASE_PASSWORD:
+    DATABASES["default"] = {
+        "NAME": env.str("DATABASE_NAME", "postgres"),
+        "USER": env.str("DATABASE_USER", "postgres"),
+        "PASSWORD": DATABASE_PASSWORD,
+        "HOST": DATABASE_HOST,
+        "PORT": env.str("DATABASE_PORT", "5432"),
+    }
+
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
 # We need to support both url and broken out host to support helm redis chart
