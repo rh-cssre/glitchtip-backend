@@ -5,6 +5,11 @@ from .models import TransactionEvent, TransactionGroup, Span
 
 
 class TransactionGroupSerializer(serializers.ModelSerializer):
+    avgDuration = serializers.DurationField(source="avg_duration", read_only=True)
+    transactionCount = serializers.IntegerField(
+        source="transaction_count", read_only=True
+    )
+
     class Meta:
         model = TransactionGroup
         fields = [
@@ -12,22 +17,36 @@ class TransactionGroupSerializer(serializers.ModelSerializer):
             "project",
             "op",
             "method",
+            "avgDuration",
+            "transactionCount",
         ]
 
 
 class SpanSerializer(serializers.ModelSerializer):
+    spanId = serializers.CharField(source="span_id", read_only=True)
+    parentSpanId = serializers.CharField(source="parent_span_id", read_only=True)
+    startTimestamp = serializers.DateTimeField(source="start_timestamp", read_only=True)
+
     class Meta:
         model = Span
         fields = [
+            "spanId",
             "span_id",
             "parent_span_id",
+            "parentSpanId",
             "op",
             "description",
+            "startTimestamp",
             "start_timestamp",
             "timestamp",
             "tags",
             "data",
         ]
+        extra_kwargs = {
+            "start_timestamp": {"write_only": True},
+            "span_id": {"write_only": True},
+            "parent_span_id": {"write_only": True},
+        }
 
 
 class TransactionEventSerializer(SentrySDKEventSerializer):
@@ -88,7 +107,33 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
 class TransactionSerializer(serializers.ModelSerializer):
     eventId = serializers.UUIDField(source="pk")
     startTimestamp = serializers.DateTimeField(source="start_timestamp")
+    transaction = serializers.SerializerMethodField()
+    op = serializers.SerializerMethodField()
+    method = serializers.SerializerMethodField()
 
     class Meta:
         model = TransactionEvent
-        fields = ("eventId", "timestamp", "startTimestamp")
+        fields = (
+            "eventId",
+            "timestamp",
+            "startTimestamp",
+            "transaction",
+            "op",
+            "method",
+        )
+
+    def get_transaction(self, obj):
+        return obj.group.transaction
+
+    def get_op(self, obj):
+        return obj.group.op
+
+    def get_method(self, obj):
+        return obj.group.transaction
+
+
+class TransactionDetailSerializer(TransactionSerializer):
+    spans = SpanSerializer(source="span_set", many=True)
+
+    class Meta(TransactionSerializer.Meta):
+        fields = TransactionSerializer.Meta.fields + ("spans",)

@@ -209,7 +209,7 @@ MIDDLEWARE = [
 ]
 
 if ENABLE_OBSERVABILITY_API:
-    MIDDLEWARE.insert(0, 'django_prometheus.middleware.PrometheusBeforeMiddleware')
+    MIDDLEWARE.insert(0, "django_prometheus.middleware.PrometheusBeforeMiddleware")
     MIDDLEWARE.append("django_prometheus.middleware.PrometheusAfterMiddleware")
 
 ROOT_URLCONF = "glitchtip.urls"
