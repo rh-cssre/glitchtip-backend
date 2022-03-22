@@ -53,7 +53,7 @@ class TransactionGroupAPITestCase(GlitchTipTestCase):
             timestamp=now + datetime.timedelta(seconds=1),
         )
         res = self.client.get(self.list_url)
-        self.assertEqual(res.data[0]["avg_duration"], "00:00:03")
+        self.assertEqual(res.data[0]["avgDuration"], "00:00:03")
 
         res = self.client.get(
             self.list_url
@@ -63,7 +63,7 @@ class TransactionGroupAPITestCase(GlitchTipTestCase):
             .isoformat()
             + "Z"
         )
-        self.assertEqual(res.data[0]["avg_duration"], "00:00:01")
+        self.assertEqual(res.data[0]["avgDuration"], "00:00:01")
 
 
 class SpanAPITestCase(GlitchTipTestCase):

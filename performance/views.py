@@ -5,6 +5,7 @@ from projects.models import Project
 from .models import TransactionEvent, TransactionGroup, Span
 from .serializers import (
     TransactionSerializer,
+    TransactionDetailSerializer,
     TransactionGroupSerializer,
     SpanSerializer,
 )
@@ -17,7 +18,7 @@ class TransactionGroupViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_class = TransactionGroupFilter
     ordering = ["-created"]
-    ordering_fields = ["created", "avg_duration"]
+    ordering_fields = ["created", "avg_duration", "transaction_count"]
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
@@ -40,6 +41,11 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = TransactionEvent.objects.all()
     serializer_class = TransactionSerializer
 
+    def get_serializer_class(self):
+        if self.action in ["retrieve"]:
+            return TransactionDetailSerializer
+        return super().get_serializer_class()
+
     def get_queryset(self):
         if not self.request.user.is_authenticated:
             return self.queryset.none()
@@ -54,6 +60,7 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(
                 group__project__organization__slug=self.kwargs["organization_slug"],
             )
+        qs = qs.select_related("group")
         return qs
 
 
