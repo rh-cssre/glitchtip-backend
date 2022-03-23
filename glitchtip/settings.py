@@ -290,6 +290,7 @@ DATABASE_HOST = env.str("DATABASE_HOST", None)
 DATABASE_PASSWORD = env.str("DATABASE_PASSWORD", None)
 if DATABASE_HOST and DATABASE_PASSWORD:
     DATABASES["default"] = {
+        "ENGINE": "django.db.backends.postgresql",
         "NAME": env.str("DATABASE_NAME", "postgres"),
         "USER": env.str("DATABASE_USER", "postgres"),
         "PASSWORD": DATABASE_PASSWORD,
