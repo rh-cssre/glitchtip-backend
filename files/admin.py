@@ -3,10 +3,14 @@ from .models import FileBlob, File
 
 
 class FileBlobAdmin(admin.ModelAdmin):
-    pass
+    search_fields = ("checksum",)
+    list_display = ("checksum", "size", "created")
+
 
 class FileAdmin(admin.ModelAdmin):
-    pass
+    search_fields = ("name", "checksum")
+    list_display = ("name", "type", "checksum")
+    list_filter = ("type", "created")
 
 
 admin.site.register(FileBlob, FileBlobAdmin)
