@@ -88,6 +88,10 @@ class JavaScriptProcessorTestCase(APITestCase):
         shutil.copyfile(
             "./events/tests/test_data/bundle.js", "./uploads/file_blobs/bundle.js"
         )
+        shutil.copyfile(
+            "./events/tests/test_data/bundle.js.map",
+            "./uploads/file_blobs/bundle.js.map",
+        )
         data = sample_event | {"release": self.release.version}
 
         res = self.client.post(self.url, data, format="json")
