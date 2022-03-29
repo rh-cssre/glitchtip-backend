@@ -25,7 +25,7 @@ from whitenoise.storage import CompressedManifestStaticFilesStorage
 
 env = environ.Env(
     ALLOWED_HOSTS=(list, ["*"]),
-    DEFAULT_FILE_STORAGE=(str, 'django.core.files.storage.FileSystemStorage'),
+    DEFAULT_FILE_STORAGE=(str, None),
     GS_BUCKET_NAME=(str, None),
     AWS_ACCESS_KEY_ID=(str, None),
     AWS_SECRET_ACCESS_KEY=(str, None),
@@ -390,7 +390,8 @@ SITE_ID = 1
 # https://docs.djangoproject.com/en/dev/howto/static-files/
 STATIC_URL = "/static/"
 
-DEFAULT_FILE_STORAGE = env("DEFAULT_FILE_STORAGE")
+if env("DEFAULT_FILE_STORAGE"):
+    DEFAULT_FILE_STORAGE = env("DEFAULT_FILE_STORAGE")
 GS_BUCKET_NAME = env("GS_BUCKET_NAME")
 
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
