@@ -45,13 +45,19 @@ class MonitorViewSet(viewsets.ModelViewSet):
         if organization_slug:
             queryset = queryset.filter(organization__slug=organization_slug)
 
-        subqueryset = Subquery(MonitorCheck.objects.filter(monitor=OuterRef('monitor')).values_list('id', flat=True)[:60])
+        # Optimization hack, we know the checks will be recent. No need to sort all checks ever.
+        hours_ago = timezone.now() - timezone.timedelta(hours=12)
+        subqueryset = Subquery(
+            MonitorCheck.objects.filter(
+                monitor=OuterRef("monitor"), created__gt=hours_ago
+            ).values_list("id", flat=True)[:60]
+        )
 
         queryset = queryset.prefetch_related(
             Prefetch(
                 "checks",
                 queryset=MonitorCheck.objects.filter(
-                    id__in=subqueryset
+                    id__in=subqueryset, created__gt=hours_ago
                 ),
             )
         ).distinct()
