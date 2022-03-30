@@ -42,9 +42,14 @@ class OrganizationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if not self.request.user.is_authenticated:
             return self.queryset.none()
-        return self.queryset.filter(users=self.request.user).prefetch_related(
-            "projects__team_set__members",
-        )
+        queryset = self.queryset.filter(users=self.request.user)
+
+        if self.action in ["retrieve"]:
+            queryset = queryset.prefetch_related(
+                "projects__team_set__members",
+                "teams__members",
+            )
+        return queryset
 
     def perform_create(self, serializer):
         """
