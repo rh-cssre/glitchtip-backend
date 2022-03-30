@@ -67,7 +67,7 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
             project=self.context.get("project"),
             transaction=data["transaction"],
             op=data["contexts"]["trace"]["op"],
-            method=data["request"].get("method"),
+            method=data.get("request", {}).get("method"),
         )
         transaction = TransactionEvent.objects.create(
             group=group,
