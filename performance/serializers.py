@@ -1,4 +1,3 @@
-
 from rest_framework import serializers
 from events.serializers import SentrySDKEventSerializer
 from glitchtip.serializers import FlexibleDateTimeField
