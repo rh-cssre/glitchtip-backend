@@ -90,7 +90,7 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
             }
         )
         first_span.is_valid()
-        spans = data["spans"] + [first_span.validated_data]
+        spans = data.get("spans", []) + [first_span.validated_data]
         Span.objects.bulk_create(
             [
                 Span(
