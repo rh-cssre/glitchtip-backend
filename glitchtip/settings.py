@@ -253,7 +253,7 @@ CSP_FONT_SRC = env.list(
 CSP_WORKER_SRC = env.list("CSP_WORKER_SRC", str, ["'self'", "blob:"])
 # GlitchTip can record it's own errors
 CSP_CONNECT_SRC = env.list(
-    "CSP_CONNECT_SRC", str, ["'self'", "https://*.glitchtip.com"]
+    "CSP_CONNECT_SRC", str, ["'self'", "https://*.glitchtip.com", "https://app.chatwoot.com"]
 )
 # Needed for Analytics and Stripe for SaaS use cases. Both are disabled by default.
 CSP_SCRIPT_SRC = env.list(
