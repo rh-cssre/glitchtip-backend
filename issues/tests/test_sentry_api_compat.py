@@ -474,3 +474,14 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
             ["type", "values", "exception"],
         )
 
+    def test_small_js_error(self):
+        """ A small example to test stacktraces """
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data("small_js_error")
+        res = self.client.post(self.event_store_url, sdk_error, format="json")
+        event = Event.objects.get(pk=res.data["id"])
+        event_json = event.event_json()
+        self.assertCompareData(
+            event_json["exception"]["values"][0],
+            sentry_json["exception"]["values"][0],
+        )
+

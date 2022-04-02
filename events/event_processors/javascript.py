@@ -43,9 +43,6 @@ class JavascriptEventProcessor(EventProcessorBase):
             frames[0]["function"],
             # minified_source
         )
-        import ipdb
-
-        ipdb.set_trace()
 
         # TODO get stacktrace files names, filter only those release files
         return data

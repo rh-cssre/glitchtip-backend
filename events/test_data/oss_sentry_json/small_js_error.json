@@ -1,0 +1,116 @@
+{
+  "event_id": "00952c9936084f759aecdb0f195dd82f",
+  "project": 11,
+  "release": null,
+  "dist": null,
+  "platform": "javascript",
+  "message": "",
+  "datetime": "2022-04-02T16:38:33.218000Z",
+  "time_spent": null,
+  "tags": [
+    ["browser", "Firefox 98.0"],
+    ["browser.name", "Firefox"],
+    ["environment", "production"],
+    ["handled", "no"],
+    ["level", "error"],
+    ["mechanism", "onerror"],
+    ["os.name", "Ubuntu"],
+    ["user", "ip:71.249.111.206"],
+    ["skippedNormalization", "True"],
+    ["url", "http://127.0.0.1:8080/"]
+  ],
+  "contexts": {
+    "os": { "version": null, "name": "Ubuntu" },
+    "browser": { "version": "98.0", "name": "Firefox" }
+  },
+  "culprit": "?(/dist/bundle.js)",
+  "environment": "production",
+  "errors": [
+    {
+      "url": "http://127.0.0.1:8080/dist/bundle.js",
+      "type": "fetch_generic_error",
+      "value": "<class 'requests.exceptions.ConnectionError'>"
+    }
+  ],
+  "exception": {
+    "values": [
+      {
+        "stacktrace": {
+          "frames": [
+            {
+              "abs_path": "http://127.0.0.1:8080/dist/bundle.js",
+              "module": "dist/bundle",
+              "in_app": false,
+              "lineno": 2,
+              "colno": 74008,
+              "filename": "/dist/bundle.js"
+            },
+            {
+              "abs_path": "http://127.0.0.1:8080/dist/bundle.js",
+              "module": "dist/bundle",
+              "in_app": false,
+              "lineno": 2,
+              "colno": 74004,
+              "filename": "/dist/bundle.js"
+            },
+            {
+              "abs_path": "http://127.0.0.1:8080/dist/bundle.js",
+              "module": "dist/bundle",
+              "in_app": false,
+              "lineno": 2,
+              "colno": 73977,
+              "filename": "/dist/bundle.js"
+            }
+          ]
+        },
+        "type": "Error",
+        "value": "this is an error",
+        "mechanism": { "type": "onerror", "handled": false }
+      }
+    ]
+  },
+  "extra": { "normalizeDepth": 3 },
+  "fingerprint": ["{{ default }}"],
+  "grouping_config": { "id": "legacy:2019-03-12" },
+  "hashes": ["e72903c169d4dceeac7fc31c58213360"],
+  "key_id": "11",
+  "level": "error",
+  "location": "/dist/bundle.js",
+  "logger": "",
+  "metadata": {
+    "type": "Error",
+    "value": "this is an error",
+    "filename": "/dist/bundle.js"
+  },
+  "received": 1648917565.093,
+  "request": {
+    "url": "http://127.0.0.1:8080/",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:98.0) Gecko/20100101 Firefox/98.0"
+      ]
+    ]
+  },
+  "sdk": {
+    "version": "6.19.2",
+    "name": "sentry.javascript.browser",
+    "packages": [{ "version": "6.19.2", "name": "npm:@sentry/browser" }],
+    "integrations": [
+      "InboundFilters",
+      "FunctionToString",
+      "TryCatch",
+      "Breadcrumbs",
+      "GlobalHandlers",
+      "LinkedErrors",
+      "Dedupe",
+      "UserAgent"
+    ]
+  },
+  "timestamp": 1648917513.218,
+  "title": "Error: this is an error",
+  "type": "error",
+  "use_rust_normalize": true,
+  "user": { "ip_address": "71.249.111.206" },
+  "version": "7"
+}
