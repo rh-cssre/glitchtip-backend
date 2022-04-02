@@ -1,0 +1,186 @@
+{
+  "event_id": "f4e67b1b9293445a9545465b0b58696c",
+  "project": 11,
+  "release": "1.0",
+  "dist": null,
+  "platform": "javascript",
+  "message": "",
+  "datetime": "2022-04-02T19:44:43.501000Z",
+  "time_spent": null,
+  "tags": [
+    ["browser", "Firefox 98.0"],
+    ["browser.name", "Firefox"],
+    ["environment", "production"],
+    ["handled", "no"],
+    ["level", "error"],
+    ["mechanism", "onerror"],
+    ["os.name", "Ubuntu"],
+    ["release", "1.0"],
+    ["user", "ip:71.249.111.206"],
+    ["skippedNormalization", "True"],
+    ["url", "http://localhost:8080/"]
+  ],
+  "contexts": {
+    "os": { "version": null, "name": "Ubuntu" },
+    "browser": { "version": "98.0", "name": "Firefox" }
+  },
+  "culprit": "?(src/index)",
+  "environment": "production",
+  "exception": {
+    "values": [
+      {
+        "stacktrace": {
+          "frames": [
+            {
+              "abs_path": "webpack://small-js-error-factory/./src/index.ts",
+              "pre_context": [
+                "import * as Sentry from \"@sentry/browser\";",
+                "",
+                "Sentry.init({\"dsn\": \"http://a00ad5cad416418684270e433baf9c77@172.17.0.1:8000/4\", \"release\": \"1.0\"});",
+                "",
+                "let foo = \"bar\";"
+              ],
+              "post_context": ["console.log(foo);", ""],
+              "module": "src/index",
+              "in_app": false,
+              "lineno": 6,
+              "colno": 13,
+              "filename": "webpack://small-js-error-factory/./src/index.ts",
+              "data": {
+                "sourcemap": "http://localhost:8080/dist/bundle.js.map"
+              },
+              "context_line": "throw Error(\"this is an error\");"
+            },
+            {
+              "abs_path": "webpack://small-js-error-factory/./src/index.ts",
+              "pre_context": [
+                "import * as Sentry from \"@sentry/browser\";",
+                "",
+                "Sentry.init({\"dsn\": \"http://a00ad5cad416418684270e433baf9c77@172.17.0.1:8000/4\", \"release\": \"1.0\"});",
+                "",
+                "let foo = \"bar\";"
+              ],
+              "post_context": ["console.log(foo);", ""],
+              "module": "src/index",
+              "in_app": false,
+              "lineno": 6,
+              "colno": 13,
+              "filename": "webpack://small-js-error-factory/./src/index.ts",
+              "data": {
+                "sourcemap": "http://localhost:8080/dist/bundle.js.map"
+              },
+              "context_line": "throw Error(\"this is an error\");"
+            },
+            {
+              "abs_path": "webpack://small-js-error-factory/./src/index.ts",
+              "pre_context": [
+                "import * as Sentry from \"@sentry/browser\";",
+                "",
+                "Sentry.init({\"dsn\": \"http://a00ad5cad416418684270e433baf9c77@172.17.0.1:8000/4\", \"release\": \"1.0\"});",
+                "",
+                "let foo = \"bar\";"
+              ],
+              "post_context": ["console.log(foo);", ""],
+              "module": "src/index",
+              "in_app": false,
+              "lineno": 6,
+              "colno": 7,
+              "filename": "webpack://small-js-error-factory/./src/index.ts",
+              "data": {
+                "sourcemap": "http://localhost:8080/dist/bundle.js.map"
+              },
+              "context_line": "throw Error(\"this is an error\");"
+            }
+          ]
+        },
+        "raw_stacktrace": {
+          "frames": [
+            {
+              "abs_path": "http://localhost:8080/dist/bundle.js",
+              "pre_context": [
+                "/*! For license information please see bundle.js.LICENSE.txt */"
+              ],
+              "post_context": ["//# sourceMappingURL=bundle.js.map"],
+              "in_app": false,
+              "lineno": 2,
+              "colno": 74022,
+              "filename": "/dist/bundle.js",
+              "context_line": "{snip} ,(()=>{throw n(185).init({dsn:\"http://a00ad5cad416418684270e433baf9c77@172.17.0.1:8000/4\",release:\"1.0\"}),Error(\"this is an error\")})()})();"
+            },
+            {
+              "abs_path": "http://localhost:8080/dist/bundle.js",
+              "pre_context": [
+                "/*! For license information please see bundle.js.LICENSE.txt */"
+              ],
+              "post_context": ["//# sourceMappingURL=bundle.js.map"],
+              "in_app": false,
+              "lineno": 2,
+              "colno": 74018,
+              "filename": "/dist/bundle.js",
+              "context_line": "{snip} ,(()=>{throw n(185).init({dsn:\"http://a00ad5cad416418684270e433baf9c77@172.17.0.1:8000/4\",release:\"1.0\"}),Error(\"this is an error\")})()})();"
+            },
+            {
+              "abs_path": "http://localhost:8080/dist/bundle.js",
+              "pre_context": [
+                "/*! For license information please see bundle.js.LICENSE.txt */"
+              ],
+              "post_context": ["//# sourceMappingURL=bundle.js.map"],
+              "in_app": false,
+              "lineno": 2,
+              "colno": 73991,
+              "filename": "/dist/bundle.js",
+              "context_line": "{snip} ,(()=>{throw n(185).init({dsn:\"http://a00ad5cad416418684270e433baf9c77@172.17.0.1:8000/4\",release:\"1.0\"}),Error(\"this is an error\")})()})();"
+            }
+          ]
+        },
+        "value": "this is an error",
+        "mechanism": { "type": "onerror", "handled": false },
+        "type": "Error"
+      }
+    ]
+  },
+  "extra": { "normalizeDepth": 3 },
+  "fingerprint": ["{{ default }}"],
+  "grouping_config": { "id": "legacy:2019-03-12" },
+  "hashes": ["d75931e06f591a159796e023fd11afae"],
+  "key_id": "11",
+  "level": "error",
+  "location": "webpack://small-js-error-factory/./src/index.ts",
+  "logger": "",
+  "metadata": {
+    "type": "Error",
+    "value": "this is an error",
+    "filename": "webpack://small-js-error-factory/./src/index.ts"
+  },
+  "received": 1648928998.91,
+  "request": {
+    "url": "http://localhost:8080/",
+    "headers": [
+      [
+        "User-Agent",
+        "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:98.0) Gecko/20100101 Firefox/98.0"
+      ]
+    ]
+  },
+  "sdk": {
+    "version": "6.19.2",
+    "name": "sentry.javascript.browser",
+    "packages": [{ "version": "6.19.2", "name": "npm:@sentry/browser" }],
+    "integrations": [
+      "InboundFilters",
+      "FunctionToString",
+      "TryCatch",
+      "Breadcrumbs",
+      "GlobalHandlers",
+      "LinkedErrors",
+      "Dedupe",
+      "UserAgent"
+    ]
+  },
+  "timestamp": 1648928683.501,
+  "title": "Error: this is an error",
+  "type": "error",
+  "use_rust_normalize": true,
+  "user": { "ip_address": "71.249.111.206" },
+  "version": "7"
+}
