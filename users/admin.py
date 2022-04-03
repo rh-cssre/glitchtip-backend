@@ -51,10 +51,15 @@ class UserAdmin(BaseUserAdmin):
     search_fields = ("email", "name")
     readonly_fields = ("analytics",)
 
-    def organizations(self, obj):
-        return ", ".join(
-            obj.organizations_ext_organization.all().values_list("name", flat=True)
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .prefetch_related("organizations_ext_organization")
         )
+
+    def organizations(self, obj):
+        return ", ".join([org.name for org in obj.organizations_ext_organization.all()])
 
 
 class UserProjectAlertAdmin(admin.ModelAdmin):
