@@ -6,10 +6,25 @@ from .models import User, UserProjectAlert
 
 class UserAdmin(BaseUserAdmin):
     ordering = ("email",)
-    list_display = ("email", "name")
+    list_display = (
+        "email",
+        "name",
+        "organizations",
+    )
     fieldsets = (
-        (None, {"fields": ("email", "password")}),
-        (_("Personal info"), {"fields": ("name", "subscribe_by_default")},),
+        (
+            None,
+            {
+                "fields": (
+                    "email",
+                    "password",
+                )
+            },
+        ),
+        (
+            _("Personal info"),
+            {"fields": ("name", "subscribe_by_default", "analytics")},
+        ),
         (
             _("Permissions"),
             {
@@ -25,9 +40,21 @@ class UserAdmin(BaseUserAdmin):
         (_("Important dates"), {"fields": ("last_login",)}),
     )
     add_fieldsets = (
-        (None, {"classes": ("wide",), "fields": ("email", "password1", "password2"),}),
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": ("email", "password1", "password2"),
+            },
+        ),
     )
     search_fields = ("email", "name")
+    readonly_fields = ("analytics",)
+
+    def organizations(self, obj):
+        return ", ".join(
+            obj.organizations_ext_organization.all().values_list("name", flat=True)
+        )
 
 
 class UserProjectAlertAdmin(admin.ModelAdmin):
