@@ -60,7 +60,7 @@ class OrganizationThrottlingTestCase(TestCase):
             )
             baker.make(
                 "performance.TransactionEvent",
-                project__organization=organization,
+                group__project__organization=organization,
                 _quantity=1,
             )
             set_organization_throttle()
@@ -87,7 +87,7 @@ class OrganizationThrottlingTestCase(TestCase):
             )
             baker.make("events.Event", issue__project=project, _quantity=3)
             baker.make(
-                "performance.TransactionEvent", project=project, _quantity=2,
+                "performance.TransactionEvent", group__project=project, _quantity=2,
             )
             free_org = get_free_tier_organizations_with_event_count().first()
         self.assertEqual(free_org.event_count, 5)

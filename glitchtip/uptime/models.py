@@ -49,10 +49,16 @@ class Monitor(CreatedModel):
     expected_status = models.PositiveSmallIntegerField(default=200)
     expected_body = models.CharField(max_length=2000, blank=True)
     environment = models.ForeignKey(
-        "environments.Environment", on_delete=models.SET_NULL, null=True, blank=True,
+        "environments.Environment",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
     )
     project = models.ForeignKey(
-        "projects.Project", on_delete=models.SET_NULL, null=True, blank=True,
+        "projects.Project",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
     )
     organization = models.ForeignKey(
         "organizations_ext.Organization", on_delete=models.CASCADE

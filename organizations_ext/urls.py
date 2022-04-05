@@ -4,7 +4,7 @@ from issues.views import IssueViewSet
 from teams.views import NestedTeamViewSet
 from environments.views import EnvironmentViewSet
 from releases.views import ReleaseViewSet
-from performance.views import TransactionViewSet
+from performance.views import TransactionViewSet, TransactionGroupViewSet, SpanViewSet
 from glitchtip.uptime.views import MonitorViewSet, MonitorCheckViewSet
 from glitchtip.routers import BulkSimpleRouter
 from .views import (
@@ -42,6 +42,16 @@ organizations_router.register(
 )
 organizations_router.register(
     r"transactions", TransactionViewSet, basename="organization-transactions"
+)
+organizations_router.register(
+    r"transaction-groups",
+    TransactionGroupViewSet,
+    basename="organization-transaction-groups",
+)
+organizations_router.register(
+    r"spans",
+    SpanViewSet,
+    basename="organization-spans",
 )
 organizations_router.register(
     r"monitors", MonitorViewSet, basename="organization-monitors"

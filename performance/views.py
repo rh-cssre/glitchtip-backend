@@ -1,17 +1,29 @@
 from rest_framework import viewsets
+from rest_framework.filters import OrderingFilter
+from django_filters.rest_framework import DjangoFilterBackend
 from projects.models import Project
-from .models import TransactionEvent
-from .serializers import TransactionSerializer
+from .models import TransactionEvent, TransactionGroup, Span
+from .serializers import (
+    TransactionSerializer,
+    TransactionDetailSerializer,
+    TransactionGroupSerializer,
+    SpanSerializer,
+)
+from .filters import TransactionGroupFilter
 
 
-class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = TransactionEvent.objects.all()
-    serializer_class = TransactionSerializer
+class TransactionGroupViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = TransactionGroup.objects.all()
+    serializer_class = TransactionGroupSerializer
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_class = TransactionGroupFilter
+    ordering = ["-created"]
+    ordering_fields = ["created", "avg_duration", "transaction_count"]
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
             return self.queryset.none()
-        # Performance optimization, override ORM to force two queries
+        # Performance optimization, force two queries
         projects = list(
             Project.objects.filter(team__members__user=self.request.user).values_list(
                 "pk", flat=True
@@ -21,5 +33,55 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
         if "organization_slug" in self.kwargs:
             qs = qs.filter(
                 project__organization__slug=self.kwargs["organization_slug"],
+            )
+        return qs
+
+
+class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = TransactionEvent.objects.all()
+    serializer_class = TransactionSerializer
+
+    def get_serializer_class(self):
+        if self.action in ["retrieve"]:
+            return TransactionDetailSerializer
+        return super().get_serializer_class()
+
+    def get_queryset(self):
+        if not self.request.user.is_authenticated:
+            return self.queryset.none()
+        # Performance optimization, force two queries
+        projects = list(
+            Project.objects.filter(team__members__user=self.request.user).values_list(
+                "pk", flat=True
+            )
+        )
+        qs = super().get_queryset().filter(group__project__pk__in=projects)
+        if "organization_slug" in self.kwargs:
+            qs = qs.filter(
+                group__project__organization__slug=self.kwargs["organization_slug"],
+            )
+        qs = qs.select_related("group")
+        return qs
+
+
+class SpanViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Span.objects.all()
+    serializer_class = SpanSerializer
+
+    def get_queryset(self):
+        if not self.request.user.is_authenticated:
+            return self.queryset.none()
+        # Performance optimization, force two queries
+        projects = list(
+            Project.objects.filter(team__members__user=self.request.user).values_list(
+                "pk", flat=True
+            )
+        )
+        qs = super().get_queryset().filter(transaction__group__project__pk__in=projects)
+        if "organization_slug" in self.kwargs:
+            qs = qs.filter(
+                transaction__group__project__organization__slug=self.kwargs[
+                    "organization_slug"
+                ],
             )
         return qs

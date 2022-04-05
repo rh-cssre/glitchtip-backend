@@ -5,6 +5,7 @@ from ssl import SSLError
 
 import aiohttp
 from aiohttp.client_exceptions import ClientConnectorError
+from django.conf import settings
 
 from .constants import MonitorCheckReason, MonitorType
 
@@ -54,7 +55,7 @@ async def fetch(session, monitor):
 
 
 async def fetch_all(monitors, loop):
-    async with aiohttp.ClientSession(loop=loop) as session:
+    async with aiohttp.ClientSession(loop=loop, headers={"User-Agent": "GlitchTip/" + settings.GLITCHTIP_VERSION}) as session:
         results = await asyncio.gather(
             *[fetch(session, monitor) for monitor in monitors], return_exceptions=True
         )

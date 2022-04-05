@@ -25,6 +25,8 @@ from whitenoise.storage import CompressedManifestStaticFilesStorage
 
 env = environ.Env(
     ALLOWED_HOSTS=(list, ["*"]),
+    DEFAULT_FILE_STORAGE=(str, None),
+    GS_BUCKET_NAME=(str, None),
     AWS_ACCESS_KEY_ID=(str, None),
     AWS_SECRET_ACCESS_KEY=(str, None),
     AWS_STORAGE_BUCKET_NAME=(str, None),
@@ -67,7 +69,7 @@ if POD_IP:
 
 
 ENVIRONMENT = env.str("ENVIRONMENT", None)
-GLITCHTIP_VERSION = env.str("GLITCHTIP_VERSION", None)
+GLITCHTIP_VERSION = env.str("GLITCHTIP_VERSION", "0.0.0-unknown")
 
 # Used in email and DSN generation. Set to full domain such as https://glitchtip.example.com
 default_url = env.str(
@@ -189,6 +191,8 @@ if SECRET_KEY == "change_me" and DEBUG is True:
     INSTALLED_APPS += ["sslserver"]
 
 ENABLE_OBSERVABILITY_API = env("ENABLE_OBSERVABILITY_API")
+# Workaround https://github.com/korfuri/django-prometheus/issues/34
+PROMETHEUS_EXPORT_MIGRATIONS = False
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -207,7 +211,7 @@ MIDDLEWARE = [
 ]
 
 if ENABLE_OBSERVABILITY_API:
-    MIDDLEWARE.insert(0, 'django_prometheus.middleware.PrometheusBeforeMiddleware')
+    MIDDLEWARE.insert(0, "django_prometheus.middleware.PrometheusBeforeMiddleware")
     MIDDLEWARE.append("django_prometheus.middleware.PrometheusAfterMiddleware")
 
 ROOT_URLCONF = "glitchtip.urls"
@@ -249,7 +253,7 @@ CSP_FONT_SRC = env.list(
 CSP_WORKER_SRC = env.list("CSP_WORKER_SRC", str, ["'self'", "blob:"])
 # GlitchTip can record it's own errors
 CSP_CONNECT_SRC = env.list(
-    "CSP_CONNECT_SRC", str, ["'self'", "https://*.glitchtip.com"]
+    "CSP_CONNECT_SRC", str, ["'self'", "https://*.glitchtip.com", "https://app.chatwoot.com"]
 )
 # Needed for Analytics and Stripe for SaaS use cases. Both are disabled by default.
 CSP_SCRIPT_SRC = env.list(
@@ -283,6 +287,19 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 DATABASES = {
     "default": env.db(default="postgres://postgres:postgres@postgres:5432/postgres")
 }
+# Support setting DATABASES in parts in order to get values from the postgresql helm chart
+DATABASE_HOST = env.str("DATABASE_HOST", None)
+DATABASE_PASSWORD = env.str("DATABASE_PASSWORD", None)
+if DATABASE_HOST and DATABASE_PASSWORD:
+    DATABASES["default"] = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": env.str("DATABASE_NAME", "postgres"),
+        "USER": env.str("DATABASE_USER", "postgres"),
+        "PASSWORD": DATABASE_PASSWORD,
+        "HOST": DATABASE_HOST,
+        "PORT": env.str("DATABASE_PORT", "5432"),
+    }
+
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
 # We need to support both url and broken out host to support helm redis chart
@@ -373,6 +390,9 @@ SITE_ID = 1
 # https://docs.djangoproject.com/en/dev/howto/static-files/
 STATIC_URL = "/static/"
 
+if env("DEFAULT_FILE_STORAGE"):
+    DEFAULT_FILE_STORAGE = env("DEFAULT_FILE_STORAGE")
+GS_BUCKET_NAME = env("GS_BUCKET_NAME")
 
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
@@ -415,7 +435,7 @@ if GITLAB_URL:
     SOCIALACCOUNT_PROVIDERS["gitlab"] = {"GITLAB_URL": GITLAB_URL.geturl()}
 GITEA_URL = env.url("SOCIALACCOUNT_PROVIDERS_gitea_GITEA_URL", None)
 if GITEA_URL:
-    SOCIALACCOUNT_PROVIDERS["gittea"] = {"GITEA_URL": GITEA_URL.geturl()}
+    SOCIALACCOUNT_PROVIDERS["gitea"] = {"GITEA_URL": GITEA_URL.geturl()}
 NEXTCLOUD_URL = env.url("SOCIALACCOUNT_PROVIDERS_nextcloud_SERVER", None)
 if NEXTCLOUD_URL:
     SOCIALACCOUNT_PROVIDERS["nextcloud"] = {"SERVER": NEXTCLOUD_URL.geturl()}

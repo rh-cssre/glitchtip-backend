@@ -72,7 +72,7 @@ class SubscriptionAPITestCase(APITestCase):
             baker.make("events.Event")
             baker.make("events.Event", issue__project__organization=self.organization)
             baker.make(
-                "performance.TransactionEvent", project__organization=self.organization
+                "performance.TransactionEvent", group__project__organization=self.organization
             )
         res = self.client.get(url)
         self.assertEqual(
