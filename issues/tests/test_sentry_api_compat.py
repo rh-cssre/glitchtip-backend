@@ -495,5 +495,5 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         self.assertCompareData(
             event_json["exception"]["values"][0],
             sentry_json["exception"]["values"][0],
-            ["type", "values", "exception"],
+            ["type", "values", "exception", "abs_path"],
         )
