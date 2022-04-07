@@ -24,9 +24,9 @@ jobs:
       id: sync
       run: |
           # make file runnable, might not be necessary
-          chmod +x "${GITHUB_WORKSPACE}/.github/script.sh"
+          chmod +x "${GITHUB_WORKSPACE}/.github/fetch_from_upstream.sh"
           # run script
-          "${GITHUB_WORKSPACE}/.github/script.sh"
+          "${GITHUB_WORKSPACE}/.github/fetch_from_upstream.sh"
       shell: bash
 
     # Step 3: Display a sample message based on the sync output var 'has_new_commits'
