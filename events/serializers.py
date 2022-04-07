@@ -260,8 +260,8 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             if frame.get("filename") and self.is_url(frame["filename"]):
                 frame["filename"] = urlparse(frame["filename"]).path
 
-
-    def create(self, data):
+    def create(self, validated_data):
+        data = validated_data
         project = self.context.get("project")
 
         eventtype = self.get_eventtype()
@@ -286,7 +286,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             release = self.get_release(data["release"], project)
 
         for Processor in EVENT_PROCESSORS:
-            Processor(project, release).run(data)
+            Processor(project, release, data).run()
 
         title = eventtype.get_title(metadata)
         culprit = eventtype.get_location(data)
