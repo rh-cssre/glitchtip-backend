@@ -19,6 +19,7 @@ from datetime import timedelta
 import environ
 import sentry_sdk
 from celery.schedules import crontab
+from corsheaders.defaults import default_headers
 from django.core.exceptions import ImproperlyConfigured
 from sentry_sdk.integrations.django import DjangoIntegration
 from whitenoise.storage import CompressedManifestStaticFilesStorage
@@ -236,6 +237,10 @@ WSGI_APPLICATION = "glitchtip.wsgi.application"
 
 CORS_ORIGIN_ALLOW_ALL = env.bool("CORS_ORIGIN_ALLOW_ALL", True)
 CORS_ORIGIN_WHITELIST = env.tuple("CORS_ORIGIN_WHITELIST", str, default=())
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "x-sentry-auth",
+]
+
 SECURE_BROWSER_XSS_FILTER = True
 CSP_DEFAULT_SRC = env.list("CSP_DEFAULT_SRC", str, ["'self'"])
 CSP_STYLE_SRC = env.list(
@@ -253,7 +258,9 @@ CSP_FONT_SRC = env.list(
 CSP_WORKER_SRC = env.list("CSP_WORKER_SRC", str, ["'self'", "blob:"])
 # GlitchTip can record it's own errors
 CSP_CONNECT_SRC = env.list(
-    "CSP_CONNECT_SRC", str, ["'self'", "https://*.glitchtip.com", "https://app.chatwoot.com"]
+    "CSP_CONNECT_SRC",
+    str,
+    ["'self'", "https://*.glitchtip.com", "https://app.chatwoot.com"],
 )
 # Needed for Analytics and Stripe for SaaS use cases. Both are disabled by default.
 CSP_SCRIPT_SRC = env.list(
