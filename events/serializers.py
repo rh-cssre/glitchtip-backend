@@ -1,3 +1,4 @@
+import uuid
 from typing import Dict, List, Tuple, Union
 from urllib.parse import urlparse
 from django.db import transaction
@@ -26,7 +27,7 @@ from .event_context_processors import EVENT_CONTEXT_PROCESSORS
 
 
 def replace(data: Union[str, dict, list], match: str, repl: str):
-    """ A recursive replace function """
+    """A recursive replace function"""
     if isinstance(data, dict):
         return {k: replace(v, match, repl) for k, v in data.items()}
     elif isinstance(data, list):
@@ -78,7 +79,7 @@ class BreadcrumbsSerializer(BaseBreadcrumbsSerializer):
 
 class BaseSerializer(serializers.Serializer):
     def process_user(self, project, data):
-        """ Fetch user data from SDK event and request """
+        """Fetch user data from SDK event and request"""
         user = data.get("user", {})
         if self.context and self.context.get("request"):
             client_ip, is_routable = get_client_ip(self.context["request"])
@@ -91,11 +92,11 @@ class BaseSerializer(serializers.Serializer):
 
 
 class SentrySDKEventSerializer(BaseSerializer):
-    """ Represents events coming from a OSS sentry SDK client """
+    """Represents events coming from a OSS sentry SDK client"""
 
     breadcrumbs = serializers.JSONField(required=False)
     tags = ForgivingHStoreField(required=False)
-    event_id = serializers.UUIDField()
+    event_id = serializers.UUIDField(required=False, default=uuid.uuid4)
     extra = serializers.JSONField(required=False)
     request = RequestSerializer(required=False)
     server_name = serializers.CharField(required=False)
@@ -174,14 +175,14 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
         return value
 
     def get_eventtype(self):
-        """ Get event type class from self.type """
+        """Get event type class from self.type"""
         if self.type is EventType.DEFAULT:
             return DefaultEvent()
         if self.type is EventType.ERROR:
             return ErrorEvent()
 
     def modify_exception(self, exception):
-        """ OSS Sentry does this, I have no idea why """
+        """OSS Sentry does this, I have no idea why"""
         if exception:
             for value in exception.get("values", []):
                 value.pop("module", None)
@@ -224,7 +225,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
         return contexts
 
     def get_message(self, data):
-        """ Prefer message over logentry """
+        """Prefer message over logentry"""
         if "message" in data:
             return data["message"]
         return data.get("logentry", {}).get("message", "")
@@ -381,7 +382,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
 
 
 class StoreErrorSerializer(StoreDefaultSerializer):
-    """ Primary difference is the presense of exception attribute """
+    """Primary difference is the presense of exception attribute"""
 
     type = EventType.ERROR
     exception = serializers.JSONField(required=False)
