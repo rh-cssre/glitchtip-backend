@@ -11,3 +11,13 @@ class IssueFilter(filters.FilterSet):
     class Meta:
         model = Issue
         fields = ["project", "start", "end"]
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+
+        # This exists because OSS did it this way, the astute observer will note
+        # it could just as well be done in query
+        environments = self.request.query_params.getlist("environment")
+        if environments:
+            queryset = queryset.filter(tags__environment__has_any_keys=environments)
+        return queryset

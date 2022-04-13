@@ -64,7 +64,9 @@ class IssueViewSet(
                 project__organization__slug=self.kwargs["organization_slug"],
             )
         if "project_slug" in self.kwargs:
-            qs = qs.filter(project__slug=self.kwargs["project_slug"],)
+            qs = qs.filter(
+                project__slug=self.kwargs["project_slug"],
+            )
 
         return qs
 
@@ -106,10 +108,6 @@ class IssueViewSet(
                 qs = qs.filter(search_vector=search_query)
                 # Search queries must be at end of query string, finished when parsing
                 break
-
-        environments = self.request.query_params.getlist("environment")
-        if environments:
-            qs = qs.filter(tags__environment__has_any_keys=environments)
 
         if str(self.request.query_params.get("sort")).endswith("priority"):
             # Raw SQL must be added when sorting by priority
@@ -249,7 +247,9 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
                 issue__project__organization__slug=self.kwargs["organization_slug"],
             )
         if "project_slug" in self.kwargs:
-            qs = qs.filter(issue__project__slug=self.kwargs["project_slug"],)
+            qs = qs.filter(
+                issue__project__slug=self.kwargs["project_slug"],
+            )
         qs = qs.prefetch_related("tags__key")
         return qs
 

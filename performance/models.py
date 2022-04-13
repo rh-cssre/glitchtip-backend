@@ -1,6 +1,7 @@
 from django.db import models
 from django.db.models import F, Avg
 from django.contrib.postgres.fields import HStoreField
+from django.contrib.postgres.search import SearchVectorField
 from glitchtip.base_models import CreatedModel
 from events.models import AbstractEvent
 
@@ -21,6 +22,8 @@ class TransactionGroup(CreatedModel):
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
     op = models.CharField(max_length=255)
     method = models.CharField(max_length=255, null=True, blank=True)
+    tags = models.JSONField(default=dict)
+    search_vector = SearchVectorField(null=True, editable=False)
     objects = TransactionGroupManager()
 
     class Meta:
@@ -34,6 +37,7 @@ class TransactionEvent(AbstractEvent):
     group = models.ForeignKey(TransactionGroup, on_delete=models.CASCADE)
     trace_id = models.UUIDField(db_index=True)
     start_timestamp = models.DateTimeField()
+    tags = HStoreField(default=dict)
 
     class Meta:
         ordering = ["-created"]

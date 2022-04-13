@@ -4,7 +4,6 @@ from django.contrib.postgres.indexes import GinIndex
 from django.conf import settings
 from django.db import models
 from django.db.models import Max, Count
-from django.db.utils import InternalError
 from events.models import LogLevel
 from glitchtip.model_utils import FromStringIntegerChoices
 from glitchtip.base_models import CreatedModel

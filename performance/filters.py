@@ -23,9 +23,15 @@ class TransactionGroupFilter(filters.FilterSet):
 
     def filter_queryset(self, queryset):
         queryset = super().filter_queryset(queryset)
+
+        environments = self.request.query_params.getlist("environment")
+        if environments:
+            queryset = queryset.filter(tags__environment__has_any_keys=environments)
+
         # This annotation must be applied after any related transactionevent filter
         queryset = queryset.annotate(
             avg_duration=avg_transactionevent_time,
             transaction_count=Count("transactionevent"),
         )
+
         return queryset
