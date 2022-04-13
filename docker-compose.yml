@@ -30,6 +30,7 @@ services:
     environment: *default-environment
   worker:
     build: .
+    user: root
     command: celery -A glitchtip worker -B -s /tmp/celerybeat-schedule -l INFO
     depends_on: *default-depends_on
     volumes: *default-volumes
