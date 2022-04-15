@@ -83,19 +83,19 @@ class File(CreatedModel):
     name = models.TextField()
     type = models.CharField(max_length=64)
     headers = models.JSONField(blank=True, null=True)
-    blobs = models.ManyToManyField(FileBlob)
+    blob = models.ForeignKey(FileBlob, on_delete=models.CASCADE, null=True)
     size = models.PositiveIntegerField(null=True)
     checksum = models.CharField(max_length=40, null=True, db_index=True)
 
     def put_django_file(self, fileobj):
-        """ Save a Django File object as a File Blob """
+        """Save a Django File object as a File Blob"""
         self.size = fileobj.size
         file_blob = FileBlob.from_file(fileobj)
         self.checksum = file_blob.checksum
         self.save()
 
     def putfile(self, fileobj):
-        """ Save a file-like object as a File Blob """
+        """Save a file-like object as a File Blob"""
         size, checksum = _get_size_and_checksum(fileobj)
         fileobj.seek(0)
         file_blob, _ = FileBlob.objects.get_or_create(
@@ -104,8 +104,8 @@ class File(CreatedModel):
             checksum=checksum,
         )
         self.checksum = checksum
+        self.blob = file_blob
         self.save()
-        self.blobs.add(file_blob)
 
     def _get_chunked_blob(
         self, mode=None, prefetch=False, prefetch_to=None, delete=True
