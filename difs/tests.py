@@ -3,16 +3,11 @@ import tempfile
 from hashlib import sha1
 from unittest.mock import MagicMock, patch
 
-from django.conf import settings
 from django.core.files import File as DjangoFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from model_bakery import baker
 
-from difs.tasks import (
-    ChecksumMismatched,
-    difs_create_file_from_chunks,
-    difs_get_file_from_chunks,
-)
+from difs.tasks import ChecksumMismatched, difs_create_file_from_chunks
 from files.models import File
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 
@@ -227,13 +222,3 @@ class DifsTasksTestCase(GlitchTipTestCase):
         chunks = [fileblob1.checksum, fileblob2.checksum]
         with self.assertRaises(ChecksumMismatched):
             difs_create_file_from_chunks("123", checksum, chunks)
-
-    def test_difs_get_file_from_chunks(self):
-        fileblob1 = self.create_file_blob("1", "1")
-        fileblob2 = self.create_file_blob("2", "2")
-        checksum = sha1(b"12").hexdigest()
-        chunks = [fileblob1.checksum, fileblob2.checksum]
-        difs_create_file_from_chunks("12", checksum, chunks)
-        file = difs_get_file_from_chunks(checksum, chunks)
-
-        self.assertEqual(file.checksum, checksum)

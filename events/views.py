@@ -1,29 +1,33 @@
-import logging
 import json
-import uuid
-import string
+import logging
 import random
-from django.core.exceptions import SuspiciousOperation, ValidationError
+import string
+import uuid
+
 from django.conf import settings
+from django.core.exceptions import SuspiciousOperation, ValidationError
+from django.db.models import Exists, OuterRef
 from django.http import HttpResponse
 from django.test import RequestFactory
-from rest_framework import permissions, exceptions, status
+from rest_framework import exceptions, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from sentry_sdk import set_context, capture_exception, set_level
-from sentry.utils.auth import parse_auth_header
-from projects.models import Project
+from sentry_sdk import capture_exception, set_context, set_level
+
+from difs.tasks import difs_run_resolve_stacktrace
+from difs.models import DebugInformationFile
 from performance.serializers import TransactionEventSerializer
+from projects.models import Project
+from sentry.utils.auth import parse_auth_header
+
+from .negotiation import IgnoreClientContentNegotiation
+from .parsers import EnvelopeParser
 from .serializers import (
+    EnvelopeHeaderSerializer,
+    StoreCSPReportSerializer,
     StoreDefaultSerializer,
     StoreErrorSerializer,
-    StoreCSPReportSerializer,
-    EnvelopeHeaderSerializer,
 )
-from .parsers import EnvelopeParser
-from .negotiation import IgnoreClientContentNegotiation
-from difs.tasks import difs_run_resolve_stacktrace
-
 
 logger = logging.getLogger(__name__)
 
@@ -87,9 +91,11 @@ class BaseEventAPIView(APIView):
 
     def get_project(self, request, project_id):
         sentry_key = BaseEventAPIView.auth_from_request(request)
+        difs_subquery = DebugInformationFile.objects.filter(project_id=OuterRef('pk'))
         try:
             project = (
                 Project.objects.filter(id=project_id, projectkey__public_key=sentry_key)
+                .annotate(has_difs=Exists(difs_subquery))
                 .select_related("organization")
                 .only("id", "first_event", "organization__is_accepting_events")
                 .first()
@@ -125,7 +131,8 @@ class BaseEventAPIView(APIView):
             logger.warning("Invalid event %s", serializer.errors)
             return Response()
         event = serializer.save()
-        difs_run_resolve_stacktrace(event.event_id)
+        if event.data.get("exception") is not None and project.has_difs:
+            difs_run_resolve_stacktrace(event.event_id)
         return Response({"id": event.event_id_hex})
 
 
