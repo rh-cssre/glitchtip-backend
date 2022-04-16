@@ -23,15 +23,12 @@ def _get_size_and_checksum(fileobj):
 
 class FileBlob(CreatedModel):
     """
-    Port of sentry.models.file.FileBlog with some simplifications
+    Port of sentry.models.file.FileBlob with simplifications
 
     OSS Sentry stores files in file blob chunks. Where one file gets saved as many blobs.
-    GlitchTip uses Django FileField and does chunk files. At this time, GlitchTip attempts to
-    support both situations for compatibility. A file upload is saved as just one blob, as though
-    the blob chunk size is infinite. In the future it may either support chunked blobs fully or
-    eliminate naive chunking support entirely.
+    GlitchTip uses Django FileField and does split files into chunks.
+    The FileBlob's still provide file deduplication.
     """
-
     blob = models.FileField(upload_to="uploads/file_blobs")
     size = models.PositiveIntegerField(null=True)
     checksum = models.CharField(max_length=40, unique=True)
@@ -79,7 +76,6 @@ class File(CreatedModel):
     """
     Port of sentry.models.file.File
     """
-
     name = models.TextField()
     type = models.CharField(max_length=64)
     headers = models.JSONField(blank=True, null=True)
@@ -160,6 +156,10 @@ class File(CreatedModel):
 
 
 class FileBlobIndex(models.Model):
+    """
+    Ported from OSS Sentry. Should be removed as GlitchTip does not
+    split file blobs into chunks.
+    """
     file = models.ForeignKey(File, on_delete=models.CASCADE)
     blob = models.ForeignKey(FileBlob, on_delete=models.CASCADE)
     offset = models.PositiveIntegerField()
