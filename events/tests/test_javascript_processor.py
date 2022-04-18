@@ -73,18 +73,22 @@ class JavaScriptProcessorTestCase(APITestCase):
         )
 
     def test_process_sourcemap(self):
-        release_file_bundle = baker.make(
-            "releases.ReleaseFile", release=self.release, file__name="bundle.js"
-        )
-        release_file_bundle_map = baker.make(
-            "releases.ReleaseFile", release=self.release, file__name="bundle.js.map"
-        )
         blob_bundle = baker.make("files.FileBlob", blob="uploads/file_blobs/bundle.js")
         blob_bundle_map = baker.make(
             "files.FileBlob", blob="uploads/file_blobs/bundle.js.map"
         )
-        release_file_bundle.file.blobs.add(blob_bundle)
-        release_file_bundle_map.file.blobs.add(blob_bundle_map)
+        release_file_bundle = baker.make(
+            "releases.ReleaseFile",
+            release=self.release,
+            file__name="bundle.js",
+            file__blob=blob_bundle,
+        )
+        release_file_bundle_map = baker.make(
+            "releases.ReleaseFile",
+            release=self.release,
+            file__name="bundle.js.map",
+            file__blob=blob_bundle_map,
+        )
         shutil.copyfile(
             "./events/tests/test_data/bundle.js", "./uploads/file_blobs/bundle.js"
         )

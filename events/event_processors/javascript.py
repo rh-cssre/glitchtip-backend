@@ -3,12 +3,13 @@ import itertools
 import re
 from os.path import splitext
 from urllib.parse import urlsplit
+
 from symbolic import SourceMapView, SourceView
-from sentry.utils.safe import get_path
 
 from files.models import File
-from .base import EventProcessorBase
+from sentry.utils.safe import get_path
 
+from .base import EventProcessorBase
 
 UNKNOWN_MODULE = "<unknown module>"
 CLEAN_MODULE_RE = re.compile(
@@ -42,7 +43,7 @@ def generate_module(src):
     if not src:
         return UNKNOWN_MODULE
 
-    filename, ext = splitext(urlsplit(src).path)
+    filename, _ = splitext(urlsplit(src).path)
     if filename.endswith(".min"):
         filename = filename[:-4]
 
@@ -85,12 +86,10 @@ class JavascriptEventProcessor(EventProcessorBase):
         if not frame.get("abs_path") or not frame.get("lineno"):
             return
 
-        sourcemap_view = SourceMapView.from_json_bytes(
-            map_file.blobs.first().blob.read()
-        )
-        minified_source_view = SourceView.from_bytes(
-            minified_source.blobs.first().blob.read()
-        )
+        minified_source.blob.blob.seek(0)
+        map_file.blob.blob.seek(0)
+        sourcemap_view = SourceMapView.from_json_bytes(map_file.blob.blob.read())
+        minified_source_view = SourceView.from_bytes(minified_source.blob.blob.read())
         token = sourcemap_view.lookup(
             frame["lineno"] - 1,
             frame["colno"] - 1,

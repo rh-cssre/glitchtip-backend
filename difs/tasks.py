@@ -1,17 +1,16 @@
-import tempfile
 import contextlib
 import logging
-from celery import shared_task
-from projects.models import Project
-from files.models import FileBlob, File
+import tempfile
 from hashlib import sha1
-from symbolic import (
-    Archive,
-)
+
+from celery import shared_task
+from symbolic import Archive
+
 from difs.models import DebugInformationFile
-from events.models import Event
 from difs.stacktrace_processor import StacktraceProcessor
-from django.conf import settings
+from events.models import Event
+from files.models import File, FileBlob
+from projects.models import Project
 
 
 def getLogger():
@@ -34,9 +33,7 @@ DIF_STATE_NOT_FOUND = "not_found"
 @shared_task
 def difs_assemble(project_slug, name, checksum, chunks, debug_id):
     try:
-        project = Project.objects.filter(
-            slug=project_slug
-        ).get()
+        project = Project.objects.filter(slug=project_slug).get()
 
         file = difs_get_file_from_chunks(checksum, chunks)
         if file is None:
@@ -45,14 +42,13 @@ def difs_assemble(project_slug, name, checksum, chunks, debug_id):
         difs_create_difs(project, name, file)
 
     except ChecksumMismatched:
-        getLogger().error(f"difs_assemble: Checksum mismatched: {name}")
-    except Exception as e:
-        getLogger().error(f"difs_assemble: {e}")
+        getLogger().error("difs_assemble: Checksum mismatched: %s", name)
+    except Exception as err:
+        getLogger().error("difs_assemble: %s", err)
 
 
 def difs_run_resolve_stacktrace(event_id):
-    if settings.GLITCHTIP_ENABLE_DIFS:
-        difs_resolve_stacktrace.delay(event_id)
+    difs_resolve_stacktrace.delay(event_id)
 
 
 @shared_task
@@ -67,27 +63,26 @@ def difs_resolve_stacktrace(event_id):
 
     project_id = event.issue.project_id
 
-    difs = DebugInformationFile.objects.filter(
-        project_id=project_id).order_by("-created")
+    difs = DebugInformationFile.objects.filter(project_id=project_id).order_by(
+        "-created"
+    )
     resolved_stracktrackes = []
 
     for dif in difs:
         if StacktraceProcessor.is_supported(event_json, dif) is False:
             continue
-        blobs = dif.file.blobs.all()
+        blobs = [dif.file.blob]
         with difs_concat_file_blobs_to_disk(blobs) as symbol_file:
             remapped_stacktrace = StacktraceProcessor.resolve_stacktrace(
-                event_json,
-                symbol_file.name
+                event_json, symbol_file.name
             )
-            if (remapped_stacktrace is not None and
-                    remapped_stacktrace.score > 0):
+            if remapped_stacktrace is not None and remapped_stacktrace.score > 0:
                 resolved_stracktrackes.append(remapped_stacktrace)
     if len(resolved_stracktrackes) > 0:
         best_remapped_stacktrace = max(
-            resolved_stracktrackes, key=lambda item: item.score)
-        StacktraceProcessor.update_frames(
-            event, best_remapped_stacktrace.frames)
+            resolved_stracktrackes, key=lambda item: item.score
+        )
+        StacktraceProcessor.update_frames(event, best_remapped_stacktrace.frames)
         event.save()
 
 
@@ -95,8 +90,8 @@ def difs_get_file_from_chunks(checksum, chunks):
     files = File.objects.filter(checksum=checksum)
 
     for file in files:
-        blobs = file.blobs.all()
-        file_chunks = [blob.checksum for blob in blobs]
+        blob = file.blob
+        file_chunks = [blob.checksum]
         if file_chunks == chunks:
             return file
 
@@ -106,7 +101,7 @@ def difs_get_file_from_chunks(checksum, chunks):
 def difs_create_file_from_chunks(name, checksum, chunks):
     blobs = FileBlob.objects.filter(checksum__in=chunks)
 
-    total_checksum = sha1(b'')
+    total_checksum = sha1(b"")
     size = 0
 
     for blob in blobs:
@@ -120,14 +115,9 @@ def difs_create_file_from_chunks(name, checksum, chunks):
     if checksum != total_checksum:
         raise ChecksumMismatched()
 
-    file = File(
-        name=name,
-        headers={},
-        size=size,
-        checksum=checksum
-    )
+    file = File(name=name, headers={}, size=size, checksum=checksum)
+    file.blob = blobs[0]
     file.save()
-    file.blobs.set(blobs)
     return file
 
 
@@ -148,13 +138,13 @@ def difs_concat_file_blobs_to_disk(blobs):
 
 
 def difs_extract_metadata_from_file(file):
-    with difs_concat_file_blobs_to_disk(file.blobs.all()) as input:
+    with difs_concat_file_blobs_to_disk([file.blob]) as _input:
         # Only one kind of file format is supported now
         try:
-            archive = Archive.open(input.name)
-        except Exception as e:
-            getLogger().error(f"Extract metadata error: {e}")
-            raise UnsupportedFile()
+            archive = Archive.open(_input.name)
+        except Exception as err:
+            getLogger().error("Extract metadata error: %s", err)
+            raise UnsupportedFile() from err
         else:
             return [
                 {
@@ -164,7 +154,7 @@ def difs_extract_metadata_from_file(file):
                     "debug_id": obj.debug_id,
                     "kind": obj.kind,
                     "features": list(obj.features),
-                    "symbol_type": "native"
+                    "symbol_type": "native",
                 }
                 for obj in archive.iter_objects()
             ]
@@ -174,8 +164,7 @@ def difs_create_difs(project, name, file):
     metadatalist = difs_extract_metadata_from_file(file)
     for metadata in metadatalist:
         dif = DebugInformationFile.objects.filter(
-            project_id=project.id,
-            file=file
+            project_id=project.id, file=file
         ).first()
 
         if dif is not None:
@@ -198,7 +187,7 @@ def difs_create_difs(project, name, file):
                 "code_id": code_id,
                 "kind": kind,
                 "features": features,
-                "symbol_type": symbol_type
-            }
+                "symbol_type": symbol_type,
+            },
         )
         dif.save()
