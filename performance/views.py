@@ -29,11 +29,13 @@ class TransactionGroupViewSet(viewsets.ReadOnlyModelViewSet):
                 "pk", flat=True
             )
         )
+
         qs = super().get_queryset().filter(project__pk__in=projects)
         if "organization_slug" in self.kwargs:
             qs = qs.filter(
                 project__organization__slug=self.kwargs["organization_slug"],
             )
+
         return qs
 
 

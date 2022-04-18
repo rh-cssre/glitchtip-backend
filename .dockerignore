@@ -1,3 +1,8 @@
 .env
 env
 *.sql
+*/tests
+*/*/tests
+*/test_data
+*/*/test_data
+**/.git

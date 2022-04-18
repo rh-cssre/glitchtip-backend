@@ -1,0 +1,403 @@
+{
+  "eventID": "f4e67b1b9293445a9545465b0b58696c",
+  "dist": null,
+  "userReport": null,
+  "projectID": "11",
+  "previousEventID": null,
+  "message": "Error this is an error webpack://small-js-error-factory/./src/index.ts ?(src/index)",
+  "id": "5255",
+  "size": 4575,
+  "errors": [],
+  "culprit": "?(src/index)",
+  "title": "Error: this is an error",
+  "platform": "javascript",
+  "location": "webpack://small-js-error-factory/./src/index.ts",
+  "nextEventID": null,
+  "type": "error",
+  "metadata": {
+    "type": "Error",
+    "value": "this is an error",
+    "filename": "webpack://small-js-error-factory/./src/index.ts"
+  },
+  "groupingConfig": {
+    "id": "legacy:2019-03-12"
+  },
+  "crashFile": null,
+  "tags": [
+    {
+      "value": "Firefox 98.0",
+      "key": "browser",
+      "_meta": null
+    },
+    {
+      "value": "Firefox",
+      "key": "browser.name",
+      "_meta": null
+    },
+    {
+      "value": "production",
+      "key": "environment",
+      "_meta": null
+    },
+    {
+      "value": "no",
+      "key": "handled",
+      "_meta": null
+    },
+    {
+      "value": "error",
+      "key": "level",
+      "_meta": null
+    },
+    {
+      "value": "onerror",
+      "key": "mechanism",
+      "_meta": null
+    },
+    {
+      "value": "Ubuntu",
+      "key": "os.name",
+      "_meta": null
+    },
+    {
+      "value": "1.0",
+      "key": "release",
+      "_meta": null
+    },
+    {
+      "value": "True",
+      "key": "skippedNormalization",
+      "_meta": null
+    },
+    {
+      "value": "http://localhost:8080/",
+      "key": "url",
+      "_meta": null
+    },
+    {
+      "query": "user.ip:71.249.111.206",
+      "value": "ip:71.249.111.206",
+      "key": "user",
+      "_meta": null
+    }
+  ],
+  "dateCreated": "2022-04-02T19:44:43.501Z",
+  "dateReceived": "2022-04-02T19:49:58.910Z",
+  "user": {
+    "username": null,
+    "name": null,
+    "ip_address": "71.249.111.206",
+    "email": null,
+    "data": {},
+    "id": null
+  },
+  "entries": [
+    {
+      "type": "exception",
+      "data": {
+        "values": [
+          {
+            "stacktrace": {
+              "frames": [
+                {
+                  "function": null,
+                  "map": "bundle.js.map",
+                  "colNo": 13,
+                  "vars": null,
+                  "symbol": null,
+                  "mapUrl": "http://localhost:8080/dist/bundle.js.map",
+                  "module": "src/index",
+                  "origAbsPath": "?",
+                  "lineNo": 6,
+                  "origColNo": "?",
+                  "trust": null,
+                  "origFunction": "?",
+                  "errors": null,
+                  "package": null,
+                  "absPath": "webpack://small-js-error-factory/./src/index.ts",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "webpack://small-js-error-factory/./src/index.ts",
+                  "origFilename": "?",
+                  "platform": null,
+                  "context": [
+                    [1, "import * as Sentry from \"@sentry/browser\";"],
+                    [2, ""],
+                    [
+                      3,
+                      "Sentry.init({\"dsn\": \"http://a00ad5cad416418684270e433baf9c77@172.17.0.1:8000/4\", \"release\": \"1.0\"});"
+                    ],
+                    [4, ""],
+                    [5, "let foo = \"bar\";"],
+                    [6, "throw Error(\"this is an error\");"],
+                    [7, "console.log(foo);"],
+                    [8, ""]
+                  ],
+                  "symbolAddr": null,
+                  "origLineNo": "?"
+                },
+                {
+                  "function": null,
+                  "map": "bundle.js.map",
+                  "colNo": 13,
+                  "vars": null,
+                  "symbol": null,
+                  "mapUrl": "http://localhost:8080/dist/bundle.js.map",
+                  "module": "src/index",
+                  "origAbsPath": "?",
+                  "lineNo": 6,
+                  "origColNo": "?",
+                  "trust": null,
+                  "origFunction": "?",
+                  "errors": null,
+                  "package": null,
+                  "absPath": "webpack://small-js-error-factory/./src/index.ts",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "webpack://small-js-error-factory/./src/index.ts",
+                  "origFilename": "?",
+                  "platform": null,
+                  "context": [
+                    [1, "import * as Sentry from \"@sentry/browser\";"],
+                    [2, ""],
+                    [
+                      3,
+                      "Sentry.init({\"dsn\": \"http://a00ad5cad416418684270e433baf9c77@172.17.0.1:8000/4\", \"release\": \"1.0\"});"
+                    ],
+                    [4, ""],
+                    [5, "let foo = \"bar\";"],
+                    [6, "throw Error(\"this is an error\");"],
+                    [7, "console.log(foo);"],
+                    [8, ""]
+                  ],
+                  "symbolAddr": null,
+                  "origLineNo": "?"
+                },
+                {
+                  "function": null,
+                  "map": "bundle.js.map",
+                  "colNo": 7,
+                  "vars": null,
+                  "symbol": null,
+                  "mapUrl": "http://localhost:8080/dist/bundle.js.map",
+                  "module": "src/index",
+                  "origAbsPath": "?",
+                  "lineNo": 6,
+                  "origColNo": "?",
+                  "trust": null,
+                  "origFunction": "?",
+                  "errors": null,
+                  "package": null,
+                  "absPath": "webpack://small-js-error-factory/./src/index.ts",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "webpack://small-js-error-factory/./src/index.ts",
+                  "origFilename": "?",
+                  "platform": null,
+                  "context": [
+                    [1, "import * as Sentry from \"@sentry/browser\";"],
+                    [2, ""],
+                    [
+                      3,
+                      "Sentry.init({\"dsn\": \"http://a00ad5cad416418684270e433baf9c77@172.17.0.1:8000/4\", \"release\": \"1.0\"});"
+                    ],
+                    [4, ""],
+                    [5, "let foo = \"bar\";"],
+                    [6, "throw Error(\"this is an error\");"],
+                    [7, "console.log(foo);"],
+                    [8, ""]
+                  ],
+                  "symbolAddr": null,
+                  "origLineNo": "?"
+                }
+              ],
+              "framesOmitted": null,
+              "registers": null,
+              "hasSystemFrames": false
+            },
+            "module": null,
+            "rawStacktrace": {
+              "frames": [
+                {
+                  "function": null,
+                  "colNo": 74022,
+                  "vars": null,
+                  "symbol": null,
+                  "module": null,
+                  "lineNo": 2,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:8080/dist/bundle.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/dist/bundle.js",
+                  "platform": null,
+                  "context": [
+                    [
+                      1,
+                      "/*! For license information please see bundle.js.LICENSE.txt */"
+                    ],
+                    [
+                      2,
+                      "{snip} ,(()=>{throw n(185).init({dsn:\"http://a00ad5cad416418684270e433baf9c77@172.17.0.1:8000/4\",release:\"1.0\"}),Error(\"this is an error\")})()})();"
+                    ],
+                    [3, "//# sourceMappingURL=bundle.js.map"]
+                  ],
+                  "symbolAddr": null
+                },
+                {
+                  "function": null,
+                  "colNo": 74018,
+                  "vars": null,
+                  "symbol": null,
+                  "module": null,
+                  "lineNo": 2,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:8080/dist/bundle.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/dist/bundle.js",
+                  "platform": null,
+                  "context": [
+                    [
+                      1,
+                      "/*! For license information please see bundle.js.LICENSE.txt */"
+                    ],
+                    [
+                      2,
+                      "{snip} ,(()=>{throw n(185).init({dsn:\"http://a00ad5cad416418684270e433baf9c77@172.17.0.1:8000/4\",release:\"1.0\"}),Error(\"this is an error\")})()})();"
+                    ],
+                    [3, "//# sourceMappingURL=bundle.js.map"]
+                  ],
+                  "symbolAddr": null
+                },
+                {
+                  "function": null,
+                  "colNo": 73991,
+                  "vars": null,
+                  "symbol": null,
+                  "module": null,
+                  "lineNo": 2,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://localhost:8080/dist/bundle.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/dist/bundle.js",
+                  "platform": null,
+                  "context": [
+                    [
+                      1,
+                      "/*! For license information please see bundle.js.LICENSE.txt */"
+                    ],
+                    [
+                      2,
+                      "{snip} ,(()=>{throw n(185).init({dsn:\"http://a00ad5cad416418684270e433baf9c77@172.17.0.1:8000/4\",release:\"1.0\"}),Error(\"this is an error\")})()})();"
+                    ],
+                    [3, "//# sourceMappingURL=bundle.js.map"]
+                  ],
+                  "symbolAddr": null
+                }
+              ],
+              "framesOmitted": null,
+              "registers": null,
+              "hasSystemFrames": false
+            },
+            "mechanism": {
+              "type": "onerror",
+              "handled": false
+            },
+            "threadId": null,
+            "value": "this is an error",
+            "type": "Error"
+          }
+        ],
+        "excOmitted": null,
+        "hasSystemFrames": false
+      }
+    },
+    {
+      "type": "request",
+      "data": {
+        "fragment": "",
+        "cookies": [],
+        "inferredContentType": null,
+        "env": null,
+        "headers": [
+          [
+            "User-Agent",
+            "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:98.0) Gecko/20100101 Firefox/98.0"
+          ]
+        ],
+        "url": "http://localhost:8080/",
+        "query": [],
+        "data": null,
+        "method": null
+      }
+    }
+  ],
+  "packages": {},
+  "sdk": {
+    "version": "6.19.2",
+    "name": "sentry.javascript.browser",
+    "upstream": {
+      "url": null,
+      "isNewer": false,
+      "name": "sentry.javascript.browser"
+    }
+  },
+  "_meta": {
+    "user": null,
+    "context": null,
+    "entries": {},
+    "contexts": null,
+    "message": null,
+    "packages": null,
+    "tags": {},
+    "sdk": null
+  },
+  "contexts": {
+    "os": {
+      "type": "os",
+      "name": "Ubuntu"
+    },
+    "browser": {
+      "version": "98.0",
+      "type": "browser",
+      "name": "Firefox"
+    }
+  },
+  "fingerprints": ["d75931e06f591a159796e023fd11afae"],
+  "context": {
+    "normalizeDepth": 3
+  },
+  "release": {
+    "dateReleased": null,
+    "commitCount": 0,
+    "url": null,
+    "data": {},
+    "lastDeploy": null,
+    "deployCount": 0,
+    "dateCreated": "2022-04-02T19:47:38.318Z",
+    "lastEvent": "2022-04-02T19:44:43.501Z",
+    "version": "1.0",
+    "firstEvent": "2022-04-02T19:48:09.247Z",
+    "lastCommit": null,
+    "shortVersion": "1.0",
+    "authors": [],
+    "owner": null,
+    "newGroups": 1,
+    "ref": null,
+    "projects": [
+      {
+        "slug": "my-js-project",
+        "name": "My JS Project"
+      }
+    ]
+  },
+  "groupID": "314"
+}
