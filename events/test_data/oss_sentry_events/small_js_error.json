@@ -1,0 +1,237 @@
+{
+  "eventID": "00952c9936084f759aecdb0f195dd82f",
+  "dist": null,
+  "userReport": null,
+  "projectID": "11",
+  "previousEventID": null,
+  "message": "Error this is an error /dist/bundle.js ?(/dist/bundle.js)",
+  "id": "5253",
+  "size": 2122,
+  "errors": [
+    {
+      "data": {
+        "url": "http://127.0.0.1:8080/dist/bundle.js",
+        "value": "<class 'requests.exceptions.ConnectionError'>"
+      },
+      "message": "Unable to fetch HTTP resource",
+      "type": "fetch_generic_error"
+    }
+  ],
+  "culprit": "?(/dist/bundle.js)",
+  "title": "Error: this is an error",
+  "platform": "javascript",
+  "location": "/dist/bundle.js",
+  "nextEventID": null,
+  "type": "error",
+  "metadata": {
+    "type": "Error",
+    "value": "this is an error",
+    "filename": "/dist/bundle.js"
+  },
+  "groupingConfig": {
+    "id": "legacy:2019-03-12"
+  },
+  "crashFile": null,
+  "tags": [
+    {
+      "value": "Firefox 98.0",
+      "key": "browser",
+      "_meta": null
+    },
+    {
+      "value": "Firefox",
+      "key": "browser.name",
+      "_meta": null
+    },
+    {
+      "value": "production",
+      "key": "environment",
+      "_meta": null
+    },
+    {
+      "value": "no",
+      "key": "handled",
+      "_meta": null
+    },
+    {
+      "value": "error",
+      "key": "level",
+      "_meta": null
+    },
+    {
+      "value": "onerror",
+      "key": "mechanism",
+      "_meta": null
+    },
+    {
+      "value": "Ubuntu",
+      "key": "os.name",
+      "_meta": null
+    },
+    {
+      "value": "True",
+      "key": "skippedNormalization",
+      "_meta": null
+    },
+    {
+      "value": "http://127.0.0.1:8080/",
+      "key": "url",
+      "_meta": null
+    },
+    {
+      "query": "user.ip:71.249.111.206",
+      "value": "ip:71.249.111.206",
+      "key": "user",
+      "_meta": null
+    }
+  ],
+  "dateCreated": "2022-04-02T16:38:33.218Z",
+  "dateReceived": "2022-04-02T16:39:25.093Z",
+  "user": {
+    "username": null,
+    "name": null,
+    "ip_address": "71.249.111.206",
+    "email": null,
+    "data": {},
+    "id": null
+  },
+  "entries": [
+    {
+      "type": "exception",
+      "data": {
+        "values": [
+          {
+            "stacktrace": {
+              "frames": [
+                {
+                  "function": null,
+                  "colNo": 74008,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "dist/bundle",
+                  "lineNo": 2,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://127.0.0.1:8080/dist/bundle.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/dist/bundle.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": null,
+                  "colNo": 74004,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "dist/bundle",
+                  "lineNo": 2,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://127.0.0.1:8080/dist/bundle.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/dist/bundle.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                },
+                {
+                  "function": null,
+                  "colNo": 73977,
+                  "vars": null,
+                  "symbol": null,
+                  "module": "dist/bundle",
+                  "lineNo": 2,
+                  "trust": null,
+                  "errors": null,
+                  "package": null,
+                  "absPath": "http://127.0.0.1:8080/dist/bundle.js",
+                  "inApp": false,
+                  "instructionAddr": null,
+                  "filename": "/dist/bundle.js",
+                  "platform": null,
+                  "context": [],
+                  "symbolAddr": null
+                }
+              ],
+              "framesOmitted": null,
+              "registers": null,
+              "hasSystemFrames": false
+            },
+            "module": null,
+            "rawStacktrace": null,
+            "mechanism": {
+              "type": "onerror",
+              "handled": false
+            },
+            "threadId": null,
+            "value": "this is an error",
+            "type": "Error"
+          }
+        ],
+        "excOmitted": null,
+        "hasSystemFrames": false
+      }
+    },
+    {
+      "type": "request",
+      "data": {
+        "fragment": "",
+        "cookies": [],
+        "inferredContentType": null,
+        "env": null,
+        "headers": [
+          [
+            "User-Agent",
+            "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:98.0) Gecko/20100101 Firefox/98.0"
+          ]
+        ],
+        "url": "http://127.0.0.1:8080/",
+        "query": [],
+        "data": null,
+        "method": null
+      }
+    }
+  ],
+  "packages": {},
+  "sdk": {
+    "version": "6.19.2",
+    "name": "sentry.javascript.browser",
+    "upstream": {
+      "url": null,
+      "isNewer": false,
+      "name": "sentry.javascript.browser"
+    }
+  },
+  "_meta": {
+    "user": null,
+    "context": null,
+    "entries": {},
+    "contexts": null,
+    "message": null,
+    "packages": null,
+    "tags": {},
+    "sdk": null
+  },
+  "contexts": {
+    "os": {
+      "type": "os",
+      "name": "Ubuntu"
+    },
+    "browser": {
+      "version": "98.0",
+      "type": "browser",
+      "name": "Firefox"
+    }
+  },
+  "fingerprints": ["e72903c169d4dceeac7fc31c58213360"],
+  "context": {
+    "normalizeDepth": 3
+  },
+  "release": null,
+  "groupID": "313"
+}

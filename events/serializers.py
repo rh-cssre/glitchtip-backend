@@ -24,6 +24,7 @@ from .fields import (
 )
 from .event_tag_processors import TAG_PROCESSORS
 from .event_context_processors import EVENT_CONTEXT_PROCESSORS
+from .event_processors import EVENT_PROCESSORS
 
 
 def replace(data: Union[str, dict, list], match: str, repl: str):
@@ -245,18 +246,28 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
         release.projects.add(project)
         return release
 
-    def create(self, data):
+    def is_url(self, filename: str) -> bool:
+        return filename.startswith(("file:", "http:", "https:", "applewebdata:"))
+
+    def normalize_stacktrace(self, stacktrace):
+        """
+        Port of semaphore store/normalize/stacktrace.rs
+        """
+        if not stacktrace:
+            return
+        for frame in stacktrace.get("frames", []):
+            if not frame.get("abs_path") and frame.get("filename"):
+                frame["abs_path"] = frame["filename"]
+            if frame.get("filename") and self.is_url(frame["filename"]):
+                frame["filename"] = urlparse(frame["filename"]).path
+
+    def create(self, validated_data):
+        data = validated_data
         project = self.context.get("project")
+
         eventtype = self.get_eventtype()
         metadata = eventtype.get_metadata(data)
-        title = eventtype.get_title(metadata)
-        culprit = eventtype.get_location(data)
-        request = data.get("request")
-        breadcrumbs = data.get("breadcrumbs")
         exception = data.get("exception")
-        level = None
-        if data.get("level"):
-            level = LogLevel.from_string(data["level"])
         if (
             data.get("stacktrace")
             and exception
@@ -267,6 +278,24 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             # Assume it's for the first exception value
             exception["values"][0]["stacktrace"] = data.get("stacktrace")
         exception = self.modify_exception(exception)
+        if isinstance(exception, dict):
+            for value in exception.get("values", []):
+                self.normalize_stacktrace(value.get("stacktrace"))
+
+        release = None
+        if data.get("release"):
+            release = self.get_release(data["release"], project)
+
+        for Processor in EVENT_PROCESSORS:
+            Processor(project, release, data).run()
+
+        title = eventtype.get_title(metadata)
+        culprit = eventtype.get_location(data)
+        request = data.get("request")
+        breadcrumbs = data.get("breadcrumbs")
+        level = None
+        if data.get("level"):
+            level = LogLevel.from_string(data["level"])
         if request:
             headers = request.get("headers")
             if headers:
@@ -292,9 +321,6 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             environment = None
             if data.get("environment"):
                 environment = self.get_environment(data["environment"], project)
-            release = None
-            if data.get("release"):
-                release = self.get_release(data["release"], project)
             tags = []
             if environment:
                 tags.append(("environment", environment.name))

@@ -1,0 +1,65 @@
+{
+  "exception": {
+    "values": [
+      {
+        "type": "Error",
+        "value": "this is an error",
+        "stacktrace": {
+          "frames": [
+            {
+              "filename": "http://localhost:8080/dist/bundle.js",
+              "function": "?",
+              "in_app": true,
+              "lineno": 2,
+              "colno": 74022
+            },
+            {
+              "filename": "http://localhost:8080/dist/bundle.js",
+              "function": "?",
+              "in_app": true,
+              "lineno": 2,
+              "colno": 74018
+            },
+            {
+              "filename": "http://localhost:8080/dist/bundle.js",
+              "function": "?",
+              "in_app": true,
+              "lineno": 2,
+              "colno": 73991
+            }
+          ]
+        },
+        "mechanism": { "type": "onerror", "handled": false }
+      }
+    ]
+  },
+  "level": "error",
+  "platform": "javascript",
+  "event_id": "f4e67b1b9293445a9545465b0b58696c",
+  "timestamp": 1648928683.501,
+  "environment": "production",
+  "release": "1.0",
+  "sdk": {
+    "integrations": [
+      "InboundFilters",
+      "FunctionToString",
+      "TryCatch",
+      "Breadcrumbs",
+      "GlobalHandlers",
+      "LinkedErrors",
+      "Dedupe",
+      "UserAgent"
+    ],
+    "name": "sentry.javascript.browser",
+    "version": "6.19.2",
+    "packages": [{ "name": "npm:@sentry/browser", "version": "6.19.2" }]
+  },
+  "request": {
+    "url": "http://localhost:8080/",
+    "headers": {
+      "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:98.0) Gecko/20100101 Firefox/98.0"
+    }
+  },
+  "tags": { "skippedNormalization": true },
+  "extra": { "normalizeDepth": 3 }
+}

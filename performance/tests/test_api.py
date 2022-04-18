@@ -35,12 +35,29 @@ class TransactionGroupAPITestCase(GlitchTipTestCase):
         res = self.client.get(self.list_url)
         self.assertContains(res, group.transaction)
 
+    def test_list_environment_filter(self):
+        environment_project = baker.make(
+            "environments.EnvironmentProject",
+            environment__organization=self.organization,
+        )
+        environment = environment_project.environment
+        environment.projects.add(self.project)
+        group1 = baker.make(
+            "performance.TransactionGroup",
+            project=self.project,
+            tags={"environment": [environment.name]},
+        )
+        group2 = baker.make("performance.TransactionGroup", project=self.project)
+        res = self.client.get(self.list_url, {"environment": environment.name})
+        self.assertContains(res, group1.transaction)
+        self.assertNotContains(res, group2.transaction)
+
     def test_filter_then_average(self):
         group = baker.make("performance.TransactionGroup", project=self.project)
         now = timezone.now()
         last_minute = now - datetime.timedelta(minutes=1)
         with freeze_time(last_minute):
-            transaction1 = baker.make(
+            baker.make(
                 "performance.TransactionEvent",
                 group=group,
                 start_timestamp=last_minute,

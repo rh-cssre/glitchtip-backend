@@ -36,7 +36,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
 
     # Upgrade functions handle intentional differences between GlitchTip and Sentry OSS
     def upgrade_title(self, value: str):
-        """ Sentry OSS uses ... while GlitchTip uses unicode …"""
+        """Sentry OSS uses ... while GlitchTip uses unicode …"""
         if value[-1] == "…":
             return value[:-4]
         return value.strip("...")
@@ -59,7 +59,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         return value
 
     def upgrade_data(self, data: Union[str, dict, list]):
-        """ A recursive replace function """
+        """A recursive replace function"""
         if isinstance(data, dict):
             return {k: self.upgrade_data(v) for k, v in data.items()}
         elif isinstance(data, list):
@@ -71,7 +71,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         return data
 
     def assertCompareData(self, data1: Dict, data2: Dict, fields: List[str]):
-        """ Compare data of two dict objects. Compare only provided fields list """
+        """Compare data of two dict objects. Compare only provided fields list"""
         for field in fields:
             field_value1 = data1.get(field)
             field_value2 = data2.get(field)
@@ -86,11 +86,13 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
                 field_value1 = self.upgrade_metadata(field_value1)
                 field_value2 = self.upgrade_metadata(field_value2)
             self.assertEqual(
-                field_value1, field_value2, f"Failed for field '{field}'",
+                field_value1,
+                field_value2,
+                f"Failed for field '{field}'",
             )
 
     def get_json_test_data(self, name: str):
-        """ Get incoming event, sentry json, sentry api event """
+        """Get incoming event, sentry json, sentry api event"""
         event = self.get_json_data(f"{TEST_DATA_DIR}/incoming_events/{name}.json")
         sentry_json = self.get_json_data(f"{TEST_DATA_DIR}/oss_sentry_json/{name}.json")
         # Force captured test data to match test generated data
@@ -179,7 +181,8 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         self.assertCompareData(res_data, sentry_data, ["datetime"])
         self.assertEqual(res_data["entries"][1].get("type"), "breadcrumbs")
         self.assertEqual(
-            res_data["entries"][1], self.upgrade_data(sentry_data["entries"][1]),
+            res_data["entries"][1],
+            self.upgrade_data(sentry_data["entries"][1]),
         )
 
     def test_dotnet_error(self):
@@ -226,7 +229,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         self.assertEqual(res.data["entries"][1], data["entries"][1])
 
     def test_csp_event_glitchtip_key(self):
-        """ Check compatibility for using glitchtip_key or sentry_key interchangably """
+        """Check compatibility for using glitchtip_key or sentry_key interchangably"""
         key = self.project.projectkey_set.first().public_key
         csp_store_url = (
             reverse("csp_store", args=[self.project.id]) + "?glitchtip_key=" + key.hex
@@ -240,7 +243,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         self.assertEqual(res.status_code, 200)
 
     def test_message_event(self):
-        """ A generic message made with the Sentry SDK. Generally has less data than exceptions. """
+        """A generic message made with the Sentry SDK. Generally has less data than exceptions."""
         # Don't mimic this test, use self.get_jest_test_data instead
         res = self.client.post(self.event_store_url, message, format="json")
         self.assertEqual(res.status_code, 200)
@@ -257,7 +260,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         )
 
     def test_python_logging(self):
-        """ Test Sentry SDK logging integration based event """
+        """Test Sentry SDK logging integration based event"""
         sdk_error, sentry_json, sentry_data = self.get_json_test_data("python_logging")
         res = self.client.post(self.event_store_url, sdk_error, format="json")
         event = Event.objects.get(pk=res.data["id"])
@@ -297,7 +300,9 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
         self.assertCompareData(
-            res.data, sentry_data, ["title", "culprit", "type", "metadata", "platform"],
+            res.data,
+            sentry_data,
+            ["title", "culprit", "type", "metadata", "platform"],
         )
 
     def test_very_small_event(self):
@@ -393,7 +398,14 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         self.assertCompareData(
             res.data,
             sentry_data,
-            ["eventID", "title", "culprit", "platform", "type", "metadata",],
+            [
+                "eventID",
+                "title",
+                "culprit",
+                "platform",
+                "type",
+                "metadata",
+            ],
         )
         res_exception = next(filter(is_exception, res.data["entries"]), None)
         sentry_exception = next(filter(is_exception, sentry_data["entries"]), None)
@@ -463,7 +475,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         self.assertCompareData(res.json(), sentry_data, ["context", "user"])
 
     def test_elixir_stacktrace(self):
-        """ The elixir SDK does things differently """
+        """The elixir SDK does things differently"""
         sdk_error, sentry_json, sentry_data = self.get_json_test_data("elixir_error")
         res = self.client.post(self.event_store_url, sdk_error, format="json")
         event = Event.objects.get(pk=res.data["id"])
@@ -474,3 +486,14 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
             ["type", "values", "exception"],
         )
 
+    def test_small_js_error(self):
+        """A small example to test stacktraces"""
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data("small_js_error")
+        res = self.client.post(self.event_store_url, sdk_error, format="json")
+        event = Event.objects.get(pk=res.data["id"])
+        event_json = event.event_json()
+        self.assertCompareData(
+            event_json["exception"]["values"][0],
+            sentry_json["exception"]["values"][0],
+            ["type", "values", "exception", "abs_path"],
+        )
