@@ -72,12 +72,24 @@ class SubscriptionAPITestCase(APITestCase):
             baker.make("events.Event")
             baker.make("events.Event", issue__project__organization=self.organization)
             baker.make(
-                "performance.TransactionEvent", group__project__organization=self.organization
+                "performance.TransactionEvent",
+                group__project__organization=self.organization,
+            )
+            baker.make(
+                "releases.ReleaseFile",
+                file__blob__size=1000000,
+                release__organization=self.organization,
+                _quantity=2,
             )
         res = self.client.get(url)
         self.assertEqual(
             res.data,
-            {"eventCount": 1, "transactionEventCount": 1, "uptimeCheckEventCount": 0},
+            {
+                "eventCount": 1,
+                "fileSizeMB": 2,
+                "transactionEventCount": 1,
+                "uptimeCheckEventCount": 0,
+            },
         )
 
     def test_events_count_without_customer(self):
@@ -99,7 +111,9 @@ class SubscriptionAPITestCase(APITestCase):
         )
         plan = baker.make("djstripe.Plan", amount=0)
         subscription = baker.make(
-            "djstripe.Subscription", customer=customer, livemode=False,
+            "djstripe.Subscription",
+            customer=customer,
+            livemode=False,
         )
         djstripe_customer_subscribe_mock.return_value = subscription
         data = {"plan": plan.id, "organization": self.organization.id}
@@ -107,7 +121,7 @@ class SubscriptionAPITestCase(APITestCase):
         self.assertEqual(res.data["plan"], plan.id)
 
     def test_create_invalid_org(self):
-        """ Only owners may create subscriptions """
+        """Only owners may create subscriptions"""
         user = baker.make("users.user")  # Non owner member
         plan = baker.make("djstripe.Plan", amount=0)
         self.organization.add_user(user)
@@ -199,12 +213,14 @@ class SubscriptionIntegrationAPITestCase(APITestCase):
 
     @patch("djstripe.models.Customer.subscribe")
     def test_new_org_flow(self, djstripe_customer_subscribe_mock):
-        """ Test checking if subscription exists and when not, creating a free tier one """
+        """Test checking if subscription exists and when not, creating a free tier one"""
         res = self.client.get(self.detail_url)
         self.assertFalse(res.data["id"])  # No subscription, user should create one
 
         subscription = baker.make(
-            "djstripe.Subscription", customer=self.customer, livemode=False,
+            "djstripe.Subscription",
+            customer=self.customer,
+            livemode=False,
         )
         djstripe_customer_subscribe_mock.return_value = subscription
 

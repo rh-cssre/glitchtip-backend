@@ -1,23 +1,22 @@
+import stripe
 from django.conf import settings
 from django.core.cache import cache
 from django.http import Http404
-from rest_framework import viewsets, views, status
+from djstripe.models import Customer, Product, Subscription
+from djstripe.settings import djstripe_settings
+from drf_yasg.utils import swagger_auto_schema
+from rest_framework import status, views, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from drf_yasg.utils import swagger_auto_schema
-from djstripe.models import Subscription, Customer, Product
-from djstripe.settings import djstripe_settings
-import stripe
+
 from organizations_ext.models import Organization
-from events.models import Event
-from performance.models import TransactionEvent
-from glitchtip.uptime.models import MonitorCheck
+
 from .serializers import (
-    SubscriptionSerializer,
     CreateSubscriptionSerializer,
-    PlanForOrganizationSerializer,
     OrganizationSelectSerializer,
+    PlanForOrganizationSerializer,
     ProductSerializer,
+    SubscriptionSerializer,
 )
 
 
@@ -38,7 +37,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         return super().get_serializer_class()
 
     def get_queryset(self):
-        """ Any user in an org may view subscription data """
+        """Any user in an org may view subscription data"""
         if self.request.user.is_authenticated:
             return self.queryset.filter(
                 livemode=settings.STRIPE_LIVE_MODE,
@@ -47,7 +46,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         return self.queryset.none()
 
     def get_object(self):
-        """ Get most recent by slug """
+        """Get most recent by slug"""
         try:
             subscription = (
                 self.get_queryset().filter(**self.kwargs).order_by("-created").first()
@@ -68,7 +67,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def events_count(self, *args, **kwargs):
-        """ Get event count for current billing period """
+        """Get event count for current billing period"""
         subscription = self.get_object()
         if not subscription:
             return Response(
@@ -82,25 +81,12 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         cache_key = "org_event_count" + str(organization.pk)
         data = cache.get(cache_key)
         if data is None:
-            event_count = Event.objects.filter(
-                issue__project__organization=organization,
-                created__gte=subscription.current_period_start,
-                created__lt=subscription.current_period_end,
-            ).count()
-            transaction_event_count = TransactionEvent.objects.filter(
-                group__project__organization=organization,
-                created__gte=subscription.current_period_start,
-                created__lt=subscription.current_period_end,
-            ).count()
-            uptime_check_event_count = MonitorCheck.objects.filter(
-                monitor__organization=organization,
-                created__gte=subscription.current_period_start,
-                created__lt=subscription.current_period_end,
-            ).count()
+            org = Organization.objects.with_event_counts().get(pk=organization.pk)
             data = {
-                "eventCount": event_count,
-                "transactionEventCount": transaction_event_count,
-                "uptimeCheckEventCount": uptime_check_event_count,
+                "eventCount": org.event_count,
+                "transactionEventCount": org.transaction_count,
+                "uptimeCheckEventCount": org.uptime_check_event_count,
+                "fileSizeMB": org.file_size,
             }
             cache.set(cache_key, data, 600)
         return Response(data)
@@ -117,7 +103,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class CreateStripeSubscriptionCheckout(views.APIView):
-    """ Create Stripe Checkout, send to client for redirecting to Stripe """
+    """Create Stripe Checkout, send to client for redirecting to Stripe"""
 
     def get_serializer(self, *args, **kwargs):
         return PlanForOrganizationSerializer(
@@ -128,7 +114,7 @@ class CreateStripeSubscriptionCheckout(views.APIView):
         responses={200: str(stripe.api_resources.checkout.session.Session)}
     )
     def post(self, request):
-        """ See https://stripe.com/docs/api/checkout/sessions/create """
+        """See https://stripe.com/docs/api/checkout/sessions/create"""
         serializer = self.get_serializer()
         if serializer.is_valid():
             organization = serializer.validated_data["organization"]
@@ -138,13 +124,20 @@ class CreateStripeSubscriptionCheckout(views.APIView):
                 api_key=djstripe_settings.STRIPE_SECRET_KEY,
                 payment_method_types=["card"],
                 line_items=[
-                    {"price": serializer.validated_data["plan"].id, "quantity": 1,}
+                    {
+                        "price": serializer.validated_data["plan"].id,
+                        "quantity": 1,
+                    }
                 ],
                 mode="subscription",
                 customer=customer.id,
-                automatic_tax={"enabled": settings.STRIPE_AUTOMATIC_TAX,},
+                automatic_tax={
+                    "enabled": settings.STRIPE_AUTOMATIC_TAX,
+                },
                 customer_update={"address": "auto", "name": "auto"},
-                tax_id_collection={"enabled": True,},
+                tax_id_collection={
+                    "enabled": True,
+                },
                 success_url=domain
                 + "/"
                 + organization.slug
@@ -167,7 +160,7 @@ class StripeBillingPortal(views.APIView):
         responses={200: str(stripe.api_resources.billing_portal.Session)}
     )
     def post(self, request):
-        """ See https://stripe.com/docs/billing/subscriptions/integrating-self-serve-portal """
+        """See https://stripe.com/docs/billing/subscriptions/integrating-self-serve-portal"""
         serializer = self.get_serializer()
         if serializer.is_valid():
             organization = serializer.validated_data["organization"]
