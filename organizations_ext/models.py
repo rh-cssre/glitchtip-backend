@@ -15,6 +15,7 @@ from organizations.managers import OrgManager
 from organizations.signals import user_added
 
 from projects.models import Project
+from glitchtip.uptime.models import Monitor, MonitorCheck
 
 # Defines which scopes belong to which role
 # Credit to sentry/conf/server.py
@@ -158,8 +159,8 @@ class OrganizationManager(OrgManager):
                 debuginformationfile__created__lt=OuterRef(period_end),
             )
             uptime_check_event_filter = Q(
-                monitor__checks__created__gte=F(period_start),
-                monitor__checks__created__lt=F(period_end),
+                checks__created__gte=F("organization__" + period_start),
+                checks__created__lt=F("organization__" + period_end),
             )
             release_file_filter = Q(
                 release__releasefile__created__gte=F(period_start),
@@ -183,13 +184,16 @@ class OrganizationManager(OrgManager):
                 "debuginformationfile__file__blob__size", filter=dif_file_size_filter
             )
         ).values("total")
+        total_monitor_checks = (
+            Monitor.objects.filter(organization=OuterRef("pk"))
+            .values("organization")
+            .annotate(total=Count("checks", filter=uptime_check_event_filter))
+            .values("total")
+        )
         return self.annotate(
             issue_event_count=Coalesce(Subquery(total_issue_events), 0),
             transaction_count=Coalesce(Subquery(total_transaction_events), 0),
-            uptime_check_event_count=Count(
-                "monitor__checks",
-                filter=uptime_check_event_filter,
-            ),
+            uptime_check_event_count=Coalesce(Subquery(total_monitor_checks), 0),
             file_size=(
                 Coalesce(
                     Sum(
