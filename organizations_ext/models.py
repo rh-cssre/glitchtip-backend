@@ -184,7 +184,7 @@ class OrganizationManager(OrgManager):
             )
         ).values("total")
         return self.annotate(
-            event_count=Coalesce(Subquery(total_issue_events), 0),
+            issue_event_count=Coalesce(Subquery(total_issue_events), 0),
             transaction_count=Coalesce(Subquery(total_transaction_events), 0),
             uptime_check_event_count=Count(
                 "monitor__checks",
@@ -201,6 +201,10 @@ class OrganizationManager(OrgManager):
                 + Coalesce(total_dif_file_size, 0)
             )
             / 1000000,
+            total_event_count=F("issue_event_count")
+            + F("transaction_count")
+            + F("uptime_check_event_count")
+            + F("file_size"),
         )
 
 

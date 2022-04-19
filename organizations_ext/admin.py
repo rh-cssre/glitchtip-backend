@@ -1,14 +1,11 @@
 from django.conf import settings
 from django.contrib import admin
-from django.db.models import Count, OuterRef, Subquery, Sum
 from django.utils.html import format_html
 from organizations.base_admin import (
     BaseOrganizationAdmin,
     BaseOrganizationUserAdmin,
     BaseOwnerInline,
 )
-
-from projects.models import Project
 
 from .models import Organization, OrganizationOwner, OrganizationUser
 
@@ -47,7 +44,7 @@ class OrganizationAdmin(BaseOrganizationAdmin):
     show_full_result_count = False
 
     def issue_events(self, obj):
-        return obj.event_count
+        return obj.issue_event_count
 
     def customers(self, obj):
         return format_html(
@@ -66,7 +63,7 @@ class OrganizationAdmin(BaseOrganizationAdmin):
         return obj.uptime_check_event_count
 
     def total_events(self, obj):
-        return obj.event_count + obj.transaction_count + obj.uptime_check_event_count
+        return obj.total_event_count
 
     def get_queryset(self, request):
         queryset = self.model.objects.with_event_counts(False)

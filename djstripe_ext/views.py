@@ -75,6 +75,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
                     "eventCount": 0,
                     "transactionEventCount": 0,
                     "uptimeCheckEventCount": 0,
+                    "fileSizeMB": 0,
                 }
             )
         organization = subscription.customer.subscriber
@@ -83,7 +84,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         if data is None:
             org = Organization.objects.with_event_counts().get(pk=organization.pk)
             data = {
-                "eventCount": org.event_count,
+                "eventCount": org.issue_event_count,
                 "transactionEventCount": org.transaction_count,
                 "uptimeCheckEventCount": org.uptime_check_event_count,
                 "fileSizeMB": org.file_size,
