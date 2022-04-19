@@ -15,7 +15,7 @@ def warn_organization_throttle():
         return
 
     queryset = (
-        Organization.objects.with_event_counts()
+        Organization.objects.with_event_counts(include_total=True)
         .filter(
             djstripe_customers__subscriptions__status="active",
         )

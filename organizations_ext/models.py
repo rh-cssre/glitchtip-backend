@@ -14,8 +14,8 @@ from organizations.fields import SlugField
 from organizations.managers import OrgManager
 from organizations.signals import user_added
 
+from glitchtip.uptime.models import Monitor
 from projects.models import Project
-from glitchtip.uptime.models import Monitor, MonitorCheck
 
 # Defines which scopes belong to which role
 # Credit to sentry/conf/server.py
@@ -133,7 +133,7 @@ class OrganizationUserRole(models.IntegerChoices):
 
 
 class OrganizationManager(OrgManager):
-    def with_event_counts(self, current_period=True):
+    def with_event_counts(self, current_period=True, include_total=False):
         period_start = "djstripe_customers__subscriptions__current_period_start"
         period_end = "djstripe_customers__subscriptions__current_period_end"
         projects = Project.objects.filter(organization=OuterRef("pk")).values(
@@ -190,7 +190,7 @@ class OrganizationManager(OrgManager):
             .annotate(total=Count("checks", filter=uptime_check_event_filter))
             .values("total")
         )
-        return self.annotate(
+        queryset = self.annotate(
             issue_event_count=Coalesce(Subquery(total_issue_events), 0),
             transaction_count=Coalesce(Subquery(total_transaction_events), 0),
             uptime_check_event_count=Coalesce(Subquery(total_monitor_checks), 0),
@@ -205,11 +205,15 @@ class OrganizationManager(OrgManager):
                 + Coalesce(total_dif_file_size, 0)
             )
             / 1000000,
-            total_event_count=F("issue_event_count")
-            + F("transaction_count")
-            + F("uptime_check_event_count")
-            + F("file_size"),
         )
+        if include_total:  # Sadly, this is slow
+            queryset = queryset.annotate(
+                total_event_count=F("issue_event_count")
+                + F("transaction_count")
+                + F("uptime_check_event_count")
+                + F("file_size"),
+            )
+        return queryset
 
 
 class Organization(SharedBaseModel, OrganizationBase):

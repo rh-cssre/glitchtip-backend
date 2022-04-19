@@ -36,6 +36,7 @@ class OrganizationAdmin(BaseOrganizationAdmin):
         "issue_events",
         "transaction_events",
         "uptime_check_events",
+        "file_size",
         "total_events",
     ]
     readonly_fields = ("customers",)
@@ -62,8 +63,16 @@ class OrganizationAdmin(BaseOrganizationAdmin):
     def uptime_check_events(self, obj):
         return obj.uptime_check_event_count
 
+    def file_size(self, obj):
+        return obj.file_size
+
     def total_events(self, obj):
-        return obj.total_event_count
+        return (
+            obj.issue_event_count
+            + obj.transaction_count
+            + obj.uptime_check_event_count
+            + obj.file_size
+        )
 
     def get_queryset(self, request):
         queryset = self.model.objects.with_event_counts(False)
