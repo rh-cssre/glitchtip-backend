@@ -44,8 +44,6 @@ def warn_organization_throttle():
         total_event_count__lte=F("plan_event_count"),
     )
 
-    print("-----------")
-    print(queryset.query)
     for org in queryset:
         subscription = org.djstripe_customers.first().subscription
         send_email_warn_quota.delay(subscription.pk, org.total_event_count)
