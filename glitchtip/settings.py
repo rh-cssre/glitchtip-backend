@@ -155,6 +155,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.microsoft",
     "allauth.socialaccount.providers.nextcloud",
+    "allauth.socialaccount.providers.keycloak",
     "anymail",
     "corsheaders",
     "django_celery_results",
@@ -444,6 +445,20 @@ if GITEA_URL:
 NEXTCLOUD_URL = env.url("SOCIALACCOUNT_PROVIDERS_nextcloud_SERVER", None)
 if NEXTCLOUD_URL:
     SOCIALACCOUNT_PROVIDERS["nextcloud"] = {"SERVER": NEXTCLOUD_URL.geturl()}
+KEYCLOAK_URL = env.url("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_URL", None)
+if KEYCLOAK_URL:
+    alt_url_env = env.url("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_URL_ALT", None)
+
+    if alt_url_env:
+        alt_url = alt_url_env.geturl()
+    else:
+        alt_url = None
+
+    SOCIALACCOUNT_PROVIDERS["keycloak"] = {
+        "KEYCLOAK_URL": KEYCLOAK_URL.geturl(),
+        "KEYCLOAK_REALM": env.str("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_REALM", None),
+        "KEYCLOAK_URL_ALT": alt_url,
+    }
 
 OLD_PASSWORD_FIELD_ENABLED = True
 LOGOUT_ON_PASSWORD_CHANGE = False
