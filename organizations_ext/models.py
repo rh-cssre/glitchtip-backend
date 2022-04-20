@@ -133,14 +133,15 @@ class OrganizationUserRole(models.IntegerChoices):
 
 class OrganizationManager(OrgManager):
     def with_event_counts(self, current_period=True):
-        period_start = "djstripe_customers__subscriptions__current_period_start"
-        period_end = "djstripe_customers__subscriptions__current_period_end"
-
         subscription_filter = Q()
         if current_period and settings.BILLING_ENABLED:
             subscription_filter = Q(
-                created__gte=OuterRef(period_start),
-                created__lt=OuterRef(period_end),
+                created__gte=OuterRef(
+                    "djstripe_customers__subscriptions__current_period_start"
+                ),
+                created__lt=OuterRef(
+                    "djstripe_customers__subscriptions__current_period_end"
+                ),
             )
 
         queryset = self.annotate(
