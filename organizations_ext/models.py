@@ -1,5 +1,6 @@
+from django.conf import settings
 from django.db import models
-from django.db.models import Count, F, OuterRef, Q, Subquery, Sum
+from django.db.models import F, OuterRef, Q
 from django.db.models.functions import Coalesce
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
@@ -13,9 +14,7 @@ from organizations.base import (
 from organizations.fields import SlugField
 from organizations.managers import OrgManager
 from organizations.signals import user_added
-
-from glitchtip.uptime.models import Monitor
-from projects.models import Project
+from sql_util.utils import SubqueryCount, SubquerySum
 
 # Defines which scopes belong to which role
 # Credit to sentry/conf/server.py
@@ -133,86 +132,50 @@ class OrganizationUserRole(models.IntegerChoices):
 
 
 class OrganizationManager(OrgManager):
-    def with_event_counts(self, current_period=True, include_total=False):
+    def with_event_counts(self, current_period=True):
         period_start = "djstripe_customers__subscriptions__current_period_start"
         period_end = "djstripe_customers__subscriptions__current_period_end"
-        projects = Project.objects.filter(organization=OuterRef("pk")).values(
-            "organization"
-        )
 
-        issue_event_filter = Q()
-        transaction_event_filter = Q()
-        dif_file_size_filter = Q()
-        uptime_check_event_filter = Q()
-        release_file_filter = Q()
-        if current_period:
-            issue_event_filter = Q(
-                issue__event__created__gte=OuterRef(period_start),
-                issue__event__created__lt=OuterRef(period_end),
-            )
-            transaction_event_filter = Q(
-                transactiongroup__transactionevent__created__gte=OuterRef(period_start),
-                transactiongroup__transactionevent__created__lt=OuterRef(period_end),
-            )
-            dif_file_size_filter = Q(
-                debuginformationfile__created__gte=OuterRef(period_start),
-                debuginformationfile__created__lt=OuterRef(period_end),
-            )
-            uptime_check_event_filter = Q(
-                checks__created__gte=F("organization__" + period_start),
-                checks__created__lt=F("organization__" + period_end),
-            )
-            release_file_filter = Q(
-                release__releasefile__created__gte=F(period_start),
-                release__releasefile__created__lt=F(period_end),
+        subscription_filter = Q()
+        if current_period and settings.BILLING_ENABLED:
+            subscription_filter = Q(
+                created__gte=OuterRef(period_start),
+                created__lt=OuterRef(period_end),
             )
 
-        total_issue_events = projects.annotate(
-            total=Count(
-                "issue__event",
-                filter=issue_event_filter,
-            )
-        ).values("total")
-        total_transaction_events = projects.annotate(
-            total=Count(
-                "transactiongroup__transactionevent",
-                filter=transaction_event_filter,
-            )
-        ).values("total")
-        total_dif_file_size = projects.annotate(
-            total=Sum(
-                "debuginformationfile__file__blob__size", filter=dif_file_size_filter
-            )
-        ).values("total")
-        total_monitor_checks = (
-            Monitor.objects.filter(organization=OuterRef("pk"))
-            .values("organization")
-            .annotate(total=Count("checks", filter=uptime_check_event_filter))
-            .values("total")
-        )
         queryset = self.annotate(
-            issue_event_count=Coalesce(Subquery(total_issue_events), 0),
-            transaction_count=Coalesce(Subquery(total_transaction_events), 0),
-            uptime_check_event_count=Coalesce(Subquery(total_monitor_checks), 0),
+            issue_event_count=SubqueryCount(
+                "projects__issue__event", filter=subscription_filter
+            ),
+            transaction_count=SubqueryCount(
+                "projects__transactiongroup__transactionevent",
+                filter=subscription_filter,
+            ),
+            uptime_check_event_count=SubqueryCount(
+                "monitor__checks", filter=subscription_filter
+            ),
             file_size=(
                 Coalesce(
-                    Sum(
+                    SubquerySum(
                         "release__releasefile__file__blob__size",
-                        filter=release_file_filter,
+                        filter=subscription_filter,
                     ),
                     0,
                 )
-                + Coalesce(total_dif_file_size, 0)
+                + Coalesce(
+                    SubquerySum(
+                        "projects__debuginformationfile__file__blob__size",
+                        filter=subscription_filter,
+                    ),
+                    0,
+                )
             )
             / 1000000,
+            total_event_count=F("issue_event_count")
+            + F("transaction_count")
+            + F("uptime_check_event_count")
+            + F("file_size"),
         )
-        if include_total:  # Sadly, this is slow
-            queryset = queryset.annotate(
-                total_event_count=F("issue_event_count")
-                + F("transaction_count")
-                + F("uptime_check_event_count")
-                + F("file_size"),
-            )
         return queryset
 
 

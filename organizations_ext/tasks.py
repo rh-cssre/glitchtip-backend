@@ -5,7 +5,7 @@ from .email import MetQuotaEmail, InvitationEmail
 
 
 def get_free_tier_organizations_with_event_count():
-    return Organization.objects.with_event_counts(include_total=True).filter(
+    return Organization.objects.with_event_counts().filter(
         djstripe_customers__subscriptions__plan__amount=0,
         djstripe_customers__subscriptions__status="active",
     )

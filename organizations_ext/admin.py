@@ -67,22 +67,17 @@ class OrganizationAdmin(BaseOrganizationAdmin):
         return obj.file_size
 
     def total_events(self, obj):
-        return (
-            obj.issue_event_count
-            + obj.transaction_count
-            + obj.uptime_check_event_count
-            + obj.file_size
-        )
+        return obj.total_event_count
 
     def get_queryset(self, request):
-        queryset = self.model.objects.with_event_counts(False)
+        qs = self.model.objects.with_event_counts()
 
         # From super
         ordering = self.ordering or ()
         if ordering:
             qs = qs.order_by(*ordering)
 
-        return queryset
+        return qs
 
 
 class OrganizationUserAdmin(BaseOrganizationUserAdmin):
