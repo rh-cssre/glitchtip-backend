@@ -1,1 +1,1 @@
-Nearing event quota for {{ organization.name }}
+Nearing event quota for {{ organization }}
