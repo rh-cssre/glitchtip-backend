@@ -16,6 +16,11 @@ class TransactionGroupFilter(filters.FilterSet):
         label="Transaction end date",
     )
     project = filters.ModelMultipleChoiceFilter(queryset=Project.objects.all())
+    query = filters.CharFilter(
+        field_name="transaction",
+        lookup_expr="icontains",
+        label="Transaction text search",
+    )
 
     class Meta:
         model = TransactionGroup
