@@ -88,6 +88,10 @@ EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
 # Throttle % of all transaction events. Not intended for general use. May change without warning.
 THROTTLE_TRANSACTION_EVENTS = env.float("THROTTLE_TRANSACTION_EVENTS", None)
 
+# Static files (CSS, JavaScript, Images)
+# https://docs.djangoproject.com/en/dev/howto/static-files/
+STATIC_URL = "/static/"
+
 # GlitchTip can track GlitchTip's own errors.
 # If enabling this, use a different server to avoid infinite loops.
 def before_send(event, hint):
@@ -103,8 +107,19 @@ SENTRY_DSN = env.str("SENTRY_DSN", None)
 # Optionally allow a different DSN for the frontend
 SENTRY_FRONTEND_DSN = env.str("SENTRY_FRONTEND_DSN", SENTRY_DSN)
 # Set traces_sample_rate to 1.0 to capture 100%. Recommended to keep this value low.
-# Disabled by default
-SENTRY_TRACES_SAMPLE_RATE = env.float("SENTRY_TRACES_SAMPLE_RATE", None)
+SENTRY_TRACES_SAMPLE_RATE = env.float("SENTRY_TRACES_SAMPLE_RATE", 0.1)
+
+# Ignore whitenoise served static routes
+def traces_sampler(sampling_context):
+    if (
+        sampling_context.get("wsgi_environ", {})
+        .get("PATH_INFO", "")
+        .startswith(STATIC_URL)
+    ):
+        return 0.0
+    return SENTRY_TRACES_SAMPLE_RATE
+
+
 if SENTRY_DSN:
     release = "glitchtip@" + GLITCHTIP_VERSION if GLITCHTIP_VERSION else None
     sentry_sdk.init(
@@ -115,6 +130,7 @@ if SENTRY_DSN:
         environment=ENVIRONMENT,
         auto_session_tracking=False,
         traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
+        traces_sampler=traces_sampler,
     )
 
 
@@ -393,10 +409,6 @@ USE_TZ = True
 
 SITE_ID = 1
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/dev/howto/static-files/
-STATIC_URL = "/static/"
-
 if env("DEFAULT_FILE_STORAGE"):
     DEFAULT_FILE_STORAGE = env("DEFAULT_FILE_STORAGE")
 GS_BUCKET_NAME = env("GS_BUCKET_NAME")
@@ -457,7 +469,9 @@ if KEYCLOAK_URL:
 
     SOCIALACCOUNT_PROVIDERS["keycloak"] = {
         "KEYCLOAK_URL": KEYCLOAK_URL.geturl(),
-        "KEYCLOAK_REALM": env.str("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_REALM", None),
+        "KEYCLOAK_REALM": env.str(
+            "SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_REALM", None
+        ),
         "KEYCLOAK_URL_ALT": alt_url,
     }
 
