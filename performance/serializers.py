@@ -13,6 +13,7 @@ class TransactionGroupSerializer(serializers.ModelSerializer):
     class Meta:
         model = TransactionGroup
         fields = [
+            "id",
             "transaction",
             "project",
             "op",

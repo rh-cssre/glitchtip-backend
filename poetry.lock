@@ -687,6 +687,18 @@ pyotp = ">=2.6.0,<3.0.0"
 user-agents = ">=2.2.0,<3.0.0"
 
 [[package]]
+name = "django-sql-utils"
+version = "0.6.1"
+description = "Improved API for aggregating using Subquery"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+django = ">=1.11"
+sqlparse = "*"
+
+[[package]]
 name = "django-sslserver"
 version = "0.22"
 description = "An SSL-enabled development server for Django"
@@ -2125,7 +2137,7 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "236c63991191672c6c226a3573e15b31604f247c3ae0422ee4f5e8e8dcd091f4"
+content-hash = "a89fbcfc93ae19031649b0a312d6ec732c6e0c3ebc7a2c660b4e4689b3632db7"
 
 [metadata.files]
 aiohttp = [
@@ -2553,6 +2565,10 @@ django-prometheus = [
 django-rest-mfa = [
     {file = "django-rest-mfa-1.0.0.tar.gz", hash = "sha256:a2d3de80e0530938a9a4c414308eaa043627b2633b5ac71fc87d2a2d9445a656"},
     {file = "django_rest_mfa-1.0.0-py3-none-any.whl", hash = "sha256:67ff899d92bdcb1de339da6de6a5d56c7177077e913b49b37e7dcaf227394205"},
+]
+django-sql-utils = [
+    {file = "django-sql-utils-0.6.1.tar.gz", hash = "sha256:4690d9e286095e3a027122fb99dc5d4f2285c64b6e35a2f59467567f293b18af"},
+    {file = "django_sql_utils-0.6.1-py3-none-any.whl", hash = "sha256:4d142f35fbc027e030021ab110d1445bd88988eb6a104169d99abff436dc03d5"},
 ]
 django-sslserver = [
     {file = "django_sslserver-0.22-py3-none-any.whl", hash = "sha256:c598a363d2ccdc2421c08ddb3d8b0973f80e8e47a3a5b74e4a2896f21c2947c5"},

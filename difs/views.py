@@ -1,61 +1,48 @@
 """ Port of sentry.api.endpoints.debug_files.DifAssembleEndpoint """
-from django.shortcuts import get_object_or_404
-from django.conf import settings
-from django.db import transaction
-from rest_framework.response import Response
-from organizations_ext.models import Organization
-from projects.models import Project
-from rest_framework import views, exceptions, status
-from .tasks import (
-    difs_assemble, DIF_STATE_CREATED, DIF_STATE_OK,
-    DIF_STATE_NOT_FOUND
-)
-from .models import DebugInformationFile
-from files.models import FileBlob, File
-from .permissions import (
-    DifsAssemblePermission, ProjectReprocessingPermission,
-    DymsPermission
-)
-from django.core.files import File as DjangoFile
-import zipfile
 import io
 import re
 import tempfile
+import zipfile
 from hashlib import sha1
+
+from django.core.files import File as DjangoFile
+from django.db import transaction
+from django.shortcuts import get_object_or_404
+from rest_framework import exceptions, status, views
+from rest_framework.response import Response
 from symbolic import ProguardMapper
 
+from files.models import File, FileBlob
+from organizations_ext.models import Organization
+from projects.models import Project
 
-MAX_UPLOAD_BLOB_SIZE = 8 * 1024 * 1024  # 8MB
+from .models import DebugInformationFile
+from .permissions import (
+    DifsAssemblePermission,
+    DymsPermission,
+    ProjectReprocessingPermission,
+)
+from .tasks import DIF_STATE_CREATED, DIF_STATE_NOT_FOUND, DIF_STATE_OK, difs_assemble
 
-
-def check_difs_enabled(func):
-    def wrapper(*args, **kwargs):
-        if settings.GLITCHTIP_ENABLE_DIFS is not True:
-            raise exceptions.PermissionDenied()
-        return func(*args, **kwargs)
-    return wrapper
+MAX_UPLOAD_BLOB_SIZE = 32 * 1024 * 1024  # 32MB
 
 
 class DifsAssembleAPIView(views.APIView):
     permission_classes = [DifsAssemblePermission]
 
-    @check_difs_enabled
     def post(self, request, organization_slug, project_slug):
         organization = get_object_or_404(
-            Organization,
-            slug=organization_slug.lower(),
-            users=self.request.user
+            Organization, slug=organization_slug.lower(), users=self.request.user
         )
 
         self.check_object_permissions(request, organization)
 
-        project = get_object_or_404(
-            Project, slug=project_slug.lower()
-        )
+        project = get_object_or_404(Project, slug=project_slug.lower())
 
         if project.organization.id != organization.id:
             raise exceptions.PermissionDenied(
-                "The project is not under this organization")
+                "The project is not under this organization"
+            )
 
         responses = {}
 
@@ -65,9 +52,13 @@ class DifsAssembleAPIView(views.APIView):
             chunks = file.get("chunks", [])
             name = file.get("name", None)
             debug_id = file.get("debug_id", None)
-            file = DebugInformationFile.objects.filter(
-                project__slug=project_slug, file__checksum=checksum
-            ).select_related("file").first()
+            file = (
+                DebugInformationFile.objects.filter(
+                    project__slug=project_slug, file__checksum=checksum
+                )
+                .select_related("file")
+                .first()
+            )
 
             if file is not None:
                 responses[checksum] = {
@@ -76,23 +67,20 @@ class DifsAssembleAPIView(views.APIView):
                 }
                 continue
 
-            existed_chunks = FileBlob.objects.filter(
-                checksum__in=chunks
-            ).values_list("checksum", flat=True)
+            existed_chunks = FileBlob.objects.filter(checksum__in=chunks).values_list(
+                "checksum", flat=True
+            )
 
             missing_chunks = list(set(chunks) - set(existed_chunks))
 
             if len(missing_chunks) != 0:
                 responses[checksum] = {
                     "state": DIF_STATE_NOT_FOUND,
-                    "missingChunks": missing_chunks
+                    "missingChunks": missing_chunks,
                 }
                 continue
 
-            responses[checksum] = {
-                "state": DIF_STATE_CREATED,
-                "missingChunks": []
-            }
+            responses[checksum] = {"state": DIF_STATE_CREATED, "missingChunks": []}
             difs_assemble.delay(project_slug, name, checksum, chunks, debug_id)
 
         return Response(responses)
@@ -105,13 +93,12 @@ class ProjectReprocessingAPIView(views.APIView):
 
     permission_classes = [ProjectReprocessingPermission]
 
-    @check_difs_enabled
     def post(self, request, organization_slug, project_slug):
         return Response()
 
 
 def extract_proguard_id(name):
-    match = re.search('proguard/([-a-fA-F0-9]+).txt', name)
+    match = re.search("proguard/([-a-fA-F0-9]+).txt", name)
     if match is None:
         return
     return match.group(1)
@@ -121,13 +108,10 @@ def extract_proguard_metadata(proguard_file):
     try:
         mapper = ProguardMapper.open(proguard_file)
 
-        if (mapper is None):
+        if mapper is None:
             return
 
-        metadata = {
-            "arch": "any",
-            "feature": "mapping"
-        }
+        metadata = {"arch": "any", "feature": "mapping"}
 
         return metadata
 
@@ -139,25 +123,22 @@ class DsymsAPIView(views.APIView):
     """
     Implementation of /files/dsyms API View
     """
+
     permission_classes = [DymsPermission]
 
-    @check_difs_enabled
     def post(self, request, organization_slug, project_slug):
         organization = get_object_or_404(
-            Organization,
-            slug=organization_slug.lower(),
-            users=self.request.user
+            Organization, slug=organization_slug.lower(), users=self.request.user
         )
 
         self.check_object_permissions(request, organization)
 
-        project = get_object_or_404(
-            Project, slug=project_slug.lower()
-        )
+        project = get_object_or_404(Project, slug=project_slug.lower())
 
         if project.organization.id != organization.id:
             raise exceptions.PermissionDenied(
-                "The project is not under this organization")
+                "The project is not under this organization"
+            )
 
         if "file" not in request.data:
             return Response(
@@ -196,31 +177,27 @@ class DsymsAPIView(views.APIView):
 
                     with uploaded_zip_file.open(filename) as proguard_file:
                         result = self.create_dif_from_read_only_file(
-                            proguard_file,
-                            project,
-                            proguard_id,
-                            filename)
+                            proguard_file, project, proguard_id, filename
+                        )
                         if result is None:
                             return Response(
-                                {"error": "Invalid proguard mapping file uploaded"},  # noqa
+                                {
+                                    "error": "Invalid proguard mapping file uploaded"
+                                },  # noqa
                                 status=status.HTTP_400_BAD_REQUEST,
                             )
                         results.append(result)
 
             return Response(results)
 
-        except Exception as e:
+        except Exception as err:
             return Response(
-                {"error": str(e)},
+                {"error": str(err)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
     def create_dif_from_read_only_file(
-        self,
-        proguard_file,
-        project,
-        proguard_id,
-        filename
+        self, proguard_file, project, proguard_id, filename
     ):
         with tempfile.NamedTemporaryFile("br+") as tmp:
             content = proguard_file.read()
@@ -233,21 +210,14 @@ class DsymsAPIView(views.APIView):
             with transaction.atomic():
                 size = len(content)
 
-                blob = FileBlob.objects.filter(
-                    checksum=checksum
-                ).first()
+                blob = FileBlob.objects.filter(checksum=checksum).first()
 
                 if blob is None:
-                    blob = FileBlob(
-                        checksum=checksum,  # noqa
-                        size=size
-                    )
+                    blob = FileBlob(checksum=checksum, size=size)  # noqa
                     blob.blob.save(filename, DjangoFile(tmp))
                     blob.save()
 
-                fileobj = File.objects.filter(
-                    checksum=checksum
-                ).first()
+                fileobj = File.objects.filter(checksum=checksum).first()
 
                 if fileobj is None:
                     fileobj = File()
@@ -255,13 +225,11 @@ class DsymsAPIView(views.APIView):
                     fileobj.headers = {}
                     fileobj.checksum = checksum
                     fileobj.size = size
+                    fileobj.blob = blob
                     fileobj.save()
 
-                    fileobj.blobs.set([blob])
-
                 dif = DebugInformationFile.objects.filter(
-                    file__checksum=checksum,
-                    project=project
+                    file__checksum=checksum, project=project
                 ).first()
 
                 if dif is None:
@@ -273,7 +241,7 @@ class DsymsAPIView(views.APIView):
                         "arch": metadata["arch"],
                         "debug_id": proguard_id,
                         "symbol_type": "proguard",
-                        "features": ["mapping"]
+                        "features": ["mapping"],
                     }
                     dif.save()
 
@@ -285,12 +253,8 @@ class DsymsAPIView(views.APIView):
                     "symbolType": "proguard",
                     "size": size,
                     "sha1": checksum,
-                    "data": {
-                        "features": ["mapping"]
-                    },
-                    "headers": {
-                        "Content-Type": "text/x-proguard+plain"
-                    },
+                    "data": {"features": ["mapping"]},
+                    "headers": {"Content-Type": "text/x-proguard+plain"},
                     "dateCreated": fileobj.created,
                 }
 

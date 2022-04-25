@@ -88,8 +88,6 @@ EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
 # Throttle % of all transaction events. Not intended for general use. May change without warning.
 THROTTLE_TRANSACTION_EVENTS = env.float("THROTTLE_TRANSACTION_EVENTS", None)
 
-GLITCHTIP_ENABLE_DIFS = env.bool("GLITCHTIP_ENABLE_DIFS", False)
-
 # GlitchTip can track GlitchTip's own errors.
 # If enabling this, use a different server to avoid infinite loops.
 def before_send(event, hint):
@@ -157,6 +155,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.microsoft",
     "allauth.socialaccount.providers.nextcloud",
+    "allauth.socialaccount.providers.keycloak",
     "anymail",
     "corsheaders",
     "django_celery_results",
@@ -284,6 +283,7 @@ ANYMAIL = {
     "MAILGUN_API_KEY": env.str("MAILGUN_API_KEY", None),
     "MAILGUN_SENDER_DOMAIN": env.str("MAILGUN_SENDER_DOMAIN", None),
     "MAILGUN_API_URL": env.str("MAILGUN_API_URL", "https://api.mailgun.net/v3"),
+    "SENDGRID_API_KEY": env.str("SENDGRID_API_KEY", None),
 }
 
 ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
@@ -446,6 +446,20 @@ if GITEA_URL:
 NEXTCLOUD_URL = env.url("SOCIALACCOUNT_PROVIDERS_nextcloud_SERVER", None)
 if NEXTCLOUD_URL:
     SOCIALACCOUNT_PROVIDERS["nextcloud"] = {"SERVER": NEXTCLOUD_URL.geturl()}
+KEYCLOAK_URL = env.url("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_URL", None)
+if KEYCLOAK_URL:
+    alt_url_env = env.url("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_URL_ALT", None)
+
+    if alt_url_env:
+        alt_url = alt_url_env.geturl()
+    else:
+        alt_url = None
+
+    SOCIALACCOUNT_PROVIDERS["keycloak"] = {
+        "KEYCLOAK_URL": KEYCLOAK_URL.geturl(),
+        "KEYCLOAK_REALM": env.str("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_REALM", None),
+        "KEYCLOAK_URL_ALT": alt_url,
+    }
 
 OLD_PASSWORD_FIELD_ENABLED = True
 LOGOUT_ON_PASSWORD_CHANGE = False
