@@ -9,7 +9,7 @@ class FileBlobAdmin(admin.ModelAdmin):
 
 class FileAdmin(admin.ModelAdmin):
     search_fields = ("name", "checksum")
-    list_display = ("name", "type", "checksum")
+    list_display = ("name", "type", "checksum", "blob")
     list_filter = ("type", "created")
 
 

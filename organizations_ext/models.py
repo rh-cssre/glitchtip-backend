@@ -1,16 +1,20 @@
+from django.conf import settings
 from django.db import models
+from django.db.models import F, OuterRef, Q
+from django.db.models.functions import Coalesce
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
+from organizations.abstract import SharedBaseModel
 from organizations.base import (
     OrganizationBase,
-    OrganizationUserBase,
-    OrganizationOwnerBase,
     OrganizationInvitationBase,
+    OrganizationOwnerBase,
+    OrganizationUserBase,
 )
-from organizations.abstract import SharedBaseModel
 from organizations.fields import SlugField
+from organizations.managers import OrgManager
 from organizations.signals import user_added
-
+from sql_util.utils import SubqueryCount, SubquerySum
 
 # Defines which scopes belong to which role
 # Credit to sentry/conf/server.py
@@ -127,6 +131,55 @@ class OrganizationUserRole(models.IntegerChoices):
         return ROLES[role]
 
 
+class OrganizationManager(OrgManager):
+    def with_event_counts(self, current_period=True):
+        subscription_filter = Q()
+        if current_period and settings.BILLING_ENABLED:
+            subscription_filter = Q(
+                created__gte=OuterRef(
+                    "djstripe_customers__subscriptions__current_period_start"
+                ),
+                created__lt=OuterRef(
+                    "djstripe_customers__subscriptions__current_period_end"
+                ),
+            )
+
+        queryset = self.annotate(
+            issue_event_count=SubqueryCount(
+                "projects__issue__event", filter=subscription_filter
+            ),
+            transaction_count=SubqueryCount(
+                "projects__transactiongroup__transactionevent",
+                filter=subscription_filter,
+            ),
+            uptime_check_event_count=SubqueryCount(
+                "monitor__checks", filter=subscription_filter
+            ),
+            file_size=(
+                Coalesce(
+                    SubquerySum(
+                        "release__releasefile__file__blob__size",
+                        filter=subscription_filter,
+                    ),
+                    0,
+                )
+                + Coalesce(
+                    SubquerySum(
+                        "projects__debuginformationfile__file__blob__size",
+                        filter=subscription_filter,
+                    ),
+                    0,
+                )
+            )
+            / 1000000,
+            total_event_count=F("issue_event_count")
+            + F("transaction_count")
+            + F("uptime_check_event_count")
+            + F("file_size"),
+        )
+        return queryset
+
+
 class Organization(SharedBaseModel, OrganizationBase):
     slug = SlugField(
         max_length=200,
@@ -146,6 +199,8 @@ class Organization(SharedBaseModel, OrganizationBase):
         default=True,
         help_text="Default for whether projects should script IP Addresses",
     )
+
+    objects = OrganizationManager()
 
     def slugify_function(self, content):
         reserved_words = [
@@ -198,7 +253,7 @@ class Organization(SharedBaseModel, OrganizationBase):
 
     @property
     def email(self):
-        """ Used to identify billing contact for stripe. """
+        """Used to identify billing contact for stripe."""
         billing_contact = self.owner.organization_user.user
         return billing_contact.email
 
@@ -251,13 +306,13 @@ class OrganizationUser(SharedBaseModel, OrganizationUserBase):
 
     @property
     def is_active(self):
-        """ Non pending means active """
+        """Non pending means active"""
         return not self.pending
 
 
 class OrganizationOwner(OrganizationOwnerBase):
-    """ Only usage is for billing contact currently """
+    """Only usage is for billing contact currently"""
 
 
 class OrganizationInvitation(OrganizationInvitationBase):
-    """ Required to exist for django-organizations """
+    """Required to exist for django-organizations"""

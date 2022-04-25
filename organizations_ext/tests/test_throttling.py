@@ -28,6 +28,7 @@ class OrganizationThrottlingTestCase(TestCase):
                 livemode=False,
                 plan=plan,
                 status="active",
+                current_period_end="2000-01-31",
             )
             baker.make(
                 "events.Event", issue__project__organization=organization, _quantity=3
@@ -48,6 +49,9 @@ class OrganizationThrottlingTestCase(TestCase):
             # Month should reset throttle
             subscription.current_period_start = timezone.make_aware(
                 timezone.datetime(2000, 2, 1)
+            )
+            subscription.current_period_end = timezone.make_aware(
+                timezone.datetime(2000, 2, 28)
             )
             subscription.save()
             set_organization_throttle()
@@ -84,13 +88,16 @@ class OrganizationThrottlingTestCase(TestCase):
                 livemode=False,
                 plan=plan,
                 status="active",
+                current_period_end="2000-02-01",
             )
             baker.make("events.Event", issue__project=project, _quantity=3)
             baker.make(
-                "performance.TransactionEvent", group__project=project, _quantity=2,
+                "performance.TransactionEvent",
+                group__project=project,
+                _quantity=2,
             )
             free_org = get_free_tier_organizations_with_event_count().first()
-        self.assertEqual(free_org.event_count, 5)
+        self.assertEqual(free_org.total_event_count, 5)
 
     @override_settings(BILLING_FREE_TIER_EVENTS=1)
     def test_non_subscriber_throttling_performance(self):
@@ -112,5 +119,5 @@ class OrganizationThrottlingTestCase(TestCase):
             baker.make(
                 "events.Event", issue__project__organization=organization, _quantity=2
             )
-        with self.assertNumQueries(12):
+        with self.assertNumQueries(4):
             set_organization_throttle()
