@@ -91,7 +91,7 @@ class BaseEventAPIView(APIView):
 
     def get_project(self, request, project_id):
         sentry_key = BaseEventAPIView.auth_from_request(request)
-        difs_subquery = DebugInformationFile.objects.filter(project_id=OuterRef('pk'))
+        difs_subquery = DebugInformationFile.objects.filter(project_id=OuterRef("pk"))
         try:
             project = (
                 Project.objects.filter(id=project_id, projectkey__public_key=sentry_key)
@@ -171,11 +171,6 @@ class EnvelopeAPIView(BaseEventAPIView):
         # Multi part envelopes are not yet supported
         message_header = data.pop(0)
         if message_header.get("type") == "transaction":
-            if (
-                settings.THROTTLE_TRANSACTION_EVENTS
-                and random.random() < settings.THROTTLE_TRANSACTION_EVENTS
-            ):
-                raise exceptions.Throttled()
             serializer = self.get_serializer_class()(
                 data=data.pop(0), context={"request": self.request, "project": project}
             )
