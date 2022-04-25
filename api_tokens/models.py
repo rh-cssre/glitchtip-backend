@@ -11,7 +11,7 @@ from glitchtip.base_models import CreatedModel
 
 
 def generate_token():
-    return binascii.hexlify(os.urandom(20)).decode()
+    return binascii.hexlify(os.urandom(32)).decode()
 
 
 class APIToken(CreatedModel):
@@ -20,7 +20,7 @@ class APIToken(CreatedModel):
     """
 
     token = models.CharField(
-        max_length=40, unique=True, editable=False, default=generate_token
+        max_length=64, unique=True, editable=False, default=generate_token
     )
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     label = models.CharField(max_length=255, blank=True)
