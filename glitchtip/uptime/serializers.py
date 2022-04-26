@@ -96,3 +96,15 @@ class MonitorSerializer(serializers.ModelSerializer):
             "projectName",
             "envName",
         )
+
+    def validate(self, data):
+        if data["url"] == "" and data["monitor_type"] in [
+            MonitorType.GET,
+            MonitorType.PING,
+            MonitorType.POST,
+            MonitorType.SSL,
+        ]:
+            raise serializers.ValidationError(
+                "URL is required for " + data["monitor_type"]
+            )
+        return data

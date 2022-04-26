@@ -39,7 +39,7 @@ class UptimeAPITestCase(GlitchTipTestCase):
         self.assertEqual(res.data[0]["lastChange"], "2021-09-19T15:39:31Z")
 
     def test_list_aggregation(self):
-        """ Test up and down event aggregations """
+        """Test up and down event aggregations"""
         monitor = baker.make(
             "uptime.Monitor", organization=self.organization, url="http://example.com"
         )
@@ -76,6 +76,18 @@ class UptimeAPITestCase(GlitchTipTestCase):
         self.assertEqual(monitor.name, data["name"])
         self.assertEqual(monitor.organization, self.organization)
         self.assertEqual(monitor.project, self.project)
+
+    def test_create_invalid(self):
+        data = {
+            "monitorType": "Ping",
+            "name": "Test",
+            "url": "",
+            "expectedStatus": 200,
+            "interval": "00:01:00",
+            "project": self.project.pk,
+        }
+        res = self.client.post(self.list_url, data)
+        self.assertEqual(res.status_code, 400)
 
     def test_monitor_retrieve(self):
         environment = baker.make(
@@ -114,7 +126,9 @@ class UptimeAPITestCase(GlitchTipTestCase):
 
     def test_monitor_checks_list(self):
         monitor = baker.make(
-            "uptime.Monitor", organization=self.organization, url="http://example.com",
+            "uptime.Monitor",
+            organization=self.organization,
+            url="http://example.com",
         )
         baker.make(
             "uptime.MonitorCheck",
@@ -163,7 +177,7 @@ class UptimeAPITestCase(GlitchTipTestCase):
 
     @mock.patch("glitchtip.uptime.tasks.perform_checks.run")
     def test_list_isolation(self, _):
-        """ Users should only access monitors in their organization """
+        """Users should only access monitors in their organization"""
         user2 = baker.make("users.user")
         org2 = baker.make("organizations_ext.Organization")
         org2.add_user(user2)
@@ -175,11 +189,12 @@ class UptimeAPITestCase(GlitchTipTestCase):
         self.assertNotContains(res, monitor2.name)
 
     def test_create_isolation(self):
-        """ Users should only make monitors in their organization """
+        """Users should only make monitors in their organization"""
         org2 = baker.make("organizations_ext.Organization")
 
         url = reverse(
-            "organization-monitors-list", kwargs={"organization_slug": org2.slug},
+            "organization-monitors-list",
+            kwargs={"organization_slug": org2.slug},
         )
         data = {
             "monitorType": "Ping",
