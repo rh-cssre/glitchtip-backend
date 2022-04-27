@@ -1,7 +1,9 @@
 from rest_framework import serializers
+
 from events.serializers import SentrySDKEventSerializer
 from glitchtip.serializers import FlexibleDateTimeField
-from .models import TransactionEvent, TransactionGroup, Span
+
+from .models import Span, TransactionEvent, TransactionGroup
 
 
 class TransactionGroupSerializer(serializers.ModelSerializer):
@@ -81,6 +83,7 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
             event_id=data["event_id"],
             timestamp=data["timestamp"],
             start_timestamp=data["start_timestamp"],
+            duration=data["timestamp"] - data["start_timestamp"],
         )
 
         first_span = SpanSerializer(

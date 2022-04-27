@@ -1,6 +1,7 @@
 from django.contrib import admin
-from django.db.models import F, Avg
-from .models import TransactionGroup, TransactionEvent, Span
+from django.db.models import Avg, F
+
+from .models import Span, TransactionEvent, TransactionGroup
 
 
 class TransactionGroupAdmin(admin.ModelAdmin):
@@ -16,12 +17,7 @@ class TransactionGroupAdmin(admin.ModelAdmin):
         return (
             super()
             .get_queryset(request)
-            .annotate(
-                avg_duration=Avg(
-                    F("transactionevent__timestamp")
-                    - F("transactionevent__start_timestamp")
-                )
-            )
+            .annotate(avg_duration=Avg("transactionevent__duration"))
         )
 
 
