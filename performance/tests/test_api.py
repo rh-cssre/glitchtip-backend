@@ -62,12 +62,14 @@ class TransactionGroupAPITestCase(GlitchTipTestCase):
                 group=group,
                 start_timestamp=last_minute,
                 timestamp=last_minute + datetime.timedelta(seconds=5),
+                duration=datetime.timedelta(seconds=5),
             )
         transaction2 = baker.make(
             "performance.TransactionEvent",
             group=group,
             start_timestamp=now,
             timestamp=now + datetime.timedelta(seconds=1),
+            duration=datetime.timedelta(seconds=1),
         )
         res = self.client.get(self.list_url)
         self.assertEqual(res.data[0]["avgDuration"], "00:00:03")
