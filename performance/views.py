@@ -17,7 +17,7 @@ class TransactionGroupViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TransactionGroupSerializer
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_class = TransactionGroupFilter
-    ordering = ["-created"]
+    ordering = ["-avg_duration"]
     ordering_fields = ["created", "avg_duration", "transaction_count"]
 
     def get_queryset(self):

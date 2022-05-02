@@ -47,7 +47,7 @@ def dispatch_checks():
         for i, monitor_id in enumerate(monitor_ids.iterator(), 1):
             batch_ids.append(monitor_id)
             if i % batch_size == 0:
-                perform_checks.delay(batch_ids, now)
+                perform_checks.apply_async(args=(batch_ids, now), expires=60)
                 batch_ids = []
         if len(batch_ids) > 0:
             perform_checks.delay(batch_ids, now)
@@ -113,7 +113,7 @@ def send_monitor_notification(monitor_check_id: int, went_down: bool, last_chang
 
 @shared_task
 def cleanup_old_monitor_checks():
-    """ Delete older checks and associated data  """
+    """Delete older checks and associated data"""
     days = settings.GLITCHTIP_MAX_EVENT_LIFE_DAYS
     qs = MonitorCheck.objects.filter(created__lt=timezone.now() - timedelta(days=days))
     # pylint: disable=protected-access

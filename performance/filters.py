@@ -1,7 +1,9 @@
-from django.db.models import Count
+from django.db.models import Avg, Count
 from django_filters import rest_framework as filters
+
 from projects.models import Project
-from .models import TransactionGroup, avg_transactionevent_time
+
+from .models import TransactionGroup
 
 
 class TransactionGroupFilter(filters.FilterSet):
@@ -16,6 +18,11 @@ class TransactionGroupFilter(filters.FilterSet):
         label="Transaction end date",
     )
     project = filters.ModelMultipleChoiceFilter(queryset=Project.objects.all())
+    query = filters.CharFilter(
+        field_name="transaction",
+        lookup_expr="icontains",
+        label="Transaction text search",
+    )
 
     class Meta:
         model = TransactionGroup
@@ -30,7 +37,7 @@ class TransactionGroupFilter(filters.FilterSet):
 
         # This annotation must be applied after any related transactionevent filter
         queryset = queryset.annotate(
-            avg_duration=avg_transactionevent_time,
+            avg_duration=Avg("transactionevent__duration"),
             transaction_count=Count("transactionevent"),
         )
 
