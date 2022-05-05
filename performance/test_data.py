@@ -84,10 +84,12 @@ def generate_fake_transaction_event(project, start_timestamp):
         op=op,
         method=method,
     )
+    timestamp=generate_random_timestamp(start_timestamp)
     return TransactionEvent(
         group=group,
         trace_id=uuid.uuid4(),
         start_timestamp=start_timestamp,
         data={},
-        timestamp=generate_random_timestamp(start_timestamp),
+        timestamp=timestamp,
+        duration=timestamp - start_timestamp
     )
