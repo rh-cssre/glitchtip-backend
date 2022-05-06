@@ -50,12 +50,8 @@ class TransactionEventAdmin(admin.ModelAdmin):
     inlines = [SpanInline]
     can_delete = False
 
-    def duration(self, obj):
-        return obj.duration
-
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        qs = qs.annotate(duration=F("timestamp") - F("start_timestamp"))
         return qs
 
 
