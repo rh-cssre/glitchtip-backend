@@ -82,6 +82,7 @@ if GLITCHTIP_URL.scheme not in ["http", "https"]:
 
 # Events and associated data older than this will be deleted from the database
 GLITCHTIP_MAX_EVENT_LIFE_DAYS = env.int("GLITCHTIP_MAX_EVENT_LIFE_DAYS", default=90)
+GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS = env.int("GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS", default=90)
 
 # For development purposes only, prints out inbound event store json
 EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
