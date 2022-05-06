@@ -203,6 +203,38 @@ jupyter = ["ipython (>=7.8.0)", "tokenize-rt (>=3.2.0)"]
 uvloop = ["uvloop (>=0.15.2)"]
 
 [[package]]
+name = "boto3"
+version = "1.22.8"
+description = "The AWS SDK for Python"
+category = "main"
+optional = false
+python-versions = ">= 3.6"
+
+[package.dependencies]
+botocore = ">=1.25.8,<1.26.0"
+jmespath = ">=0.7.1,<2.0.0"
+s3transfer = ">=0.5.0,<0.6.0"
+
+[package.extras]
+crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
+
+[[package]]
+name = "botocore"
+version = "1.25.8"
+description = "Low-level, data-driven core of boto 3."
+category = "main"
+optional = false
+python-versions = ">= 3.6"
+
+[package.dependencies]
+jmespath = ">=0.7.1,<2.0.0"
+python-dateutil = ">=2.1,<3.0.0"
+urllib3 = ">=1.25.4,<1.27"
+
+[package.extras]
+crt = ["awscrt (==0.13.8)"]
+
+[[package]]
 name = "brotli"
 version = "1.0.9"
 description = "Python bindings for the Brotli compression library"
@@ -713,6 +745,7 @@ python-versions = ">=3.5"
 
 [package.dependencies]
 azure-storage-blob = {version = ">=12.0.0", optional = true, markers = "extra == \"azure\""}
+boto3 = {version = ">=1.4.4", optional = true, markers = "extra == \"boto3\""}
 Django = ">=2.2"
 google-cloud-storage = {version = ">=1.27.0", optional = true, markers = "extra == \"google\""}
 
@@ -1255,6 +1288,14 @@ MarkupSafe = ">=2.0"
 i18n = ["Babel (>=2.7)"]
 
 [[package]]
+name = "jmespath"
+version = "1.0.0"
+description = "JSON Matching Expressions"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[[package]]
 name = "jsonfield"
 version = "3.1.0"
 description = "A reusable Django field that allows you to store validated JSON in your model."
@@ -1743,7 +1784,7 @@ python-versions = ">=3.7"
 name = "python-dateutil"
 version = "2.8.2"
 description = "Extensions to the standard Python datetime module"
-category = "dev"
+category = "main"
 optional = false
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,>=2.7"
 
@@ -1889,6 +1930,20 @@ optional = false
 python-versions = ">=3.5"
 
 [[package]]
+name = "s3transfer"
+version = "0.5.2"
+description = "An Amazon S3 Transfer Manager"
+category = "main"
+optional = false
+python-versions = ">= 3.6"
+
+[package.dependencies]
+botocore = ">=1.12.36,<2.0a.0"
+
+[package.extras]
+crt = ["botocore[crt] (>=1.20.29,<2.0a.0)"]
+
+[[package]]
 name = "sentry-sdk"
 version = "1.5.11"
 description = "Python client for Sentry (https://sentry.io)"
@@ -1960,7 +2015,7 @@ tests = ["pytest", "typeguard", "pygments", "littleutils", "cython"]
 
 [[package]]
 name = "stripe"
-version = "2.75.0"
+version = "2.76.0"
 description = "Python bindings for the Stripe API"
 category = "main"
 optional = false
@@ -1971,7 +2026,7 @@ requests = {version = ">=2.20", markers = "python_version >= \"3.0\""}
 
 [[package]]
 name = "symbolic"
-version = "8.7.0"
+version = "8.7.1"
 description = "A python library for dealing with symbol files and more."
 category = "main"
 optional = false
@@ -2181,7 +2236,7 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "64b67af563e6dee5372522dcabc654e2cdfb3b7cc7c6de3c5d9ccfba1d7e9ec9"
+content-hash = "96c9083d4142963fd7c266686dd175618d9c7cd2f22b200d451a2ff9c7d8b36c"
 
 [metadata.files]
 aiohttp = [
@@ -2356,6 +2411,14 @@ black = [
     {file = "black-22.3.0-cp39-cp39-win_amd64.whl", hash = "sha256:9b542ced1ec0ceeff5b37d69838106a6348e60db7b8fdd245294dc1d26136265"},
     {file = "black-22.3.0-py3-none-any.whl", hash = "sha256:bc58025940a896d7e5356952228b68f793cf5fcb342be703c3a2669a1488cb72"},
     {file = "black-22.3.0.tar.gz", hash = "sha256:35020b8886c022ced9282b51b5a875b6d1ab0c387b31a065b84db7c33085ca79"},
+]
+boto3 = [
+    {file = "boto3-1.22.8-py3-none-any.whl", hash = "sha256:a6925fe88cc9cd6aab35ea950cdb1678a88210ece5271bb64c1593a46ed6de6c"},
+    {file = "boto3-1.22.8.tar.gz", hash = "sha256:222cfb68bd4f46f4beae7770f1f6b066786254462f289027ca123fe77eb50ff9"},
+]
+botocore = [
+    {file = "botocore-1.25.8-py3-none-any.whl", hash = "sha256:5b342da3487e5669801f5589cc15e379fc9f7803a426584d08a6329575644da3"},
+    {file = "botocore-1.25.8.tar.gz", hash = "sha256:f0a7e9fb6000a6cfc7ca63971d8d1ab4ed3c38514ded439bcf1fc8bca162dc1b"},
 ]
 brotli = [
     {file = "Brotli-1.0.9-cp27-cp27m-macosx_10_9_x86_64.whl", hash = "sha256:268fe94547ba25b58ebc724680609c8ee3e5a843202e9a381f6f9c5e8bdb5c70"},
@@ -3041,6 +3104,10 @@ jinja2 = [
     {file = "Jinja2-3.1.2-py3-none-any.whl", hash = "sha256:6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61"},
     {file = "Jinja2-3.1.2.tar.gz", hash = "sha256:31351a702a408a9e7595a8fc6150fc3f43bb6bf7e319770cbc0db9df9437e852"},
 ]
+jmespath = [
+    {file = "jmespath-1.0.0-py3-none-any.whl", hash = "sha256:e8dcd576ed616f14ec02eed0005c85973b5890083313860136657e24784e4c04"},
+    {file = "jmespath-1.0.0.tar.gz", hash = "sha256:a490e280edd1f57d6de88636992d05b71e97d69a26a19f058ecf7d304474bf5e"},
+]
 jsonfield = [
     {file = "jsonfield-3.1.0-py3-none-any.whl", hash = "sha256:df857811587f252b97bafba42e02805e70a398a7a47870bc6358a0308dd689ed"},
     {file = "jsonfield-3.1.0.tar.gz", hash = "sha256:7e4e84597de21eeaeeaaa7cc5da08c61c48a9b64d0c446b2d71255d01812887a"},
@@ -3644,6 +3711,10 @@ rsa = [
     {file = "ruamel.yaml.clib-0.2.6-cp39-cp39-win_amd64.whl", hash = "sha256:825d5fccef6da42f3c8eccd4281af399f21c02b32d98e113dbc631ea6a6ecbc7"},
     {file = "ruamel.yaml.clib-0.2.6.tar.gz", hash = "sha256:4ff604ce439abb20794f05613c374759ce10e3595d1867764dd1ae675b85acbd"},
 ]
+s3transfer = [
+    {file = "s3transfer-0.5.2-py3-none-any.whl", hash = "sha256:7a6f4c4d1fdb9a2b640244008e142cbc2cd3ae34b386584ef044dd0f27101971"},
+    {file = "s3transfer-0.5.2.tar.gz", hash = "sha256:95c58c194ce657a5f4fb0b9e60a84968c808888aed628cd98ab8771fe1db98ed"},
+]
 sentry-sdk = [
     {file = "sentry-sdk-1.5.11.tar.gz", hash = "sha256:6c01d9d0b65935fd275adc120194737d1df317dce811e642cbf0394d0d37a007"},
     {file = "sentry_sdk-1.5.11-py2.py3-none-any.whl", hash = "sha256:c17179183cac614e900cbd048dab03f49a48e2820182ec686c25e7ce46f8548f"},
@@ -3724,16 +3795,16 @@ stack-data = [
     {file = "stack_data-0.2.0.tar.gz", hash = "sha256:45692d41bd633a9503a5195552df22b583caf16f0b27c4e58c98d88c8b648e12"},
 ]
 stripe = [
-    {file = "stripe-2.75.0-py2.py3-none-any.whl", hash = "sha256:60a9192087ed8349ab1cd22b3b37aaaddb15f6240d7fbcbd4dbe6a06a6acf418"},
-    {file = "stripe-2.75.0.tar.gz", hash = "sha256:8808d7b1b797faf656f05b5a251201e65477104903514fdd3e92e97474b12cc1"},
+    {file = "stripe-2.76.0-py2.py3-none-any.whl", hash = "sha256:756bf6c1206f438d1fa23bb90cdf1233c9383478f854f2720a8a3e1eaf1f715b"},
+    {file = "stripe-2.76.0.tar.gz", hash = "sha256:fd3fc6935c3b6189967191607b6f38ebe490005a590b4d0d43fbe3aba45deca8"},
 ]
 symbolic = [
-    {file = "symbolic-8.7.0-py2.py3-none-macosx_10_15_x86_64.whl", hash = "sha256:11d82bd7181439839c5efd6c3e85653419e0b12ecdd3da8b843a5cacd13c22b1"},
-    {file = "symbolic-8.7.0-py2.py3-none-macosx_11_0_arm64.whl", hash = "sha256:4aa3d4fde085109d1ace0589f7695cfafb78a954acf6af8b9bb285cd6b45ff82"},
-    {file = "symbolic-8.7.0-py2.py3-none-manylinux_2_12_i686.manylinux2010_i686.whl", hash = "sha256:0ab5d5f84c48d4973017f94178e17c97205ac0eaa1a00322ee67d2261accfe2f"},
-    {file = "symbolic-8.7.0-py2.py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:e0badcdef4bcd1c56f31d46589ee3edabbbc902c6d0158d152080bddae3e7a24"},
-    {file = "symbolic-8.7.0-py2.py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:116288b7941f6338b912f04fdef312c6ae9d6734ce209b97c425b0a98ed11c80"},
-    {file = "symbolic-8.7.0.zip", hash = "sha256:be1f488078c31af540b1892ca3e5ba0f2d934b3b11cf68cd14b9fe9cd4ad7673"},
+    {file = "symbolic-8.7.1-py2.py3-none-macosx_10_15_x86_64.whl", hash = "sha256:eb194b2c567d1515774b03b9011f45083b08e0314a9f85e23d95ecd469feb301"},
+    {file = "symbolic-8.7.1-py2.py3-none-macosx_11_0_arm64.whl", hash = "sha256:3b1e640d0b6dd58ef98c56d00e05b3cc268a2d088f67ea33df55087d2501ac93"},
+    {file = "symbolic-8.7.1-py2.py3-none-manylinux_2_12_i686.manylinux2010_i686.whl", hash = "sha256:086ef0883ba999b9b7bd7cdabde75021343707ac196660ef1f17bc8c2cf2c147"},
+    {file = "symbolic-8.7.1-py2.py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:c6c3b79b01bb6566ed525befd553f10fb81d6bcf5ee70fce64f9f808b7f23452"},
+    {file = "symbolic-8.7.1-py2.py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7d6a93bdad57361af9e6f780f0928e46b62721d9342cb993b65ed4f9923c88d0"},
+    {file = "symbolic-8.7.1.zip", hash = "sha256:1a576f12636c68611eea4cce05bca0e4e86a60a82a7f5cb57fe60fca5873979a"},
 ]
 tblib = [
     {file = "tblib-1.7.0-py2.py3-none-any.whl", hash = "sha256:289fa7359e580950e7d9743eab36b0691f0310fce64dee7d9c31065b8f723e23"},

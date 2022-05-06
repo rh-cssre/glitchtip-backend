@@ -15,7 +15,7 @@ django-debug-toolbar = "^3.2"
 django-environ = "^0.8.1"
 django-extensions = "^3.0.2"
 django-organizations = "~2.0.1"
-django-storages = {extras = ["botos3", "azure", "google"], version = "^1.12.3"}
+django-storages = {extras = ["boto3", "azure", "google"], version = "^1.12.3"}
 drf-nested-routers = "^0.93.3"
 uWSGI = "^2.0.18"
 whitenoise = "^6.0.0"
