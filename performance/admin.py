@@ -50,10 +50,6 @@ class TransactionEventAdmin(admin.ModelAdmin):
     inlines = [SpanInline]
     can_delete = False
 
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs
-
 
 class SpanAdmin(admin.ModelAdmin):
     search_fields = [
