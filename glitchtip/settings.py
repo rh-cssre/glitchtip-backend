@@ -36,10 +36,7 @@ env = environ.Env(
     DEBUG=(bool, False),
     DEBUG_TOOLBAR=(bool, False),
     STATIC_URL=(str, "/"),
-    STATICFILES_STORAGE=(
-        str,
-        "glitchtip.settings.NoSourceMapsStorage",
-    ),
+    STATICFILES_STORAGE=(str, "glitchtip.settings.NoSourceMapsStorage",),
     ENABLE_OBSERVABILITY_API=(bool, False),
 )
 path = environ.Path()
@@ -82,7 +79,9 @@ if GLITCHTIP_URL.scheme not in ["http", "https"]:
 
 # Events and associated data older than this will be deleted from the database
 GLITCHTIP_MAX_EVENT_LIFE_DAYS = env.int("GLITCHTIP_MAX_EVENT_LIFE_DAYS", default=90)
-GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS = env.int("GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS", default=90)
+GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS = env.int(
+    "GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS", default=GLITCHTIP_MAX_EVENT_LIFE_DAYS
+)
 
 # For development purposes only, prints out inbound event store json
 EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
@@ -381,15 +380,9 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
-    {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
-    },
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",},
 ]
 
 
@@ -532,18 +525,11 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "handlers": {
-        "null": {
-            "class": "logging.NullHandler",
-        },
-        "console": {
-            "class": LOGGING_HANDLER_CLASS,
-        },
+        "null": {"class": "logging.NullHandler",},
+        "console": {"class": LOGGING_HANDLER_CLASS,},
     },
     "loggers": {
-        "django.security.DisallowedHost": {
-            "handlers": ["null"],
-            "propagate": False,
-        },
+        "django.security.DisallowedHost": {"handlers": ["null"], "propagate": False,},
     },
     "root": {"handlers": ["console"]},
 }
@@ -632,11 +618,7 @@ if TESTING:
         "ignore", message="No directory at", module="whitenoise.base"
     )
 if CELERY_TASK_ALWAYS_EAGER:
-    CACHES = {
-        "default": {
-            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        }
-    }
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache",}}
 
 MFA_SERVER_NAME = "GlitchTip"
 FIDO_SERVER_ID = GLITCHTIP_URL.hostname
