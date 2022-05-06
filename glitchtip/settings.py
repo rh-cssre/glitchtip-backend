@@ -36,7 +36,10 @@ env = environ.Env(
     DEBUG=(bool, False),
     DEBUG_TOOLBAR=(bool, False),
     STATIC_URL=(str, "/"),
-    STATICFILES_STORAGE=(str, "glitchtip.settings.NoSourceMapsStorage",),
+    STATICFILES_STORAGE=(
+        str,
+        "glitchtip.settings.NoSourceMapsStorage",
+    ),
     ENABLE_OBSERVABILITY_API=(bool, False),
 )
 path = environ.Path()
@@ -380,9 +383,15 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+    },
 ]
 
 
@@ -525,11 +534,18 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "handlers": {
-        "null": {"class": "logging.NullHandler",},
-        "console": {"class": LOGGING_HANDLER_CLASS,},
+        "null": {
+            "class": "logging.NullHandler",
+        },
+        "console": {
+            "class": LOGGING_HANDLER_CLASS,
+        },
     },
     "loggers": {
-        "django.security.DisallowedHost": {"handlers": ["null"], "propagate": False,},
+        "django.security.DisallowedHost": {
+            "handlers": ["null"],
+            "propagate": False,
+        },
     },
     "root": {"handlers": ["console"]},
 }
@@ -618,7 +634,11 @@ if TESTING:
         "ignore", message="No directory at", module="whitenoise.base"
     )
 if CELERY_TASK_ALWAYS_EAGER:
-    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache",}}
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        }
+    }
 
 MFA_SERVER_NAME = "GlitchTip"
 FIDO_SERVER_ID = GLITCHTIP_URL.hostname
