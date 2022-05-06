@@ -21,7 +21,7 @@ class TasksTestCase(TestCase):
         self.assertEqual(Span.objects.count(), 1)
 
         with freeze_time(
-            now() + timedelta(days=settings.GLITCHTIP_MAX_EVENT_LIFE_DAYS)
+            now() + timedelta(days=settings.GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS)
         ):
             cleanup_old_transaction_events()
         self.assertEqual(TransactionGroup.objects.count(), 0)
