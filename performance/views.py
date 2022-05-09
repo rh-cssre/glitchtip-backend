@@ -24,17 +24,18 @@ class TransactionGroupViewSet(viewsets.ReadOnlyModelViewSet):
         if not self.request.user.is_authenticated:
             return self.queryset.none()
         # Performance optimization, force two queries
-        projects = list(
-            Project.objects.filter(team__members__user=self.request.user).values_list(
-                "pk", flat=True
-            )
-        )
-
-        qs = super().get_queryset().filter(project__pk__in=projects)
+        projects = Project.objects.filter(team__members__user=self.request.user)
         if "organization_slug" in self.kwargs:
-            qs = qs.filter(
-                project__organization__slug=self.kwargs["organization_slug"],
+            projects = projects.filter(
+                organization__slug=self.kwargs["organization_slug"],
             )
+
+        qs = (
+            super()
+            .get_queryset()
+            .filter(project__pk__in=list(projects.values_list("pk", flat=True)))
+            .defer("search_vector", "created")
+        )
 
         return qs
 

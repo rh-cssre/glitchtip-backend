@@ -27,12 +27,17 @@ from whitenoise.storage import CompressedManifestStaticFilesStorage
 env = environ.Env(
     ALLOWED_HOSTS=(list, ["*"]),
     DEFAULT_FILE_STORAGE=(str, None),
-    GS_BUCKET_NAME=(str, None),
     AWS_ACCESS_KEY_ID=(str, None),
     AWS_SECRET_ACCESS_KEY=(str, None),
     AWS_STORAGE_BUCKET_NAME=(str, None),
     AWS_S3_ENDPOINT_URL=(str, None),
     AWS_LOCATION=(str, ""),
+    AZURE_ACCOUNT_NAME=(str, None),
+    AZURE_ACCOUNT_KEY=(str, None),
+    AZURE_CONTAINER=(str, None),
+    AZURE_URL_EXPIRATION_SECS=(int, None),
+    GS_BUCKET_NAME=(str, None),
+    GS_PROJECT_ID=(str, None),
     DEBUG=(bool, False),
     DEBUG_TOOLBAR=(bool, False),
     STATIC_URL=(str, "/"),
@@ -82,6 +87,9 @@ if GLITCHTIP_URL.scheme not in ["http", "https"]:
 
 # Events and associated data older than this will be deleted from the database
 GLITCHTIP_MAX_EVENT_LIFE_DAYS = env.int("GLITCHTIP_MAX_EVENT_LIFE_DAYS", default=90)
+GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS = env.int(
+    "GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS", default=GLITCHTIP_MAX_EVENT_LIFE_DAYS
+)
 
 # For development purposes only, prints out inbound event store json
 EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
@@ -409,13 +417,20 @@ SITE_ID = 1
 
 if env("DEFAULT_FILE_STORAGE"):
     DEFAULT_FILE_STORAGE = env("DEFAULT_FILE_STORAGE")
-GS_BUCKET_NAME = env("GS_BUCKET_NAME")
 
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
 AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME")
 AWS_S3_ENDPOINT_URL = env("AWS_S3_ENDPOINT_URL")
 AWS_LOCATION = env("AWS_LOCATION")
+
+AZURE_ACCOUNT_NAME = env("AZURE_ACCOUNT_NAME")
+AZURE_ACCOUNT_KEY = env("AZURE_ACCOUNT_KEY")
+AZURE_CONTAINER = env("AZURE_CONTAINER")
+AZURE_URL_EXPIRATION_SECS = env("AZURE_URL_EXPIRATION_SECS")
+
+GS_BUCKET_NAME = env("GS_BUCKET_NAME")
+GS_PROJECT_ID = env("GS_PROJECT_ID")
 
 if AWS_S3_ENDPOINT_URL:
     MEDIA_URL = env.str(

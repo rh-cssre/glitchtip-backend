@@ -1,12 +1,16 @@
+import logging
 import urllib.parse as urlparse
 from urllib.parse import parse_qs
 
+from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import CursorPagination
 from rest_framework.response import Response
 
+logger = logging.getLogger(__name__)
+
 
 class LinkHeaderPagination(CursorPagination):
-    """ Inform the user of pagination links via response headers, similar to
+    """Inform the user of pagination links via response headers, similar to
     what's described in
     https://developer.github.com/guides/traversing-with-pagination/.
     """
@@ -16,10 +20,15 @@ class LinkHeaderPagination(CursorPagination):
 
     def paginate_queryset(self, queryset, request, view=None):
         self.count = self.get_count(queryset)
-        return super().paginate_queryset(queryset, request, view)
+        try:
+            return super().paginate_queryset(queryset, request, view)
+        except ValueError as err:
+            # https://gitlab.com/glitchtip/glitchtip-backend/-/issues/136
+            logging.warning("Pagination received invalid cursor", exc_info=True)
+            raise ValidationError("Invalid page cursor") from err
 
     def get_count(self, queryset):
-        """ Count with max limit, to prevent slowdown """
+        """Count with max limit, to prevent slowdown"""
         return queryset[: self.max_hits].count()
 
     def get_paginated_response(self, data):
