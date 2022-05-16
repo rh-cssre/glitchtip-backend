@@ -388,6 +388,11 @@ else:  # Default to REDIS when unset
         }
     }
 
+if CACHES["default"].get("OPTIONS"):
+    SENTINELS = [x.split(":") for x in env.list("SENTINELS", str, [])]
+    if SENTINELS:
+        CACHES["default"]["OPTIONS"]["SENTINELS"] = SENTINELS
+
 if os.environ.get("SESSION_ENGINE"):
     SESSION_ENGINE = env.str("SESSION_ENGINE")
 if os.environ.get("SESSION_CACHE_ALIAS"):
