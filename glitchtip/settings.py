@@ -374,12 +374,26 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": timedelta(seconds=30),
     },
 }
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": REDIS_URL,
+
+
+if os.environ.get("CACHE_URL"):
+    CACHES = {
+        "default": env.cache(),
     }
-}
+else:  # Default to REDIS when unset
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+        }
+    }
+
+if os.environ.get("SESSION_ENGINE"):
+    SESSION_ENGINE = env.str("SESSION_ENGINE")
+if os.environ.get("SESSION_CACHE_ALIAS"):
+    SESSION_CACHE_ALIAS = env.str("SESSION_CACHE_ALIAS")
+if os.environ.get("SESSION_COOKIE_AGE"):
+    SESSION_COOKIE_AGE = env.int("SESSION_COOKIE_AGE")
 
 # Password validation
 # https://docs.djangoproject.com/en/dev/ref/settings/#auth-password-validators
