@@ -350,14 +350,6 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {
     "fanout_prefix": True,
     "fanout_patterns": True,
 }
-# Sentinel uses this option
-CELERY_BROKER_TRANSPORT_OPTIONS_MASTER_NAME = env.str(
-    "CELERY_BROKER_TRANSPORT_OPTIONS_MASTER_NAME", None
-)
-if CELERY_BROKER_TRANSPORT_OPTIONS_MASTER_NAME:
-    CELERY_BROKER_TRANSPORT_OPTIONS[
-        "master_name"
-    ] = CELERY_BROKER_TRANSPORT_OPTIONS_MASTER_NAME
 
 CELERY_RESULT_BACKEND = "django-db"
 CELERY_CACHE_BACKEND = "django-cache"
@@ -397,10 +389,6 @@ else:  # Default to REDIS when unset
         }
     }
 
-if CACHES["default"].get("OPTIONS"):
-    SENTINELS = [x.split(":") for x in env.list("SENTINELS", str, [])]
-    if SENTINELS:
-        CACHES["default"]["OPTIONS"]["SENTINELS"] = SENTINELS
 
 if os.environ.get("SESSION_ENGINE"):
     SESSION_ENGINE = env.str("SESSION_ENGINE")
