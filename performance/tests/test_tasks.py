@@ -1,14 +1,17 @@
 from datetime import timedelta
+
 from django.conf import settings
-from django.test import TestCase
 from django.utils.timezone import now
-from model_bakery import baker
 from freezegun import freeze_time
-from ..models import TransactionEvent, TransactionGroup, Span
+from model_bakery import baker
+
+from glitchtip.test_utils.test_case import GlitchTipTestCase
+
+from ..models import Span, TransactionEvent, TransactionGroup
 from ..tasks import cleanup_old_transaction_events
 
 
-class TasksTestCase(TestCase):
+class TasksTestCase(GlitchTipTestCase):
     def test_cleanup_old_events(self):
         group = baker.make("performance.TransactionGroup")
         transactions = baker.make(
