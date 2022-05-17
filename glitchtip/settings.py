@@ -262,6 +262,7 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
     "x-sentry-auth",
 ]
 
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", str, [])
 SECURE_BROWSER_XSS_FILTER = True
 CSP_DEFAULT_SRC = env.list("CSP_DEFAULT_SRC", str, ["'self'"])
 CSP_STYLE_SRC = env.list(
