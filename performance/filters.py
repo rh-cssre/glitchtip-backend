@@ -8,6 +8,7 @@ from projects.models import Project
 from .models import TransactionGroup
 
 
+# Workaround https://github.com/carltongibson/django-filter/issues/1403
 class StartEndDateRangeWidget(DateRangeWidget):
     """
     A range widget that uses 'start' and 'end' query params
