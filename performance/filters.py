@@ -1,21 +1,36 @@
 from django.db.models import Avg, Count
 from django_filters import rest_framework as filters
+from django_filters.fields import IsoDateTimeRangeField
+from django_filters.widgets import DateRangeWidget
 
 from projects.models import Project
 
 from .models import TransactionGroup
 
 
+class StartEndDateRangeWidget(DateRangeWidget):
+    """
+    A range widget that uses 'start' and 'end' query params
+    """
+
+    suffixes = ["start", "end"]
+
+    def suffixed(self, name, suffix):
+        return suffix
+
+
+class StartEndIsoDateTimeRangeField(IsoDateTimeRangeField):
+    widget = StartEndDateRangeWidget
+
+
+class StartEndIsoDateTimeFromToRangeFilter(filters.IsoDateTimeFromToRangeFilter):
+    field_class = StartEndIsoDateTimeRangeField
+
+
 class TransactionGroupFilter(filters.FilterSet):
-    start = filters.IsoDateTimeFilter(
+    transaction_created = StartEndIsoDateTimeFromToRangeFilter(
         field_name="transactionevent__created",
-        lookup_expr="gte",
-        label="Transaction start date",
-    )
-    end = filters.IsoDateTimeFilter(
-        field_name="transactionevent__created",
-        lookup_expr="lte",
-        label="Transaction end date",
+        label="Transaction created",
     )
     project = filters.ModelMultipleChoiceFilter(queryset=Project.objects.all())
     query = filters.CharFilter(
@@ -26,7 +41,7 @@ class TransactionGroupFilter(filters.FilterSet):
 
     class Meta:
         model = TransactionGroup
-        fields = ["project", "start", "end"]
+        fields = ["project", "transaction_created"]
 
     def filter_queryset(self, queryset):
         queryset = super().filter_queryset(queryset)
