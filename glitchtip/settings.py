@@ -262,6 +262,7 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
     "x-sentry-auth",
 ]
 
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", str, [])
 SECURE_BROWSER_XSS_FILTER = True
 CSP_DEFAULT_SRC = env.list("CSP_DEFAULT_SRC", str, ["'self'"])
 CSP_STYLE_SRC = env.list(
@@ -345,11 +346,12 @@ if REDIS_HOST:
         REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DATABASE}"
 else:
     REDIS_URL = env.str("REDIS_URL", "redis://redis:6379/0")
-CELERY_BROKER_URL = REDIS_URL
+CELERY_BROKER_URL = env.str("CELERY_BROKER_URL", REDIS_URL)
 CELERY_BROKER_TRANSPORT_OPTIONS = {
     "fanout_prefix": True,
     "fanout_patterns": True,
 }
+
 CELERY_RESULT_BACKEND = "django-db"
 CELERY_CACHE_BACKEND = "django-cache"
 CELERY_BEAT_SCHEDULE = {
@@ -374,12 +376,27 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": timedelta(seconds=30),
     },
 }
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": REDIS_URL,
+
+
+if os.environ.get("CACHE_URL"):
+    CACHES = {
+        "default": env.cache(),
     }
-}
+else:  # Default to REDIS when unset
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+        }
+    }
+
+
+if os.environ.get("SESSION_ENGINE"):
+    SESSION_ENGINE = env.str("SESSION_ENGINE")
+if os.environ.get("SESSION_CACHE_ALIAS"):
+    SESSION_CACHE_ALIAS = env.str("SESSION_CACHE_ALIAS")
+if os.environ.get("SESSION_COOKIE_AGE"):
+    SESSION_COOKIE_AGE = env.int("SESSION_COOKIE_AGE")
 
 # Password validation
 # https://docs.djangoproject.com/en/dev/ref/settings/#auth-password-validators
