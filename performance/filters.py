@@ -1,6 +1,10 @@
+import re
+from datetime import timedelta
+
 from django.db.models import Avg, Count
+from django.utils import timezone
 from django_filters import rest_framework as filters
-from django_filters.fields import IsoDateTimeRangeField
+from django_filters.fields import IsoDateTimeField, RangeField
 from django_filters.widgets import DateRangeWidget
 
 from projects.models import Project
@@ -20,8 +24,45 @@ class StartEndDateRangeWidget(DateRangeWidget):
         return suffix
 
 
-class StartEndIsoDateTimeRangeField(IsoDateTimeRangeField):
+RELATIVE_TIME_REGEX = re.compile(r"now\s*\-\s*\d+\s*(m|h|d)\s*$")
+
+
+class RelativeIsoDateTimeField(IsoDateTimeField):
+    """
+    Allow relative terms like now or now-1h. Only 0 or 1 subtraction operation is permitted.
+
+    Accepts
+    - now
+    - - (subtraction)
+    - m (minutes)
+    - h (hours)
+    - d (days)
+    """
+
+    def strptime(self, value, format):
+        # Check for relative time, if panic just assume it's a datetime
+        result = timezone.now()
+        if value == "now":
+            return result
+        if RELATIVE_TIME_REGEX.match(value):
+            spacesStripped = value.replace(" ", "")
+            numbers = int(re.findall(r"\d+", spacesStripped)[0])
+            if spacesStripped[-1] == "m":
+                result -= timedelta(minutes=numbers)
+            if spacesStripped[-1] == "h":
+                result -= timedelta(hours=numbers)
+            if spacesStripped[-1] == "d":
+                result -= timedelta(days=numbers)
+            return result
+        return super().strptime(value, format)
+
+
+class StartEndIsoDateTimeRangeField(RangeField):
     widget = StartEndDateRangeWidget
+
+    def __init__(self, *args, **kwargs):
+        fields = (RelativeIsoDateTimeField(), RelativeIsoDateTimeField())
+        super().__init__(fields, *args, **kwargs)
 
 
 class StartEndIsoDateTimeFromToRangeFilter(filters.IsoDateTimeFromToRangeFilter):
@@ -30,8 +71,7 @@ class StartEndIsoDateTimeFromToRangeFilter(filters.IsoDateTimeFromToRangeFilter)
 
 class TransactionGroupFilter(filters.FilterSet):
     transaction_created = StartEndIsoDateTimeFromToRangeFilter(
-        field_name="transactionevent__created",
-        label="Transaction created",
+        field_name="transactionevent__created", label="Transaction created",
     )
     project = filters.ModelMultipleChoiceFilter(queryset=Project.objects.all())
     query = filters.CharFilter(

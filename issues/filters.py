@@ -1,16 +1,18 @@
 from django_filters import rest_framework as filters
+from performance.filters import StartEndIsoDateTimeFromToRangeFilter
 from projects.models import Project
 from .models import Issue
 
 
 class IssueFilter(filters.FilterSet):
-    start = filters.IsoDateTimeFilter(field_name="created", lookup_expr="gte")
-    end = filters.IsoDateTimeFilter(field_name="created", lookup_expr="lte")
+    issue_created = StartEndIsoDateTimeFromToRangeFilter(
+        field_name="created", label="Issue created",
+    )
     project = filters.ModelMultipleChoiceFilter(queryset=Project.objects.all())
 
     class Meta:
         model = Issue
-        fields = ["project", "start", "end"]
+        fields = ["project", "issue_created"]
 
     def filter_queryset(self, queryset):
         queryset = super().filter_queryset(queryset)
