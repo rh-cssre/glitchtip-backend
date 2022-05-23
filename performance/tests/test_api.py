@@ -108,6 +108,10 @@ class TransactionGroupAPITestCase(GlitchTipTestCase):
         self.assertEqual(res.status_code, 400)
         res = self.client.get(self.list_url, {"start": "won-1m"})
         self.assertEqual(res.status_code, 400)
+        res = self.client.get(self.list_url, {"start": "now+1m"})
+        self.assertEqual(res.status_code, 400)
+        res = self.client.get(self.list_url, {"start": "now 1m"})
+        self.assertEqual(res.status_code, 400)
 
     def test_list_environment_filter(self):
         environment_project = baker.make(
