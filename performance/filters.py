@@ -60,6 +60,7 @@ class RelativeIsoDateTimeField(IsoDateTimeField):
 class StartEndIsoDateTimeRangeField(RangeField):
     widget = StartEndDateRangeWidget
 
+
 class StartEndIsoDateTimeFromToRangeFilter(filters.IsoDateTimeFromToRangeFilter):
     field_class = StartEndIsoDateTimeRangeField
 
