@@ -52,7 +52,7 @@ class RelativeIsoDateTimeField(IsoDateTimeField):
         return super().strptime(value, format)
 
 
-class StartEndIsoDateTimeRangeField(RangeField):
+class RelativeIsoDateTimeRangeField(RangeField):
     widget = StartEndDateRangeWidget
 
     def __init__(self, *args, **kwargs):
@@ -60,5 +60,5 @@ class StartEndIsoDateTimeRangeField(RangeField):
         super().__init__(fields, *args, **kwargs)
 
 
-class StartEndIsoDateTimeFromToRangeFilter(filters.IsoDateTimeFromToRangeFilter):
-    field_class = StartEndIsoDateTimeRangeField
+class RelativeIsoDateTimeRangeFilter(filters.IsoDateTimeFromToRangeFilter):
+    field_class = RelativeIsoDateTimeRangeField
