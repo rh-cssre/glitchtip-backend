@@ -45,13 +45,13 @@ class RelativeIsoDateTimeField(IsoDateTimeField):
         if value == "now":
             return result
         if RELATIVE_TIME_REGEX.match(value):
-            spacesStripped = value.replace(" ", "")
-            numbers = int(re.findall(r"\d+", spacesStripped)[0])
-            if spacesStripped[-1] == "m":
+            spaces_stripped = value.replace(" ", "")
+            numbers = int(re.findall(r"\d+", spaces_stripped)[0])
+            if spaces_stripped[-1] == "m":
                 result -= timedelta(minutes=numbers)
-            if spacesStripped[-1] == "h":
+            if spaces_stripped[-1] == "h":
                 result -= timedelta(hours=numbers)
-            if spacesStripped[-1] == "d":
+            if spaces_stripped[-1] == "d":
                 result -= timedelta(days=numbers)
             return result
         return super().strptime(value, format)
@@ -60,18 +60,15 @@ class RelativeIsoDateTimeField(IsoDateTimeField):
 class StartEndIsoDateTimeRangeField(RangeField):
     widget = StartEndDateRangeWidget
 
-    def __init__(self, *args, **kwargs):
-        fields = (RelativeIsoDateTimeField(), RelativeIsoDateTimeField())
-        super().__init__(fields, *args, **kwargs)
-
-
 class StartEndIsoDateTimeFromToRangeFilter(filters.IsoDateTimeFromToRangeFilter):
     field_class = StartEndIsoDateTimeRangeField
 
 
 class TransactionGroupFilter(filters.FilterSet):
     transaction_created = StartEndIsoDateTimeFromToRangeFilter(
-        field_name="transactionevent__created", label="Transaction created",
+        field_name="transactionevent__created",
+        label="Transaction created",
+        fields=(RelativeIsoDateTimeField(), RelativeIsoDateTimeField()),
     )
     project = filters.ModelMultipleChoiceFilter(queryset=Project.objects.all())
     query = filters.CharFilter(
