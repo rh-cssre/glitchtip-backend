@@ -1,19 +1,19 @@
 from django_filters import rest_framework as filters
 
-from glitchtip.filters import RelativeIsoDateTimeRangeFilter
+from glitchtip.filters import StartEndRelativeIsoDateTimeRangeFilter
 from projects.models import Project
 from .models import Issue
 
 
 class IssueFilter(filters.FilterSet):
-    issue_created = RelativeIsoDateTimeRangeFilter(
+    created = StartEndRelativeIsoDateTimeRangeFilter(
         field_name="created", label="Issue created",
     )
     project = filters.ModelMultipleChoiceFilter(queryset=Project.objects.all())
 
     class Meta:
         model = Issue
-        fields = ["project", "issue_created"]
+        fields = ["project", "created"]
 
     def filter_queryset(self, queryset):
         queryset = super().filter_queryset(queryset)

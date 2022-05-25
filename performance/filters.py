@@ -1,13 +1,13 @@
 from django.db.models import Avg, Count
 from django_filters import rest_framework as filters
 
-from glitchtip.filters import RelativeIsoDateTimeRangeFilter
+from glitchtip.filters import StartEndRelativeIsoDateTimeRangeFilter
 from projects.models import Project
 from .models import TransactionGroup
 
 
 class TransactionGroupFilter(filters.FilterSet):
-    transaction_created = RelativeIsoDateTimeRangeFilter(
+    transaction_created = StartEndRelativeIsoDateTimeRangeFilter(
         field_name="transactionevent__created", label="Transaction created",
     )
     project = filters.ModelMultipleChoiceFilter(queryset=Project.objects.all())
