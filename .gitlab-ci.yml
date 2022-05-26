@@ -45,10 +45,45 @@ lint:
 build:
   image: docker:20
   rules:
-    - if: '$CI_PIPELINE_SOURCE != "merge_request_event" && $CI_COMMIT_REF_PROTECTED == "true"'
+    # Run only on protected branches that are not tagged and not merge requests
+    - if: '$CI_PIPELINE_SOURCE != "merge_request_event" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_TAG == ""'
   services:
     - docker:20-dind
   script:
     - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN registry.gitlab.com
     - docker build -t $CONTAINER_TEST_IMAGE --build-arg IS_CI="True" .
     - docker push $CONTAINER_TEST_IMAGE
+
+buildx:
+  image: docker:20-git
+  rules:
+    - if: "$CI_COMMIT_TAG"
+  variables:
+    GIT_STRATEGY: none
+  artifacts:
+    paths:
+      - buildx
+    expire_in: 1 hour
+  services:
+    - docker:20-dind
+  script:
+    - export DOCKER_BUILDKIT=1
+    - git clone https://github.com/docker/buildx.git ./docker-buildx
+    - docker build --platform=local -o . ./docker-buildx
+
+build_arm_x86:
+  image: docker:20
+  rules:
+    - if: "$CI_COMMIT_TAG"
+  needs:
+    - buildx
+  services:
+    - docker:20-dind
+  before_script:
+    - mkdir -p ~/.docker/cli-plugins
+    - mv buildx ~/.docker/cli-plugins/docker-buildx
+    - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+  script:
+    - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN registry.gitlab.com
+    - docker buildx create --use
+    - docker buildx build --platform linux/arm64/v8,linux/amd64 --push -t $CONTAINER_TEST_IMAGE --build-arg IS_CI="True" .
