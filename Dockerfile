@@ -1,7 +1,5 @@
 FROM python:3.10 as build-python
 ARG IS_CI
-ARG GLITCHTIP_VERSION=local
-ENV GLITCHTIP_VERSION ${GLITCHTIP_VERSION}
 ENV PYTHONUNBUFFERED=1 \
   PORT=8080 \
   POETRY_VIRTUALENVS_CREATE=false \
@@ -13,6 +11,8 @@ COPY poetry.lock pyproject.toml /code/
 RUN poetry install --no-interaction --no-ansi $(test "$IS_CI" = "True" && echo "--no-dev")
 
 FROM python:3.10-slim
+ARG GLITCHTIP_VERSION=local
+ENV GLITCHTIP_VERSION ${GLITCHTIP_VERSION}
 ENV PYTHONUNBUFFERED=1 \
   PORT=8080
 

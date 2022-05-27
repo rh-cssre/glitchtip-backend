@@ -91,4 +91,4 @@ build_arm_x86:
     - echo "Build version $VERSION ci registry image $CI_REGISTRY_IMAGE commit ref $CI_COMMIT_REF_NAME"
     - docker login -u ${DOCKER_CI_REGISTRY_USER} -p ${DOCKER_CI_REGISTRY_PASSWORD}
     - docker buildx create --use
-    - docker buildx build --platform linux/arm64/v8,linux/amd64 --push -t ${DOCKER_CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME} -t ${DOCKER_CI_REGISTRY_IMAGE}:latest --build-arg IS_CI="True" --build-arg GLITCHTIP_VERSION=$VERSION .
+    - docker buildx build --platform linux/arm64/v8,linux/amd64 --push -t ${DOCKER_CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME} -t ${DOCKER_CI_REGISTRY_IMAGE}:latest --build-arg IS_CI="True" --build-arg GLITCHTIP_VERSION=$VERSION --build-arg COLLECT_STATIC="True" .
