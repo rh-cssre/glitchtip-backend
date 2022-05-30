@@ -1,3 +1,5 @@
+import datetime
+
 from django.urls import reverse
 from django.utils import timezone
 from freezegun import freeze_time
@@ -26,6 +28,41 @@ class FilterTestCase(GlitchTipTestCase):
         self.assertContains(res, event2.issue.title)
         self.assertNotContains(res, event1.issue.title)
         self.assertNotContains(res, event3.issue.title)
+
+    def test_list_relative_datetime_filter(self):
+
+        now = timezone.now()
+        last_minute = now - datetime.timedelta(minutes=1)
+        with freeze_time(last_minute):
+            event1 = baker.make("events.Event", issue__project=self.project)
+
+        two_minutes_ago = now - datetime.timedelta(minutes=2)
+        with freeze_time(two_minutes_ago):
+            event2 = baker.make("events.Event", issue__project=self.project)
+
+        yesterday = now - datetime.timedelta(days=1)
+        with freeze_time(yesterday):
+            event3 = baker.make("events.Event", issue__project=self.project)
+
+        with freeze_time(now):
+            res = self.client.get(self.url, {"start": "now-1m"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data), 1)
+
+        with freeze_time(now):
+            res = self.client.get(self.url, {"start": "now-2m"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data), 2)
+
+        with freeze_time(now):
+            res = self.client.get(self.url, {"start": "now-24h", "end": "now"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data), 3)
+
+        with freeze_time(now):
+            res = self.client.get(self.url, {"end": "now-3m"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data), 1)
 
     def test_tag_space(self):
         tag_name = "os.name"

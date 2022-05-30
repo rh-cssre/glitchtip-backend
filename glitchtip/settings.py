@@ -90,6 +90,10 @@ GLITCHTIP_MAX_EVENT_LIFE_DAYS = env.int("GLITCHTIP_MAX_EVENT_LIFE_DAYS", default
 GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS = env.int(
     "GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS", default=GLITCHTIP_MAX_EVENT_LIFE_DAYS
 )
+# Defaults to twice as long as event life
+GLITCHTIP_MAX_FILE_LIFE_DAYS = env.int(
+    "GLITCHTIP_MAX_EVENT_LIFE_DAYS", default=GLITCHTIP_MAX_EVENT_LIFE_DAYS * 2
+)
 
 # For development purposes only, prints out inbound event store json
 EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
@@ -370,6 +374,10 @@ CELERY_BEAT_SCHEDULE = {
     "cleanup-old-monitor-checks": {
         "task": "glitchtip.uptime.tasks.cleanup_old_monitor_checks",
         "schedule": crontab(hour=6, minute=20),
+    },
+    "cleanup-old-files": {
+        "task": "files.tasks.cleanup_old_files",
+        "schedule": crontab(hour=6, minute=30),
     },
     "uptime-dispatch-checks": {
         "task": "glitchtip.uptime.tasks.dispatch_checks",

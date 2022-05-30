@@ -8,9 +8,11 @@ ENV PYTHONUNBUFFERED=1 \
 RUN pip install poetry
 WORKDIR /code
 COPY poetry.lock pyproject.toml /code/
-RUN poetry install --no-interaction --no-ansi $(test "$IS_CI" = "True" && echo "--no-dev") && test "$IS_CI" = "True" && pip install psycopg2 || true
+RUN poetry install --no-interaction --no-ansi $(test "$IS_CI" = "True" && echo "--no-dev")
 
 FROM python:3.10-slim
+ARG GLITCHTIP_VERSION=local
+ENV GLITCHTIP_VERSION ${GLITCHTIP_VERSION}
 ENV PYTHONUNBUFFERED=1 \
   PORT=8080
 
@@ -24,6 +26,8 @@ COPY --from=build-python /usr/local/bin/ /usr/local/bin/
 EXPOSE 8080
 
 COPY . /code/
+ARG COLLECT_STATIC
+RUN if [ "$COLLECT_STATIC" != "" ] ; then SECRET_KEY=ci ./manage.py collectstatic --noinput; fi
 
 RUN useradd -u 5000 app && chown app:app /code
 USER app:app
