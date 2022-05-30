@@ -42,6 +42,7 @@ django-prometheus = "^2.2.0"
 django-sql-utils = "^0.6.1"
 django-redis = {extras = ["hiredis"], version = "^5.2.0"}
 hiredis = "^2.0.0"
+psycopg2 = "^2.9.3"
 
 [tool.poetry.dev-dependencies]
 black = "^22.1.0"
@@ -58,7 +59,6 @@ django-stubs = "^1.9.0"
 django-sslserver = "^0.22"
 aioresponses = "^0.7.2"
 isort = "^5.9.3"
-psycopg2-binary = "^2.9.3"
 
 [tool.isort]
 profile = "black"

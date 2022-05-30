@@ -45,10 +45,52 @@ lint:
 build:
   image: docker:20
   rules:
-    - if: '$CI_PIPELINE_SOURCE != "merge_request_event" && $CI_COMMIT_REF_PROTECTED == "true"'
+    # Run only on protected branches that are not tagged and not merge requests
+    - if: '$CI_PIPELINE_SOURCE != "merge_request_event" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_TAG =~ "/^$/"'
   services:
     - docker:20-dind
   script:
     - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN registry.gitlab.com
     - docker build -t $CONTAINER_TEST_IMAGE --build-arg IS_CI="True" .
     - docker push $CONTAINER_TEST_IMAGE
+
+buildx:
+  image: docker:20-git
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+.\d+.\d+/
+  variables:
+    GIT_STRATEGY: none
+  artifacts:
+    paths:
+      - buildx
+    expire_in: 1 hour
+  services:
+    - docker:20-dind
+  script:
+    - export DOCKER_BUILDKIT=1
+    - git clone https://github.com/docker/buildx.git ./docker-buildx
+    - docker build --platform=local -o . ./docker-buildx
+
+build_arm_x86:
+  image: docker:20
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+.\d+.\d+/ && $CI_COMMIT_REF_PROTECTED == "true"'
+  needs:
+    - buildx
+  services:
+    - docker:20-dind
+  before_script:
+    - mkdir -p ~/.docker/cli-plugins
+    - mv buildx ~/.docker/cli-plugins/docker-buildx
+    - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+  script:
+    - wget https://gitlab.com/api/v4/projects/15449363/jobs/artifacts/$CI_COMMIT_TAG/download?job=build-assets -O assets.zip
+    - unzip assets.zip
+    - rm assets.zip
+    - mv dist/glitchtip-frontend/* dist/
+    - rmdir dist/glitchtip-frontend/
+    - VERSION=${CI_COMMIT_REF_NAME#*v}
+    - echo "Build version $VERSION ci registry image $CI_REGISTRY_IMAGE commit ref $CI_COMMIT_REF_NAME"
+    - docker login -u ${DOCKER_CI_REGISTRY_USER} -p ${DOCKER_CI_REGISTRY_PASSWORD}
+    - docker buildx create --use
+    - docker buildx build --platform linux/arm64/v8,linux/amd64 --push -t ${DOCKER_CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME} -t ${DOCKER_CI_REGISTRY_IMAGE}:latest --build-arg IS_CI="True" --build-arg GLITCHTIP_VERSION=$VERSION --build-arg COLLECT_STATIC="True" .
