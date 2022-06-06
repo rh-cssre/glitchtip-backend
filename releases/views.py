@@ -43,7 +43,8 @@ class ReleaseViewSet(viewsets.ModelViewSet):
     def get_organization(self):
         try:
             return Organization.objects.get(
-                slug=self.kwargs.get("organization_slug"), users=self.request.user,
+                slug=self.kwargs.get("organization_slug"),
+                users=self.request.user,
             )
         except Organization.DoesNotExist:
             raise exceptions.ValidationError("Organization does not exist")
@@ -52,7 +53,8 @@ class ReleaseViewSet(viewsets.ModelViewSet):
         organization = self.get_organization()
         try:
             project = Project.objects.get(
-                slug=self.kwargs.get("project_slug"), organization=organization,
+                slug=self.kwargs.get("project_slug"),
+                organization=organization,
             )
         except Project.DoesNotExist:
             raise exceptions.ValidationError("Project does not exist")
@@ -71,7 +73,10 @@ class ReleaseViewSet(viewsets.ModelViewSet):
         chunks = serializer.validated_data.get("chunks", [])
 
         assemble_artifacts_task.delay(
-            org_id=organization.id, version=version, checksum=checksum, chunks=chunks,
+            org_id=organization.id,
+            version=version,
+            checksum=checksum,
+            chunks=chunks,
         )
 
         # TODO should return more state's
@@ -97,9 +102,12 @@ class ReleaseFileViewSet(
         queryset = queryset.filter(
             release__organization__users=self.request.user,
             release__organization__slug=self.kwargs.get("organization_slug"),
-            release__projects__slug=self.kwargs.get("project_slug"),
             release__version=self.kwargs.get("release_version"),
         )
+        if self.kwargs.get("project_slug"):
+            queryset = queryset.filter(
+                release__projects__slug=self.kwargs.get("project_slug")
+            )
 
         queryset = queryset.select_related("file")
         return queryset
