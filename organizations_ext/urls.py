@@ -3,7 +3,7 @@ from rest_framework_nested import routers
 from issues.views import IssueViewSet
 from teams.views import NestedTeamViewSet
 from environments.views import EnvironmentViewSet
-from releases.views import ReleaseViewSet
+from releases.views import ReleaseViewSet, ReleaseFileViewSet
 from performance.views import TransactionViewSet, TransactionGroupViewSet, SpanViewSet
 from glitchtip.uptime.views import MonitorViewSet, MonitorCheckViewSet
 from glitchtip.routers import BulkSimpleRouter
@@ -38,9 +38,6 @@ organizations_router.register(
     r"environments", EnvironmentViewSet, basename="organization-environments"
 )
 organizations_router.register(
-    r"releases", ReleaseViewSet, basename="organization-releases"
-)
-organizations_router.register(
     r"transactions", TransactionViewSet, basename="organization-transactions"
 )
 organizations_router.register(
@@ -64,10 +61,21 @@ organizations_monitors_router.register(
     r"checks", MonitorCheckViewSet, basename="organization-monitor-checks"
 )
 
+organizations_router.register(
+    r"releases", ReleaseViewSet, basename="organization-releases"
+)
+organizations_releases_router = routers.NestedSimpleRouter(
+    organizations_router, r"releases", lookup="release"
+)
+organizations_releases_router.register(
+    r"files", ReleaseFileViewSet, basename="organization-release-files"
+)
+
 urlpatterns = [
     path("", include(router.urls)),
     path("", include(organizations_router.urls)),
     path("", include(organizations_monitors_router.urls)),
+    path("", include(organizations_releases_router.urls)),
     path(
         "accept/<int:org_user_id>/<token>/",
         AcceptInviteView.as_view(),
