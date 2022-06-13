@@ -18,6 +18,8 @@ exec uwsgi \
     --master --pidfile=/tmp/project-master.pid \
     --log-x-forwarded-for \
     --log-format-strftime \
+    --uid=1000 \
+    --gid=2000 \
     --http-socket=:$PORT \
     --cheaper-algo=busyness \
     --cheaper=$MIN_WORKERS \

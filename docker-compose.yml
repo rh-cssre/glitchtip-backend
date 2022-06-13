@@ -22,12 +22,15 @@ services:
   web:
     build: .
     user: root # Allows for usage of ipdb, apt, etc in dev
-    command: ./manage.py runserver 0.0.0.0:8000
+    entrypoint: ["./bin/start.sh"]
     depends_on: *default-depends_on
     volumes: *default-volumes
     ports:
       - "8000:8000"
-    environment: *default-environment
+    environment:
+      <<: *default-environment
+      DJANGO_SETTINGS_MODULE: "glitchtip.settings"
+      PORT: "8000"
   worker:
     build: .
     user: root
