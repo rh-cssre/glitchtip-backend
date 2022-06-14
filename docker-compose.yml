@@ -7,6 +7,8 @@ x-environment: &default-environment
   DEBUG: "true"
   EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
   ENABLE_OBSERVABILITY_API: "true"
+  CELERY_WORKER_CONCURRENCY: 1
+
 x-depends_on: &default-depends_on
   - postgres
   - redis
