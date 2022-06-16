@@ -266,6 +266,13 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
     "x-sentry-auth",
 ]
 
+BILLING_ENABLED = False
+if env.str("STRIPE_TEST_PUBLIC_KEY", None) or env.str("STRIPE_LIVE_PUBLIC_KEY", None):
+    BILLING_ENABLED = True
+
+# Set to chatwoot website token to enable live help widget. Assumes app.chatwoot.com.
+CHATWOOT_WEBSITE_TOKEN = env.str("CHATWOOT_WEBSITE_TOKEN", None)
+
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", str, [])
 SECURE_BROWSER_XSS_FILTER = True
 CSP_DEFAULT_SRC = env.list("CSP_DEFAULT_SRC", str, ["'self'"])
@@ -282,20 +289,24 @@ CSP_FONT_SRC = env.list(
 )
 # Redoc requires blob
 CSP_WORKER_SRC = env.list("CSP_WORKER_SRC", str, ["'self'", "blob:"])
-# GlitchTip can record it's own errors
-CSP_CONNECT_SRC = env.list(
-    "CSP_CONNECT_SRC",
-    str,
-    ["'self'", "https://*.glitchtip.com", "https://app.chatwoot.com"],
-)
-# Needed for Analytics and Stripe for SaaS use cases. Both are disabled by default.
-CSP_SCRIPT_SRC = env.list(
-    "CSP_SCRIPT_SRC",
-    str,
-    ["'self'", "https://*.glitchtip.com", "https://js.stripe.com"],
-)
+
+# Enable Chatwoot only when configured
+default_connect_src = ["'self'", "https://*.glitchtip.com"]
+if CHATWOOT_WEBSITE_TOKEN:
+    default_connect_src.append("https://app.chatwoot.com")
+CSP_CONNECT_SRC = env.list("CSP_CONNECT_SRC", str, default_connect_src)
+
+# Enable stripe by default only when configured
+stripe_domain = "https://js.stripe.com"
+default_script_src = ["'self'", "https://*.glitchtip.com"]
+default_frame_src = ["'self'"]
+if BILLING_ENABLED:
+    default_script_src.append(stripe_domain)
+    default_frame_src.append(stripe_domain)
+
+CSP_SCRIPT_SRC = env.list("CSP_SCRIPT_SRC", str, default_script_src)
 CSP_IMG_SRC = env.list("CSP_IMG_SRC", str, ["'self'"])
-CSP_FRAME_SRC = env.list("CSP_FRAME_SRC", str, ["'self'", "https://js.stripe.com"])
+CSP_FRAME_SRC = env.list("CSP_FRAME_SRC", str, default_frame_src)
 # Consider tracking CSP reports with GlitchTip itself
 CSP_REPORT_URI = env.tuple("CSP_REPORT_URI", str, None)
 CSP_REPORT_ONLY = env.bool("CSP_REPORT_ONLY", False)
@@ -615,9 +626,6 @@ def organization_request_callback(request):
 PLAUSIBLE_URL = env.str("PLAUSIBLE_URL", default=None)
 PLAUSIBLE_DOMAIN = env.str("PLAUSIBLE_DOMAIN", default=None)
 
-# Set to chatwoot website token to enable live help widget. Assumes app.chatwoot.com.
-CHATWOOT_WEBSITE_TOKEN = env.str("CHATWOOT_WEBSITE_TOKEN", None)
-
 # Is running unit test
 TESTING = len(sys.argv) > 1 and sys.argv[1] == "test"
 
@@ -632,10 +640,8 @@ DJSTRIPE_SUBSCRIBER_MODEL_REQUEST_CALLBACK = organization_request_callback
 DJSTRIPE_USE_NATIVE_JSONFIELD = True
 DJSTRIPE_FOREIGN_KEY_TO_FIELD = "djstripe_id"
 STRIPE_AUTOMATIC_TAX = env.bool("STRIPE_AUTOMATIC_TAX", False)
-BILLING_ENABLED = False
 STRIPE_LIVE_MODE = env.bool("STRIPE_LIVE_MODE", False)
-if env.str("STRIPE_TEST_PUBLIC_KEY", None) or env.str("STRIPE_LIVE_PUBLIC_KEY", None):
-    BILLING_ENABLED = True
+if BILLING_ENABLED:
     I_PAID_FOR_GLITCHTIP = True
     INSTALLED_APPS.append("djstripe")
     INSTALLED_APPS.append("djstripe_ext")
