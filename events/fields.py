@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from urllib.parse import parse_qs
 from typing import List
 import re
@@ -58,7 +57,7 @@ class ForgivingHStoreField(ForgivingFieldMixin, serializers.HStoreField):
 
 
 class ForgivingDisallowRegexField(ForgivingFieldMixin, serializers.CharField):
-    """ Disallow bad matches, set disallow_regex kwarg to use """
+    """Disallow bad matches, set disallow_regex kwarg to use"""
 
     def __init__(self, **kwargs):
         self.disallow_regex = kwargs.pop("disallow_regex", None)
