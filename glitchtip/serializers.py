@@ -5,11 +5,10 @@ from rest_framework import serializers
 
 
 class FlexibleDateTimeField(serializers.DateTimeField):
-    """ Supports both DateTime and unix epoch timestamp """
+    """Supports both DateTime and unix epoch timestamp"""
 
-    def to_internal_value(self, timestamp):
+    def to_internal_value(self, value):
         try:
-            return make_aware(datetime.fromtimestamp(float(timestamp)))
-        except ValueError:
-            return super().to_internal_value(timestamp)
-
+            return make_aware(datetime.fromtimestamp(float(value)))
+        except (ValueError, TypeError):
+            return super().to_internal_value(value)
