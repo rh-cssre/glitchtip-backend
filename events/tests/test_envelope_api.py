@@ -1,9 +1,12 @@
 import json
+
 from django.shortcuts import reverse
-from rest_framework.test import APITestCase
 from model_bakery import baker
+from rest_framework.test import APITestCase
+
 from glitchtip import test_utils  # pylint: disable=unused-import
 from performance.models import TransactionEvent
+
 from ..models import Event
 
 
@@ -15,7 +18,7 @@ class EnvelopeStoreTestCase(APITestCase):
         self.url = reverse("envelope_store", args=[self.project.id]) + self.params
 
     def get_payload(self, path):
-        """ Convert JSON file into envelope format string """
+        """Convert JSON file into envelope format string"""
         with open(path) as json_file:
             json_data = json.load(json_file)
             data = "\n".join([json.dumps(line) for line in json_data])
@@ -23,6 +26,12 @@ class EnvelopeStoreTestCase(APITestCase):
 
     def test_accept(self):
         data = self.get_payload("events/test_data/transactions/django_simple.json")
+        res = self.client.generic("POST", self.url, data)
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(TransactionEvent.objects.exists())
+
+    def test_accept_js_transaction(self):
+        data = self.get_payload("events/test_data/transactions/js_simple.json")
         res = self.client.generic("POST", self.url, data)
         self.assertEqual(res.status_code, 200)
         self.assertTrue(TransactionEvent.objects.exists())
