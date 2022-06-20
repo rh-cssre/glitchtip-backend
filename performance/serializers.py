@@ -29,6 +29,8 @@ class SpanSerializer(serializers.ModelSerializer):
     spanId = serializers.CharField(source="span_id", read_only=True)
     parentSpanId = serializers.CharField(source="parent_span_id", read_only=True)
     startTimestamp = serializers.DateTimeField(source="start_timestamp", read_only=True)
+    start_timestamp = FlexibleDateTimeField(write_only=True)
+    timestamp = FlexibleDateTimeField(write_only=True)
 
     class Meta:
         model = Span
