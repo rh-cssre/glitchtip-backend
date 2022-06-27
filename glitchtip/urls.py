@@ -141,15 +141,8 @@ if settings.BILLING_ENABLED:
 if settings.ENABLE_TEST_API:
     urlpatterns.append(path("api/test/", include("test_api.urls")))
 
-if settings.DEBUG:
-    import debug_toolbar
+if settings.DEBUG_TOOLBAR:
+    urlpatterns.append(path("__debug__/", include("debug_toolbar.urls")))
 
-    urlpatterns = (
-        [
-            path("__debug__/", include(debug_toolbar.urls)),
-            # For django versions before 2.0:
-            # url(r'^__debug__/', include(debug_toolbar.urls)),
-        ]
-        + urlpatterns
-        + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-    )
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
