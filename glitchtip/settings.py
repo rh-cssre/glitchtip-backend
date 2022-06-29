@@ -241,6 +241,7 @@ MIDDLEWARE += [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "sentry.middleware.proxy.DecompressBodyMiddleware",
+    "django.middleware.locale.LocaleMiddleware",
 ]
 
 if ENABLE_OBSERVABILITY_API:
