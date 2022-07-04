@@ -148,6 +148,7 @@ def show_toolbar(request):
     return env("DEBUG_TOOLBAR")
 
 
+DEBUG_TOOLBAR = env("DEBUG_TOOLBAR")
 DEBUG_TOOLBAR_CONFIG = {"SHOW_TOOLBAR_CALLBACK": show_toolbar}
 DEBUG_TOOLBAR_PANELS = [
     "debug_toolbar.panels.versions.VersionsPanel",
@@ -188,7 +189,10 @@ INSTALLED_APPS = [
     "django_filters",
     "django_extensions",
     "django_rest_mfa",
-    "debug_toolbar",
+]
+if DEBUG_TOOLBAR:
+    INSTALLED_APPS.append("debug_toolbar")
+INSTALLED_APPS += [
     "rest_framework",
     "drf_yasg",
     "dj_rest_auth",
@@ -227,13 +231,17 @@ MIDDLEWARE = [
     "csp.middleware.CSPMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    "debug_toolbar.middleware.DebugToolbarMiddleware",
+]
+if DEBUG_TOOLBAR:
+    MIDDLEWARE.append("debug_toolbar.middleware.DebugToolbarMiddleware")
+MIDDLEWARE += [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "sentry.middleware.proxy.DecompressBodyMiddleware",
+    "django.middleware.locale.LocaleMiddleware",
 ]
 
 if ENABLE_OBSERVABILITY_API:
