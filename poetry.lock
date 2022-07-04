@@ -633,7 +633,7 @@ sqlparse = ">=0.2.0"
 
 [[package]]
 name = "django-environ"
-version = "0.8.1"
+version = "0.9.0"
 description = "A package that allows you to utilize 12factor inspired environment variables to configure your Django application."
 category = "main"
 optional = false
@@ -657,14 +657,14 @@ Django = ">=2.2"
 
 [[package]]
 name = "django-filter"
-version = "21.1"
+version = "22.1"
 description = "Django-filter is a reusable Django application for allowing users to filter querysets dynamically."
 category = "main"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.7"
 
 [package.dependencies]
-Django = ">=2.2"
+Django = ">=3.2"
 
 [[package]]
 name = "django-ipware"
@@ -2058,7 +2058,7 @@ requests = {version = ">=2.20", markers = "python_version >= \"3.0\""}
 
 [[package]]
 name = "symbolic"
-version = "8.8.0"
+version = "9.0.0"
 description = "A python library for dealing with symbol files and more."
 category = "main"
 optional = false
@@ -2276,7 +2276,7 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "542dc22a402b4e8477caf72cf25aca0072a55d6e6b126350bd56c3313868be2c"
+content-hash = "44231d44ad2a9ccb2e15a8a5058016cefacd47c975f78ab768756ccdb68c71af"
 
 [metadata.files]
 aiohttp = [
@@ -2702,16 +2702,16 @@ django-debug-toolbar = [
     {file = "django_debug_toolbar-3.5.0-py3-none-any.whl", hash = "sha256:89a52128309eb4da12738801ff0c202d2ff8730d1c3225fac6acf630c303e661"},
 ]
 django-environ = [
-    {file = "django-environ-0.8.1.tar.gz", hash = "sha256:6f0bc902b43891656b20486938cba0861dc62892784a44919170719572a534cb"},
-    {file = "django_environ-0.8.1-py2.py3-none-any.whl", hash = "sha256:42593bee519a527602a467c7b682aee1a051c2597f98c45f4f4f44169ecdb6e5"},
+    {file = "django-environ-0.9.0.tar.gz", hash = "sha256:bff5381533056328c9ac02f71790bd5bf1cea81b1beeb648f28b81c9e83e0a21"},
+    {file = "django_environ-0.9.0-py2.py3-none-any.whl", hash = "sha256:f21a5ef8cc603da1870bbf9a09b7e5577ab5f6da451b843dbcc721a7bca6b3d9"},
 ]
 django-extensions = [
     {file = "django-extensions-3.1.5.tar.gz", hash = "sha256:28e1e1bf49f0e00307ba574d645b0af3564c981a6dfc87209d48cb98f77d0b1a"},
     {file = "django_extensions-3.1.5-py3-none-any.whl", hash = "sha256:9238b9e016bb0009d621e05cf56ea8ce5cce9b32e91ad2026996a7377ca28069"},
 ]
 django-filter = [
-    {file = "django-filter-21.1.tar.gz", hash = "sha256:632a251fa8f1aadb4b8cceff932bb52fe2f826dd7dfe7f3eac40e5c463d6836e"},
-    {file = "django_filter-21.1-py3-none-any.whl", hash = "sha256:f4a6737a30104c98d2e2a5fb93043f36dd7978e0c7ddc92f5998e85433ea5063"},
+    {file = "django-filter-22.1.tar.gz", hash = "sha256:ed473b76e84f7e83b2511bb2050c3efb36d135207d0128dfe3ae4b36e3594ba5"},
+    {file = "django_filter-22.1-py3-none-any.whl", hash = "sha256:ed429e34760127e3520a67f415bec4c905d4649fbe45d0d6da37e6ff5e0287eb"},
 ]
 django-ipware = [
     {file = "django-ipware-4.0.2.tar.gz", hash = "sha256:602a58325a4808bd19197fef2676a0b2da2df40d0ecf21be414b2ff48c72ad05"},
@@ -3893,12 +3893,12 @@ stripe = [
     {file = "stripe-3.5.0.tar.gz", hash = "sha256:08f74cae6619d4a7d78f8162ff72bc3e9c913f53ec96ecd5ddc7d823c2e79ddd"},
 ]
 symbolic = [
-    {file = "symbolic-8.8.0-py2.py3-none-macosx_10_15_x86_64.whl", hash = "sha256:4bfcb1c47b8d7ceb9fed4f17bf9527322094157cbd7269374c2c8f80eece358f"},
-    {file = "symbolic-8.8.0-py2.py3-none-macosx_11_0_arm64.whl", hash = "sha256:1443b373a124d430441754a62728b93d3b3d21d42a0d2b9ac0eab6dc6befaefd"},
-    {file = "symbolic-8.8.0-py2.py3-none-manylinux_2_12_i686.manylinux2010_i686.whl", hash = "sha256:6b410164089b574134414733e1509d85a4c355145e6517ecefe0180d965220f5"},
-    {file = "symbolic-8.8.0-py2.py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:837bee493fbf7d74800117a68c3c62a0351c73ab823adc7a5999a0c319c494f2"},
-    {file = "symbolic-8.8.0-py2.py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7d9654d37825c271e3b967949581b4437a8c6341b7259830ee28d2814b7daea6"},
-    {file = "symbolic-8.8.0.zip", hash = "sha256:444400029ed3c9474d4f99ef6ee0203f32bebe7da21a7c1ddfd4fe589c4288c6"},
+    {file = "symbolic-9.0.0-py2.py3-none-macosx_10_15_x86_64.whl", hash = "sha256:b8f525ee6be0251222396e5fab10442bd1b989a4d0b8e7cbed8ec8a4a8dcb7bb"},
+    {file = "symbolic-9.0.0-py2.py3-none-macosx_11_0_arm64.whl", hash = "sha256:6fc6f70c5c3d5840334ab3abb59bb97142ac52013cf5e223c235b1b9e1c270ab"},
+    {file = "symbolic-9.0.0-py2.py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:15ebe9dd65d03dae9be127cc0c7b5d4a37e7ddc69bceee9c5fdb331d61cf81c8"},
+    {file = "symbolic-9.0.0-py2.py3-none-manylinux_2_5_i686.manylinux1_i686.manylinux_2_12_i686.manylinux2010_i686.whl", hash = "sha256:decf0e06c735968da30e233f5fc4609e46dd593fa03a0fe1ea6920c611f52e61"},
+    {file = "symbolic-9.0.0-py2.py3-none-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:0ac03f615b608911df645fef5dbb7c40fabb6f6ac49704a5a6817e5ff023b376"},
+    {file = "symbolic-9.0.0.zip", hash = "sha256:263c1d1565b165cfc44e49fc65d5c44fb3412270f03fa07d1fb3a3f5032f315f"},
 ]
 tblib = [
     {file = "tblib-1.7.0-py2.py3-none-any.whl", hash = "sha256:289fa7359e580950e7d9743eab36b0691f0310fce64dee7d9c31065b8f723e23"},
