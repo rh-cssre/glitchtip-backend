@@ -55,7 +55,7 @@ class SpanSerializer(serializers.ModelSerializer):
 
 
 class TransactionEventSerializer(SentrySDKEventSerializer):
-    type = serializers.CharField()
+    type = serializers.CharField(required=False)
     contexts = serializers.JSONField()
     measurements = serializers.JSONField(required=False)
     spans = serializers.ListField(
