@@ -4,6 +4,7 @@ x-environment: &default-environment
   SECRET_KEY: change_me
   ENABLE_OPEN_USER_REGISTRATION: "true"
   ENABLE_TEST_API: "true"
+  ENABLE_LOGIN_FORM: "false"
   DEBUG: "true"
   EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
   ENABLE_OBSERVABILITY_API: "true"
