@@ -550,6 +550,8 @@ REST_AUTH_TOKEN_CREATOR = "users.utils.noop_token_creator"
 # and create an organization. Other users must be invited. Intended for private instances
 ENABLE_OPEN_USER_REGISTRATION = env.bool("ENABLE_OPEN_USER_REGISTRATION", False)
 
+ENABLE_LOGIN_FORM = env.bool("ENABLE_LOGIN_FORM", False)
+
 AUTHENTICATION_BACKENDS = (
     # Needed to login by username in Django admin, regardless of `allauth`
     "django.contrib.auth.backends.ModelBackend",

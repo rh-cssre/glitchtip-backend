@@ -97,9 +97,7 @@ urlpatterns += [
         name="event_json",
     ),
     path("api/settings/", SettingsView.as_view(), name="settings"),
-    path("rest-auth/login/", MFALoginView.as_view()),
     path("rest-auth/", include("dj_rest_auth.urls")),
-    path("rest-auth/registration/", include("dj_rest_auth.registration.urls")),
     re_path(
         r"^api/socialaccounts/(?P<pk>\d+)/disconnect/$",
         SocialAccountDisconnectView.as_view(),
@@ -146,3 +144,9 @@ if settings.DEBUG_TOOLBAR:
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+if settings.ENABLE_LOGIN_FORM:
+    urlpatterns += [
+        path("rest-auth/login/", MFALoginView.as_view()),
+        path("rest-auth/registration/", include("dj_rest_auth.registration.urls")),
+    ]
