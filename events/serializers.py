@@ -402,7 +402,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 raise e
 
         issue.check_for_status_update()
-        update_search_index_issue(args=[issue.pk, issue_created], countdown=10)
+        update_search_index_issue(args=[issue.pk], countdown=10)
 
         return event
 
