@@ -43,3 +43,8 @@ class EnvelopeStoreTestCase(APITestCase):
         res = self.client.generic("POST", self.url, data)
         self.assertEqual(res.status_code, 200)
         self.assertTrue(Event.objects.exists())
+
+    def test_js_angular(self):
+        data = self.get_payload("events/test_data/transactions/js_angular.json")
+        res = self.client.generic("POST", self.url, data)
+        self.assertEqual(res.status_code, 200)
