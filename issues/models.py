@@ -1,12 +1,12 @@
-import collections
-from django.contrib.postgres.search import SearchVectorField
-from django.contrib.postgres.indexes import GinIndex
 from django.conf import settings
-from django.db import models
-from django.db.models import Max, Count
+from django.contrib.postgres.indexes import GinIndex
+from django.contrib.postgres.search import SearchVectorField
+from django.db import connection, models
+
 from events.models import LogLevel
-from glitchtip.model_utils import FromStringIntegerChoices
 from glitchtip.base_models import CreatedModel
+from glitchtip.model_utils import FromStringIntegerChoices
+
 from .utils import base32_encode
 
 
@@ -100,48 +100,9 @@ class Issue(CreatedModel):
         return f"{settings.GLITCHTIP_URL.geturl()}/{self.project.organization.slug}/issues/{self.pk}"
 
     @classmethod
-    def update_index(cls, issue_id: int, skip_tags=False):
+    def update_index(cls, issue_id: int):
         """
         Update search index/tag aggregations
         """
-        vector_query = """SELECT generate_issue_tsvector(jsonb_agg(data)) from (SELECT events_event.data from events_event where issue_id = %s limit 200) as data"""
-        issue = (
-            cls.objects.extra(
-                select={"new_vector": vector_query}, select_params=(issue_id,)
-            )
-            .annotate(
-                new_count=Count("event"),
-                new_last_seen=Max("event__created"),
-                new_level=Max("event__level"),
-            )
-            .defer("search_vector")
-            .get(pk=issue_id)
-        )
-
-        update_fields = ["last_seen", "count", "level"]
-        if (
-            issue.new_vector
-        ):  # This check is important, because generate_issue_tsvector returns null on size limit
-            update_fields.append("search_vector")
-            issue.search_vector = issue.new_vector
-        if issue.new_last_seen:
-            issue.last_seen = issue.new_last_seen
-        if issue.new_count:
-            issue.count = issue.new_count
-        if issue.new_level:
-            issue.level = issue.new_level
-
-        if not skip_tags:
-            update_fields.append("tags")
-            tags = (
-                issue.event_set.all()
-                .order_by("tags")
-                .values_list("tags", flat=True)
-                .distinct()
-            )
-            super_dict = collections.defaultdict(set)
-            for tag in tags:
-                for key, value in tag.items():
-                    super_dict[key].add(value)
-            issue.tags = {k: list(v) for k, v in super_dict.items()}
-        issue.save(update_fields=update_fields)
+        with connection.cursor() as cursor:
+            cursor.execute("CALL update_issue_index(%s)", [issue_id])
