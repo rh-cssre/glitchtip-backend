@@ -374,6 +374,10 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {
     "fanout_prefix": True,
     "fanout_patterns": True,
 }
+if CELERY_BROKER_URL.startswith("sentinel"):
+    CELERY_BROKER_TRANSPORT_OPTIONS["master_name"] = env.str(
+        "CELERY_BROKER_MASTER_NAME", "mymaster"
+    )
 
 CELERY_RESULT_BACKEND = "django-db"
 CELERY_CACHE_BACKEND = "django-cache"
@@ -416,6 +420,16 @@ else:  # Default to REDIS when unset
             "LOCATION": REDIS_URL,
         }
     }
+if cache_sentinel_url := env.str("CACHE_SENTINEL_URL", None):
+    try:
+        cache_sentinel_host, cache_sentinel_port = cache_sentinel_url.split(":")
+        SENTINELS = [(cache_sentinel_host, int(cache_sentinel_port))]
+    except ValueError as err:
+        raise ImproperlyConfigured(
+            "Invalid cache redis sentinel url, format is host:port"
+        ) from err
+    DJANGO_REDIS_CONNECTION_FACTORY = "django_redis.pool.SentinelConnectionFactory"
+    CACHES["default"]["OPTIONS"]["SENTINELS"] = SENTINELS
 
 
 if os.environ.get("SESSION_ENGINE"):
