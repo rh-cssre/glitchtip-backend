@@ -17,7 +17,7 @@ tracking platform that respects your freedom to use it any way you wish. Some di
 - A modern development environment with Python 3 and Django 3.2.
 - Simplicity over features. We use Postgres to store error data. Our code base is a fraction of the size of Sentry and
   looks like a typical Django app. We leverage existing open source Django ecosystem apps whenever possible.
-- Respects your privacy. No massive JS bundles. No invasive tracking. No third party spying. Our marketing site only the
+- Respects your privacy. No massive JS bundles. No invasive tracking. No third party spying. Our marketing site runs the
   privacy-focused Plausible analytics. Self hosted GlitchTip will never report home. We will never know if you run it
   yourself.
 - Commitment to open source. We use open source tools like GitLab whenever possible. With our MIT license, you can use
