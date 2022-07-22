@@ -380,6 +380,8 @@ if CELERY_BROKER_URL.startswith("sentinel"):
     )
 if socket_timeout := env.int("CELERY_BROKER_SOCKET_TIMEOUT", None):
     CELERY_BROKER_TRANSPORT_OPTIONS["socket_timeout"] = socket_timeout
+if sentinel_password := env.str("CELERY_BROKER_SENTINEL_KWARGS_PASSWORD", None):
+    CELERY_BROKER_TRANSPORT_OPTIONS["sentinel_kwargs"] = {"password": sentinel_password}
 
 CELERY_RESULT_BACKEND = "django-db"
 CELERY_CACHE_BACKEND = "django-cache"
