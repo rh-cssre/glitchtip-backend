@@ -380,8 +380,10 @@ if CELERY_BROKER_URL.startswith("sentinel"):
     )
 if socket_timeout := env.int("CELERY_BROKER_SOCKET_TIMEOUT", None):
     CELERY_BROKER_TRANSPORT_OPTIONS["socket_timeout"] = socket_timeout
-if sentinel_password := env.str("CELERY_BROKER_SENTINEL_KWARGS_PASSWORD", None):
-    CELERY_BROKER_TRANSPORT_OPTIONS["sentinel_kwargs"] = {"password": sentinel_password}
+if broker_sentinel_password := env.str("CELERY_BROKER_SENTINEL_KWARGS_PASSWORD", None):
+    CELERY_BROKER_TRANSPORT_OPTIONS["sentinel_kwargs"] = {
+        "password": broker_sentinel_password
+    }
 
 CELERY_RESULT_BACKEND = "django-db"
 CELERY_CACHE_BACKEND = "django-cache"
@@ -434,6 +436,10 @@ if cache_sentinel_url := env.str("CACHE_SENTINEL_URL", None):
         ) from err
     DJANGO_REDIS_CONNECTION_FACTORY = "django_redis.pool.SentinelConnectionFactory"
     CACHES["default"]["OPTIONS"]["SENTINELS"] = SENTINELS
+if cache_sentinel_password := env.str("CACHE_SENTINEL_PASSWORD", None):
+    CACHES["default"]["OPTIONS"]["SENTINEL_KWARGS"] = {
+        "password": cache_sentinel_password
+    }
 
 
 if os.environ.get("SESSION_ENGINE"):
