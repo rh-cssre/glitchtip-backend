@@ -374,6 +374,16 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {
     "fanout_prefix": True,
     "fanout_patterns": True,
 }
+if CELERY_BROKER_URL.startswith("sentinel"):
+    CELERY_BROKER_TRANSPORT_OPTIONS["master_name"] = env.str(
+        "CELERY_BROKER_MASTER_NAME", "mymaster"
+    )
+if socket_timeout := env.int("CELERY_BROKER_SOCKET_TIMEOUT", None):
+    CELERY_BROKER_TRANSPORT_OPTIONS["socket_timeout"] = socket_timeout
+if broker_sentinel_password := env.str("CELERY_BROKER_SENTINEL_KWARGS_PASSWORD", None):
+    CELERY_BROKER_TRANSPORT_OPTIONS["sentinel_kwargs"] = {
+        "password": broker_sentinel_password
+    }
 
 CELERY_RESULT_BACKEND = "django-db"
 CELERY_CACHE_BACKEND = "django-cache"
@@ -415,6 +425,20 @@ else:  # Default to REDIS when unset
             "BACKEND": "django.core.cache.backends.redis.RedisCache",
             "LOCATION": REDIS_URL,
         }
+    }
+if cache_sentinel_url := env.str("CACHE_SENTINEL_URL", None):
+    try:
+        cache_sentinel_host, cache_sentinel_port = cache_sentinel_url.split(":")
+        SENTINELS = [(cache_sentinel_host, int(cache_sentinel_port))]
+    except ValueError as err:
+        raise ImproperlyConfigured(
+            "Invalid cache redis sentinel url, format is host:port"
+        ) from err
+    DJANGO_REDIS_CONNECTION_FACTORY = "django_redis.pool.SentinelConnectionFactory"
+    CACHES["default"]["OPTIONS"]["SENTINELS"] = SENTINELS
+if cache_sentinel_password := env.str("CACHE_SENTINEL_PASSWORD", None):
+    CACHES["default"]["OPTIONS"]["SENTINEL_KWARGS"] = {
+        "password": cache_sentinel_password
     }
 
 
@@ -549,8 +573,6 @@ REST_AUTH_TOKEN_CREATOR = "users.utils.noop_token_creator"
 # By default (False) only the first user, superuser, or organization owners may register
 # and create an organization. Other users must be invited. Intended for private instances
 ENABLE_OPEN_USER_REGISTRATION = env.bool("ENABLE_OPEN_USER_REGISTRATION", False)
-
-ENABLE_LOGIN_FORM = env.bool("ENABLE_LOGIN_FORM", False)
 
 AUTHENTICATION_BACKENDS = (
     # Needed to login by username in Django admin, regardless of `allauth`
