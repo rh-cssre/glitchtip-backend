@@ -95,17 +95,21 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
                 "timestamp": data["timestamp"],
             }
         )
-        first_span.is_valid()
-        spans = data.get("spans", []) + [first_span.validated_data]
-        Span.objects.bulk_create(
-            [
-                Span(
-                    transaction=transaction,
-                    **span,
-                )
-                for span in spans
-            ]
-        )
+        is_valid = first_span.is_valid()
+        if is_valid:
+            spans = data.get("spans", []) + [first_span.validated_data]
+        else:
+            spans = data.get("spans")
+        if spans:
+            Span.objects.bulk_create(
+                [
+                    Span(
+                        transaction=transaction,
+                        **span,
+                    )
+                    for span in spans
+                ]
+            )
 
         return transaction
 
