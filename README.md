@@ -34,8 +34,8 @@ View our [Contributing](./CONTRIBUTING.md) documentation if you'd like to help m
 ## Run local dev environment
 
 1. Ensure docker and docker-compose are installed
-2. `docker-compose up`
-3. `docker-compose run --rm web ./manage.py migrate`
+2. `docker compose up`
+3. `docker compose run --rm web ./manage.py migrate`
 
 Run tests with `docker-compose run --rm web ./manage.py test`
 
@@ -58,11 +58,16 @@ VS Code can do type checking and type inference. However, it requires setting up
 ### Load testing
 
 Locust is built into the dev dependencies. To run with Locust run
-`docker-compose -f docker-compose.yml -f docker-compose.locust.yml up`
+`docker compose -f docker-compose.yml -f docker-compose.locust.yml up`
 
 Now go to localhost:8089 to run the test.
 
 Locust will not be installed to production docker images and cannot be run from them.
+
+### Observability metrics with Prometheus
+
+1. Edit monitoring/prometheus/prometheus.yml and set credentials to a GlitchTip auth token
+2. `docker compose -f docker-compose.yml -f docker-compose.metrics.yml up`
 
 # GCP Logging
 
