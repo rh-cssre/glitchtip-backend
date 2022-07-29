@@ -518,7 +518,15 @@ STATICFILES_STORAGE = env("STATICFILES_STORAGE")
 EMAIL_BACKEND = env.str(
     "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
 )
-if os.getenv("EMAIL_URL"):
+EMAIL_HOST_USER = env.str("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = env.str("EMAIL_HOST_PASSWORD")
+EMAIL_HOST = env.str("EMAIL_HOST")
+EMAIL_PORT = env.str("EMAIL_PORT")
+EMAIL_USE_TLS = env.str("EMAIL_USE_TLS")
+EMAIL_USE_SSL = env.str("EMAIL_USE_SSL")
+EMAIL_TIMEOUT = env.str("EMAIL_TIMEOUT")
+EMAIL_FILE_PATH = env.str("EMAIL_FILE_PATH")
+if os.getenv("EMAIL_URL"): # Careful, this will override most EMAIL_*** settings. Set them all individually, or use EMAIL_URL to set them all at once, but don't do both.
     EMAIL_CONFIG = env.email_url("EMAIL_URL")
     vars().update(EMAIL_CONFIG)
 
