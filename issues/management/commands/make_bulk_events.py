@@ -33,8 +33,11 @@ class Command(BaseCommand):
         title = issue_data.get("title")
         culprit = issue_data.get("culprit")
         metadata = issue_data.get("metadata")
-        issue, issue_created = Issue.objects.get_or_create(
-            title=title, culprit=culprit, metadata=metadata, project=project,
+        issue, _ = Issue.objects.get_or_create(
+            title=title,
+            culprit=culprit,
+            metadata=metadata,
+            project=project,
         )
 
         quantity = options["quantity"]
@@ -58,7 +61,7 @@ class Command(BaseCommand):
             Event.objects.bulk_create(event_list)
             quantity -= batch_size
 
-        update_search_index_issue(args=[issue.pk, issue_created])
+        update_search_index_issue(args=[issue.pk])
         self.stdout.write(
             self.style.SUCCESS('Successfully created "%s" events' % options["quantity"])
         )

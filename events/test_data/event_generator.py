@@ -1,9 +1,10 @@
 import copy
-import uuid
-import string
 import random
-import itertools
+import string
+import uuid
+
 from django.utils import timezone
+
 from . import django_error_factory
 from .csp import mdn_sample_csp
 
@@ -18,7 +19,7 @@ def get_random_string(length=16):
 
 
 def make_event_unique(event, unique_issue=False):
-    """ Assign event a random new event_id and current timestamp """
+    """Assign event a random new event_id and current timestamp"""
     new_event = copy.deepcopy(event)
     new_event["event_id"] = uuid.uuid4().hex
     new_event["timestamp"] = timezone.now().isoformat()
@@ -34,7 +35,7 @@ def make_event_unique(event, unique_issue=False):
 
 
 def generate_random_event(unique_issue=False):
-    """ Return a random event from library of samples with unique event id """
+    """Return a random event from library of samples with unique event id"""
     event = random.choice(events)  # nosec
     result = make_event_unique(event, unique_issue)
 
