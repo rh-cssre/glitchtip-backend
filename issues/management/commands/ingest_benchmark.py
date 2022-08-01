@@ -1,19 +1,23 @@
 import json
 from timeit import default_timer as timer
+
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.shortcuts import reverse
 from django.test import RequestFactory
-from projects.models import Project
-from organizations_ext.models import Organization
-from events.test_data.event_generator import get_seeded_benchmark_events
+
 from events.models import Event
+from events.test_data.event_generator import get_seeded_benchmark_events
 from events.views import EventStoreAPIView
+from organizations_ext.models import Organization
+from projects.models import Project
 
 
 class Command(BaseCommand):
     help = "Time (for performance) ingesting fake events, including celery processing."
 
     def handle(self, *args, **options):
+        settings.CELERY_TASK_ALWAYS_EAGER = True
         slug = "benchark-test-jfhr3e3jlek8eewmksde"
         name = "Benchark Test Do Not Use"
         organization, _ = Organization.objects.get_or_create(
@@ -32,7 +36,7 @@ class Command(BaseCommand):
         )
 
         factory = RequestFactory()
-        quantity = 200
+        quantity = 300
         requests = [
             factory.post(url, data=json.dumps(event), content_type="application/json")
             for event in get_seeded_benchmark_events(quantity=quantity)
@@ -46,4 +50,3 @@ class Command(BaseCommand):
         print(end - start)
         assert Event.objects.filter(issue__project=project).count() == quantity
         project.issue_set.all().delete()
-

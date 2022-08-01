@@ -36,7 +36,7 @@ symbolic = "^9.0.0"
 django-rest-mfa = "^1.0.0"
 aiohttp = "^3.7.4"
 google-cloud-logging = "^3.0.0"
-django-bitfield-4-0 = "^2.1.0"
+django-bitfield = "^2.2.0"
 django-prometheus = "^2.2.0"
 django-sql-utils = "^0.6.1"
 django-redis = {extras = ["hiredis"], version = "^5.2.0"}
