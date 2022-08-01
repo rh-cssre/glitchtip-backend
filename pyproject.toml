@@ -42,13 +42,14 @@ django-sql-utils = "^0.6.1"
 django-redis = {extras = ["hiredis"], version = "^5.2.0"}
 hiredis = "^2.0.0"
 psycopg2 = "^2.9.3"
+uwsgi-chunked = "^0.1.8"
 
 [tool.poetry.dev-dependencies]
 black = "^22.1.0"
 ipdb = "^0.13.2"
 pylint = "^2.4.4"
 pylint-django = "^2.0.13"
-locust = "^1.1.1"
+locust = "^2.10.1"
 freezegun = "^1.1.0"
 rope = "^0.20.1"
 model_bakery = "^1.1.1"
