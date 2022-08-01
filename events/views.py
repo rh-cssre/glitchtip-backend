@@ -100,8 +100,8 @@ class BaseEventAPIView(APIView):
                 .only("id", "first_event", "organization__is_accepting_events")
                 .first()
             )
-        except ValidationError as e:
-            raise exceptions.AuthenticationFailed({"error": "Invalid api key"})
+        except ValidationError as err:
+            raise exceptions.AuthenticationFailed({"error": "Invalid api key"}) from err
         if not project:
             if Project.objects.filter(id=project_id).exists():
                 raise exceptions.AuthenticationFailed({"error": "Invalid api key"})
@@ -110,8 +110,10 @@ class BaseEventAPIView(APIView):
             raise exceptions.Throttled(detail="event rejected due to rate limit")
         return project
 
-    def get_event_serializer_class(self, data=[]):
+    def get_event_serializer_class(self, data=None):
         """Determine event type and return serializer"""
+        if data is None:
+            data = []
         if "exception" in data and data["exception"]:
             return StoreErrorSerializer
         if "platform" not in data:
@@ -125,9 +127,9 @@ class BaseEventAPIView(APIView):
         )
         try:
             serializer.is_valid(raise_exception=True)
-        except exceptions.ValidationError as e:
+        except exceptions.ValidationError as err:
             set_level("warning")
-            capture_exception(e)
+            capture_exception(err)
             logger.warning("Invalid event %s", serializer.errors)
             return Response()
         event = serializer.save()
@@ -142,9 +144,9 @@ class EventStoreAPIView(BaseEventAPIView):
             print(json.dumps(request.data))
         try:
             project = self.get_project(request, kwargs.get("id"))
-        except exceptions.AuthenticationFailed as e:
+        except exceptions.AuthenticationFailed as err:
             # Replace 403 status code with 401 to match OSS Sentry
-            return Response(e.detail, status=401)
+            return Response(err.detail, status=401)
         return self.process_event(request.data, request, project)
 
 

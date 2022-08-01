@@ -65,14 +65,28 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
     timestamp = FlexibleDateTimeField()
     transaction = serializers.CharField()
 
-    def create(self, data):
-        trace_id = data["contexts"]["trace"]["trace_id"]
+    def create(self, validated_data):
+        data = validated_data
+        contexts = data["contexts"]
+        project = self.context.get("project")
+        trace_id = contexts["trace"]["trace_id"]
+
+        tags = []
+        if environment := data.get("environment"):
+            environment = self.get_environment(data["environment"], project)
+            tags.append(("environment", environment.name))
+        if release := data.get("release"):
+            release = self.get_release(release, project)
+            tags.append(("release", release.version))
+        defaults = {}
+        defaults["tags"] = {tag[0]: [tag[1]] for tag in tags}
 
         group, _ = TransactionGroup.objects.get_or_create(
             project=self.context.get("project"),
             transaction=data["transaction"],
-            op=data["contexts"]["trace"]["op"],
+            op=contexts["trace"]["op"],
             method=data.get("request", {}).get("method"),
+            defaults=defaults,
         )
         transaction = TransactionEvent.objects.create(
             group=group,
@@ -86,10 +100,11 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
             timestamp=data["timestamp"],
             start_timestamp=data["start_timestamp"],
             duration=data["timestamp"] - data["start_timestamp"],
+            tags={tag[0]: tag[1] for tag in tags},
         )
 
         first_span = SpanSerializer(
-            data=data["contexts"]["trace"]
+            data=contexts["trace"]
             | {
                 "start_timestamp": data["start_timestamp"],
                 "timestamp": data["timestamp"],

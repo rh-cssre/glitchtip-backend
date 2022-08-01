@@ -112,6 +112,21 @@ class SentrySDKEventSerializer(BaseSerializer):
     )
     _meta = serializers.JSONField(required=False)
 
+    def get_environment(self, name: str, project):
+        environment, _ = Environment.objects.get_or_create(
+            name=name[: Environment._meta.get_field("name").max_length],
+            organization=project.organization,
+        )
+        environment.projects.add(project)
+        return environment
+
+    def get_release(self, version: str, project):
+        release, _ = Release.objects.get_or_create(
+            version=version, organization=project.organization
+        )
+        release.projects.add(project)
+        return release
+
 
 class FormattedMessageSerializer(serializers.Serializer):
     formatted = serializers.CharField(
@@ -236,21 +251,6 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             return data["message"]
         return data.get("logentry", {}).get("message", "")
 
-    def get_environment(self, name: str, project):
-        environment, _ = Environment.objects.get_or_create(
-            name=name[: Environment._meta.get_field("name").max_length],
-            organization=project.organization,
-        )
-        environment.projects.add(project)
-        return environment
-
-    def get_release(self, version: str, project):
-        release, _ = Release.objects.get_or_create(
-            version=version, organization=project.organization
-        )
-        release.projects.add(project)
-        return release
-
     def is_url(self, filename: str) -> bool:
         return filename.startswith(("file:", "http:", "https:", "applewebdata:"))
 
@@ -287,9 +287,8 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             for value in exception.get("values", []):
                 self.normalize_stacktrace(value.get("stacktrace"))
 
-        release = None
-        if data.get("release"):
-            release = self.get_release(data["release"], project)
+        if release := data.get("release"):
+            release = self.get_release(release, project)
 
         for Processor in EVENT_PROCESSORS:
             Processor(project, release, data).run()
@@ -323,8 +322,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             if level:
                 defaults["level"] = level
 
-            environment = None
-            if data.get("environment"):
+            if environment := data.get("environment"):
                 environment = self.get_environment(data["environment"], project)
             tags = []
             if environment:

@@ -534,7 +534,9 @@ if os.getenv("EMAIL_TIMEOUT"):
     EMAIL_TIMEOUT = env.str("EMAIL_TIMEOUT")
 if os.getenv("EMAIL_FILE_PATH"):
     EMAIL_FILE_PATH = env.str("EMAIL_FILE_PATH")
-if os.getenv("EMAIL_URL"): # Careful, this will override most EMAIL_*** settings. Set them all individually, or use EMAIL_URL to set them all at once, but don't do both.
+if os.getenv(
+    "EMAIL_URL"
+):  # Careful, this will override most EMAIL_*** settings. Set them all individually, or use EMAIL_URL to set them all at once, but don't do both.
     EMAIL_CONFIG = env.email_url("EMAIL_URL")
     vars().update(EMAIL_CONFIG)
 
