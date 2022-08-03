@@ -110,7 +110,7 @@ class UptimeTestCase(GlitchTipTestCase):
 
     @aioresponses()
     def test_notification_default_scope(self, mocked):
-        """ Subscribe by default should not result in alert emails for non-team members """
+        """Subscribe by default should not result in alert emails for non-team members"""
         self.create_user_and_project()
         test_url = "https://example.com"
 
@@ -155,7 +155,7 @@ class UptimeTestCase(GlitchTipTestCase):
 
     @aioresponses()
     def test_user_project_alert_scope(self, mocked):
-        """ User project alert should not result in alert emails for non-team members """
+        """User project alert should not result in alert emails for non-team members"""
         self.create_user_and_project()
         test_url = "https://example.com"
         baker.make(
@@ -195,7 +195,9 @@ class UptimeTestCase(GlitchTipTestCase):
         self.create_user_and_project()
         with freeze_time("2020-01-01"):
             monitor = baker.make(
-                Monitor, monitor_type=MonitorType.HEARTBEAT, project=self.project,
+                Monitor,
+                monitor_type=MonitorType.HEARTBEAT,
+                project=self.project,
             )
             baker.make(
                 "alerts.AlertRecipient",

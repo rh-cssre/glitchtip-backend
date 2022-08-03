@@ -1,12 +1,12 @@
 from django.conf import settings
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.urls import re_path
-from django.utils.http import base36_to_int
 from django.utils.crypto import constant_time_compare
+from django.utils.http import base36_to_int
 from organizations.backends.defaults import InvitationBackend as BaseInvitationBackend
+
 from .models import Organization
 from .tasks import send_email_invite
-
 
 REGISTRATION_TIMEOUT_DAYS = getattr(settings, "REGISTRATION_TIMEOUT_DAYS", 15)
 
@@ -21,7 +21,7 @@ class InvitationTokenGenerator(PasswordResetTokenGenerator):
         """
         # Parse the token
         try:
-            ts_b36, hash = token.split("-")
+            ts_b36, _hash = token.split("-")
         except ValueError:
             return False
 
@@ -31,7 +31,9 @@ class InvitationTokenGenerator(PasswordResetTokenGenerator):
             return False
 
         # Check that the timestamp/uid has not been tampered with
-        if not constant_time_compare(self._make_token_with_timestamp(user, ts), token):
+        if not constant_time_compare(
+            self._make_token_with_timestamp(user, ts, self.secret), token
+        ):
             return False
 
         # Check the timestamp is within limit
@@ -65,7 +67,10 @@ class InvitationBackend(BaseInvitationBackend):
 
     def send_invitation(self, user, sender=None, **kwargs):
         kwargs.update(
-            {"token": self.get_token(user), "organization": user.organization,}
+            {
+                "token": self.get_token(user),
+                "organization": user.organization,
+            }
         )
         send_email_invite.delay(user.pk, kwargs["token"])
         return True
