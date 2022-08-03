@@ -39,9 +39,8 @@ class UptimeTestCase(GlitchTipTestCase):
         mocked.get(test_url, status=200)
         mon1 = baker.make(Monitor, url=test_url, monitor_type=MonitorType.GET)
         mocked.get(test_url, status=200)
-        loop = asyncio.get_event_loop()
         monitors = list(Monitor.objects.all().values())
-        results = loop.run_until_complete(fetch_all(monitors, loop))
+        results = asyncio.run(fetch_all(monitors))
         self.assertEqual(results[0]["id"], mon1.pk)
 
     @aioresponses()
