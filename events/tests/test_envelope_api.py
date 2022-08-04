@@ -91,3 +91,9 @@ class EnvelopeStoreTestCase(APITestCase):
         #         tags__environment__contains="dev",
         #     ).exists()
         # )
+
+    def test_duplicate_id(self):
+        data = self.get_payload("events/test_data/transactions/django_simple.json")
+        self.client.generic("POST", self.url, data)
+        res = self.client.generic("POST", self.url, data)
+        self.assertEqual(res.status_code, 400)

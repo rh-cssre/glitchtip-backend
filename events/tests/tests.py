@@ -1,12 +1,15 @@
 import json
 import random
 from unittest.mock import patch
+
 from django.shortcuts import reverse
-from rest_framework.test import APITestCase
 from model_bakery import baker
-from glitchtip import test_utils  # pylint: disable=unused-import
-from issues.models import Issue, EventStatus
+from rest_framework.test import APITestCase
+
 from environments.models import Environment
+from glitchtip import test_utils  # pylint: disable=unused-import
+from issues.models import EventStatus, Issue
+
 from ..models import Event, LogLevel
 from ..test_data.csp import mdn_sample_csp
 
@@ -42,12 +45,12 @@ class EventStoreTestCase(APITestCase):
         url = "/api/1/store/"
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
-        params = f"?sentry_key=aaa"
+        params = "?sentry_key=aaa"
         url = reverse("event_store", args=[self.project.id]) + params
         res = self.client.post(url, data, format="json")
         self.assertEqual(res.status_code, 401)
 
-        params = f"?sentry_key=238df2aac6331578a16c14bcb3db5259"
+        params = "?sentry_key=238df2aac6331578a16c14bcb3db5259"
         url = reverse("event_store", args=[self.project.id]) + params
         res = self.client.post(url, data, format="json")
         self.assertContains(res, "Invalid api key", status_code=401)

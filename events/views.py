@@ -7,6 +7,7 @@ import uuid
 from django.conf import settings
 from django.core.exceptions import SuspiciousOperation, ValidationError
 from django.db.models import Exists, OuterRef
+from django.db.utils import IntegrityError
 from django.http import HttpResponse
 from django.test import RequestFactory
 from rest_framework import exceptions, permissions, status
@@ -14,8 +15,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from sentry_sdk import capture_exception, set_context, set_level
 
-from difs.tasks import difs_run_resolve_stacktrace
 from difs.models import DebugInformationFile
+from difs.tasks import difs_run_resolve_stacktrace
 from performance.serializers import TransactionEventSerializer
 from projects.models import Project
 from sentry.utils.auth import parse_auth_header
@@ -167,7 +168,8 @@ class EnvelopeAPIView(BaseEventAPIView):
 
         data = request.data
         if len(data) < 2:
-            raise ValidationError("Envelope has no headers")
+            logger.warning("Envelope has no headers %s", data)
+            raise exceptions.ValidationError("Envelope has no headers")
         event_header_serializer = EnvelopeHeaderSerializer(data=data.pop(0))
         event_header_serializer.is_valid(raise_exception=True)
         # Multi part envelopes are not yet supported
@@ -177,7 +179,11 @@ class EnvelopeAPIView(BaseEventAPIView):
                 data=data.pop(0), context={"request": self.request, "project": project}
             )
             serializer.is_valid(raise_exception=True)
-            event = serializer.save()
+            try:
+                event = serializer.save()
+            except IntegrityError as err:
+                logger.warning("Duplicate event id", exc_info=True)
+                raise exceptions.ValidationError("Duplicate event id") from err
             return Response({"id": event.event_id_hex})
         elif message_header.get("type") == "event":
             event_data = data.pop(0)
