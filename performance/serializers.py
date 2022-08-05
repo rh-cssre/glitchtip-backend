@@ -81,13 +81,27 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
         defaults = {}
         defaults["tags"] = {tag[0]: [tag[1]] for tag in tags}
 
-        group, _ = TransactionGroup.objects.get_or_create(
+        group, group_created = TransactionGroup.objects.get_or_create(
             project=self.context.get("project"),
             transaction=data["transaction"],
             op=contexts["trace"]["op"],
             method=data.get("request", {}).get("method"),
             defaults=defaults,
         )
+
+        # Merge tags, only save if necessary
+        update_group = False
+        if not group_created:
+            for tag in tags:
+                if tag[0] not in group.tags:
+                    group.tags[tag[0]] = tag[1]
+                    update_group = True
+                elif tag[1] not in group.tags[tag[0]]:
+                    group.tags[tag[0]].append(tag[1])
+                    update_group = True
+        if update_group:
+            group.save(update_fields=["tags"])
+
         transaction = TransactionEvent.objects.create(
             group=group,
             data={

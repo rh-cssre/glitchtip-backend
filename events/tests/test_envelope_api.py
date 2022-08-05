@@ -83,14 +83,13 @@ class EnvelopeStoreTestCase(APITestCase):
             set_release="1.1",
         )
         res = self.client.generic("POST", self.url, data)
-        # TODO, update groups
-        # self.assertTrue(
-        #     TransactionGroup.objects.filter(
-        #         transactionevent__pk=event_id,
-        #         tags__release__contains="1.1",
-        #         tags__environment__contains="dev",
-        #     ).exists()
-        # )
+        self.assertTrue(
+            TransactionGroup.objects.filter(
+                transactionevent__pk=event_id,
+                tags__release__contains="1.1",
+                tags__environment__contains="dev",
+            ).exists()
+        )
 
     def test_duplicate_id(self):
         data = self.get_payload("events/test_data/transactions/django_simple.json")
