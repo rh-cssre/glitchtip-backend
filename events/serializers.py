@@ -1,30 +1,33 @@
 import uuid
 from typing import Dict, List, Tuple, Union
 from urllib.parse import urlparse
+
+from anonymizeip import anonymize_ip
 from django.db import transaction
 from django.db.utils import IntegrityError
 from ipware import get_client_ip
-from anonymizeip import anonymize_ip
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
-from sentry.eventtypes.error import ErrorEvent
-from sentry.eventtypes.base import DefaultEvent
+
+from environments.models import Environment
+from glitchtip.serializers import FlexibleDateTimeField
 from issues.models import EventType, Issue
 from issues.serializers import BaseBreadcrumbsSerializer
 from issues.tasks import update_search_index_issue
-from environments.models import Environment
 from releases.models import Release
-from glitchtip.serializers import FlexibleDateTimeField
-from .models import Event, LogLevel
-from .fields import (
-    GenericField,
-    ForgivingHStoreField,
-    ForgivingDisallowRegexField,
-    QueryStringField,
-)
-from .event_tag_processors import TAG_PROCESSORS
+from sentry.eventtypes.base import DefaultEvent
+from sentry.eventtypes.error import ErrorEvent
+
 from .event_context_processors import EVENT_CONTEXT_PROCESSORS
 from .event_processors import EVENT_PROCESSORS
+from .event_tag_processors import TAG_PROCESSORS
+from .fields import (
+    ForgivingDisallowRegexField,
+    ForgivingHStoreField,
+    GenericField,
+    QueryStringField,
+)
+from .models import Event, LogLevel
 
 
 def replace(data: Union[str, dict, list], match: str, repl: str):
@@ -108,6 +111,21 @@ class SentrySDKEventSerializer(BaseSerializer):
         required=False, allow_null=True, disallow_regex=r"^[^\n\r\f\/]*$"
     )
     _meta = serializers.JSONField(required=False)
+
+    def get_environment(self, name: str, project):
+        environment, _ = Environment.objects.get_or_create(
+            name=name[: Environment._meta.get_field("name").max_length],
+            organization=project.organization,
+        )
+        environment.projects.add(project)
+        return environment
+
+    def get_release(self, version: str, project):
+        release, _ = Release.objects.get_or_create(
+            version=version, organization=project.organization
+        )
+        release.projects.add(project)
+        return release
 
 
 class FormattedMessageSerializer(serializers.Serializer):
@@ -195,12 +213,14 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                             frame["in_app"] = False
         return exception
 
-    def generate_tags(self, data: Dict, tags: List[Tuple[str, str]] = []):
+    def generate_tags(self, data: Dict, tags: List[Tuple[str, str]] = None):
         """
         Determine tag relational data
 
         Optionally pass tags array for existing known tags to generate
         """
+        if tags is None:
+            tags = []
         for Processor in TAG_PROCESSORS:
             processor = Processor()
             value = processor.get_tag_values(data)
@@ -230,21 +250,6 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
         if "message" in data:
             return data["message"]
         return data.get("logentry", {}).get("message", "")
-
-    def get_environment(self, name: str, project):
-        environment, _ = Environment.objects.get_or_create(
-            name=name[: Environment._meta.get_field("name").max_length],
-            organization=project.organization,
-        )
-        environment.projects.add(project)
-        return environment
-
-    def get_release(self, version: str, project):
-        release, _ = Release.objects.get_or_create(
-            version=version, organization=project.organization
-        )
-        release.projects.add(project)
-        return release
 
     def is_url(self, filename: str) -> bool:
         return filename.startswith(("file:", "http:", "https:", "applewebdata:"))
@@ -282,9 +287,8 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             for value in exception.get("values", []):
                 self.normalize_stacktrace(value.get("stacktrace"))
 
-        release = None
-        if data.get("release"):
-            release = self.get_release(data["release"], project)
+        if release := data.get("release"):
+            release = self.get_release(release, project)
 
         for Processor in EVENT_PROCESSORS:
             Processor(project, release, data).run()
@@ -318,8 +322,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             if level:
                 defaults["level"] = level
 
-            environment = None
-            if data.get("environment"):
+            if environment := data.get("environment"):
                 environment = self.get_environment(data["environment"], project)
             tags = []
             if environment:
@@ -329,7 +332,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             tags = self.generate_tags(data, tags)
             defaults["tags"] = {tag[0]: [tag[1]] for tag in tags}
 
-            issue, issue_created = Issue.objects.get_or_create(
+            issue, _ = Issue.objects.get_or_create(
                 title=sanitize_bad_postgres_chars(title),
                 culprit=sanitize_bad_postgres_chars(culprit),
                 project_id=project.id,
@@ -392,17 +395,17 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 params["level"] = level
             try:
                 event = Event.objects.create(**params)
-            except IntegrityError as e:
+            except IntegrityError as err:
                 # This except is more efficient than a query for exists().
-                if e.args and "event_id" in e.args[0]:
+                if err.args and "event_id" in err.args[0]:
                     raise PermissionDenied(
                         "An event with the same ID already exists (%s)"
                         % params["event_id"]
-                    ) from e
-                raise e
+                    ) from err
+                raise err
 
         issue.check_for_status_update()
-        update_search_index_issue(args=[issue.pk, issue_created], countdown=10)
+        update_search_index_issue(args=[issue.pk], countdown=10)
 
         return event
 
@@ -431,9 +434,9 @@ class StoreCSPReportSerializer(BaseSerializer):
         # This is done to support the hyphen
         self.fields.update({"csp-report": serializers.JSONField()})
 
-    def create(self, data):
+    def create(self, validated_data):
         project = self.context.get("project")
-        csp = data["csp-report"]
+        csp = validated_data["csp-report"]
         title = self.get_title(csp)
         culprit = self.get_culprit(csp)
         uri = self.get_uri(csp)
@@ -463,7 +466,7 @@ class StoreCSPReportSerializer(BaseSerializer):
             "message": title,
             "type": EventType.CSP.label,
         }
-        user = self.process_user(project, data)
+        user = self.process_user(project, validated_data)
         if user:
             json_data["user"] = user
 

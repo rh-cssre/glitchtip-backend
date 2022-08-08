@@ -39,9 +39,8 @@ class UptimeTestCase(GlitchTipTestCase):
         mocked.get(test_url, status=200)
         mon1 = baker.make(Monitor, url=test_url, monitor_type=MonitorType.GET)
         mocked.get(test_url, status=200)
-        loop = asyncio.get_event_loop()
         monitors = list(Monitor.objects.all().values())
-        results = loop.run_until_complete(fetch_all(monitors, loop))
+        results = asyncio.run(fetch_all(monitors))
         self.assertEqual(results[0]["id"], mon1.pk)
 
     @aioresponses()
@@ -110,7 +109,7 @@ class UptimeTestCase(GlitchTipTestCase):
 
     @aioresponses()
     def test_notification_default_scope(self, mocked):
-        """ Subscribe by default should not result in alert emails for non-team members """
+        """Subscribe by default should not result in alert emails for non-team members"""
         self.create_user_and_project()
         test_url = "https://example.com"
 
@@ -155,7 +154,7 @@ class UptimeTestCase(GlitchTipTestCase):
 
     @aioresponses()
     def test_user_project_alert_scope(self, mocked):
-        """ User project alert should not result in alert emails for non-team members """
+        """User project alert should not result in alert emails for non-team members"""
         self.create_user_and_project()
         test_url = "https://example.com"
         baker.make(
@@ -195,7 +194,9 @@ class UptimeTestCase(GlitchTipTestCase):
         self.create_user_and_project()
         with freeze_time("2020-01-01"):
             monitor = baker.make(
-                Monitor, monitor_type=MonitorType.HEARTBEAT, project=self.project,
+                Monitor,
+                monitor_type=MonitorType.HEARTBEAT,
+                project=self.project,
             )
             baker.make(
                 "alerts.AlertRecipient",

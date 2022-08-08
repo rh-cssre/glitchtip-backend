@@ -10,7 +10,8 @@ https://docs.djangoproject.com/en/dev/howto/deployment/wsgi/
 import os
 
 from django.core.wsgi import get_wsgi_application
+from uwsgi_chunked import Chunked
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'glitchtip.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "glitchtip.settings")
 
-application = get_wsgi_application()
+application = Chunked(get_wsgi_application())
