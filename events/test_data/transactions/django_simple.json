@@ -37,7 +37,8 @@
         "timestamp": "2020-12-29T17:51:08.467908Z",
         "tags": {
           "django.function_name": "django.utils.deprecation.MiddlewareMixin.__call__",
-          "django.middleware_name": "django.middleware.security.SecurityMiddleware"
+          "django.middleware_name": "django.middleware.security.SecurityMiddleware",
+          "bad": true
         }
       },
       {

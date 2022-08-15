@@ -53,6 +53,13 @@ class SpanSerializer(serializers.ModelSerializer):
             "parent_span_id": {"write_only": True},
         }
 
+    def to_internal_value(self, data):
+        # Coerce tags to strings
+        # Must be done here to avoid failing child CharField validation
+        if tags := data.get("tags"):
+            data["tags"] = {key: str(value) for key, value in tags.items()}
+        return super().to_internal_value(data)
+
 
 class TransactionEventSerializer(SentrySDKEventSerializer):
     type = serializers.CharField(required=False)
