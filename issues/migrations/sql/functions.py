@@ -9,6 +9,7 @@ $$ LANGUAGE plpgsql;;
 """
 
 UPDATE_ISSUE_INDEX = """
+DROP PROCEDURE IF EXISTS update_issue_index;
 CREATE OR REPLACE PROCEDURE update_issue_index(update_issue_id integer)
 LANGUAGE SQL
 AS $$
