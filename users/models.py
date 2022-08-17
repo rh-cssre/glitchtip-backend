@@ -40,21 +40,21 @@ class UserManager(BaseUserManager):
         return self.create_user(email, password, **extra_fields)
 
     def alert_notification_recipients(self, notification):
-        """ Distinct users associated with a project notification who should receive alerts """
+        """Distinct users associated with a project notification who should receive alerts"""
         queryset = self.filter(
             organizations_ext_organizationuser__team__projects__projectalert__notification=notification
         )
         return self._exclude_recipients(queryset, notification.project_alert.project)
 
     def uptime_monitor_recipients(self, monitor):
-        """ Distinct users associated with a project uptime monitor who should receive alerts """
+        """Distinct users associated with a project uptime monitor who should receive alerts"""
         queryset = self.filter(
             organizations_ext_organizationuser__team__projects__monitor=monitor
         )
         return self._exclude_recipients(queryset, monitor.project)
 
     def _exclude_recipients(self, queryset, project):
-        """ Exclude from queryset users who have a preference not to receive notifications """
+        """Exclude from queryset users who have a preference not to receive notifications"""
         return queryset.exclude(
             Q(
                 userprojectalert__project=project,
@@ -86,6 +86,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         default=True,
         help_text="Subscribe to project notifications by default. Overrides project settings",
     )
+    options = models.JSONField(default={})
     USERNAME_FIELD = "email"
     EMAIL_FIELD = "email"
     objects = UserManager()

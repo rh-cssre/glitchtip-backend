@@ -68,8 +68,7 @@ def perform_checks(monitor_ids: List[int], now=None):
     monitors = list(
         Monitor.objects.with_check_annotations().filter(pk__in=monitor_ids).values()
     )
-    loop = asyncio.get_event_loop()
-    results = loop.run_until_complete(fetch_all(monitors, loop))
+    results = asyncio.run(fetch_all(monitors))
     monitor_checks = MonitorCheck.objects.bulk_create(
         [
             MonitorCheck(

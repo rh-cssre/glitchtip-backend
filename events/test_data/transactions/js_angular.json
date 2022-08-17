@@ -1,0 +1,238 @@
+[
+    {
+        "event_id": "aa159604bf264634bf69a542511f10a3",
+        "sent_at": "2022-07-12T01:31:22.636Z",
+        "sdk": {
+            "name": "sentry.javascript.angular",
+            "version": "7.6.0"
+        },
+        "trace": {
+            "public_key": "3887bca678924cd3a276f7e57d135ad9",
+            "trace_id": "58c97bf3cf5d455c864741913e122d41",
+            "sample_rate": "1"
+        }
+    },
+    {
+        "type": "transaction",
+        "sample_rates": [
+            {
+                "id": "client_sampler",
+                "rate": 1
+            }
+        ]
+    },
+    {
+        "contexts": {
+            "angular": {
+                "version": 13
+            },
+            "trace": {
+                "op": "navigation",
+                "span_id": "905d36eebee31df8",
+                "tags": {
+                    "hardwareConcurrency": "16",
+                    "sentry_reportAllChanges": false
+                },
+                "trace_id": "58c97bf3cf5d455c864741913e122d41"
+            }
+        },
+        "spans": [],
+        "start_timestamp": 1657589481.622,
+        "tags": {
+            "hardwareConcurrency": "16",
+            "sentry_reportAllChanges": false
+        },
+        "timestamp": 1657589482.623,
+        "transaction": "/tracing-3",
+        "type": "transaction",
+        "transaction_info": {
+            "source": "url"
+        },
+        "platform": "javascript",
+        "event_id": "aa159604bf264634bf69a542511f10a3",
+        "environment": "production",
+        "sdk": {
+            "integrations": [
+                "InboundFilters",
+                "FunctionToString",
+                "TryCatch",
+                "Breadcrumbs",
+                "GlobalHandlers",
+                "LinkedErrors",
+                "Dedupe",
+                "HttpContext",
+                "BrowserTracing"
+            ],
+            "name": "sentry.javascript.angular",
+            "version": "7.6.0",
+            "packages": [
+                {
+                    "name": "npm:@sentry/angular",
+                    "version": "7.6.0"
+                }
+            ]
+        },
+        "breadcrumbs": [
+            {
+                "timestamp": 1657588833.579,
+                "category": "console",
+                "data": {
+                    "arguments": [
+                        "Angular is running in development mode. Call enableProdMode() to enable production mode."
+                    ],
+                    "logger": "console"
+                },
+                "level": "log",
+                "message": "Angular is running in development mode. Call enableProdMode() to enable production mode."
+            },
+            {
+                "timestamp": 1657588833.583,
+                "category": "navigation",
+                "data": {
+                    "from": "/",
+                    "to": "/"
+                }
+            },
+            {
+                "timestamp": 1657588841.216,
+                "category": "ui.click",
+                "message": "body > app-root > ol > li > button"
+            },
+            {
+                "timestamp": 1657588841.24,
+                "category": "sentry.event",
+                "event_id": "2b6d317ffaee4bf6bf957b5ac703d58e",
+                "level": "error",
+                "message": "RangeError: The number must be between 0 and 10."
+            },
+            {
+                "timestamp": 1657588841.244,
+                "category": "console",
+                "data": {
+                    "arguments": [
+                        {
+                            "message": "The number must be between 0 and 10.",
+                            "name": "RangeError",
+                            "stack": "checkRange@http://localhost:4201/main.js:94:19\nAppComponent_Template_button_click_17_listener@http://localhost:4201/main.js:158:146\nexecuteListenerWithErrorHandling@http://localhost:4201/vendor.js:46108:16\nwrapListenerIn_markDirtyAndPreventDefault@http://localhost:4201/vendor.js:46146:54\ndecoratePreventDefault/<@http://localhost:4201/vendor.js:60555:46\nsentryWrapped@http://localhost:4201/vendor.js:1052:17\ninvokeTask@http://localhost:4201/polyfills.js:3521:31\nonInvokeTask@http://localhost:4201/vendor.js:56672:33\ninvokeTask@http://localhost:4201/polyfills.js:3520:60\nrunTask@http://localhost:4201/polyfills.js:3293:47\ninvokeTask@http://localhost:4201/polyfills.js:3602:34\ninvokeTask@http://localhost:4201/polyfills.js:4715:14\nglobalZoneAwareCallback@http://localhost:4201/polyfills.js:4752:31\n"
+                        }
+                    ],
+                    "logger": "console"
+                },
+                "level": "error",
+                "message": "RangeError: The number must be between 0 and 10."
+            },
+            {
+                "timestamp": 1657588842.24,
+                "category": "ui.click",
+                "message": "body > app-root > ol > li > button"
+            },
+            {
+                "timestamp": 1657588842.248,
+                "category": "console",
+                "data": {
+                    "arguments": [
+                        {
+                            "message": "The number must be between 0 and 10.",
+                            "name": "RangeError",
+                            "stack": "checkRange@http://localhost:4201/main.js:94:19\nAppComponent_Template_button_click_17_listener@http://localhost:4201/main.js:158:146\nexecuteListenerWithErrorHandling@http://localhost:4201/vendor.js:46108:16\nwrapListenerIn_markDirtyAndPreventDefault@http://localhost:4201/vendor.js:46146:54\ndecoratePreventDefault/<@http://localhost:4201/vendor.js:60555:46\nsentryWrapped@http://localhost:4201/vendor.js:1052:17\ninvokeTask@http://localhost:4201/polyfills.js:3521:31\nonInvokeTask@http://localhost:4201/vendor.js:56672:33\ninvokeTask@http://localhost:4201/polyfills.js:3520:60\nrunTask@http://localhost:4201/polyfills.js:3293:47\ninvokeTask@http://localhost:4201/polyfills.js:3602:34\ninvokeTask@http://localhost:4201/polyfills.js:4715:14\nglobalZoneAwareCallback@http://localhost:4201/polyfills.js:4752:31\n"
+                        }
+                    ],
+                    "logger": "console"
+                },
+                "level": "error",
+                "message": "RangeError: The number must be between 0 and 10."
+            },
+            {
+                "timestamp": 1657588842.621,
+                "category": "console",
+                "data": {
+                    "arguments": [
+                        {
+                            "message": "The number must be between 0 and 10.",
+                            "name": "RangeError",
+                            "stack": "checkRange@http://localhost:4201/main.js:94:19\nAppComponent_Template_button_click_17_listener@http://localhost:4201/main.js:158:146\nexecuteListenerWithErrorHandling@http://localhost:4201/vendor.js:46108:16\nwrapListenerIn_markDirtyAndPreventDefault@http://localhost:4201/vendor.js:46146:54\ndecoratePreventDefault/<@http://localhost:4201/vendor.js:60555:46\nsentryWrapped@http://localhost:4201/vendor.js:1052:17\ninvokeTask@http://localhost:4201/polyfills.js:3521:31\nonInvokeTask@http://localhost:4201/vendor.js:56672:33\ninvokeTask@http://localhost:4201/polyfills.js:3520:60\nrunTask@http://localhost:4201/polyfills.js:3293:47\ninvokeTask@http://localhost:4201/polyfills.js:3602:34\ninvokeTask@http://localhost:4201/polyfills.js:4715:14\nglobalZoneAwareCallback@http://localhost:4201/polyfills.js:4752:31\n"
+                        }
+                    ],
+                    "logger": "console"
+                },
+                "level": "error",
+                "message": "RangeError: The number must be between 0 and 10."
+            },
+            {
+                "timestamp": 1657588850.911,
+                "category": "ui.click",
+                "message": "body > app-root > ol > li > a"
+            },
+            {
+                "timestamp": 1657588850.927,
+                "category": "navigation",
+                "data": {
+                    "from": "/",
+                    "to": "/tracing"
+                }
+            },
+            {
+                "timestamp": 1657588852.439,
+                "category": "ui.click",
+                "message": "body > app-root > app-tracing > nav > a"
+            },
+            {
+                "timestamp": 1657588852.452,
+                "category": "navigation",
+                "data": {
+                    "from": "/tracing",
+                    "to": "/tracing-2"
+                }
+            },
+            {
+                "timestamp": 1657588853.344,
+                "category": "ui.click",
+                "message": "body > app-root > app-tracing-2 > nav > a"
+            },
+            {
+                "timestamp": 1657588853.351,
+                "category": "navigation",
+                "data": {
+                    "from": "/tracing-2",
+                    "to": "/tracing-3"
+                }
+            },
+            {
+                "timestamp": 1657588853.369,
+                "category": "sentry.transaction",
+                "event_id": "ed89609601d749f1b6d340b840478980",
+                "message": "ed89609601d749f1b6d340b840478980"
+            },
+            {
+                "timestamp": 1657588853.982,
+                "category": "sentry.transaction",
+                "event_id": "484c0306446245a7a22a2a4047937da2",
+                "message": "484c0306446245a7a22a2a4047937da2"
+            },
+            {
+                "timestamp": 1657589477.161,
+                "category": "ui.click",
+                "message": "body > app-root > app-tracing-3 > nav > a"
+            },
+            {
+                "timestamp": 1657589481.582,
+                "category": "ui.click",
+                "message": "body > app-root > app-tracing-3 > nav > a"
+            },
+            {
+                "timestamp": 1657589481.619,
+                "category": "navigation",
+                "data": {
+                    "from": "/tracing-3",
+                    "to": "/tracing-2"
+                }
+            }
+        ],
+        "request": {
+            "url": "http://localhost:4201/tracing-2",
+            "headers": {
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:102.0) Gecko/20100101 Firefox/102.0"
+            }
+        }
+    }
+]

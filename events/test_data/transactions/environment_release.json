@@ -1,0 +1,123 @@
+[
+  {
+    "event_id": "037419a37a8e426ba52e82cd647f2d14",
+    "sent_at": "2022-08-01T16:59:58.064Z",
+    "sdk": { "name": "sentry.javascript.angular", "version": "7.8.1" },
+    "trace": {
+      "environment": "dev",
+      "release": "1.0",
+      "public_key": "4d886b61b58e48a685455c51c434d2a6",
+      "trace_id": "df3b21283b08480ba166b32692d85453",
+      "sample_rate": "1"
+    }
+  },
+  {
+    "type": "transaction",
+    "sample_rates": [{ "id": "client_sampler", "rate": 1 }]
+  },
+  {
+    "contexts": {
+      "angular": { "version": 14 },
+      "trace": {
+        "op": "pageload",
+        "span_id": "a468669a1489ecf7",
+        "tags": {
+          "hardwareConcurrency": "16",
+          "sentry_reportAllChanges": false
+        },
+        "trace_id": "df3b21283b08480ba166b32692d85453"
+      }
+    },
+    "spans": [
+      {
+        "description": "unloadEvent",
+        "op": "browser",
+        "parent_span_id": "a468669a1489ecf7",
+        "span_id": "a39d104d785c87c3",
+        "start_timestamp": 1659373196.921,
+        "timestamp": 1659373196.921,
+        "trace_id": "df3b21283b08480ba166b32692d85453"
+      },
+      {
+        "description": "first-contentful-paint",
+        "op": "paint",
+        "parent_span_id": "a468669a1489ecf7",
+        "span_id": "ba375d967f28e05b",
+        "start_timestamp": 1659373197.0779998,
+        "timestamp": 1659373197.0779998,
+        "trace_id": "df3b21283b08480ba166b32692d85453"
+      }
+    ],
+    "start_timestamp": 1659373196.891,
+    "tags": { "hardwareConcurrency": "16", "sentry_reportAllChanges": false },
+    "timestamp": 1659373197.135,
+    "transaction": "/tracing",
+    "type": "transaction",
+    "transaction_info": { "source": "url" },
+    "measurements": {
+      "fcp": { "value": 186.99979782104492, "unit": "millisecond" },
+      "mark.fcp": { "value": 1659373197.0779998, "unit": "second" },
+      "ttfb": { "value": 26.999950408935547, "unit": "millisecond" },
+      "ttfb.requestTime": { "value": 0.9999275207519531, "unit": "millisecond" }
+    },
+    "platform": "javascript",
+    "event_id": "037419a37a8e426ba52e82cd647f2d14",
+    "environment": "dev",
+    "release": "1.0",
+    "sdk": {
+      "integrations": [
+        "InboundFilters",
+        "FunctionToString",
+        "TryCatch",
+        "Breadcrumbs",
+        "GlobalHandlers",
+        "LinkedErrors",
+        "Dedupe",
+        "HttpContext",
+        "BrowserTracing"
+      ],
+      "name": "sentry.javascript.angular",
+      "version": "7.8.1",
+      "packages": [{ "name": "npm:@sentry/angular", "version": "7.8.1" }]
+    },
+    "breadcrumbs": [
+      {
+        "timestamp": 1659373197.052,
+        "category": "console",
+        "data": { "arguments": ["what what"], "logger": "console" },
+        "level": "log",
+        "message": "what what"
+      },
+      {
+        "timestamp": 1659373197.052,
+        "category": "console",
+        "data": { "arguments": ["DOIT"], "logger": "console" },
+        "level": "log",
+        "message": "DOIT"
+      },
+      {
+        "timestamp": 1659373197.074,
+        "category": "console",
+        "data": {
+          "arguments": [
+            "Angular is running in development mode. Call enableProdMode() to enable production mode."
+          ],
+          "logger": "console"
+        },
+        "level": "log",
+        "message": "Angular is running in development mode. Call enableProdMode() to enable production mode."
+      },
+      {
+        "timestamp": 1659373197.08,
+        "category": "navigation",
+        "data": { "from": "/tracing", "to": "/tracing" }
+      }
+    ],
+    "request": {
+      "url": "http://localhost:4201/tracing",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:103.0) Gecko/20100101 Firefox/103.0"
+      }
+    }
+  }
+]

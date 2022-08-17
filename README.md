@@ -2,28 +2,40 @@
 
 <script src="https://liberapay.com/GlitchTip/widgets/button.js"></script>
 
-<noscript><a href="https://liberapay.com/GlitchTip/donate"><img alt="Donate using Liberapay" src="https://liberapay.com/assets/widgets/donate.svg"></a></noscript>
+<noscript>
+    <a href="https://liberapay.com/GlitchTip/donate">
+        <img alt="Donate using Liberapay" src="https://liberapay.com/assets/widgets/donate.svg">
+    </a>
+</noscript>
 
 # GlitchTip Backend
 
-GlitchTip is an open source, Sentry API compatible error tracking platform. It is a partial fork/mostly reimplementation of Sentry's open source codebase before it went proprietary. Its goals are to be a modern, easy-to-develop error tracking platform that respects your freedom to use it any way you wish. Some differences include:
+GlitchTip is an open source, Sentry API compatible error tracking platform. It is a partial fork/mostly re-implementation
+of Sentry's open source codebase before it went proprietary. Its goals are to be a modern, easy-to-develop error
+tracking platform that respects your freedom to use it any way you wish. Some differences include:
 
-- A modern development environment with Python 3 and Django 3.2.
-- Simplicity over features. We use Postgres to store error data. Our code base is a fraction of the size of Sentry and looks like a typical Django app. We leverage existing open source Django ecosystem apps whenever possible.
-- Respects your privacy. No massive JS bundles. No invasive tracking. No third party spying. Our marketing site only the privacy-focused Plausible analytics. Self hosted GlitchTip will never report home. We will never know if you run it yourself.
-- Commitment to open source. We use open source tools like GitLab whenever possible. With our MIT license, you can use it for anything you'd like and even sell it. We believe in competition and hope you make GlitchTip even better.
+- A modern development environment with Python 3 and Django 4.
+- Simplicity over features. We use Postgres to store error data. Our code base is a fraction of the size of Sentry and
+  looks like a typical Django app. We leverage existing open source Django ecosystem apps whenever possible.
+- Respects your privacy. No massive JS bundles. No invasive tracking. No third party spying. Our marketing site runs the
+  privacy-focused Plausible analytics. Self hosted GlitchTip will never report home. We will never know if you run it
+  yourself.
+- Commitment to open source. We use open source tools like GitLab whenever possible. With our MIT license, you can use
+  it for anything you'd like and even sell it. We believe in competition and hope you make GlitchTip even better.
 
-Project status: Stable. Open an issue and say hello if you'd like to help. We are able to process basic error requests from the open source Sentry client tools. More features are on the way.
+Project status: Stable. Open an issue and say hello if you'd like to help. We are able to process basic error requests
+from the open source Sentry client tools. More features are on the way.
 
 # Developing
 
-We use Docker for development. View our [Contributing](./CONTRIBUTING.md) documentation if you'd like to help make GlitchTip better.
+We use Docker for development.
+View our [Contributing](./CONTRIBUTING.md) documentation if you'd like to help make GlitchTip better.
 
 ## Run local dev environment
 
 1. Ensure docker and docker-compose are installed
-2. `docker-compose up`
-3. `docker-compose run --rm web ./manage.py migrate
+2. `docker compose up`
+3. `docker compose run --rm web ./manage.py migrate`
 
 Run tests with `docker-compose run --rm web ./manage.py test`
 
@@ -46,11 +58,16 @@ VS Code can do type checking and type inference. However, it requires setting up
 ### Load testing
 
 Locust is built into the dev dependencies. To run with Locust run
-`docker-compose -f docker-compose.yml -f docker-compose.locust.yml up`
+`docker compose -f docker-compose.yml -f docker-compose.locust.yml up`
 
 Now go to localhost:8089 to run the test.
 
 Locust will not be installed to production docker images and cannot be run from them.
+
+### Observability metrics with Prometheus
+
+1. Edit monitoring/prometheus/prometheus.yml and set credentials to a GlitchTip auth token
+2. `docker compose -f docker-compose.yml -f docker-compose.metrics.yml up`
 
 # GCP Logging
 
@@ -63,6 +80,7 @@ UWSGI_LOG_ENCODER='json {"severity":"info","timestamp":${unix},"message":"${msg}
 
 # Acknowledgements
 
-- Thank you to the Sentry team for their ongoing open source SDK work and formerly open source backend of which this project is based on.
+- Thank you to the Sentry team for their ongoing open source SDK work and formerly open source backend of which this
+  project is based on.
 - We use element.io for internal chat and public gitter room
 - Plausible Analytics is used for analytics

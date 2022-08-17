@@ -65,15 +65,43 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
     timestamp = FlexibleDateTimeField()
     transaction = serializers.CharField()
 
-    def create(self, data):
-        trace_id = data["contexts"]["trace"]["trace_id"]
+    def create(self, validated_data):
+        data = validated_data
+        contexts = data["contexts"]
+        project = self.context.get("project")
+        trace_id = contexts["trace"]["trace_id"]
 
-        group, _ = TransactionGroup.objects.get_or_create(
+        tags = []
+        if environment := data.get("environment"):
+            environment = self.get_environment(data["environment"], project)
+            tags.append(("environment", environment.name))
+        if release := data.get("release"):
+            release = self.get_release(release, project)
+            tags.append(("release", release.version))
+        defaults = {}
+        defaults["tags"] = {tag[0]: [tag[1]] for tag in tags}
+
+        group, group_created = TransactionGroup.objects.get_or_create(
             project=self.context.get("project"),
             transaction=data["transaction"],
-            op=data["contexts"]["trace"]["op"],
+            op=contexts["trace"]["op"],
             method=data.get("request", {}).get("method"),
+            defaults=defaults,
         )
+
+        # Merge tags, only save if necessary
+        update_group = False
+        if not group_created:
+            for tag in tags:
+                if tag[0] not in group.tags:
+                    group.tags[tag[0]] = tag[1]
+                    update_group = True
+                elif tag[1] not in group.tags[tag[0]]:
+                    group.tags[tag[0]].append(tag[1])
+                    update_group = True
+        if update_group:
+            group.save(update_fields=["tags"])
+
         transaction = TransactionEvent.objects.create(
             group=group,
             data={
@@ -86,26 +114,31 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
             timestamp=data["timestamp"],
             start_timestamp=data["start_timestamp"],
             duration=data["timestamp"] - data["start_timestamp"],
+            tags={tag[0]: tag[1] for tag in tags},
         )
 
         first_span = SpanSerializer(
-            data=data["contexts"]["trace"]
+            data=contexts["trace"]
             | {
                 "start_timestamp": data["start_timestamp"],
                 "timestamp": data["timestamp"],
             }
         )
-        first_span.is_valid()
-        spans = data.get("spans", []) + [first_span.validated_data]
-        Span.objects.bulk_create(
-            [
-                Span(
-                    transaction=transaction,
-                    **span,
-                )
-                for span in spans
-            ]
-        )
+        is_valid = first_span.is_valid()
+        if is_valid:
+            spans = data.get("spans", []) + [first_span.validated_data]
+        else:
+            spans = data.get("spans")
+        if spans:
+            Span.objects.bulk_create(
+                [
+                    Span(
+                        transaction=transaction,
+                        **span,
+                    )
+                    for span in spans
+                ]
+            )
 
         return transaction
 

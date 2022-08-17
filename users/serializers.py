@@ -83,7 +83,7 @@ class EmailAddressSerializer(serializers.ModelSerializer):
         fields = ("isPrimary", "email", "isVerified")
 
     def clean_email(self):
-        """ Validate email as done in allauth.account.forms.AddEmailForm """
+        """Validate email as done in allauth.account.forms.AddEmailForm"""
         value = self.cleaned_data["email"]
         value = get_adapter().clean_email(value)
         errors = {
@@ -104,13 +104,13 @@ class EmailAddressSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(errors["different_account"])
         return value
 
-    def validate(self, data):
+    def validate(self, attrs):
         if self.context["request"].method == "POST":
             # Run extra validation on create
             self.user = self.context["request"].user
-            self.cleaned_data = data
-            data["email"] = self.clean_email()
-        return data
+            self.cleaned_data = attrs
+            attrs["email"] = self.clean_email()
+        return attrs
 
     def create(self, validated_data):
         return EmailAddress.objects.add_email(
@@ -152,6 +152,7 @@ class UserSerializer(serializers.ModelSerializer):
             "dateJoined",
             "hasPasswordAuth",
             "email",
+            "options",
         )
 
 
@@ -179,7 +180,7 @@ class UserNotificationsSerializer(serializers.ModelSerializer):
 
 
 class NoopTokenSerializer(serializers.Serializer):
-    """ dj-rest-auth requires tokens, but we don't use them. """
+    """dj-rest-auth requires tokens, but we don't use them."""
 
 
 class PasswordSetResetSerializer(PasswordResetSerializer):

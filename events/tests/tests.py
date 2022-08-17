@@ -1,12 +1,15 @@
 import json
 import random
 from unittest.mock import patch
+
 from django.shortcuts import reverse
-from rest_framework.test import APITestCase
 from model_bakery import baker
-from glitchtip import test_utils  # pylint: disable=unused-import
-from issues.models import Issue, EventStatus
+from rest_framework.test import APITestCase
+
 from environments.models import Environment
+from glitchtip import test_utils  # pylint: disable=unused-import
+from issues.models import EventStatus, Issue
+
 from ..models import Event, LogLevel
 from ..test_data.csp import mdn_sample_csp
 
@@ -42,12 +45,12 @@ class EventStoreTestCase(APITestCase):
         url = "/api/1/store/"
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
-        params = f"?sentry_key=aaa"
+        params = "?sentry_key=aaa"
         url = reverse("event_store", args=[self.project.id]) + params
         res = self.client.post(url, data, format="json")
         self.assertEqual(res.status_code, 401)
 
-        params = f"?sentry_key=238df2aac6331578a16c14bcb3db5259"
+        params = "?sentry_key=238df2aac6331578a16c14bcb3db5259"
         url = reverse("event_store", args=[self.project.id]) + params
         res = self.client.post(url, data, format="json")
         self.assertContains(res, "Invalid api key", status_code=401)
@@ -88,13 +91,13 @@ class EventStoreTestCase(APITestCase):
     def test_performance(self):
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
-        with self.assertNumQueries(16):
+        with self.assertNumQueries(15):
             res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 
         # Second event should have less queries
         data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4bb"
-        with self.assertNumQueries(10):
+        with self.assertNumQueries(8):
             res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 
@@ -146,7 +149,7 @@ class EventStoreTestCase(APITestCase):
         self.assertTrue(isinstance(header[1], str))
 
     def test_anonymize_ip(self):
-        """ ip address should get masked because default project settings are to scrub ip address """
+        """ip address should get masked because default project settings are to scrub ip address"""
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
         test_ip = "123.168.29.14"
@@ -176,9 +179,12 @@ class EventStoreTestCase(APITestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(
             Issue.objects.first().search_vector,
-            None,
+            "",
             "No tsvector is expected as it would exceed the Postgres limit",
         )
+        data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4be"
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
 
     @patch("events.views.logger")
     def test_invalid_event(self, mock_logger):
@@ -191,7 +197,7 @@ class EventStoreTestCase(APITestCase):
         mock_logger.warning.assert_called()
 
     def test_breadcrumbs_object(self):
-        """ Event breadcrumbs may be sent as an array or a object. """
+        """Event breadcrumbs may be sent as an array or a object."""
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
 
@@ -218,7 +224,8 @@ class EventStoreTestCase(APITestCase):
         self.assertTrue(event.release)
         self.assertEqual(event_json.get("release"), event.release.version)
         self.assertIn(
-            event.release.version, dict(event_json.get("tags")).values(),
+            event.release.version,
+            dict(event_json.get("tags")).values(),
         )
 
     def test_client_tags(self):
@@ -229,11 +236,12 @@ class EventStoreTestCase(APITestCase):
         event = Event.objects.first()
         event_json = event.event_json()
         self.assertIn(
-            "the value", tuple(event_json.get("tags"))[1],
+            "the value",
+            tuple(event_json.get("tags"))[1],
         )
 
     def test_client_tags_invalid(self):
-        """ Invalid tags should not be saved. But should not error. """
+        """Invalid tags should not be saved. But should not error."""
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
         data["tags"] = {
@@ -247,14 +255,15 @@ class EventStoreTestCase(APITestCase):
         event_json = event.event_json()
         tags = tuple(event_json.get("tags"))
         self.assertIn(
-            "valid value", tags[0],
+            "valid value",
+            tags[0],
         )
         for tag in tags:
             self.assertNotIn("this is invalid", tag)
         self.assertEqual(len(event_json.get("errors")), 1)
 
     def test_malformed_exception_value(self):
-        """ Malformed exception values aren't 100% supported, but should stored anyway """
+        """Malformed exception values aren't 100% supported, but should stored anyway"""
         with open("events/test_data/py_error.json") as json_file:
             data = json.load(json_file)
         data["exception"]["values"][0]["value"] = {"why is this": "any object?"}
@@ -275,7 +284,9 @@ class EventStoreTestCase(APITestCase):
             "event_id": "11111111111111111111111111111111",
             "breadcrumbs": [],
             "level": "error",
-            "modules": {"cowboy": "2.8.0",},
+            "modules": {
+                "cowboy": "2.8.0",
+            },
             "fingerprint": ["{{ default }}"],
             "message": "(Plug.Parsers.ParseError) malformed",
         }
@@ -285,7 +296,13 @@ class EventStoreTestCase(APITestCase):
 
     def test_invalid_level(self):
         data = {
-            "exception": [{"type": "a", "value": "a", "module": None,}],
+            "exception": [
+                {
+                    "type": "a",
+                    "value": "a",
+                    "module": None,
+                }
+            ],
             "culprit": "a",
             "extra": {},
             "event_id": "11111111111111111111111111111111",
@@ -300,7 +317,13 @@ class EventStoreTestCase(APITestCase):
 
     def test_null_release(self):
         data = {
-            "exception": [{"type": "a", "value": "a", "module": None,}],
+            "exception": [
+                {
+                    "type": "a",
+                    "value": "a",
+                    "module": None,
+                }
+            ],
             "culprit": "a",
             "extra": {},
             "event_id": "11111111111111111111111111111111",
@@ -318,7 +341,13 @@ class EventStoreTestCase(APITestCase):
 
     def test_formatted_message(self):
         data = {
-            "exception": [{"type": "a", "value": "a", "module": None,}],
+            "exception": [
+                {
+                    "type": "a",
+                    "value": "a",
+                    "module": None,
+                }
+            ],
             "event_id": "11111111111111111111111111111111",
             "message": {"formatted": "Hello"},
         }
@@ -329,7 +358,13 @@ class EventStoreTestCase(APITestCase):
     def test_invalid_message(self):
         # It's actually accepted as is. Considered to be message: ""
         data = {
-            "exception": [{"type": "a", "value": "a", "module": None,}],
+            "exception": [
+                {
+                    "type": "a",
+                    "value": "a",
+                    "module": None,
+                }
+            ],
             "event_id": "11111111111111111111111111111111",
             "message": {},
         }
@@ -349,7 +384,13 @@ class EventStoreTestCase(APITestCase):
 
     def test_long_environment(self):
         data = {
-            "exception": [{"type": "a", "value": "a", "module": None,}],
+            "exception": [
+                {
+                    "type": "a",
+                    "value": "a",
+                    "module": None,
+                }
+            ],
             "event_id": "11111111111111111111111111111111",
             "environment": "a" * 257,
         }
@@ -359,7 +400,13 @@ class EventStoreTestCase(APITestCase):
 
     def test_invalid_environment(self):
         data = {
-            "exception": [{"type": "a", "value": "a", "module": None,}],
+            "exception": [
+                {
+                    "type": "a",
+                    "value": "a",
+                    "module": None,
+                }
+            ],
             "event_id": "11111111111111111111111111111111",
             "environment": "a/a",
         }
@@ -371,19 +418,42 @@ class EventStoreTestCase(APITestCase):
     def test_query_string_formats(self):
         data = {
             "event_id": "11111111111111111111111111111111",
-            "exception": [{"type": "a", "value": "a", "module": None,}],
-            "request": {"method": "GET", "query_string": {"search": "foo"},},
+            "exception": [
+                {
+                    "type": "a",
+                    "value": "a",
+                    "module": None,
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "query_string": {"search": "foo"},
+            },
         }
         self.client.post(self.url, data, format="json")
         data = {
             "event_id": "11111111111111111111111111111112",
-            "exception": [{"type": "a", "value": "a", "module": None,}],
-            "request": {"query_string": "search=foo",},
+            "exception": [
+                {
+                    "type": "a",
+                    "value": "a",
+                    "module": None,
+                }
+            ],
+            "request": {
+                "query_string": "search=foo",
+            },
         }
         self.client.post(self.url, data, format="json")
         data = {
             "event_id": "11111111111111111111111111111113",
-            "exception": [{"type": "a", "value": "a", "module": None,}],
+            "exception": [
+                {
+                    "type": "a",
+                    "value": "a",
+                    "module": None,
+                }
+            ],
             "request": {"query_string": [["search", "foo"]]},
         }
         self.client.post(self.url, data, format="json")
