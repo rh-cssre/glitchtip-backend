@@ -7,8 +7,8 @@ from organizations_ext.admin import OrganizationResource, OrganizationUserResour
 from organizations_ext.models import OrganizationUser, OrganizationUserRole
 from projects.admin import ProjectKeyResource, ProjectResource
 from teams.admin import TeamResource
-from users.models import User
 from users.admin import UserResource
+from users.models import User
 
 from .exceptions import ImporterException
 
@@ -52,8 +52,8 @@ class GlitchTipImporter:
         self.check_auth()
         self.import_organization()
         self.import_organization_users()
-        # self.import_projects()
-        # self.import_teams()
+        self.import_projects()
+        self.import_teams()
 
     def get(self, url):
         return requests.get(url, headers=self.headers)
