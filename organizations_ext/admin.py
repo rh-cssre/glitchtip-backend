@@ -90,8 +90,23 @@ class OrganizationAdmin(BaseOrganizationAdmin, ImportExportModelAdmin):
         return qs
 
 
-class OrganizationUserAdmin(BaseOrganizationUserAdmin):
-    list_display = ["user", "organization", "role"]
+class OrganizationUserResource(resources.ModelResource):
+    class Meta:
+        model = OrganizationUser
+        skip_unchanged = True
+        fields = (
+            "id",
+            "user",
+            "organization",
+            "role",
+            "email",
+        )
+        import_id_fields = ("user", "email", "organization")
+
+
+class OrganizationUserAdmin(BaseOrganizationUserAdmin, ImportExportModelAdmin):
+    list_display = ["user", "organization", "role", "email"]
+    resource_class = OrganizationUserResource
 
 
 admin.site.register(Organization, OrganizationAdmin)

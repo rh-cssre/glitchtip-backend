@@ -9,7 +9,7 @@ class TeamResource(resources.ModelResource):
     class Meta:
         model = Team
         skip_unchanged = True
-        fields = ("id", "slug", "created", "organization", "projects")
+        fields = ("id", "slug", "created", "organization", "projects", "members")
 
 
 class TeamAdmin(ImportExportModelAdmin):
