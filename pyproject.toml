@@ -43,6 +43,7 @@ django-redis = {extras = ["hiredis"], version = "^5.2.0"}
 hiredis = "^2.0.0"
 psycopg2 = "^2.9.3"
 uwsgi-chunked = "^0.1.8"
+django-import-export = "^2.8.0"
 
 [tool.poetry.dev-dependencies]
 black = "^22.1.0"
