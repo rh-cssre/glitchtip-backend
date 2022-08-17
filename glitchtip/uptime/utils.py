@@ -54,8 +54,10 @@ async def fetch(session, monitor):
     return monitor
 
 
-async def fetch_all(monitors, loop):
-    async with aiohttp.ClientSession(loop=loop, headers={"User-Agent": "GlitchTip/" + settings.GLITCHTIP_VERSION}) as session:
+async def fetch_all(monitors):
+    async with aiohttp.ClientSession(
+        headers={"User-Agent": "GlitchTip/" + settings.GLITCHTIP_VERSION}
+    ) as session:
         results = await asyncio.gather(
             *[fetch(session, monitor) for monitor in monitors], return_exceptions=True
         )

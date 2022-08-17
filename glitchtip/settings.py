@@ -121,11 +121,7 @@ SENTRY_TRACES_SAMPLE_RATE = env.float("SENTRY_TRACES_SAMPLE_RATE", 0.1)
 
 # Ignore whitenoise served static routes
 def traces_sampler(sampling_context):
-    if (
-        sampling_context.get("wsgi_environ", {})
-        .get("PATH_INFO", "")
-        .startswith(STATIC_URL)
-    ):
+    if sampling_context.get("wsgi_environ", {}).get("PATH_INFO", "").startswith(STATIC_URL):
         return 0.0
     return SENTRY_TRACES_SAMPLE_RATE
 
@@ -292,9 +288,7 @@ CSP_STYLE_SRC_ELEM = env.list(
     str,
     ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
 )
-CSP_FONT_SRC = env.list(
-    "CSP_FONT_SRC", str, ["'self'", "https://fonts.gstatic.com", "data:"]
-)
+CSP_FONT_SRC = env.list("CSP_FONT_SRC", str, ["'self'", "https://fonts.gstatic.com", "data:"])
 # Redoc requires blob
 CSP_WORKER_SRC = env.list("CSP_WORKER_SRC", str, ["'self'", "blob:"])
 
@@ -337,9 +331,7 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 # Database
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
 
-DATABASES = {
-    "default": env.db(default="postgres://postgres:postgres@postgres:5432/postgres")
-}
+DATABASES = {"default": env.db(default="postgres://postgres:postgres@postgres:5432/postgres")}
 # Support setting DATABASES in parts in order to get values from the postgresql helm chart
 DATABASE_HOST = env.str("DATABASE_HOST", None)
 DATABASE_PASSWORD = env.str("DATABASE_PASSWORD", None)
@@ -362,9 +354,7 @@ if REDIS_HOST:
     REDIS_DATABASE = env.str("REDIS_DATABASE", "0")
     REDIS_PASSWORD = env.str("REDIS_PASSWORD", None)
     if REDIS_PASSWORD:
-        REDIS_URL = (
-            f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DATABASE}"
-        )
+        REDIS_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DATABASE}"
     else:
         REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DATABASE}"
 else:
@@ -374,6 +364,14 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {
     "fanout_prefix": True,
     "fanout_patterns": True,
 }
+if CELERY_BROKER_URL.startswith("sentinel"):
+    CELERY_BROKER_TRANSPORT_OPTIONS["master_name"] = env.str(
+        "CELERY_BROKER_MASTER_NAME", "mymaster"
+    )
+if socket_timeout := env.int("CELERY_BROKER_SOCKET_TIMEOUT", None):
+    CELERY_BROKER_TRANSPORT_OPTIONS["socket_timeout"] = socket_timeout
+if broker_sentinel_password := env.str("CELERY_BROKER_SENTINEL_KWARGS_PASSWORD", None):
+    CELERY_BROKER_TRANSPORT_OPTIONS["sentinel_kwargs"] = {"password": broker_sentinel_password}
 
 CELERY_RESULT_BACKEND = "django-db"
 CELERY_CACHE_BACKEND = "django-cache"
@@ -416,6 +414,16 @@ else:  # Default to REDIS when unset
             "LOCATION": REDIS_URL,
         }
     }
+if cache_sentinel_url := env.str("CACHE_SENTINEL_URL", None):
+    try:
+        cache_sentinel_host, cache_sentinel_port = cache_sentinel_url.split(":")
+        SENTINELS = [(cache_sentinel_host, int(cache_sentinel_port))]
+    except ValueError as err:
+        raise ImproperlyConfigured("Invalid cache redis sentinel url, format is host:port") from err
+    DJANGO_REDIS_CONNECTION_FACTORY = "django_redis.pool.SentinelConnectionFactory"
+    CACHES["default"]["OPTIONS"]["SENTINELS"] = SENTINELS
+if cache_sentinel_password := env.str("CACHE_SENTINEL_PASSWORD", None):
+    CACHES["default"]["OPTIONS"]["SENTINEL_KWARGS"] = {"password": cache_sentinel_password}
 
 
 if os.environ.get("SESSION_ENGINE"):
@@ -477,9 +485,7 @@ GS_BUCKET_NAME = env("GS_BUCKET_NAME")
 GS_PROJECT_ID = env("GS_PROJECT_ID")
 
 if AWS_S3_ENDPOINT_URL:
-    MEDIA_URL = env.str(
-        "MEDIA_URL", "https://%s/%s/" % (AWS_S3_ENDPOINT_URL, AWS_LOCATION)
-    )
+    MEDIA_URL = env.str("MEDIA_URL", "https://%s/%s/" % (AWS_S3_ENDPOINT_URL, AWS_LOCATION))
     DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 else:
     MEDIA_URL = "media/"
@@ -491,10 +497,26 @@ STATICFILES_DIRS = [
 ]
 STATIC_ROOT = path("static/")
 STATICFILES_STORAGE = env("STATICFILES_STORAGE")
-EMAIL_BACKEND = env.str(
-    "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
-)
-if os.getenv("EMAIL_URL"):
+EMAIL_BACKEND = env.str("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
+if os.getenv("EMAIL_HOST_USER"):
+    EMAIL_HOST_USER = env.str("EMAIL_HOST_USER")
+if os.getenv("EMAIL_HOST_PASSWORD"):
+    EMAIL_HOST_PASSWORD = env.str("EMAIL_HOST_PASSWORD")
+if os.getenv("EMAIL_HOST"):
+    EMAIL_HOST = env.str("EMAIL_HOST")
+if os.getenv("EMAIL_PORT"):
+    EMAIL_PORT = env.str("EMAIL_PORT")
+if os.getenv("EMAIL_USE_TLS"):
+    EMAIL_USE_TLS = env.str("EMAIL_USE_TLS")
+if os.getenv("EMAIL_USE_SSL"):
+    EMAIL_USE_SSL = env.str("EMAIL_USE_SSL")
+if os.getenv("EMAIL_TIMEOUT"):
+    EMAIL_TIMEOUT = env.str("EMAIL_TIMEOUT")
+if os.getenv("EMAIL_FILE_PATH"):
+    EMAIL_FILE_PATH = env.str("EMAIL_FILE_PATH")
+if os.getenv(
+    "EMAIL_URL"
+):  # Careful, this will override most EMAIL_*** settings. Set them all individually, or use EMAIL_URL to set them all at once, but don't do both.
     EMAIL_CONFIG = env.email_url("EMAIL_URL")
     vars().update(EMAIL_CONFIG)
 
@@ -526,9 +548,7 @@ if KEYCLOAK_URL:
 
     SOCIALACCOUNT_PROVIDERS["keycloak"] = {
         "KEYCLOAK_URL": KEYCLOAK_URL.geturl(),
-        "KEYCLOAK_REALM": env.str(
-            "SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_REALM", None
-        ),
+        "KEYCLOAK_REALM": env.str("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_REALM", None),
         "KEYCLOAK_URL_ALT": alt_url,
     }
 
@@ -683,9 +703,7 @@ if TESTING:
     CELERY_TASK_ALWAYS_EAGER = True
     STATICFILES_STORAGE = None
     # https://github.com/evansd/whitenoise/issues/215
-    warnings.filterwarnings(
-        "ignore", message="No directory at", module="whitenoise.base"
-    )
+    warnings.filterwarnings("ignore", message="No directory at", module="whitenoise.base")
 if CELERY_TASK_ALWAYS_EAGER:
     CACHES = {
         "default": {

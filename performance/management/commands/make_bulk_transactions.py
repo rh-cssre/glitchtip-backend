@@ -4,11 +4,9 @@ from model_bakery import baker
 from model_bakery.random_gen import gen_json, gen_slug
 
 from organizations_ext.models import Organization
-from projects.models import Project
 from performance.models import TransactionEvent
 from performance.test_data import generate_fake_transaction_event
-
-from events.test_data import bulk_event_data
+from projects.models import Project
 
 baker.generators.add("organizations.fields.SlugField", gen_slug)
 baker.generators.add("django.db.models.JSONField", gen_json)

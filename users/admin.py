@@ -23,7 +23,7 @@ class UserAdmin(BaseUserAdmin):
         ),
         (
             _("Personal info"),
-            {"fields": ("name", "subscribe_by_default", "analytics")},
+            {"fields": ("name", "subscribe_by_default", "analytics", "options")},
         ),
         (
             _("Permissions"),
