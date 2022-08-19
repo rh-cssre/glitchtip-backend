@@ -1,8 +1,11 @@
 from timeit import default_timer as timer
+
 from django.shortcuts import reverse
 from model_bakery import baker
+
 from glitchtip.test_utils.test_case import GlitchTipTestCase
-from issues.models import Issue, EventStatus
+from issues.models import EventStatus, Issue
+
 from ..tasks import update_search_index_all_issues
 
 
@@ -39,7 +42,7 @@ class EventTestCase(GlitchTipTestCase):
         self.assertEqual(res.data["nextEventID"], None)
 
     def test_next_prev_event(self):
-        """ Get next and previous event IDs that belong to same issue """
+        """Get next and previous event IDs that belong to same issue"""
         issue1 = baker.make("issues.Issue", project=self.project)
         issue2 = baker.make("issues.Issue", project=self.project)
         baker.make("events.Event")
@@ -53,7 +56,7 @@ class EventTestCase(GlitchTipTestCase):
         self.assertEqual(res.data["previousEventID"], issue1_event1.pk.hex)
 
     def test_entries_emtpy(self):
-        """ A minimal or incomplete data set should result in an empty entries array """
+        """A minimal or incomplete data set should result in an empty entries array"""
         data = {
             "sdk": {
                 "name": "sentry",
@@ -93,6 +96,9 @@ class EventTestCase(GlitchTipTestCase):
 
     def test_event_json(self):
         event = baker.make("events.Event", issue__project=self.project)
+        team = baker.make("teams.Team", organization=self.organization)
+        team.members.add(self.org_user)
+        self.project.team_set.add(team)
         url = reverse(
             "event_json",
             kwargs={
@@ -103,6 +109,16 @@ class EventTestCase(GlitchTipTestCase):
         )
         res = self.client.get(url)
         self.assertContains(res, event.event_id_hex)
+        url = reverse(
+            "event_json",
+            kwargs={
+                "org": "nope",
+                "issue": event.issue.id,
+                "event": event.event_id_hex,
+            },
+        )
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 404)
 
 
 class IssuesAPITestCase(GlitchTipTestCase):
@@ -184,7 +200,7 @@ class IssuesAPITestCase(GlitchTipTestCase):
         self.assertEqual(issue.status, EventStatus.RESOLVED)
 
     def test_bulk_update(self):
-        """ Bulk update only supports Issue status """
+        """Bulk update only supports Issue status"""
         issues = baker.make(Issue, project=self.project, _quantity=2)
         url = f"{self.url}?id={issues[0].id}&id={issues[1].id}"
         status_to_set = EventStatus.RESOLVED
@@ -196,7 +212,7 @@ class IssuesAPITestCase(GlitchTipTestCase):
         self.assertEqual(issues[1].status, status_to_set)
 
     def test_bulk_update_query(self):
-        """ Bulk update only supports Issue status """
+        """Bulk update only supports Issue status"""
         project2 = baker.make("projects.Project", organization=self.organization)
         project2.team_set.add(self.team)
         issue1 = baker.make(Issue, project=self.project)
@@ -228,10 +244,14 @@ class IssuesAPITestCase(GlitchTipTestCase):
         environment1_name = "prod"
         environment2_name = "staging"
         issue1 = baker.make(
-            Issue, project=self.project, event_set__tags={"environment": "??"},
+            Issue,
+            project=self.project,
+            event_set__tags={"environment": "??"},
         )
         baker.make(
-            Issue, project=self.project, event_set__tags={"foos": environment1_name},
+            Issue,
+            project=self.project,
+            event_set__tags={"foos": environment1_name},
         )
         baker.make(
             "events.Event", issue=issue1, tags={"environment": environment1_name}
@@ -252,7 +272,8 @@ class IssuesAPITestCase(GlitchTipTestCase):
         update_search_index_all_issues()
 
         res = self.client.get(
-            self.url, {"environment": [environment1_name, environment2_name]},
+            self.url,
+            {"environment": [environment1_name, environment2_name]},
         )
         self.assertEqual(len(res.data), 2)
         self.assertContains(res, issue1.id)
@@ -298,7 +319,7 @@ class IssuesAPITestCase(GlitchTipTestCase):
         self.assertEqual(res.data[0]["id"], str(issue2.id))
 
     def test_filter_is_status(self):
-        """ Match sentry's usage of "is" for status filtering """
+        """Match sentry's usage of "is" for status filtering"""
         resolved_issue = baker.make(
             Issue, status=EventStatus.RESOLVED, project=self.project
         )

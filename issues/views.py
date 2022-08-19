@@ -1,24 +1,22 @@
 import shlex
 import uuid
+
 from django.db import connection
 from django.db.models.expressions import RawSQL
-from django.shortcuts import get_object_or_404
-from rest_framework import viewsets, views, mixins
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.filters import OrderingFilter
-from rest_framework.exceptions import NotFound
-
+from django.http import HttpResponseNotFound
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import mixins, views, viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import NotFound
+from rest_framework.filters import OrderingFilter
+from rest_framework.response import Response
+
 from events.models import Event
-from .models import Issue, EventStatus
-from .serializers import (
-    IssueSerializer,
-    EventSerializer,
-    EventDetailSerializer,
-)
+
 from .filters import IssueFilter
-from .permissions import IssuePermission, EventPermission
+from .models import EventStatus, Issue
+from .permissions import EventPermission, IssuePermission
+from .serializers import EventDetailSerializer, EventSerializer, IssueSerializer
 
 
 class IssueViewSet(
@@ -270,10 +268,16 @@ class EventJsonView(views.APIView):
     permission_classes = [EventPermission]
 
     def get(self, request, org, issue, event, format=None):
-        event = get_object_or_404(
-            Event,
-            pk=event,
-            issue__project__organization__slug=org,
-            issue__project__team__members__user=self.request.user,
-        )
+        try:
+            event = (
+                Event.objects.filter(
+                    pk=event,
+                    issue__project__organization__slug=org,
+                    issue__project__team__members__user=self.request.user,
+                )
+                .distinct()
+                .get()
+            )
+        except Event.DoesNotExist:
+            return HttpResponseNotFound()
         return Response(event.event_json())
