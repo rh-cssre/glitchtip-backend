@@ -1,9 +1,11 @@
 from urllib.parse import urlparse
 from uuid import uuid4
+
 from django.conf import settings
 from django.db import models
 from django.utils.text import slugify
 from django_extensions.db.fields import AutoSlugField
+
 from glitchtip.base_models import CreatedModel
 
 
@@ -23,7 +25,8 @@ class Project(CreatedModel):
     platform = models.CharField(max_length=64, blank=True, null=True)
     first_event = models.DateTimeField(null=True)
     scrub_ip_addresses = models.BooleanField(
-        default=True, help_text="Should project anonymize IP Addresses",
+        default=True,
+        help_text="Should project anonymize IP Addresses",
     )
 
     class Meta:
@@ -42,7 +45,7 @@ class Project(CreatedModel):
 
     @property
     def should_scrub_ip_addresses(self):
-        """ Organization overrides project setting """
+        """Organization overrides project setting"""
         return self.scrub_ip_addresses or self.organization.scrub_ip_addresses
 
     def slugify_function(self, content):
@@ -68,7 +71,7 @@ class ProjectCounter(models.Model):
 
 
 class ProjectKey(CreatedModel):
-    """ Authentication key for a Project """
+    """Authentication key for a Project"""
 
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     label = models.CharField(max_length=64, blank=True)
@@ -89,15 +92,17 @@ class ProjectKey(CreatedModel):
 
         try:
             return ProjectKey.objects.get(public_key=public_key, project=project_id)
-        except ValueError:
+        except ValueError as err:
             # ValueError would come from a non-integer project_id,
             # which is obviously a DoesNotExist. We catch and rethrow this
             # so anything downstream expecting DoesNotExist works fine
-            raise ProjectKey.DoesNotExist("ProjectKey matching query does not exist.")
+            raise ProjectKey.DoesNotExist(
+                "ProjectKey matching query does not exist."
+            ) from err
 
     @property
     def public_key_hex(self):
-        """ The public key without dashes """
+        """The public key without dashes"""
         return self.public_key.hex
 
     def dsn(self):

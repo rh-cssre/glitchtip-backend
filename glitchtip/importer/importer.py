@@ -6,6 +6,7 @@ from django.urls import reverse
 from organizations_ext.admin import OrganizationResource, OrganizationUserResource
 from organizations_ext.models import OrganizationUser, OrganizationUserRole
 from projects.admin import ProjectKeyResource, ProjectResource
+from projects.models import Project
 from teams.admin import TeamResource
 from users.admin import UserResource
 from users.models import User
@@ -46,7 +47,6 @@ class GlitchTipImporter:
             "organization-teams-list",
             kwargs={"organization_slug": self.organization_slug},
         )
-        self.check_auth()
 
     def run(self):
         self.check_auth()
@@ -124,6 +124,13 @@ class GlitchTipImporter:
         dataset = tablib.Dataset()
         dataset.dict = projects
         project_resource.import_data(dataset, raise_errors=True)
+        owned_project_ids = Project.objects.filter(
+            organization_id=self.organization_id,
+            pk__in=[d["projectID"] for d in project_keys],
+        ).values_list("pk", flat=True)
+        project_keys = list(
+            filter(lambda key: key["projectID"] in owned_project_ids, project_keys)
+        )
         dataset.dict = project_keys
         project_key_resource.import_data(dataset, raise_errors=True)
 
@@ -133,8 +140,15 @@ class GlitchTipImporter:
         teams = res.json()
         for team in teams:
             team["organization"] = self.organization_id
-            # TODO confirm project ownership
-            team["projects"] = ",".join([d["id"] for d in team["projects"]])
+            team["projects"] = ",".join(
+                map(
+                    str,
+                    Project.objects.filter(
+                        organization_id=self.organization_id,
+                        pk__in=[int(d["id"]) for d in team["projects"]],
+                    ).values_list("id", flat=True),
+                )
+            )
             team_members = self.get(
                 self.url
                 + reverse(

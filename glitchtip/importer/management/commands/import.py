@@ -16,6 +16,6 @@ class Command(BaseCommand):
         if not url.startswith("http"):
             url = "https://" + url
         importer = GlitchTipImporter(
-            options["url"], options["auth_token"], options["organization_slug"]
+            url, options["auth_token"], options["organization_slug"]
         )
         importer.run()
