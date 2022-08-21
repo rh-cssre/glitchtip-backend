@@ -2,8 +2,8 @@ import requests_mock
 from django.core.management import call_command
 
 from glitchtip.test_utils.test_case import GlitchTipTestCase
-from teams.models import Team
 from projects.models import Project
+from teams.models import Team
 
 from .importer import GlitchTipImporter
 
