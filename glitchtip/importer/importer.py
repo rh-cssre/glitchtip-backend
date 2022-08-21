@@ -117,7 +117,6 @@ class GlitchTipImporter:
                 )
             ).json()
             for key in keys:
-                # TODO unsafe if used by non-admin, this value could be ANY project
                 key["project"] = project["id"]
                 key["public_key"] = key["public"]
             project_keys += keys
