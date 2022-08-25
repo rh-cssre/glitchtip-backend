@@ -178,7 +178,11 @@ class EnvelopeAPIView(BaseEventAPIView):
             serializer = self.get_serializer_class()(
                 data=data.pop(0), context={"request": self.request, "project": project}
             )
-            serializer.is_valid(raise_exception=True)
+            try:
+                serializer.is_valid(raise_exception=True)
+            except exceptions.ValidationError as err:
+                logger.warning("Invalid envelope payload", exc_info=True)
+                raise err
             try:
                 event = serializer.save()
             except IntegrityError as err:

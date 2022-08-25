@@ -39,7 +39,7 @@ lint:
   script:
     - pip install poetry
     - poetry install --no-interaction --no-ansi
-    - isort --check glitchtip
+    # - isort --check glitchtip not compatible with black :(
     # - pylint --load-plugins=pylint_django --django-settings-module=glitchtip.settings --disable=R glitchtip
 
 build:

@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.contrib import admin
 from django.utils.html import format_html
+from import_export import resources
+from import_export.admin import ImportExportModelAdmin
 from organizations.base_admin import (
     BaseOrganizationAdmin,
     BaseOrganizationUserAdmin,
@@ -27,7 +29,14 @@ class OrganizationUserInline(admin.StackedInline):
     extra = 0
 
 
-class OrganizationAdmin(BaseOrganizationAdmin):
+class OrganizationResource(resources.ModelResource):
+    class Meta:
+        model = Organization
+        skip_unchanged = True
+        fields = ("id", "slug", "name", "created", "organization")
+
+
+class OrganizationAdmin(BaseOrganizationAdmin, ImportExportModelAdmin):
     list_per_page = 50
     list_display = [
         "name",
@@ -39,10 +48,11 @@ class OrganizationAdmin(BaseOrganizationAdmin):
         "file_size",
         "total_events",
     ]
-    readonly_fields = ("customers",)
+    readonly_fields = ("customers", "created")
     list_filter = ORGANIZATION_LIST_FILTER
     inlines = [OrganizationUserInline, OwnerInline]
     show_full_result_count = False
+    resource_class = OrganizationResource
 
     def issue_events(self, obj):
         return obj.issue_event_count
@@ -80,8 +90,23 @@ class OrganizationAdmin(BaseOrganizationAdmin):
         return qs
 
 
-class OrganizationUserAdmin(BaseOrganizationUserAdmin):
-    list_display = ["user", "organization", "role"]
+class OrganizationUserResource(resources.ModelResource):
+    class Meta:
+        model = OrganizationUser
+        skip_unchanged = True
+        fields = (
+            "id",
+            "user",
+            "organization",
+            "role",
+            "email",
+        )
+        import_id_fields = ("user", "email", "organization")
+
+
+class OrganizationUserAdmin(BaseOrganizationUserAdmin, ImportExportModelAdmin):
+    list_display = ["user", "organization", "role", "email"]
+    resource_class = OrganizationUserResource
 
 
 admin.site.register(Organization, OrganizationAdmin)
