@@ -1,9 +1,13 @@
+import logging
+
 from rest_framework import serializers
 
 from events.serializers import SentrySDKEventSerializer
 from glitchtip.serializers import FlexibleDateTimeField
 
 from .models import Span, TransactionEvent, TransactionGroup
+
+logger = logging.getLogger(__name__)
 
 
 class TransactionGroupSerializer(serializers.ModelSerializer):
@@ -31,6 +35,7 @@ class SpanSerializer(serializers.ModelSerializer):
     startTimestamp = serializers.DateTimeField(source="start_timestamp", read_only=True)
     start_timestamp = FlexibleDateTimeField(write_only=True)
     timestamp = FlexibleDateTimeField(write_only=True)
+    description = serializers.CharField()
 
     class Meta:
         model = Span
@@ -52,6 +57,21 @@ class SpanSerializer(serializers.ModelSerializer):
             "span_id": {"write_only": True},
             "parent_span_id": {"write_only": True},
         }
+
+    def to_internal_value(self, data):
+        # Coerce tags to strings
+        # Must be done here to avoid failing child CharField validation
+        if tags := data.get("tags"):
+            data["tags"] = {key: str(value) for key, value in tags.items()}
+        return super().to_internal_value(data)
+
+    def validate_description(self, value):
+        # No documented max length here, so we truncate
+        max_length = self.Meta.model._meta.get_field("description").max_length
+        if value and len(value) > max_length:
+            logger.warning("Span description truncation %s", value)
+            return value[:max_length]
+        return value
 
 
 class TransactionEventSerializer(SentrySDKEventSerializer):

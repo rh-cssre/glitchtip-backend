@@ -86,7 +86,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         default=True,
         help_text="Subscribe to project notifications by default. Overrides project settings",
     )
-    options = models.JSONField(default={})
+    options = models.JSONField(default=dict)
     USERNAME_FIELD = "email"
     EMAIL_FIELD = "email"
     objects = UserManager()

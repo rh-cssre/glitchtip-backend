@@ -8,7 +8,7 @@ class Team(CreatedModel):
     organization = models.ForeignKey(
         Organization, on_delete=models.CASCADE, related_name="teams"
     )
-    members = models.ManyToManyField("organizations_ext.OrganizationUser")
+    members = models.ManyToManyField("organizations_ext.OrganizationUser", blank=True)
     projects = models.ManyToManyField("projects.Project")
 
     class Meta:
