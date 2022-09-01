@@ -1,0 +1,122 @@
+{
+  "level": "error",
+  "exception": {
+    "values": [
+      {
+        "module": null,
+        "type": "Exception",
+        "value": "something 9",
+        "mechanism": null,
+        "stacktrace": {
+          "frames": [
+            {
+              "filename": "errors/views.py",
+              "abs_path": "/code/errors/views.py",
+              "function": "get",
+              "module": "errors.views",
+              "lineno": 91,
+              "pre_context": [
+                "        0 / 0",
+                "",
+                "class FingerprintView(View):",
+                "    def get(self, request, *args, **kwargs):",
+                "        try:"
+              ],
+              "context_line": "            raise Exception(\"something %s\" % randrange(10))",
+              "post_context": [
+                "        except Exception as err:",
+                "            with push_scope() as scope:",
+                "                scope.fingerprint = [\"foo\"]",
+                "                capture_exception(err)",
+                "        return HttpResponse(\"Ok\")"
+              ],
+              "vars": {
+                "self": "<errors.views.FingerprintView object at 0x7fdb827a69b0>",
+                "request": "<WSGIRequest: GET '/fingerprint/'>",
+                "args": [],
+                "kwargs": {},
+                "err": "Exception('something 9')",
+                "scope": "<Scope id=0x7fdb827bb5e0 name=wsgi>"
+              },
+              "in_app": true
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "event_id": "3ae3fd09af864ff2b47b5660ffdd2335",
+  "timestamp": "2022-08-26T01:04:11.691403Z",
+  "breadcrumbs": { "values": [] },
+  "transaction": "/fingerprint/",
+  "transaction_info": { "source": "route" },
+  "fingerprint": ["foo"],
+  "contexts": {
+    "trace": {
+      "trace_id": "c5092e5166294f92a45c85400396415e",
+      "span_id": "b12138ae837c101f",
+      "parent_span_id": "b7bf9900011a3876",
+      "op": "django.view",
+      "description": "fingerprint"
+    },
+    "runtime": {
+      "name": "CPython",
+      "version": "3.10.6",
+      "build": "3.10.6 (main, Aug  3 2022, 10:24:07) [GCC 10.2.1 20210110]"
+    }
+  },
+  "modules": {
+    "django": "3.2.15",
+    "ipython-genutils": "0.2.0"
+  },
+  "extra": { "sys.argv": ["./manage.py", "runserver", "0.0.0.0:8001"] },
+  "request": {
+    "url": "http://localhost:8001/fingerprint/",
+    "query_string": "",
+    "method": "GET",
+    "env": { "SERVER_NAME": "0242d0b0a287", "SERVER_PORT": "8001" },
+    "headers": {
+      "Content-Length": "",
+      "Content-Type": "text/plain",
+      "Host": "localhost:8001",
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:104.0) Gecko/20100101 Firefox/104.0",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.5",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Referer": "http://localhost:8001/",
+      "Connection": "keep-alive",
+      "Cookie": "",
+      "Upgrade-Insecure-Requests": "1",
+      "Sec-Fetch-Dest": "document",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Site": "same-origin",
+      "Dnt": "1",
+      "Sec-Gpc": "1"
+    }
+  },
+  "environment": "production",
+  "server_name": "0242d0b0a287",
+  "sdk": {
+    "name": "sentry.python",
+    "version": "1.9.5",
+    "packages": [{ "name": "pypi:sentry-sdk", "version": "1.9.5" }],
+    "integrations": [
+      "argv",
+      "atexit",
+      "dedupe",
+      "django",
+      "excepthook",
+      "logging",
+      "modules",
+      "redis",
+      "stdlib",
+      "threading"
+    ]
+  },
+  "platform": "python",
+  "_meta": {
+    "request": {
+      "headers": { "Cookie": { "": { "rem": [["!config", "x", 0, 464]] } } }
+    }
+  }
+}
