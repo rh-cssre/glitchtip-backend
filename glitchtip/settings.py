@@ -376,6 +376,7 @@ if broker_sentinel_password := env.str("CELERY_BROKER_SENTINEL_KWARGS_PASSWORD",
     CELERY_BROKER_TRANSPORT_OPTIONS["sentinel_kwargs"] = {"password": broker_sentinel_password}
 
 CELERY_RESULT_BACKEND = "django-db"
+CELERY_RESULT_EXTENDED = True
 CELERY_CACHE_BACKEND = "django-cache"
 CELERY_BEAT_SCHEDULE = {
     "send-alert-notifications": {
