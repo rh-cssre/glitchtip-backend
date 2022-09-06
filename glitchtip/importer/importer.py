@@ -57,7 +57,7 @@ class GlitchTipImporter:
         if organization_id is None:
             self.import_organization()
         else:
-            organization_id = organization_id
+            self.organization_id = organization_id
         self.import_organization_users()
         self.import_projects()
         self.import_teams()
