@@ -5,6 +5,7 @@ variables:
   PIP_DISABLE_PIP_VERSION_CHECK: "on"
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
   POETRY_VIRTUALENVS_CREATE: "false"
+  POETRY_HOME: "/opt/poetry"
   POSTGRES_HOST_AUTH_METHOD: "trust"
   DEBUG: "true"
 
@@ -30,15 +31,15 @@ test:
     paths:
       - .cache/pip
   script:
-    - pip install poetry
-    - poetry install --no-interaction --no-ansi
+    - curl -sSL https://install.python-poetry.org | python3 -
+    - $POETRY_HOME/bin/poetry install --no-interaction --no-ansi
     - ./manage.py test
 
 lint:
   image: python:3.10
   script:
-    - pip install poetry
-    - poetry install --no-interaction --no-ansi
+    - curl -sSL https://install.python-poetry.org | python3 -
+    - $POETRY_HOME/bin/poetry install --no-interaction --no-ansi
     # - isort --check glitchtip not compatible with black :(
     # - pylint --load-plugins=pylint_django --django-settings-module=glitchtip.settings --disable=R glitchtip
 
