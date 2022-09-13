@@ -19,6 +19,7 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && apt-get install -y libxml2 libpq5 && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /code
+VOLUME /celery
 
 COPY --from=build-python /usr/local/lib/python3.10/site-packages/ /usr/local/lib/python3.10/site-packages/
 COPY --from=build-python /usr/local/bin/ /usr/local/bin/
