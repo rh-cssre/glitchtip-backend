@@ -20,7 +20,7 @@ class ImporterTestCase(GlitchTipTestCase):
         key = {
             "id": "a" * 32,
             "public": "a" * 32,
-            "projectID": 1,
+            "projectId": 1,
             "label": "Default",
         }
         m.get(url + importer.api_root_url, json={"user": {"username": "foo"}})
