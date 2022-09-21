@@ -388,6 +388,7 @@ if broker_sentinel_password := env.str("CELERY_BROKER_SENTINEL_KWARGS_PASSWORD",
     }
 
 CELERY_RESULT_BACKEND = "django-db"
+CELERY_RESULT_EXTENDED = True
 CELERY_CACHE_BACKEND = "django-cache"
 CELERY_BEAT_SCHEDULE = {
     "send-alert-notifications": {
@@ -550,17 +551,13 @@ ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_ADAPTER = "glitchtip.social.MFAAccountAdapter"
 INVITATION_BACKEND = "organizations_ext.invitation_backend.InvitationBackend"
 SOCIALACCOUNT_PROVIDERS = {}
-GITLAB_URL = env.url("SOCIALACCOUNT_PROVIDERS_gitlab_GITLAB_URL", None)
-if GITLAB_URL:
+if GITLAB_URL := env.url("SOCIALACCOUNT_PROVIDERS_gitlab_GITLAB_URL", None):
     SOCIALACCOUNT_PROVIDERS["gitlab"] = {"GITLAB_URL": GITLAB_URL.geturl()}
-GITEA_URL = env.url("SOCIALACCOUNT_PROVIDERS_gitea_GITEA_URL", None)
-if GITEA_URL:
+if GITEA_URL := env.url("SOCIALACCOUNT_PROVIDERS_gitea_GITEA_URL", None):
     SOCIALACCOUNT_PROVIDERS["gitea"] = {"GITEA_URL": GITEA_URL.geturl()}
-NEXTCLOUD_URL = env.url("SOCIALACCOUNT_PROVIDERS_nextcloud_SERVER", None)
-if NEXTCLOUD_URL:
+if NEXTCLOUD_URL := env.url("SOCIALACCOUNT_PROVIDERS_nextcloud_SERVER", None):
     SOCIALACCOUNT_PROVIDERS["nextcloud"] = {"SERVER": NEXTCLOUD_URL.geturl()}
-KEYCLOAK_URL = env.url("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_URL", None)
-if KEYCLOAK_URL:
+if KEYCLOAK_URL := env.url("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_URL", None):
     alt_url_env = env.url("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_URL_ALT", None)
 
     if alt_url_env:
@@ -735,7 +732,7 @@ if CELERY_TASK_ALWAYS_EAGER:
         }
     }
 
-MFA_SERVER_NAME = "GlitchTip"
+MFA_SERVER_NAME = GLITCHTIP_URL.hostname
 FIDO_SERVER_ID = GLITCHTIP_URL.hostname
 
 # Workaround for error encountered at build time (source: https://github.com/axnsan12/drf-yasg/issues/761#issuecomment-1014530805)

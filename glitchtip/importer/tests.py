@@ -13,7 +13,7 @@ test_project = {"id": "1", "slug": "project", "name": "project"}
 test_key = {
     "id": "a" * 32,
     "public": "a" * 32,
-    "projectID": 1,
+    "projectId": 1,
     "label": "Default",
 }
 

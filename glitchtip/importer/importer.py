@@ -132,10 +132,10 @@ class GlitchTipImporter:
         project_resource.import_data(dataset, raise_errors=True)
         owned_project_ids = Project.objects.filter(
             organization_id=self.organization_id,
-            pk__in=[d["projectID"] for d in project_keys],
+            pk__in=[d["projectId"] for d in project_keys],
         ).values_list("pk", flat=True)
         project_keys = list(
-            filter(lambda key: key["projectID"] in owned_project_ids, project_keys)
+            filter(lambda key: key["projectId"] in owned_project_ids, project_keys)
         )
         dataset.dict = project_keys
         project_key_resource.import_data(dataset, raise_errors=True)
