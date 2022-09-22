@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Team
+from projects.serializers.base_serializers import ProjectReferenceSerializer
 
 
 class RelatedTeamSerializer(serializers.ModelSerializer):
@@ -19,6 +20,7 @@ class TeamSerializer(RelatedTeamSerializer):
     dateCreated = serializers.DateTimeField(source="created", read_only=True)
     isMember = serializers.SerializerMethodField()
     memberCount = serializers.SerializerMethodField()
+    projects = ProjectReferenceSerializer(many=True, read_only=True)
 
     class Meta(RelatedTeamSerializer.Meta):
         fields = (
@@ -27,6 +29,7 @@ class TeamSerializer(RelatedTeamSerializer):
             "isMember",
             "memberCount",
             "slug",
+            "projects"
         )
 
     def get_isMember(self, obj):
