@@ -16,11 +16,10 @@ class NestedTeamViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if self.request.user.is_authenticated:
             queryset = self.queryset.filter(organization__users=self.request.user)
-            queryset = queryset.prefetch_related("projects")
             organization_slug = self.kwargs.get("organization_slug")
             if organization_slug:
                 queryset = queryset.filter(organization__slug=organization_slug)
-            return queryset.prefetch_related("members")
+            return queryset.prefetch_related("members", "projects")
         return self.queryset.none()
 
     def perform_create(self, serializer):
