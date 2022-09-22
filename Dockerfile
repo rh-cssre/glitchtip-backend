@@ -30,7 +30,6 @@ COPY . /code/
 ARG COLLECT_STATIC
 RUN if [ "$COLLECT_STATIC" != "" ] ; then SECRET_KEY=ci ./manage.py collectstatic --noinput; fi
 
-RUN mkdir /code/uploads
 RUN useradd -u 5000 app && chown app:app /code && chown app:app /code/uploads
 USER app:app
 
