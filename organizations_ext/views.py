@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from organizations.backends import invitation_backend
 from teams.serializers import TeamSerializer
-from users.utils import is_user_registration_open
+from users.utils import is_organization_creation_open, is_user_registration_open
 from projects.views import NestedProjectViewSet
 from .permissions import (
     OrganizationPermission,
@@ -57,14 +57,14 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         If registration is closed, only superuser and organization owners may create new.
         """
         if (
-            not is_user_registration_open()
+            not is_organization_creation_open()
             and not self.request.user.is_superuser
             and not Organization.objects.filter(
                 organization_users__role=OrganizationUserRole.OWNER,
                 organization_users__user=self.request.user,
             ).exists()
         ):
-            raise exceptions.PermissionDenied("Registration is not open")
+            raise exceptions.PermissionDenied("Organization creation is not open")
         organization = serializer.save()
         organization.add_user(self.request.user, role=OrganizationUserRole.OWNER)
 

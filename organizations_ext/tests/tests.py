@@ -82,7 +82,7 @@ class OrganizationsAPITestCase(APITestCase):
     def test_organizations_create_closed_registration(self):
         data = {"name": "test"}
 
-        with self.settings(ENABLE_OPEN_USER_REGISTRATION=False):
+        with self.settings(ENABLE_ORGANIZATION_CREATION=False):
             res = self.client.post(self.url, data)
         self.assertEqual(res.status_code, 201)
 
@@ -92,13 +92,13 @@ class OrganizationsAPITestCase(APITestCase):
             role=OrganizationUserRole.MANAGER
         )
 
-        with self.settings(ENABLE_OPEN_USER_REGISTRATION=False):
+        with self.settings(ENABLE_ORGANIZATION_CREATION=False):
             res = self.client.post(self.url, data)
         self.assertEqual(res.status_code, 403)
 
         self.user.is_superuser = True
         self.user.save()
 
-        with self.settings(ENABLE_OPEN_USER_REGISTRATION=False):
+        with self.settings(ENABLE_ORGANIZATION_CREATION=False):
             res = self.client.post(self.url, data)
         self.assertEqual(res.status_code, 201)

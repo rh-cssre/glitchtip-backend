@@ -3,7 +3,10 @@ from django.test import override_settings
 from django.shortcuts import reverse
 from rest_framework.test import APITestCase
 from model_bakery import baker
-from glitchtip import test_utils  # pylint: disable=unused-import
+from glitchtip import test_utils
+from glitchtip.settings import (
+    ENABLE_ORGANIZATION_CREATION,
+)  # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from organizations_ext.models import OrganizationUserRole
 from ..models import UserProjectAlert, User
@@ -48,7 +51,9 @@ class UserRegistrationTestCase(APITestCase):
         self.assertEqual(res.status_code, 204)
         baker.make("organizations_ext.Organization")
         data["email"] = "another@example.com"
-        with override_settings(ENABLE_OPEN_USER_REGISTRATION=False):
+        with override_settings(ENABLE_USER_REGISTRATION=False), override_settings(
+            ENABLE_ORGANIZATION_CREATION=False
+        ):
             res = self.client.post(url, data)
             self.assertEqual(res.status_code, 204)
             # Can't make more organizations outside of Django Admin
@@ -57,7 +62,7 @@ class UserRegistrationTestCase(APITestCase):
             res = self.client.post(org_url, org_data)
             self.assertEqual(res.status_code, 403)
         # When True, users can register and create more orgs
-        with override_settings(ENABLE_OPEN_USER_REGISTRATION=True):
+        with override_settings(ENABLE_ORGANIZATION_CREATION=True):
             # Can't make more organizations outside of Django Admin
             user = User.objects.first()
             self.client.force_login(user)
