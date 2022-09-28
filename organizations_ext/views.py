@@ -9,6 +9,7 @@ from rest_framework.exceptions import PermissionDenied
 from organizations.backends import invitation_backend
 from teams.serializers import TeamSerializer
 from users.utils import is_organization_creation_open, is_user_registration_open
+from users.models import User
 from projects.views import NestedProjectViewSet
 from .permissions import (
     OrganizationPermission,
@@ -46,8 +47,7 @@ class OrganizationViewSet(viewsets.ModelViewSet):
 
         if self.action in ["retrieve"]:
             queryset = queryset.prefetch_related(
-                "projects__team_set__members",
-                "teams__members",
+                "projects__team_set__members", "teams__members",
             )
         return queryset
 
@@ -151,6 +151,12 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def perform_create(self, serializer):
+        if (
+            not is_user_registration_open()
+            and not User.objects.filter(email=self.request.data.get("email")).exists()
+        ):
+            raise exceptions.PermissionDenied("Only existing users may be invited")
+
         try:
             organization = self.request.user.organizations_ext_organization.get(
                 slug=self.kwargs.get("organization_slug")

@@ -4,9 +4,6 @@ from django.shortcuts import reverse
 from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip import test_utils
-from glitchtip.settings import (
-    ENABLE_ORGANIZATION_CREATION,
-)  # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from organizations_ext.models import OrganizationUserRole
 from ..models import UserProjectAlert, User
