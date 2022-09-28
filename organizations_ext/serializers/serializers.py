@@ -1,9 +1,11 @@
 from rest_framework import serializers, status
-from rest_framework.exceptions import APIException
+from rest_framework.exceptions import APIException, PermissionDenied
 from projects.serializers.base_serializers import ProjectReferenceWithMemberSerializer
 from users.serializers import UserSerializer
 from teams.serializers import TeamSerializer
 from teams.models import Team
+from users.models import User
+from users.utils import is_user_registration_open
 from .base_serializers import OrganizationReferenceSerializer
 from ..models import OrganizationUser, OrganizationUserRole, ROLES
 
@@ -75,6 +77,11 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
         email = validated_data.get("email")
         organization = validated_data.get("organization")
         teams = validated_data.get("teams")
+        if (
+            not is_user_registration_open()
+            and not User.objects.filter(email=email).exists()
+        ):
+            raise PermissionDenied("Only existing users may be invited")
         if organization.organization_users.filter(email=email).exists():
             raise HTTP409APIException(f"The user {email} is already invited", "email")
         if organization.organization_users.filter(user__email=email).exists():
