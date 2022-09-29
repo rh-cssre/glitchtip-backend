@@ -23,13 +23,17 @@ class GlitchTipImporter:
     faked and used to elevate privileges. Always confirm new data is associated with
     appropriate organization. Also assume user is at least an org admin, no need to
     double check permissions when creating assets within the organization.
+
+    create_users should be False unless running as superuser/management command
     """
 
-    def __init__(self, url: str, auth_token: str, organization_slug: str):
+    def __init__(
+        self, url: str, auth_token: str, organization_slug: str, create_users=False
+    ):
         self.api_root_url = reverse("api-root-view")
         self.url = url
         self.headers = {"Authorization": f"Bearer {auth_token}"}
-        self.create_users = True  # Very unsafe outside of superuser usage
+        self.create_users = create_users
         self.organization_slug = organization_slug
         self.organization_id = None
         self.organization_url = reverse(
@@ -48,9 +52,12 @@ class GlitchTipImporter:
             kwargs={"organization_slug": self.organization_slug},
         )
 
-    def run(self):
-        self.check_auth()
-        self.import_organization()
+    def run(self, organization_id=None):
+        """Set organization_id to None to import (superuser only)"""
+        if organization_id is None:
+            self.import_organization()
+        else:
+            self.organization_id = organization_id
         self.import_organization_users()
         self.import_projects()
         self.import_teams()
@@ -125,10 +132,10 @@ class GlitchTipImporter:
         project_resource.import_data(dataset, raise_errors=True)
         owned_project_ids = Project.objects.filter(
             organization_id=self.organization_id,
-            pk__in=[d["projectID"] for d in project_keys],
+            pk__in=[d["projectId"] for d in project_keys],
         ).values_list("pk", flat=True)
         project_keys = list(
-            filter(lambda key: key["projectID"] in owned_project_ids, project_keys)
+            filter(lambda key: key["projectId"] in owned_project_ids, project_keys)
         )
         dataset.dict = project_keys
         project_key_resource.import_data(dataset, raise_errors=True)
