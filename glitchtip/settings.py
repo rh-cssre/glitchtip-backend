@@ -583,6 +583,8 @@ ENABLE_ORGANIZATION_CREATION = env.bool(
     "ENABLE_OPEN_USER_REGISTRATION", env.bool("ENABLE_ORGANIZATION_CREATION", False)
 )
 
+REST_AUTH_REGISTER_PERMISSION_CLASSES = ("glitchtip.permissions.UserRegistrationPermission"),
+
 AUTHENTICATION_BACKENDS = (
     # Needed to login by username in Django admin, regardless of `allauth`
     "django.contrib.auth.backends.ModelBackend",

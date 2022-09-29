@@ -3,7 +3,7 @@ from django.test import override_settings
 from django.shortcuts import reverse
 from rest_framework.test import APITestCase
 from model_bakery import baker
-from glitchtip import test_utils
+from glitchtip import test_utils # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from organizations_ext.models import OrganizationUserRole
 from ..models import UserProjectAlert, User
@@ -35,36 +35,24 @@ class UserRegistrationTestCase(APITestCase):
         )
 
     def test_closed_registration(self):
-        """ Only first user/organization may register """
+        """ Only first user may register """
         url = reverse("rest_register")
-        org_url = reverse("organization-list")
-        data = {
-            "email": "test@example.com",
+        user1_data = {
+            "email": "test1@example.com",
             "password1": "hunter222",
             "password2": "hunter222",
         }
-        org_data = {"name": "test"}
-        res = self.client.post(url, data)
-        self.assertEqual(res.status_code, 204)
-        baker.make("organizations_ext.Organization")
-        data["email"] = "another@example.com"
-        with override_settings(ENABLE_USER_REGISTRATION=False), override_settings(
-            ENABLE_ORGANIZATION_CREATION=False
-        ):
-            res = self.client.post(url, data)
+        user2_data = {
+            "email": "test2@example.com",
+            "password1": "hunter222",
+            "password2": "hunter222",
+        }
+        with override_settings(ENABLE_USER_REGISTRATION=False):
+            res = self.client.post(url, user1_data)
             self.assertEqual(res.status_code, 204)
-            # Can't make more organizations outside of Django Admin
-            user = User.objects.first()
-            self.client.force_login(user)
-            res = self.client.post(org_url, org_data)
+
+            res = self.client.post(url, user2_data)
             self.assertEqual(res.status_code, 403)
-        # When True, users can register and create more orgs
-        with override_settings(ENABLE_ORGANIZATION_CREATION=True):
-            # Can't make more organizations outside of Django Admin
-            user = User.objects.first()
-            self.client.force_login(user)
-            res = self.client.post(org_url, org_data)
-            self.assertEqual(res.status_code, 201)
 
 
 class UsersTestCase(GlitchTipTestCase):
