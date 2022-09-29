@@ -30,9 +30,8 @@ COPY . /code/
 ARG COLLECT_STATIC
 RUN if [ "$COLLECT_STATIC" != "" ] ; then SECRET_KEY=ci ./manage.py collectstatic --noinput; fi
 
-RUN useradd -u 5000 app && chown app:app /code
-RUN mkdir -p /celery && chown -R app:app /celery
-VOLUME /celery
+RUN useradd -u 5000 app && chown app:app /code && chown app:app /code/uploads
+RUN mkdir -p /code/var/run/
 USER app:app
 
 CMD ["./bin/start.sh"]

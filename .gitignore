@@ -122,6 +122,5 @@ dmypy.json
 
 docker-compose.override.yml
 dump.sql
-uploads
 
 .idea/
