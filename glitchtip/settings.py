@@ -540,6 +540,7 @@ ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_ADAPTER = "glitchtip.social.MFAAccountAdapter"
+SOCIALACCOUNT_ADAPTER = "glitchtip.social.CustomSocialAccountAdapter"
 INVITATION_BACKEND = "organizations_ext.invitation_backend.InvitationBackend"
 SOCIALACCOUNT_PROVIDERS = {}
 if GITLAB_URL := env.url("SOCIALACCOUNT_PROVIDERS_gitlab_GITLAB_URL", None):
