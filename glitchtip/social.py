@@ -7,7 +7,6 @@ from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from allauth.socialaccount.providers.gitlab.views import GitLabOAuth2Adapter
 from allauth.socialaccount.providers.microsoft.views import MicrosoftGraphOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
-from allauth.exceptions import ImmediateHttpResponse
 from dj_rest_auth.registration.serializers import (
     SocialLoginSerializer as BaseSocialLoginSerializer,
 )
@@ -59,6 +58,7 @@ class MFAAccountAdapter(DefaultAccountAdapter):
         except AssertionError:
             pass
 
+
 class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
     def is_open_for_signup(self, request, sociallogin):
         return is_user_registration_open()
@@ -70,109 +70,111 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
     )
 
     def validate(self, attrs):
-            view = self.context.get('view')
-            request = self._get_request()
+        view = self.context.get("view")
+        request = self._get_request()
 
-            if not view:
+        if not view:
+            raise serializers.ValidationError(
+                _("View is not defined, pass it as a context variable"),
+            )
+
+        adapter_class = getattr(view, "adapter_class", None)
+        if not adapter_class:
+            raise serializers.ValidationError(_("Define adapter_class in view"))
+
+        adapter = adapter_class(request)
+        app = adapter.get_provider().get_app(request)
+
+        # More info on code vs access_token
+        # http://stackoverflow.com/questions/8666316/facebook-oauth-2-0-code-and-token
+
+        access_token = attrs.get("access_token")
+        code = attrs.get("code")
+        # Case 1: We received the access_token
+        if access_token:
+            tokens_to_parse = {"access_token": access_token}
+            token = access_token
+            # For sign in with apple
+            id_token = attrs.get("id_token")
+            if id_token:
+                tokens_to_parse["id_token"] = id_token
+
+        # Case 2: We received the authorization code
+        elif code:
+            self.set_callback_url(view=view, adapter_class=adapter_class)
+            self.client_class = getattr(view, "client_class", None)
+
+            if not self.client_class:
                 raise serializers.ValidationError(
-                    _('View is not defined, pass it as a context variable'),
+                    _("Define client_class in view"),
                 )
 
-            adapter_class = getattr(view, 'adapter_class', None)
-            if not adapter_class:
-                raise serializers.ValidationError(_('Define adapter_class in view'))
+            provider = adapter.get_provider()
+            scope = provider.get_scope(request)
+            client = self.client_class(
+                request,
+                app.client_id,
+                app.secret,
+                adapter.access_token_method,
+                adapter.access_token_url,
+                self.callback_url,
+                scope,
+                scope_delimiter=adapter.scope_delimiter,
+                headers=adapter.headers,
+                basic_auth=adapter.basic_auth,
+            )
+            token = client.get_access_token(code)
+            access_token = token["access_token"]
+            tokens_to_parse = {"access_token": access_token}
 
-            adapter = adapter_class(request)
-            app = adapter.get_provider().get_app(request)
+            # If available we add additional data to the dictionary
+            for key in ["refresh_token", "id_token", adapter.expires_in_key]:
+                if key in token:
+                    tokens_to_parse[key] = token[key]
+        else:
+            raise serializers.ValidationError(
+                _("Incorrect input. access_token or code is required."),
+            )
 
-            # More info on code vs access_token
-            # http://stackoverflow.com/questions/8666316/facebook-oauth-2-0-code-and-token
+        social_token = adapter.parse_token(tokens_to_parse)
+        social_token.app = app
 
-            access_token = attrs.get('access_token')
-            code = attrs.get('code')
-            # Case 1: We received the access_token
-            if access_token:
-                tokens_to_parse = {'access_token': access_token}
-                token = access_token
-                # For sign in with apple
-                id_token = attrs.get('id_token')
-                if id_token:
-                    tokens_to_parse['id_token'] = id_token
+        try:
+            login = self.get_social_login(adapter, app, social_token, token)
+            ret = complete_social_login(request, login)
+        except HTTPError:
+            raise serializers.ValidationError(_("Incorrect value"))
 
-            # Case 2: We received the authorization code
-            elif code:
-                self.set_callback_url(view=view, adapter_class=adapter_class)
-                self.client_class = getattr(view, 'client_class', None)
+        if isinstance(ret, HttpResponseBadRequest):
+            raise serializers.ValidationError(ret.content)
 
-                if not self.client_class:
-                    raise serializers.ValidationError(
-                        _('Define client_class in view'),
+        if not login.is_existing:
+            # We have an account already signed up in a different flow
+            # with the same email address: raise an exception.
+            # This needs to be handled in the frontend. We can not just
+            # link up the accounts due to security constraints
+            if allauth_settings.UNIQUE_EMAIL:
+                # Do we have an account already with this email address?
+                account_exists = (
+                    get_user_model()
+                    .objects.filter(
+                        email=login.user.email,
                     )
-
-                provider = adapter.get_provider()
-                scope = provider.get_scope(request)
-                client = self.client_class(
-                    request,
-                    app.client_id,
-                    app.secret,
-                    adapter.access_token_method,
-                    adapter.access_token_url,
-                    self.callback_url,
-                    scope,
-                    scope_delimiter=adapter.scope_delimiter,
-                    headers=adapter.headers,
-                    basic_auth=adapter.basic_auth,
+                    .exists()
                 )
-                token = client.get_access_token(code)
-                access_token = token['access_token']
-                tokens_to_parse = {'access_token': access_token}
-
-                # If available we add additional data to the dictionary
-                for key in ['refresh_token', 'id_token', adapter.expires_in_key]:
-                    if key in token:
-                        tokens_to_parse[key] = token[key]
+                if account_exists:
+                    raise serializers.ValidationError(
+                        _("User is already registered with this e-mail address."),
+                    )
+            if not get_adapter(request).is_open_for_signup(request, login):
+                raise serializers.ValidationError(_("User registration is closed."))
             else:
-                raise serializers.ValidationError(
-                    _('Incorrect input. access_token or code is required.'),
-                )
+                login.lookup()
+                login.save(request, connect=True)
 
-            social_token = adapter.parse_token(tokens_to_parse)
-            social_token.app = app
+        attrs["user"] = login.account.user
 
-            try:
-                login = self.get_social_login(adapter, app, social_token, token)
-                ret = complete_social_login(request, login)
-            except HTTPError:
-                raise serializers.ValidationError(_('Incorrect value'))
-
-            if isinstance(ret, HttpResponseBadRequest):
-                raise serializers.ValidationError(ret.content)
-
-            if not login.is_existing:
-                # We have an account already signed up in a different flow
-                # with the same email address: raise an exception.
-                # This needs to be handled in the frontend. We can not just
-                # link up the accounts due to security constraints
-                if not get_adapter(request).is_open_for_signup(request, login):
-                    raise serializers.ValidationError(
-                        _("User registration is closed.")
-                    )
-                else:
-                    if allauth_settings.UNIQUE_EMAIL:
-                        # Do we have an account already with this email address?
-                        account_exists = get_user_model().objects.filter(
-                            email=login.user.email,
-                        ).exists()
-                        if account_exists:
-                            raise serializers.ValidationError(
-                                _('User is already registered with this e-mail address.'),
-                            )
-                    login.lookup()
-                    login.save(request, connect=True)
-
-            attrs['user'] = login.account.user
-
-            return attrs
+        return attrs
 
 
 class GenericMFAMixin:
