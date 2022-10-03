@@ -133,7 +133,7 @@ class FormattedMessageSerializer(serializers.Serializer):
         required=False
     )  # Documented as required, but some Sentry SDKs don't send it
     messages = serializers.CharField(required=False)
-    params = serializers.ListField(child=serializers.CharField(), required=False)
+    params = serializers.JSONField(required=False)
 
     def to_internal_value(self, data):
         value = super().to_internal_value(data)
