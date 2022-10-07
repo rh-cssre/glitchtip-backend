@@ -158,7 +158,7 @@ class ProductAPITestCase(APITestCase):
             active=True,
             product__active=True,
             product__livemode=False,
-            product__metadata={"events": 10, "is_public": "true"},
+            product__metadata={"events": 10, "is_public": "false"},
         )
         user = baker.make("users.user")
         self.client.force_login(user)
