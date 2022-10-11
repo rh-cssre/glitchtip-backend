@@ -24,9 +24,10 @@ class DefaultEvent(BaseEvent):
         message = strip(
             get_path(data, "logentry", "formatted")
             or get_path(data, "logentry", "message")
+            or get_path(data, "message", "formatted")
             or get_path(data, "message")
         )
-
+        
         if message:
             title = truncatechars(message.splitlines()[0], 100)
         else:
