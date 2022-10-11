@@ -27,7 +27,7 @@ class DefaultEvent(BaseEvent):
             or get_path(data, "message", "formatted")
             or get_path(data, "message")
         )
-        
+
         if message:
             title = truncatechars(message.splitlines()[0], 100)
         else:

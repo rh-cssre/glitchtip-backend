@@ -1,4 +1,3 @@
-from cmath import log
 from rest_framework import serializers
 from projects.serializers.base_serializers import ProjectReferenceSerializer
 from user_reports.serializers import UserReportSerializer
