@@ -237,7 +237,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
             sentry_data,
             ["message", "title",],
         )
-        # self.assertEqual(res.data["entries"][1], sentry_data["entries"][0])
+        self.assertEqual(res.data["entries"][0], sentry_data["entries"][0])
 
     def test_django_message_params(self):
         sdk_error, sentry_json, sentry_data = self.get_json_test_data(
@@ -263,7 +263,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
             sentry_data,
             ["message", "title",],
         )
-        # self.assertEqual(res.data["entries"][1], sentry_data["entries"][0])
+        self.assertEqual(res.data["entries"][0], sentry_data["entries"][0])
 
     def test_csp_event(self):
         # Don't mimic this test, use self.get_jest_test_data instead

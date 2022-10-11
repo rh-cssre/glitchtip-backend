@@ -168,6 +168,8 @@ class LogEntrySerializer(serializers.Serializer):
             params = data["params"]
             if isinstance(params, list):
                 data["formatted"] = data["message"] % tuple(data["params"])
+            elif isinstance(params, dict):
+                data["formatted"] = data["message"].format(**params)
         return data
 
 
