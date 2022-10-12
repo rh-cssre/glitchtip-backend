@@ -150,6 +150,11 @@ class BaseEventAPIView(APIView):
 
 class EventStoreAPIView(BaseEventAPIView):
     def post(self, request, *args, **kwargs):
+        if settings.MAINTENANCE_EVENT_FREEZE:
+            return Response(
+                {"message": "Events are not currently being accepted due to database maintenance."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
         if settings.EVENT_STORE_DEBUG:
             print(json.dumps(request.data))
         try:
@@ -171,6 +176,11 @@ class EnvelopeAPIView(BaseEventAPIView):
         return TransactionEventSerializer
 
     def post(self, request, *args, **kwargs):
+        if settings.MAINTENANCE_EVENT_FREEZE:
+            return Response(
+                {"message": "Events are not currently being accepted due to database maintenance."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
         if settings.EVENT_STORE_DEBUG:
             print(json.dumps(request.data))
         project = self.get_project(request, kwargs.get("id"))
