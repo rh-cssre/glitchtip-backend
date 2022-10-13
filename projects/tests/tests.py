@@ -28,6 +28,16 @@ class ProjectsAPITestCase(APITestCase):
         res = self.client.get(self.url)
         self.assertContains(res, project.name)
 
+    def test_default_ordering(self):
+        organization = baker.make("organizations_ext.Organization")
+        organization.add_user(self.user, role=OrganizationUserRole.OWNER)
+        projectA = baker.make("projects.Project", organization=organization, name="A Project")
+        projectZ = baker.make("projects.Project", organization=organization, name="Z Project")
+        projectB = baker.make("projects.Project", organization=organization, name="B Project")
+        res = self.client.get(self.url)
+        self.assertEqual(res.data[0]["name"], projectA.name)
+        self.assertEqual(res.data[2]["name"], projectZ.name)
+
     def test_projects_api_retrieve(self):
         organization = baker.make("organizations_ext.Organization")
         organization.add_user(self.user, role=OrganizationUserRole.OWNER)
@@ -48,12 +58,18 @@ class ProjectsAPITestCase(APITestCase):
         page_size = settings.REST_FRAMEWORK.get("PAGE_SIZE")
         organization = baker.make("organizations_ext.Organization")
         organization.add_user(self.user, role=OrganizationUserRole.OWNER)
-        projects = baker.make(
-            "projects.Project", organization=organization, _quantity=page_size + 1
+        firstProject = projects = baker.make(
+            "projects.Project", organization=organization, name="Alphabetically First"
+        )
+        baker.make(
+            "projects.Project", organization=organization, name="B", _quantity=page_size
+        )
+        lastProject = projects = baker.make(
+            "projects.Project", organization=organization, name="Last Alphabetically"
         )
         res = self.client.get(self.url)
-        self.assertNotContains(res, projects[0].name)
-        self.assertContains(res, projects[-1].name)
+        self.assertNotContains(res, lastProject.name)
+        self.assertContains(res, firstProject.name)
         link_header = res.get("Link")
         self.assertIn('results="true"', link_header)
 

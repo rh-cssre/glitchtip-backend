@@ -4,6 +4,7 @@ from django.http import Http404
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import viewsets, views, exceptions, permissions
 from rest_framework.decorators import action
+from rest_framework.filters import OrderingFilter
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from organizations.backends import invitation_backend
@@ -29,6 +30,9 @@ from .serializers.serializers import (
 
 
 class OrganizationViewSet(viewsets.ModelViewSet):
+    filter_backends = [OrderingFilter]
+    ordering = ["name"]
+    ordering_fields = ["name"]
     queryset = Organization.objects.all()
     serializer_class = OrganizationSerializer
     lookup_field = "slug"
