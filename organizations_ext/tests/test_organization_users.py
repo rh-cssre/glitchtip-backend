@@ -144,33 +144,32 @@ class OrganizationUsersAPITestCase(APITestCase):
             "teams": [],
             "user": "new@example.com",
         }
-        with override_settings(ENABLE_USER_REGISTRATION=True):
-            res = self.client.post(self.members_url, data)
-            self.assertTrue(res.data["pending"])
-            body = mail.outbox[0].body
-            body_split = body[body.find("http://localhost:8000/accept/") :].split("/")
-            org_user_id = body_split[4]
-            token = body_split[5]
-            url = reverse(
-                "accept-invite", kwargs={"org_user_id": org_user_id, "token": token}
-            )
+        res = self.client.post(self.members_url, data)
+        self.assertTrue(res.data["pending"])
+        body = mail.outbox[0].body
+        body_split = body[body.find("http://localhost:8000/accept/") :].split("/")
+        org_user_id = body_split[4]
+        token = body_split[5]
+        url = reverse(
+            "accept-invite", kwargs={"org_user_id": org_user_id, "token": token}
+        )
 
-            # Check that we can determine organization name from GET request to accept invite endpoint
-            self.client.logout()
-            res = self.client.get(url)
-            self.assertContains(res, self.organization.name)
+        # Check that we can determine organization name from GET request to accept invite endpoint
+        self.client.logout()
+        res = self.client.get(url)
+        self.assertContains(res, self.organization.name)
 
-            user = baker.make("users.user")
-            self.client.force_login(user)
-            data = {"accept_invite": True}
-            res = self.client.post(url, data)
-            self.assertContains(res, self.organization.name)
-            self.assertFalse(res.data["org_user"]["pending"])
-            self.assertTrue(
-                OrganizationUser.objects.filter(
-                    user=user, organization=self.organization
-                ).exists()
-            )
+        user = baker.make("users.user")
+        self.client.force_login(user)
+        data = {"accept_invite": True}
+        res = self.client.post(url, data)
+        self.assertContains(res, self.organization.name)
+        self.assertFalse(res.data["org_user"]["pending"])
+        self.assertTrue(
+            OrganizationUser.objects.filter(
+                user=user, organization=self.organization
+            ).exists()
+        )
 
     def test_closed_user_registration(self):
         data = {
@@ -199,14 +198,13 @@ class OrganizationUsersAPITestCase(APITestCase):
             "teams": [],
             "user": "new@example.com",
         }
-        with override_settings(ENABLE_USER_REGISTRATION=True):
-            res = self.client.post(self.members_url, data)
-            self.assertEqual(res.status_code, 201)
-            res = self.client.post(self.members_url, data)
-            self.assertEqual(res.status_code, 409)
-            data["email"] = self.user.email
-            res = self.client.post(self.members_url, data)
-            self.assertEqual(res.status_code, 409)
+        res = self.client.post(self.members_url, data)
+        self.assertEqual(res.status_code, 201)
+        res = self.client.post(self.members_url, data)
+        self.assertEqual(res.status_code, 409)
+        data["email"] = self.user.email
+        res = self.client.post(self.members_url, data)
+        self.assertEqual(res.status_code, 409)
 
     def test_organization_users_add_team_member_permission(self):
         self.org_user.role = OrganizationUserRole.MEMBER
@@ -280,22 +278,21 @@ class OrganizationUsersAPITestCase(APITestCase):
             "teams": [team.slug],
             "user": "new@example.com",
         }
-        with override_settings(ENABLE_USER_REGISTRATION=True):
-            res = self.client.post(
-                self.members_url, json.dumps(data), content_type="application/json"
-            )
-            self.assertContains(res, data["email"], status_code=201)
-            self.assertEqual(res.data["role"], "manager")
-            self.assertTrue(
-                OrganizationUser.objects.filter(
-                    organization=self.organization,
-                    email=data["email"],
-                    user=None,
-                    role=OrganizationUserRole.MANAGER,
-                ).exists()
-            )
-            self.assertTrue(team.members.exists())
-            self.assertEqual(len(mail.outbox), 1)
+        res = self.client.post(
+            self.members_url, json.dumps(data), content_type="application/json"
+        )
+        self.assertContains(res, data["email"], status_code=201)
+        self.assertEqual(res.data["role"], "manager")
+        self.assertTrue(
+            OrganizationUser.objects.filter(
+                organization=self.organization,
+                email=data["email"],
+                user=None,
+                role=OrganizationUserRole.MANAGER,
+            ).exists()
+        )
+        self.assertTrue(team.members.exists())
+        self.assertEqual(len(mail.outbox), 1)
 
     def test_organization_users_create_and_accept(self):
         data = {
@@ -304,10 +301,9 @@ class OrganizationUsersAPITestCase(APITestCase):
             "teams": [],
             "user": "new@example.com",
         }
-        with override_settings(ENABLE_USER_REGISTRATION=True):
-            self.client.post(self.members_url, data)
-            body = mail.outbox[0].body
-            token = body[body.find("http://localhost:8000/accept/") :].split("/")[4]
+        self.client.post(self.members_url, data)
+        body = mail.outbox[0].body
+        token = body[body.find("http://localhost:8000/accept/") :].split("/")[4]
 
     def test_organization_users_create_without_permissions(self):
         """ Admin cannot add users to org """
