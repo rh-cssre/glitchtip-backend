@@ -6,8 +6,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from api_tokens.serializers import APITokenAuthScopesSerializer
+from organizations_ext.utils import is_organization_creation_open
 from users.serializers import SocialAppSerializer, UserSerializer
-from users.utils import is_organization_creation_open, is_user_registration_open
+from users.utils import is_user_registration_open
+
 
 try:
     from djstripe.settings import djstripe_settings

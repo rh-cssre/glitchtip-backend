@@ -7,8 +7,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from organizations.backends import invitation_backend
+from organizations_ext.utils import is_organization_creation_open
 from teams.serializers import TeamSerializer
-from users.utils import is_organization_creation_open
 from projects.views import NestedProjectViewSet
 from .permissions import (
     OrganizationPermission,

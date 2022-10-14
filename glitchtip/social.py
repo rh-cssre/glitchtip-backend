@@ -69,6 +69,9 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
         allow_blank=True, required=False, allow_null=True, write_only=True
     )
 
+    # This needs to be overridden due to the location of the relatively small change we must make to
+    # prevent creation of new user on first-time social auth login
+    # https://github.com/iMerica/dj-rest-auth/blob/master/dj_rest_auth/registration/serializers.py#L79
     def validate(self, attrs):
         view = self.context.get("view")
         request = self._get_request()
@@ -85,21 +88,15 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
         adapter = adapter_class(request)
         app = adapter.get_provider().get_app(request)
 
-        # More info on code vs access_token
-        # http://stackoverflow.com/questions/8666316/facebook-oauth-2-0-code-and-token
-
         access_token = attrs.get("access_token")
         code = attrs.get("code")
-        # Case 1: We received the access_token
         if access_token:
             tokens_to_parse = {"access_token": access_token}
             token = access_token
-            # For sign in with apple
             id_token = attrs.get("id_token")
             if id_token:
                 tokens_to_parse["id_token"] = id_token
 
-        # Case 2: We received the authorization code
         elif code:
             self.set_callback_url(view=view, adapter_class=adapter_class)
             self.client_class = getattr(view, "client_class", None)
@@ -127,7 +124,6 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
             access_token = token["access_token"]
             tokens_to_parse = {"access_token": access_token}
 
-            # If available we add additional data to the dictionary
             for key in ["refresh_token", "id_token", adapter.expires_in_key]:
                 if key in token:
                     tokens_to_parse[key] = token[key]
@@ -149,12 +145,7 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
             raise serializers.ValidationError(ret.content)
 
         if not login.is_existing:
-            # We have an account already signed up in a different flow
-            # with the same email address: raise an exception.
-            # This needs to be handled in the frontend. We can not just
-            # link up the accounts due to security constraints
             if allauth_settings.UNIQUE_EMAIL:
-                # Do we have an account already with this email address?
                 account_exists = (
                     get_user_model()
                     .objects.filter(
