@@ -3,7 +3,7 @@ from django.test import override_settings
 from django.shortcuts import reverse
 from rest_framework.test import APITestCase
 from model_bakery import baker
-from glitchtip import test_utils # pylint: disable=unused-import
+from glitchtip import test_utils  # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from organizations_ext.models import OrganizationUserRole
 from ..models import UserProjectAlert, User
@@ -35,7 +35,7 @@ class UserRegistrationTestCase(APITestCase):
         )
 
     def test_closed_registration(self):
-        """ Only first user may register """
+        """Only first user may register"""
         url = reverse("rest_register")
         user1_data = {
             "email": "test1@example.com",

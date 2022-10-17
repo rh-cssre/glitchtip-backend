@@ -9,7 +9,7 @@ from glitchtip import test_utils  # pylint: disable=unused-import
 
 class OrganizationModelTestCase(TestCase):
     def test_email(self):
-        """ Billing email address """
+        """Billing email address"""
         user = baker.make("users.user")
         organization = baker.make("organizations_ext.Organization")
         organization.add_user(user)
@@ -37,7 +37,7 @@ class OrganizationModelTestCase(TestCase):
         self.assertEqual(callback(request), organization)
 
     def test_slug_reserved_words(self):
-        """ Reserve some words for frontend routing needs """
+        """Reserve some words for frontend routing needs"""
         word = "login"
         organization = baker.make("organizations_ext.Organization", name=word)
         self.assertNotEqual(organization.slug, word)

@@ -46,7 +46,8 @@ class OrganizationViewSet(viewsets.ModelViewSet):
 
         if self.action in ["retrieve"]:
             queryset = queryset.prefetch_related(
-                "projects__team_set__members", "teams__members",
+                "projects__team_set__members",
+                "teams__members",
             )
         return queryset
 
@@ -113,8 +114,10 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         ]:
             org_slug = self.kwargs.get("organization_slug")
             try:
-                user_org_user = self.request.user.organizations_ext_organizationuser.get(
-                    organization__slug=org_slug
+                user_org_user = (
+                    self.request.user.organizations_ext_organizationuser.get(
+                        organization__slug=org_slug
+                    )
                 )
             except ObjectDoesNotExist:
                 raise PermissionDenied("Not a member of this organization")
@@ -162,7 +165,7 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         return org_user
 
     def check_team_member_permission(self, org_user, user, team):
-        """ Check if user has permission to update team members """
+        """Check if user has permission to update team members"""
         open_membership = org_user.organization.open_membership
         is_self = org_user.user == user
 
@@ -186,7 +189,7 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         url_path=r"teams/(?P<members_team_slug>[-\w]+)",
     )
     def teams(self, request, pk=None, organization_slug=None, members_team_slug=None):
-        """ Add existing organization user to a team """
+        """Add existing organization user to a team"""
         if not pk or not organization_slug or not members_team_slug:
             raise exceptions.MethodNotAllowed(request.method)
 
@@ -233,7 +236,7 @@ class OrganizationUserViewSet(OrganizationMemberViewSet):
 
 
 class AcceptInviteView(views.APIView):
-    """ Accept invite to organization """
+    """Accept invite to organization"""
 
     serializer_class = AcceptInviteSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
