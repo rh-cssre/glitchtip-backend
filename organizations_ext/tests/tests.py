@@ -102,3 +102,27 @@ class OrganizationsAPITestCase(APITestCase):
         with self.settings(ENABLE_ORGANIZATION_CREATION=False):
             res = self.client.post(self.url, data)
         self.assertEqual(res.status_code, 201)
+
+
+class OrganizationsFilterTestCase(APITestCase):
+    def setUp(self):
+        self.user = baker.make("users.user")
+        self.client.force_login(self.user)
+        self.url = reverse("organization-list")
+
+    def test_default_ordering(self):
+        organizationA = baker.make(
+            "organizations_ext.Organization", name="A Organization"
+        )
+        organizationZ = baker.make(
+            "organizations_ext.Organization", name="Z Organization"
+        )
+        organizationB = baker.make(
+            "organizations_ext.Organization", name="B Organization"
+        )
+        organizationA.add_user(self.user)
+        organizationB.add_user(self.user)
+        organizationZ.add_user(self.user)
+        res = self.client.get(self.url)
+        self.assertEqual(res.data[0]["name"], organizationA.name)
+        self.assertEqual(res.data[2]["name"], organizationZ.name)
