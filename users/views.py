@@ -107,7 +107,9 @@ class UserViewSet(viewsets.ModelViewSet):
 
 
 class EmailAddressViewSet(
-    mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet,
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
 ):
     queryset = EmailAddress.objects.all()
     serializer_class = EmailAddressSerializer

@@ -16,7 +16,7 @@ except ImportError:
 
 
 class SettingsView(APIView):
-    """ Global configuration to pass to client """
+    """Global configuration to pass to client"""
 
     permission_classes = [AllowAny]
 
@@ -51,7 +51,7 @@ class SettingsView(APIView):
 
 
 class APIRootView(APIView):
-    """ /api/0/ gives information about the server and current user """
+    """/api/0/ gives information about the server and current user"""
 
     def get(self, request, *args, **kwargs):
         user_data = None
@@ -60,7 +60,13 @@ class APIRootView(APIView):
             user_data = UserSerializer(instance=request.user).data
         if request.auth:
             auth_data = APITokenAuthScopesSerializer(instance=request.auth).data
-        return Response({"version": "0", "user": user_data, "auth": auth_data,})
+        return Response(
+            {
+                "version": "0",
+                "user": user_data,
+                "auth": auth_data,
+            }
+        )
 
 
 def health(request):
