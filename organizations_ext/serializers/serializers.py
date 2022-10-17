@@ -62,7 +62,7 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
             )
 
     def get_extra_kwargs(self):
-        """ email should be read only when updating """
+        """email should be read only when updating"""
         extra_kwargs = super().get_extra_kwargs()
         if self.instance is not None:
             extra_kwargs["email"] = {"read_only": True}
@@ -93,12 +93,12 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
     def to_representation(self, obj):
-        """ Override email for representation to potientially show user's email """
+        """Override email for representation to potientially show user's email"""
         self.fields["email"] = serializers.SerializerMethodField()
         return super().to_representation(obj)
 
     def get_email(self, obj):
-        """ Prefer user primary email over org user email (which is only for invites) """
+        """Prefer user primary email over org user email (which is only for invites)"""
         if obj.user:
             return obj.user.email
         return obj.email
@@ -140,7 +140,7 @@ class ReinviteSerializer(serializers.Serializer):
 
 
 class OrganizationUserOrganizationSerializer(OrganizationUserSerializer):
-    """ Organization User Serializer with Organization info """
+    """Organization User Serializer with Organization info"""
 
     organization = OrganizationSerializer()
 

@@ -35,7 +35,7 @@ class UserRegistrationTestCase(APITestCase):
         )
 
     def test_closed_registration(self):
-        """ Only first user/organization may register """
+        """Only first user/organization may register"""
         url = reverse("rest_register")
         org_url = reverse("organization-list")
         data = {

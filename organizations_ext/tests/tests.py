@@ -9,7 +9,7 @@ from glitchtip import test_utils  # pylint: disable=unused-import
 
 class OrganizationModelTestCase(TestCase):
     def test_email(self):
-        """ Billing email address """
+        """Billing email address"""
         user = baker.make("users.user")
         organization = baker.make("organizations_ext.Organization")
         organization.add_user(user)
@@ -37,7 +37,7 @@ class OrganizationModelTestCase(TestCase):
         self.assertEqual(callback(request), organization)
 
     def test_slug_reserved_words(self):
-        """ Reserve some words for frontend routing needs """
+        """Reserve some words for frontend routing needs"""
         word = "login"
         organization = baker.make("organizations_ext.Organization", name=word)
         self.assertNotEqual(organization.slug, word)
@@ -103,6 +103,7 @@ class OrganizationsAPITestCase(APITestCase):
             res = self.client.post(self.url, data)
         self.assertEqual(res.status_code, 201)
 
+
 class OrganizationsFilterTestCase(APITestCase):
     def setUp(self):
         self.user = baker.make("users.user")
@@ -110,9 +111,15 @@ class OrganizationsFilterTestCase(APITestCase):
         self.url = reverse("organization-list")
 
     def test_default_ordering(self):
-        organizationA = baker.make("organizations_ext.Organization", name="A Organization")
-        organizationZ = baker.make("organizations_ext.Organization", name="Z Organization")
-        organizationB = baker.make("organizations_ext.Organization", name="B Organization")
+        organizationA = baker.make(
+            "organizations_ext.Organization", name="A Organization"
+        )
+        organizationZ = baker.make(
+            "organizations_ext.Organization", name="Z Organization"
+        )
+        organizationB = baker.make(
+            "organizations_ext.Organization", name="B Organization"
+        )
         organizationA.add_user(self.user)
         organizationB.add_user(self.user)
         organizationZ.add_user(self.user)
