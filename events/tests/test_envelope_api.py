@@ -2,6 +2,7 @@ import json
 import uuid
 
 from django.shortcuts import reverse
+from django.test import override_settings
 from model_bakery import baker
 from rest_framework.test import APITestCase
 
@@ -37,6 +38,12 @@ class EnvelopeStoreTestCase(APITestCase):
         res = self.client.generic("POST", self.url, data)
         self.assertEqual(res.status_code, 200)
         self.assertTrue(TransactionEvent.objects.exists())
+
+    def test_maintenance_freeze(self):
+        data = self.get_payload("events/test_data/transactions/django_simple.json")
+        with override_settings(MAINTENANCE_EVENT_FREEZE=True):
+            res = self.client.generic("POST", self.url, data)
+        self.assertEqual(res.status_code, 503)
 
     def test_accept_js_transaction(self):
         data = self.get_payload("events/test_data/transactions/js_simple.json")
