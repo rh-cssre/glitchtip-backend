@@ -25,7 +25,7 @@ class SettingsView(APIView):
     def get(self, request, *args, **kwargs):
         billing_enabled = settings.BILLING_ENABLED
         enable_user_registration = is_user_registration_open()
-        enable_organization_creation = is_organization_creation_open()
+        enable_organization_creation = settings.ENABLE_ORGANIZATION_CREATION
         stripe_public_key = None
         if billing_enabled:
             stripe_public_key = djstripe_settings.STRIPE_PUBLIC_KEY

@@ -58,16 +58,9 @@ class OrganizationViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """
         Create organization with current user as owner
-        If registration is closed, only superuser and organization owners may create new.
+        If registration is closed, only superusers can create new orgs.
         """
-        if (
-            not is_organization_creation_open()
-            and not self.request.user.is_superuser
-            and not Organization.objects.filter(
-                organization_users__role=OrganizationUserRole.OWNER,
-                organization_users__user=self.request.user,
-            ).exists()
-        ):
+        if not is_organization_creation_open() and not self.request.user.is_superuser:
             raise exceptions.PermissionDenied("Organization creation is not open")
         organization = serializer.save()
         organization.add_user(self.request.user, role=OrganizationUserRole.OWNER)

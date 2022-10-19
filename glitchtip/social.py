@@ -69,8 +69,8 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
         allow_blank=True, required=False, allow_null=True, write_only=True
     )
 
-    # This needs to be overridden due to the location of the relatively small change we must make to
-    # prevent creation of new user on first-time social auth login
+    # Overriding to add check for django-allauth's is_open_for_signup() at end, to prevent
+    # creation of new user on first-time social auth login
     # https://github.com/iMerica/dj-rest-auth/blob/master/dj_rest_auth/registration/serializers.py#L79
     def validate(self, attrs):
         view = self.context.get("view")
@@ -157,6 +157,7 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
                     raise serializers.ValidationError(
                         _("User is already registered with this e-mail address."),
                     )
+            # Added check for open signup
             if not get_adapter(request).is_open_for_signup(request, login):
                 raise serializers.ValidationError(_("User registration is closed."))
             else:
