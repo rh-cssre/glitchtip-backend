@@ -50,39 +50,8 @@ class OrganizationRegistrationSettingQueryTestCase(APITestCase):
         self.client.force_login(self.user)
         self.url = reverse("organization-list")
 
-    def test_organizations_registration_open_query_count(self):
-        data = {"name": "test"}
-        with self.settings(ENABLE_ORGANIZATION_CREATION=True):
-            with self.assertNumQueries(7):
-                res = self.client.post(self.url, data)
-        self.assertEqual(res.status_code, 201)
-
-    def test_organizations_registration_closed_query_count(self):
-        data = {"name": "test"}
-        with self.settings(ENABLE_ORGANIZATION_CREATION=False):
-            with self.assertNumQueries(8):
-                res = self.client.post(self.url, data)
-        self.assertEqual(res.status_code, 201)
-
     def test_organizations_closed_registration_first_organization_create(self):
         data = {"name": "test"}
-
-        with self.settings(ENABLE_ORGANIZATION_CREATION=False):
-            res = self.client.post(self.url, data)
-        self.assertEqual(res.status_code, 201)
-
-    def test_organizations_create_closed_registration_superuser(self):
-        data = {"name": "test"}
-        organization = baker.make("organizations_ext.Organization")
-        organization.add_user(self.user)
-        organization.organization_users.all().update(role=OrganizationUserRole.MANAGER)
-
-        with self.settings(ENABLE_ORGANIZATION_CREATION=False):
-            res = self.client.post(self.url, data)
-        self.assertEqual(res.status_code, 403)
-
-        self.user.is_superuser = True
-        self.user.save()
 
         with self.settings(ENABLE_ORGANIZATION_CREATION=False):
             res = self.client.post(self.url, data)
@@ -118,11 +87,27 @@ class OrganizationsAPITestCase(APITestCase):
 
     def test_organizations_create(self):
         data = {"name": "test"}
-        res = self.client.post(self.url, data)
+        with self.assertNumQueries(7):
+            res = self.client.post(self.url, data)
         self.assertContains(res, data["name"], status_code=201)
         self.assertEqual(
             OrganizationUser.objects.filter(organization__name=data["name"]).count(), 1
         )
+
+    def test_organizations_create_closed_registration_superuser(self):
+        data = {"name": "test"}
+
+        with self.settings(ENABLE_ORGANIZATION_CREATION=False):
+            res = self.client.post(self.url, data)
+        self.assertEqual(res.status_code, 403)
+
+        self.user.is_superuser = True
+        self.user.save()
+
+        with self.settings(ENABLE_ORGANIZATION_CREATION=False):
+            with self.assertNumQueries(8):
+                res = self.client.post(self.url, data)
+        self.assertEqual(res.status_code, 201)
 
 
 class OrganizationsFilterTestCase(APITestCase):
