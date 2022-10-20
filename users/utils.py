@@ -1,12 +1,9 @@
 from django.conf import settings
-from organizations_ext.models import Organization
+from users.models import User
 
 
 def is_user_registration_open() -> bool:
-    enable_user_registration = settings.ENABLE_OPEN_USER_REGISTRATION
-    if not enable_user_registration:
-        enable_user_registration = not Organization.objects.exists()
-    return enable_user_registration
+    return settings.ENABLE_USER_REGISTRATION or not User.objects.exists()
 
 
 def noop_token_creator(token_model, user, serializer):

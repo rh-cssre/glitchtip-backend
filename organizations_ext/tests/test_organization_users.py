@@ -1,6 +1,7 @@
 import json
 from django.core import mail
 from django.shortcuts import reverse
+from django.test import override_settings
 from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
@@ -172,6 +173,24 @@ class OrganizationUsersAPITestCase(APITestCase):
                 user=user, organization=self.organization
             ).exists()
         )
+
+    def test_closed_user_registration(self):
+        data = {
+            "email": "new@example.com",
+            "role": OrganizationUserRole.MANAGER.label.lower(),
+            "teams": [],
+            "user": "new@example.com",
+        }
+
+        with override_settings(ENABLE_USER_REGISTRATION=False):
+            # Non-existing user cannot be invited
+            res = self.client.post(self.members_url, data)
+            self.assertEqual(res.status_code, 403)
+
+            # Existing user can be invited
+            self.user = baker.make("users.user", email="new@example.com")
+            res = self.client.post(self.members_url, data)
+            self.assertEqual(res.status_code, 201)
 
     def test_organization_users_invite_twice(self):
         """Don't allow inviting user who is already in the group"""

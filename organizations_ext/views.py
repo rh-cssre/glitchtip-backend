@@ -8,8 +8,8 @@ from rest_framework.filters import OrderingFilter
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from organizations.backends import invitation_backend
+from organizations_ext.utils import is_organization_creation_open
 from teams.serializers import TeamSerializer
-from users.utils import is_user_registration_open
 from projects.views import NestedProjectViewSet
 from .permissions import (
     OrganizationPermission,
@@ -58,17 +58,10 @@ class OrganizationViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """
         Create organization with current user as owner
-        If registration is closed, only superuser and organization owners may create new.
+        If registration is closed, only superusers can create new orgs.
         """
-        if (
-            not is_user_registration_open()
-            and not self.request.user.is_superuser
-            and not Organization.objects.filter(
-                organization_users__role=OrganizationUserRole.OWNER,
-                organization_users__user=self.request.user,
-            ).exists()
-        ):
-            raise exceptions.PermissionDenied("Registration is not open")
+        if not is_organization_creation_open() and not self.request.user.is_superuser:
+            raise exceptions.PermissionDenied("Organization creation is not open")
         organization = serializer.save()
         organization.add_user(self.request.user, role=OrganizationUserRole.OWNER)
 
@@ -118,8 +111,10 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         ]:
             org_slug = self.kwargs.get("organization_slug")
             try:
-                user_org_user = self.request.user.organizations_ext_organizationuser.get(
-                    organization__slug=org_slug
+                user_org_user = (
+                    self.request.user.organizations_ext_organizationuser.get(
+                        organization__slug=org_slug
+                    )
                 )
             except ObjectDoesNotExist:
                 raise PermissionDenied("Not a member of this organization")
@@ -167,7 +162,7 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         return org_user
 
     def check_team_member_permission(self, org_user, user, team):
-        """ Check if user has permission to update team members """
+        """Check if user has permission to update team members"""
         open_membership = org_user.organization.open_membership
         is_self = org_user.user == user
 
@@ -191,7 +186,7 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         url_path=r"teams/(?P<members_team_slug>[-\w]+)",
     )
     def teams(self, request, pk=None, organization_slug=None, members_team_slug=None):
-        """ Add existing organization user to a team """
+        """Add existing organization user to a team"""
         if not pk or not organization_slug or not members_team_slug:
             raise exceptions.MethodNotAllowed(request.method)
 
@@ -238,7 +233,7 @@ class OrganizationUserViewSet(OrganizationMemberViewSet):
 
 
 class AcceptInviteView(views.APIView):
-    """ Accept invite to organization """
+    """Accept invite to organization"""
 
     serializer_class = AcceptInviteSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]

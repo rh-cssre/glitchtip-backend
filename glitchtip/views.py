@@ -6,8 +6,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from api_tokens.serializers import APITokenAuthScopesSerializer
+from organizations_ext.utils import is_organization_creation_open
 from users.serializers import SocialAppSerializer, UserSerializer
 from users.utils import is_user_registration_open
+
 
 try:
     from djstripe.settings import djstripe_settings
@@ -23,6 +25,7 @@ class SettingsView(APIView):
     def get(self, request, *args, **kwargs):
         billing_enabled = settings.BILLING_ENABLED
         enable_user_registration = is_user_registration_open()
+        enable_organization_creation = settings.ENABLE_ORGANIZATION_CREATION
         stripe_public_key = None
         if billing_enabled:
             stripe_public_key = djstripe_settings.STRIPE_PUBLIC_KEY
@@ -37,6 +40,7 @@ class SettingsView(APIView):
                 "billingEnabled": billing_enabled,
                 "iPaidForGlitchTip": settings.I_PAID_FOR_GLITCHTIP,
                 "enableUserRegistration": enable_user_registration,
+                "enableOrganizationCreation": enable_organization_creation,
                 "stripePublicKey": stripe_public_key,
                 "plausibleURL": settings.PLAUSIBLE_URL,
                 "plausibleDomain": settings.PLAUSIBLE_DOMAIN,

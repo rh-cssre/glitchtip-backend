@@ -2,7 +2,7 @@ version: "3.8"
 x-environment: &default-environment
   DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
   SECRET_KEY: change_me
-  ENABLE_OPEN_USER_REGISTRATION: "true"
+  ENABLE_ORGANIZATION_CREATION: "true"
   ENABLE_TEST_API: "true"
   DEBUG: "true"
   EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
