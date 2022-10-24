@@ -3,6 +3,7 @@ import random
 from unittest.mock import patch
 
 from django.shortcuts import reverse
+from django.test import override_settings
 from model_bakery import baker
 from rest_framework.test import APITestCase
 
@@ -26,6 +27,13 @@ class EventStoreTestCase(APITestCase):
             data = json.load(json_file)
         res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
+
+    def test_maintenance_freeze(self):
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        with override_settings(MAINTENANCE_EVENT_FREEZE=True):
+            res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 503)
 
     def test_store_duplicate(self):
         with open("events/test_data/py_hi_event.json") as json_file:
