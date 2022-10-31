@@ -10,6 +10,7 @@ from dj_rest_auth.registration.views import (
 )
 from allauth.account.models import EmailAddress
 from organizations_ext.models import Organization
+from users.utils import is_user_registration_open
 from .models import User, UserProjectAlert
 from .serializers import (
     UserSerializer,
@@ -48,6 +49,8 @@ class UserViewSet(viewsets.ModelViewSet):
         except Organization.DoesNotExist:
             raise exceptions.ValidationError("Organization does not exist")
         # TODO deal with organization and users who aren't set up yet
+        if not is_user_registration_open() and not self.request.user.is_superuser:
+            raise exceptions.PermissionDenied("Registration is not open")
         user = serializer.save()
         return user
 
@@ -107,7 +110,9 @@ class UserViewSet(viewsets.ModelViewSet):
 
 
 class EmailAddressViewSet(
-    mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet,
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
 ):
     queryset = EmailAddress.objects.all()
     serializer_class = EmailAddressSerializer

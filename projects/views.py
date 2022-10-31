@@ -1,5 +1,6 @@
 from rest_framework import viewsets, exceptions, status
 from rest_framework.decorators import action
+from rest_framework.filters import OrderingFilter
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from teams.models import Team
@@ -72,6 +73,9 @@ class NestedProjectViewSet(viewsets.ModelViewSet):
 
 
 class ProjectViewSet(NestedProjectViewSet):
+    filter_backends = [OrderingFilter]
+    ordering = ["name"]
+    ordering_fields = ["name"]
     lookup_field = "pk"
     lookup_value_regex = r"(?P<organization_slug>[^/.]+)/(?P<project_slug>[-\w]+)"
 

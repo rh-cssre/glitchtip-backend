@@ -6,8 +6,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from api_tokens.serializers import APITokenAuthScopesSerializer
+from organizations_ext.utils import is_organization_creation_open
 from users.serializers import SocialAppSerializer, UserSerializer
 from users.utils import is_user_registration_open
+
 
 try:
     from djstripe.settings import djstripe_settings
@@ -16,13 +18,14 @@ except ImportError:
 
 
 class SettingsView(APIView):
-    """ Global configuration to pass to client """
+    """Global configuration to pass to client"""
 
     permission_classes = [AllowAny]
 
     def get(self, request, *args, **kwargs):
         billing_enabled = settings.BILLING_ENABLED
         enable_user_registration = is_user_registration_open()
+        enable_organization_creation = settings.ENABLE_ORGANIZATION_CREATION
         stripe_public_key = None
         if billing_enabled:
             stripe_public_key = djstripe_settings.STRIPE_PUBLIC_KEY
@@ -37,6 +40,7 @@ class SettingsView(APIView):
                 "billingEnabled": billing_enabled,
                 "iPaidForGlitchTip": settings.I_PAID_FOR_GLITCHTIP,
                 "enableUserRegistration": enable_user_registration,
+                "enableOrganizationCreation": enable_organization_creation,
                 "stripePublicKey": stripe_public_key,
                 "plausibleURL": settings.PLAUSIBLE_URL,
                 "plausibleDomain": settings.PLAUSIBLE_DOMAIN,
@@ -51,7 +55,7 @@ class SettingsView(APIView):
 
 
 class APIRootView(APIView):
-    """ /api/0/ gives information about the server and current user """
+    """/api/0/ gives information about the server and current user"""
 
     def get(self, request, *args, **kwargs):
         user_data = None
@@ -60,7 +64,13 @@ class APIRootView(APIView):
             user_data = UserSerializer(instance=request.user).data
         if request.auth:
             auth_data = APITokenAuthScopesSerializer(instance=request.auth).data
-        return Response({"version": "0", "user": user_data, "auth": auth_data,})
+        return Response(
+            {
+                "version": "0",
+                "user": user_data,
+                "auth": auth_data,
+            }
+        )
 
 
 def health(request):

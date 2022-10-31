@@ -1,0 +1,92 @@
+{
+  "event_id": "ca2f3e4a95694dfb81c3cbb1eaca4e49",
+  "project": 8,
+  "release": null,
+  "dist": null,
+  "platform": "php",
+  "message": "My raw message with interpreted strings8 like {foo}",
+  "datetime": "2022-10-05T16:47:51.208000Z",
+  "time_spent": null,
+  "tags": [
+    ["browser", "Chrome 105.0.0"],
+    ["browser.name", "Chrome"],
+    ["environment", "production"],
+    ["level", "error"],
+    ["logger", "php"],
+    ["os", "Linux 5.14.0-1051-oem"],
+    ["os.name", "Linux"],
+    ["runtime", "php 8.1.9"],
+    ["runtime.name", "php"],
+    ["server_name", "9c5a5db68679"],
+    ["url", "http://localhost:8080/"]
+  ],
+  "contexts": {
+    "runtime": { "version": "8.1.9", "type": "runtime", "name": "php" },
+    "os": {
+      "kernel_version": "Linux 9c5a5db68679 5.14.0-1051-oem #58-Ubuntu SMP Fri Aug 26 05:50:00 UTC 2022 x86_64",
+      "version": "5.14.0-1051-oem",
+      "type": "os",
+      "name": "Linux",
+      "build": "#58-Ubuntu SMP Fri Aug 26 05:50:00 UTC 2022"
+    },
+    "user": { "status": "subscriber", "type": "user", "name": "Bob Dylan" },
+    "browser": { "version": "105.0.0", "name": "Chrome" }
+  },
+  "culprit": "http://localhost:8080/",
+  "environment": "production",
+  "fingerprint": ["{{ default }}"],
+  "grouping_config": { "id": "legacy:2019-03-12" },
+  "hashes": ["9e0af6b5399dea62e74cfbe0e61ebc1b"],
+  "key_id": "8",
+  "level": "error",
+  "location": null,
+  "logentry": {
+    "params": { "foo": "this" },
+    "formatted": "My raw message with interpreted strings8 like {foo}"
+  },
+  "logger": "php",
+  "metadata": {
+    "title": "My raw message with interpreted strings8 like {foo}"
+  },
+  "received": 1664988471.648,
+  "request": {
+    "url": "http://localhost:8080/",
+    "headers": [
+      [
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9"
+      ],
+      ["Accept-Encoding", "gzip, deflate, br"],
+      ["Accept-Language", "en-US,en;q=0.9"],
+      ["Cache-Control", "max-age=0"],
+      ["Connection", "keep-alive"],
+      ["Content-Length", ""],
+      ["Content-Type", ""],
+      ["Cookie", "[Filtered]"],
+      ["Host", "localhost:8080"],
+      [
+        "Sec-Ch-Ua",
+        "\"Google Chrome\";v=\"105\", \"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"105\""
+      ],
+      ["Sec-Ch-Ua-Mobile", "?0"],
+      ["Sec-Ch-Ua-Platform", "\"Linux\""],
+      ["Sec-Fetch-Dest", "document"],
+      ["Sec-Fetch-Mode", "navigate"],
+      ["Sec-Fetch-Site", "none"],
+      ["Sec-Fetch-User", "?1"],
+      ["Upgrade-Insecure-Requests", "1"],
+      [
+        "User-Agent",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36"
+      ]
+    ],
+    "method": "GET"
+  },
+  "sdk": { "version": "3.7.0", "name": "sentry.php" },
+  "timestamp": 1664988471.208,
+  "title": "My raw message with interpreted strings8 like {foo}",
+  "transaction": "",
+  "type": "default",
+  "use_rust_normalize": true,
+  "version": "7"
+}

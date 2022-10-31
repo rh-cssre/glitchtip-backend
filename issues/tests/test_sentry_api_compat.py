@@ -213,6 +213,58 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
             sentry_exception["data"].get("hasSystemFrames"),
         )
 
+    def test_php_message_event(self):
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+            "php_message_event"
+        )
+        res = self.client.post(self.event_store_url, sdk_error, format="json")
+        event = Event.objects.first()
+        self.assertEqual(res.status_code, 200)
+        event_id = res.data["id"]
+
+        event_json = event.event_json()
+        self.assertCompareData(event_json, sentry_json, ["logentry"])
+
+        sentry_data = self.get_json_data(
+            "events/test_data/oss_sentry_events/php_message_event.json"
+        )
+        url = self.get_project_events_detail(event_id)
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+
+        self.assertCompareData(
+            res.data,
+            sentry_data,
+            ["message", "title",],
+        )
+        self.assertEqual(res.data["entries"][0], sentry_data["entries"][0])
+
+    def test_django_message_params(self):
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+            "django_message_params"
+        )
+        res = self.client.post(self.event_store_url, sdk_error, format="json")
+        event = Event.objects.first()
+        self.assertEqual(res.status_code, 200)
+        event_id = res.data["id"]
+
+        event_json = event.event_json()
+        self.assertCompareData(event_json, sentry_json, ["logentry"])
+
+        sentry_data = self.get_json_data(
+            "events/test_data/oss_sentry_events/django_message_params.json"
+        )
+        url = self.get_project_events_detail(event_id)
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+
+        self.assertCompareData(
+            res.data,
+            sentry_data,
+            ["message", "title",],
+        )
+        self.assertEqual(res.data["entries"][0], sentry_data["entries"][0])
+
     def test_csp_event(self):
         # Don't mimic this test, use self.get_jest_test_data instead
         data = mdn_sample_csp
