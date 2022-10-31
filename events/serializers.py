@@ -259,9 +259,8 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
         """Prefer message over logentry"""
         if "message" in data:
             if isinstance(data["message"], dict):
-                return (
-                    data["message"].get("formatted")
-                    or data["message"].get("message", "")
+                return data["message"].get("formatted") or data["message"].get(
+                    "message", ""
                 )
             return data["message"]
         return data.get("logentry", {}).get("message", "")
@@ -430,7 +429,8 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 raise err
 
         issue.check_for_status_update()
-        update_search_index_issue(args=[issue.pk], countdown=10)
+        # Expire after 1 hour - in case of major backup
+        update_search_index_issue(args=[issue.pk], countdown=10, expires=3600)
 
         return event
 

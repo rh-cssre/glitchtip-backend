@@ -428,7 +428,7 @@ if os.environ.get("CACHE_URL"):
 else:  # Default to REDIS when unset
     CACHES = {
         "default": {
-            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "BACKEND": "django_redis.cache.RedisCache",
             "LOCATION": REDIS_URL,
         }
     }
