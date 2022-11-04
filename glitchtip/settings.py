@@ -430,6 +430,7 @@ else:  # Default to REDIS when unset
         "default": {
             "BACKEND": "django_redis.cache.RedisCache",
             "LOCATION": REDIS_URL,
+            "PARSER_CLASS": "redis.connection.HiredisParser",
         }
     }
 if cache_sentinel_url := env.str("CACHE_SENTINEL_URL", None):
