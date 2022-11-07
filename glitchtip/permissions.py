@@ -1,4 +1,5 @@
 from rest_framework.permissions import BasePermission
+from users.utils import is_user_registration_open
 
 
 class ScopedPermission(BasePermission):
@@ -41,3 +42,14 @@ class UserOnlyPermission(BasePermission):
         if request.auth:
             return False
         return bool(request.user and request.user.is_authenticated)
+
+
+class UserRegistrationPermission(BasePermission):
+    """
+    If registration is closed, only first user can be created except by superuser.
+    """
+
+    def has_permission(self, request, view):
+        return bool(
+            is_user_registration_open() or (request.user and request.user.is_superuser)
+        )

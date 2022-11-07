@@ -86,14 +86,17 @@ class EventEntriesSerializer(serializers.Serializer):
                     }
                 )
 
+        logentry = instance.get("logentry")
+        message = instance.get("message")
+        if logentry:
+            entries.append({"type": "message", "data": logentry})
+        elif message:
+            entries.append({"type": "message", "data": {"formatted": message}})
+
         request = instance.get("request")
         if request:
             request["inferredContentType"] = request.pop("inferred_content_type", None)
             entries.append({"type": "request", "data": request})
-
-        message = instance.get("message")
-        if message:
-            entries.append({"type": "message", "data": {"formatted": message}})
 
         csp = instance.get("csp")
         if csp:

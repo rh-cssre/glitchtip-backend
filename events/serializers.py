@@ -132,12 +132,20 @@ class FormattedMessageSerializer(serializers.Serializer):
     formatted = serializers.CharField(
         required=False
     )  # Documented as required, but some Sentry SDKs don't send it
-    messages = serializers.CharField(required=False)
-    params = serializers.ListField(child=serializers.CharField(), required=False)
+    message = serializers.CharField(required=False)
+    params = serializers.JSONField(required=False)
 
-    def to_internal_value(self, data):
-        value = super().to_internal_value(data)
-        return value.get("formatted", "")
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        if not data.get("formatted") and data.get("params"):
+            params = data["params"]
+            if isinstance(params, list):
+                data["formatted"] = data["message"] % tuple(params)
+            elif isinstance(params, dict):
+                data["formatted"] = data["message"].format(**params)
+            return data
+        # OSS Sentry only keeps unformatted "message" when it creates a formatted message
+        return {key: data[key] for key in data if key != "message"}
 
 
 class MessageField(serializers.CharField):
@@ -160,6 +168,8 @@ class LogEntrySerializer(serializers.Serializer):
             params = data["params"]
             if isinstance(params, list):
                 data["formatted"] = data["message"] % tuple(data["params"])
+            elif isinstance(params, dict):
+                data["formatted"] = data["message"].format(**params)
         return data
 
 
@@ -248,8 +258,21 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
     def get_message(self, data):
         """Prefer message over logentry"""
         if "message" in data:
+            if isinstance(data["message"], dict):
+                return data["message"].get("formatted") or data["message"].get(
+                    "message", ""
+                )
             return data["message"]
         return data.get("logentry", {}).get("message", "")
+
+    def get_logentry(self, data):
+        if "logentry" in data:
+            return data.get("logentry")
+        elif "message" in data:
+            message = data["message"]
+            if isinstance(message, dict):
+                return message
+            return {"formatted": message}
 
     def is_url(self, filename: str) -> bool:
         return filename.startswith(("file:", "http:", "https:", "applewebdata:"))
@@ -345,6 +368,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 "contexts": contexts,
                 "culprit": culprit,
                 "exception": exception,
+                "logentry": self.get_logentry(data),
                 "metadata": metadata,
                 "message": self.get_message(data),
                 "modules": data.get("modules"),
@@ -405,7 +429,8 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 raise err
 
         issue.check_for_status_update()
-        update_search_index_issue(args=[issue.pk], countdown=10)
+        # Expire after 1 hour - in case of major backup
+        update_search_index_issue(args=[issue.pk], countdown=10, expires=3600)
 
         return event
 

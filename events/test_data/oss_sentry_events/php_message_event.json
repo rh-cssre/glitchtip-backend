@@ -1,0 +1,120 @@
+{
+  "eventID": "ca2f3e4a95694dfb81c3cbb1eaca4e49",
+  "dist": null,
+  "userReport": null,
+  "projectID": "8",
+  "previousEventID": null,
+  "message": "My raw message with interpreted strings8 like {foo}",
+  "id": "54",
+  "size": 2293,
+  "errors": [],
+  "culprit": "http://localhost:8080/",
+  "title": "My raw message with interpreted strings8 like {foo}",
+  "platform": "php",
+  "location": null,
+  "nextEventID": null,
+  "type": "default",
+  "metadata": {
+    "title": "My raw message with interpreted strings8 like {foo}"
+  },
+  "groupingConfig": { "id": "legacy:2019-03-12" },
+  "crashFile": null,
+  "tags": [
+    { "value": "Chrome 105.0.0", "key": "browser", "_meta": null },
+    { "value": "Chrome", "key": "browser.name", "_meta": null },
+    { "value": "production", "key": "environment", "_meta": null },
+    { "value": "error", "key": "level", "_meta": null },
+    { "value": "php", "key": "logger", "_meta": null },
+    { "value": "Linux 5.14.0-1051-oem", "key": "os", "_meta": null },
+    { "value": "Linux", "key": "os.name", "_meta": null },
+    { "value": "php 8.1.9", "key": "runtime", "_meta": null },
+    { "value": "php", "key": "runtime.name", "_meta": null },
+    { "value": "9c5a5db68679", "key": "server_name", "_meta": null },
+    { "value": "http://localhost:8080/", "key": "url", "_meta": null }
+  ],
+  "dateCreated": "2022-10-05T16:47:51.208Z",
+  "dateReceived": "2022-10-05T16:47:51.648Z",
+  "user": null,
+  "entries": [
+    {
+      "type": "message",
+      "data": {
+        "params": { "foo": "this" },
+        "formatted": "My raw message with interpreted strings8 like {foo}"
+      }
+    },
+    {
+      "type": "request",
+      "data": {
+        "fragment": "",
+        "cookies": [["[Filtered]", ""]],
+        "inferredContentType": "",
+        "env": null,
+        "headers": [
+          [
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9"
+          ],
+          ["Accept-Encoding", "gzip, deflate, br"],
+          ["Accept-Language", "en-US,en;q=0.9"],
+          ["Cache-Control", "max-age=0"],
+          ["Connection", "keep-alive"],
+          ["Content-Length", ""],
+          ["Content-Type", ""],
+          ["Host", "localhost:8080"],
+          [
+            "Sec-Ch-Ua",
+            "\"Google Chrome\";v=\"105\", \"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"105\""
+          ],
+          ["Sec-Ch-Ua-Mobile", "?0"],
+          ["Sec-Ch-Ua-Platform", "\"Linux\""],
+          ["Sec-Fetch-Dest", "document"],
+          ["Sec-Fetch-Mode", "navigate"],
+          ["Sec-Fetch-Site", "none"],
+          ["Sec-Fetch-User", "?1"],
+          ["Upgrade-Insecure-Requests", "1"],
+          [
+            "User-Agent",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36"
+          ]
+        ],
+        "url": "http://localhost:8080/",
+        "query": [],
+        "data": null,
+        "method": "GET"
+      }
+    }
+  ],
+  "packages": {},
+  "sdk": {
+    "version": "3.7.0",
+    "name": "sentry.php",
+    "upstream": { "url": null, "isNewer": false, "name": "sentry.php" }
+  },
+  "_meta": {
+    "user": null,
+    "context": null,
+    "entries": {},
+    "contexts": null,
+    "message": null,
+    "packages": null,
+    "tags": {},
+    "sdk": null
+  },
+  "contexts": {
+    "runtime": { "version": "8.1.9", "type": "runtime", "name": "php" },
+    "os": {
+      "kernel_version": "Linux 9c5a5db68679 5.14.0-1051-oem #58-Ubuntu SMP Fri Aug 26 05:50:00 UTC 2022 x86_64",
+      "version": "5.14.0-1051-oem",
+      "type": "os",
+      "build": "#58-Ubuntu SMP Fri Aug 26 05:50:00 UTC 2022",
+      "name": "Linux"
+    },
+    "user": { "status": "subscriber", "type": "default", "name": "Bob Dylan" },
+    "browser": { "version": "105.0.0", "type": "browser", "name": "Chrome" }
+  },
+  "fingerprints": ["9e0af6b5399dea62e74cfbe0e61ebc1b"],
+  "context": {},
+  "release": null,
+  "groupID": "27"
+}
