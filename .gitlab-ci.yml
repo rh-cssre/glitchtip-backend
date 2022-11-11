@@ -1,6 +1,5 @@
 variables:
   PROJECT_NAME: glitchtip
-  IMAGE_NAME: registry.gitlab.com/glitchtip/glitchtip-backend
   PIP_DISABLE_PIP_VERSION_CHECK: "on"
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
   POETRY_VIRTUALENVS_CREATE: "false"
