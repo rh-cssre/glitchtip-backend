@@ -116,6 +116,4 @@ update_deps:
     RENOVATE_REPOSITORIES: glitchtip/glitchtip-backend
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
-    - if: $CI_PIPELINE_SOURCE != "schedule"
-      when: manual
   script: renovate
