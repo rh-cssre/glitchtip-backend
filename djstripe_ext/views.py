@@ -99,6 +99,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         livemode=settings.STRIPE_LIVE_MODE,
         plan__active=True,
         metadata__events__isnull=False,
+        metadata__is_public="true",
     ).prefetch_related("plan_set")
     serializer_class = ProductSerializer
 

@@ -140,7 +140,7 @@ class ProductAPITestCase(APITestCase):
             active=True,
             product__active=True,
             product__livemode=False,
-            product__metadata={"events": 10},
+            product__metadata={"events": 10, "is_public": "true"},
         )
         inactive_plan = baker.make(
             "djstripe.Plan",
@@ -149,13 +149,23 @@ class ProductAPITestCase(APITestCase):
             active=False,
             product__active=False,
             product__livemode=False,
-            product__metadata={"events": 10},
+            product__metadata={"events": 10, "is_public": "true"},
+        )
+        hidden_plan = baker.make(
+            "djstripe.Plan",
+            amount=0,
+            livemode=False,
+            active=True,
+            product__active=True,
+            product__livemode=False,
+            product__metadata={"events": 10, "is_public": "false"},
         )
         user = baker.make("users.user")
         self.client.force_login(user)
         res = self.client.get(reverse("product-list"))
         self.assertContains(res, plan.id)
         self.assertNotContains(res, inactive_plan.id)
+        self.assertNotContains(res, hidden_plan.id)
 
 
 class StripeAPITestCase(APITestCase):

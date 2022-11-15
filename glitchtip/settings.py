@@ -95,6 +95,9 @@ GLITCHTIP_MAX_FILE_LIFE_DAYS = env.int(
     "GLITCHTIP_MAX_EVENT_LIFE_DAYS", default=GLITCHTIP_MAX_EVENT_LIFE_DAYS * 2
 )
 
+# Freezes acceptance of new events, for use during db maintenance
+MAINTENANCE_EVENT_FREEZE = env.bool("MAINTENANCE_EVENT_FREEZE", False)
+
 # For development purposes only, prints out inbound event store json
 EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
 
@@ -413,8 +416,9 @@ if os.environ.get("CACHE_URL"):
 else:  # Default to REDIS when unset
     CACHES = {
         "default": {
-            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "BACKEND": "django_redis.cache.RedisCache",
             "LOCATION": REDIS_URL,
+            "PARSER_CLASS": "redis.connection.HiredisParser",
         }
     }
 if cache_sentinel_url := env.str("CACHE_SENTINEL_URL", None):
@@ -529,6 +533,7 @@ ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_ADAPTER = "glitchtip.social.MFAAccountAdapter"
+SOCIALACCOUNT_ADAPTER = "glitchtip.social.CustomSocialAccountAdapter"
 INVITATION_BACKEND = "organizations_ext.invitation_backend.InvitationBackend"
 SOCIALACCOUNT_PROVIDERS = {}
 if GITLAB_URL := env.url("SOCIALACCOUNT_PROVIDERS_gitlab_GITLAB_URL", None):
@@ -565,10 +570,12 @@ REST_AUTH_REGISTER_SERIALIZERS = {
 REST_AUTH_TOKEN_MODEL = None
 REST_AUTH_TOKEN_CREATOR = "users.utils.noop_token_creator"
 
-# By default (False) only the first user, superuser, or organization owners may register
-# and create an organization. Other users must be invited. Intended for private instances
-ENABLE_OPEN_USER_REGISTRATION = env.bool("ENABLE_OPEN_USER_REGISTRATION", False)
+ENABLE_USER_REGISTRATION = env.bool("ENABLE_USER_REGISTRATION", True)
+ENABLE_ORGANIZATION_CREATION = env.bool(
+    "ENABLE_OPEN_USER_REGISTRATION", env.bool("ENABLE_ORGANIZATION_CREATION", False)
+)
 
+REST_AUTH_REGISTER_PERMISSION_CLASSES = (("glitchtip.permissions.UserRegistrationPermission"),)
 # Enables login urls for glitchtip backend
 ENABLE_LOGIN_FORM = env.bool("ENABLE_LOGIN_FORM", False)
 

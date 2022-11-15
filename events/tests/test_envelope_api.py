@@ -2,6 +2,7 @@ import json
 import uuid
 
 from django.shortcuts import reverse
+from django.test import override_settings
 from model_bakery import baker
 from rest_framework.test import APITestCase
 
@@ -38,11 +39,35 @@ class EnvelopeStoreTestCase(APITestCase):
         self.assertEqual(res.status_code, 200)
         self.assertTrue(TransactionEvent.objects.exists())
 
+    def test_maintenance_freeze(self):
+        data = self.get_payload("events/test_data/transactions/django_simple.json")
+        with override_settings(MAINTENANCE_EVENT_FREEZE=True):
+            res = self.client.generic("POST", self.url, data)
+        self.assertEqual(res.status_code, 503)
+
     def test_accept_js_transaction(self):
         data = self.get_payload("events/test_data/transactions/js_simple.json")
         res = self.client.generic("POST", self.url, data)
         self.assertEqual(res.status_code, 200)
         self.assertTrue(TransactionEvent.objects.exists())
+
+    def test_accept_dsn_event(self):
+        # Ensure JS tunnel works
+        # https://gitlab.com/glitchtip/glitchtip-backend/-/issues/181
+        data = [
+            {
+                "event_id": "37f658fddae1465ab1ed7569ca653177",
+                "dsn": f"http://{self.projectkey.public_key}@172.17.0.1:8000/18",
+            },
+            {"type": "event"},
+            {"exception": {"values": []}},
+        ]
+        data = "\n".join([json.dumps(line) for line in data])
+        res = self.client.generic(
+            "POST", reverse("envelope_store", args=[self.project.id]), data
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(Event.objects.exists())
 
     def test_android_sdk_event(self):
         data = self.get_payload(
