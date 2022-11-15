@@ -1,0 +1,55 @@
+{
+  "event_id": "ca2f3e4a95694dfb81c3cbb1eaca4e49",
+  "timestamp": 1664988471.208,
+  "platform": "php",
+  "sdk": { "name": "sentry.php", "version": "3.7.0" },
+  "logger": "php",
+  "transaction": "",
+  "server_name": "9c5a5db68679",
+  "environment": "production",
+  "contexts": {
+    "os": {
+      "name": "Linux",
+      "version": "5.14.0-1051-oem",
+      "build": "#58-Ubuntu SMP Fri Aug 26 05:50:00 UTC 2022",
+      "kernel_version": "Linux 9c5a5db68679 5.14.0-1051-oem #58-Ubuntu SMP Fri Aug 26 05:50:00 UTC 2022 x86_64"
+    },
+    "runtime": { "name": "php", "version": "8.1.9" },
+    "user": { "name": "Bob Dylan", "status": "subscriber" }
+  },
+  "request": {
+    "url": "http://localhost:8080/",
+    "method": "GET",
+    "headers": {
+      "Cookie": ["[Filtered]"],
+      "Accept-Language": ["en-US,en;q=0.9"],
+      "Accept-Encoding": ["gzip, deflate, br"],
+      "Sec-Fetch-Dest": ["document"],
+      "Sec-Fetch-User": ["?1"],
+      "Sec-Fetch-Mode": ["navigate"],
+      "Sec-Fetch-Site": ["none"],
+      "Accept": [
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9"
+      ],
+      "User-Agent": [
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36"
+      ],
+      "Upgrade-Insecure-Requests": ["1"],
+      "Sec-Ch-Ua-Platform": ["\"Linux\""],
+      "Sec-Ch-Ua-Mobile": ["?0"],
+      "Sec-Ch-Ua": [
+        "\"Google Chrome\";v=\"105\", \"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"105\""
+      ],
+      "Cache-Control": ["max-age=0"],
+      "Connection": ["keep-alive"],
+      "Host": ["localhost:8080"],
+      "Content-Length": [""],
+      "Content-Type": [""]
+    }
+  },
+  "message": {
+    "message": "My raw message with interpreted strings8 like {foo}",
+    "params": { "foo": "this" },
+    "formatted": "My raw message with interpreted strings8 like {foo}"
+  }
+}

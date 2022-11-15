@@ -34,7 +34,7 @@ def debounced_task(key_generator):
             func_args = kwargs.get("args", [])
             func_kwargs = kwargs.get("kwargs", {})
             key = f"{func.__module__}.{func.__name__}.{key_generator(*func_args, **func_kwargs)}"
-            cache.add(key, 0)
+            cache.add(key, 0, 3600)
             call_count = cache.incr(key)
             func_kwargs.update({"key": key, "call_count": call_count})
             kwargs["args"] = func_args

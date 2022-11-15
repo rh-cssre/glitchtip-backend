@@ -1,6 +1,7 @@
 import json
 from django.core import mail
 from django.shortcuts import reverse
+from django.test import override_settings
 from rest_framework.test import APITestCase
 from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
@@ -122,7 +123,10 @@ class OrganizationUsersAPITestCase(APITestCase):
         url = (
             reverse(
                 "organization-members-detail",
-                kwargs={"organization_slug": self.organization.slug, "pk": "me",},
+                kwargs={
+                    "organization_slug": self.organization.slug,
+                    "pk": "me",
+                },
             )
             + f"teams/{team.slug}/"
         )
@@ -170,8 +174,26 @@ class OrganizationUsersAPITestCase(APITestCase):
             ).exists()
         )
 
+    def test_closed_user_registration(self):
+        data = {
+            "email": "new@example.com",
+            "role": OrganizationUserRole.MANAGER.label.lower(),
+            "teams": [],
+            "user": "new@example.com",
+        }
+
+        with override_settings(ENABLE_USER_REGISTRATION=False):
+            # Non-existing user cannot be invited
+            res = self.client.post(self.members_url, data)
+            self.assertEqual(res.status_code, 403)
+
+            # Existing user can be invited
+            self.user = baker.make("users.user", email="new@example.com")
+            res = self.client.post(self.members_url, data)
+            self.assertEqual(res.status_code, 201)
+
     def test_organization_users_invite_twice(self):
-        """ Don't allow inviting user who is already in the group """
+        """Don't allow inviting user who is already in the group"""
         data = {
             "email": "new@example.com",
             "role": OrganizationUserRole.MANAGER.label.lower(),
@@ -286,7 +308,7 @@ class OrganizationUsersAPITestCase(APITestCase):
         token = body[body.find("http://localhost:8000/accept/") :].split("/")[4]
 
     def test_organization_users_create_without_permissions(self):
-        """ Admin cannot add users to org """
+        """Admin cannot add users to org"""
         self.org_user.role = OrganizationUserRole.ADMIN
         self.org_user.save()
         data = {
