@@ -1,7 +1,5 @@
 variables:
   PROJECT_NAME: glitchtip
-  IMAGE_NAME: registry.gitlab.com/glitchtip/glitchtip-backend
-  CONTAINER_TEST_IMAGE: registry.gitlab.com/glitchtip/glitchtip-backend:$CI_BUILD_REF_NAME
   PIP_DISABLE_PIP_VERSION_CHECK: "on"
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
   POETRY_VIRTUALENVS_CREATE: "false"
@@ -56,8 +54,8 @@ build:
     - docker:20-dind
   script:
     - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN registry.gitlab.com
-    - docker build -t $CONTAINER_TEST_IMAGE --build-arg IS_CI="True" .
-    - docker push $CONTAINER_TEST_IMAGE
+    - docker build -t ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME//\//-} --build-arg IS_CI="True" .
+    - docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME//\//-}
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 
