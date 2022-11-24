@@ -116,7 +116,7 @@ urlpatterns += [
     # These routes belong to the Angular single page app
     re_path(r"^$", TemplateView.as_view(template_name="index.html")),
     re_path(
-        r"^(auth|login|register|(.*)/issues|(.*)/settings|(.*)/performance|(.*)/projects|organizations|profile|(.*)/uptime-monitors|accept|reset-password).*$",
+        r"^(auth|login|register|(.*)/issues|(.*)/settings|(.*)/performance|(.*)/projects|(.*)/releases|organizations|profile|(.*)/uptime-monitors|accept|reset-password).*$",
         TemplateView.as_view(template_name="index.html"),
     ),
     # These URLS are for generating reverse urls in django, but are not really present
