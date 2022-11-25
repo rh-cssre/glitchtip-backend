@@ -2194,7 +2194,7 @@ requests = {version = ">=2.20", markers = "python_version >= \"3.0\""}
 
 [[package]]
 name = "symbolic"
-version = "10.1.2"
+version = "10.1.5"
 description = "A python library for dealing with symbol files and more."
 category = "main"
 optional = false
@@ -4227,12 +4227,12 @@ stripe = [
     {file = "stripe-4.2.0.tar.gz", hash = "sha256:f0134704bd4e9410fae25034836dc6f5849d92c0f9083d58d43e01b3e631ac4c"},
 ]
 symbolic = [
-    {file = "symbolic-10.1.2-py2.py3-none-macosx_10_15_x86_64.whl", hash = "sha256:aae7ab94a871a1504f53cb9feef0a5bf23509f90006fc4467313003ca26af8a7"},
-    {file = "symbolic-10.1.2-py2.py3-none-macosx_11_0_arm64.whl", hash = "sha256:a012fe483e3cfc0dc48db977f43715a96f1f734e7230d72202e1dc6144efa90d"},
-    {file = "symbolic-10.1.2-py2.py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:0c61fe4e7e4e45925a8593ee459878f535f325b645bd28b11231d742c3d7c8cb"},
-    {file = "symbolic-10.1.2-py2.py3-none-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:783ae340346916254af7a5fbecccf1d276a36bb785b5fa7e6b490c9b8d23c8ad"},
-    {file = "symbolic-10.1.2-py2.py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8f7c1e7c815c2f46446442d38e2339ab2d63a33eb267f6fc4856096a3874c858"},
-    {file = "symbolic-10.1.2.zip", hash = "sha256:7d32fa26b9f9ba761ab81156fef50fa3c61b987cb2ac677ee873e02330a0c6f4"},
+    {file = "symbolic-10.1.5-py2.py3-none-macosx_10_15_x86_64.whl", hash = "sha256:6445a9a488aae72a6d450f09956daa59b631bd8139e506234d9ac50ce58949ba"},
+    {file = "symbolic-10.1.5-py2.py3-none-macosx_11_0_arm64.whl", hash = "sha256:712672e2d54c8ab48835da42178dc59a23c2f1aafa1594cad682963adac398d3"},
+    {file = "symbolic-10.1.5-py2.py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2f8a0c499830f54bd5f6f6081dce4c322eafff9a9f6f4a4332c55eca2269b174"},
+    {file = "symbolic-10.1.5-py2.py3-none-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:bf524c2a8a842bf3855f2d365656ba3d6f08d7b770c08ed8fa3e88b63d354eab"},
+    {file = "symbolic-10.1.5-py2.py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:1b9e803b7a36a5b5f13c519fe9a6ce5aa5c06ecb2d8170eb7b276a254da79d0e"},
+    {file = "symbolic-10.1.5.zip", hash = "sha256:f46efc196fe3ca5661b480ee7175a65150031760fa03934e3b5c24f71a04fc57"},
 ]
 tablib = [
     {file = "tablib-3.2.1-py3-none-any.whl", hash = "sha256:870d7e688f738531a14937a055e8bba404fbc388e77d4d500b2c904075d1019c"},
