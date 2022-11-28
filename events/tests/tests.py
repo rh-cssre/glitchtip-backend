@@ -236,6 +236,15 @@ class EventStoreTestCase(APITestCase):
             dict(event_json.get("tags")).values(),
         )
 
+    def test_event_release_blank(self):
+        """In the SDK, it's possible to set a release to a blank string"""
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        data["release"] = ""
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(Event.objects.first())
+
     def test_client_tags(self):
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
