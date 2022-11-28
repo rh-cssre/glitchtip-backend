@@ -106,7 +106,7 @@ class SentrySDKEventSerializer(BaseSerializer):
     server_name = serializers.CharField(required=False)
     sdk = serializers.JSONField(required=False)
     platform = serializers.CharField(required=False)
-    release = serializers.CharField(required=False, allow_null=True)
+    release = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     environment = ForgivingDisallowRegexField(
         required=False, allow_null=True, disallow_regex=r"^[^\n\r\f\/]*$"
     )
@@ -352,6 +352,8 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 tags.append(("environment", environment.name))
             if release:
                 tags.append(("release", release.version))
+            else:
+                release = None  # Anything falsey should be None
             tags = self.generate_tags(data, tags)
             defaults["tags"] = {tag[0]: [tag[1]] for tag in tags}
 
