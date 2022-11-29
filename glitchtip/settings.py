@@ -98,6 +98,9 @@ GLITCHTIP_MAX_FILE_LIFE_DAYS = env.int(
 # Freezes acceptance of new events, for use during db maintenance
 MAINTENANCE_EVENT_FREEZE = env.bool("MAINTENANCE_EVENT_FREEZE", False)
 
+# Allows saving of spans on transactions.
+ENABLE_PERFORMANCE_SPANS = env.bool("ENABLE_PERFORMANCE_SPANS", True)
+
 # For development purposes only, prints out inbound event store json
 EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
 

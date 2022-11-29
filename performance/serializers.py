@@ -1,5 +1,6 @@
 import logging
 
+from django.conf import settings
 from rest_framework import serializers
 
 from events.serializers import SentrySDKEventSerializer
@@ -144,21 +145,22 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
                 "timestamp": data["timestamp"],
             }
         )
-        is_valid = first_span.is_valid()
-        if is_valid:
-            spans = data.get("spans", []) + [first_span.validated_data]
-        else:
-            spans = data.get("spans")
-        if spans:
-            Span.objects.bulk_create(
-                [
-                    Span(
-                        transaction=transaction,
-                        **span,
-                    )
-                    for span in spans
-                ]
-            )
+        if settings.ENABLE_PERFORMANCE_SPANS:
+            is_valid = first_span.is_valid()
+            if is_valid:
+                spans = data.get("spans", []) + [first_span.validated_data]
+            else:
+                spans = data.get("spans")
+            if spans:
+                Span.objects.bulk_create(
+                    [
+                        Span(
+                            transaction=transaction,
+                            **span,
+                        )
+                        for span in spans
+                    ]
+                )
 
         return transaction
 
