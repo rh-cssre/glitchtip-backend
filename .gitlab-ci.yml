@@ -84,6 +84,8 @@ build_arm_x86:
     - buildx
   variables:
     DOCKER_HOST: tcp://docker:2375
+  tags:
+    funkwhale
   services:
     - docker:20-dind
   before_script:
