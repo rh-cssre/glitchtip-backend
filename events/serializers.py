@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 
 from anonymizeip import anonymize_ip
 from django.db import transaction
+from django.db.models.expressions import RawSQL, OuterRef
 from django.db.utils import IntegrityError
 from ipware import get_client_ip
 from rest_framework import serializers
@@ -357,7 +358,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             tags = self.generate_tags(data, tags)
             defaults["tags"] = {tag[0]: [tag[1]] for tag in tags}
 
-            issue, _ = Issue.objects.get_or_create(
+            issue, issue_created = Issue.objects.get_or_create(
                 title=sanitize_bad_postgres_chars(title),
                 culprit=sanitize_bad_postgres_chars(culprit),
                 project_id=project.id,
@@ -430,9 +431,20 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                     ) from err
                 raise err
 
-        issue.check_for_status_update()
-        # Expire after 1 hour - in case of major backup
-        update_search_index_issue(args=[issue.pk], countdown=10, expires=3600)
+        if issue_created:  # Do it right now, so that new issues look correct
+            event_data = Event.objects.filter(issue_id=OuterRef("id")).values("data")[
+                :1
+            ]
+            event_vector = event_data.annotate(
+                search_vector=RawSQL("select generate_issue_tsvector(data)", [])
+            ).values("search_vector")
+            Issue.objects.filter(pk=issue.pk).update(
+                search_vector=event_vector, last_seen=event.created
+            )
+        else:  # Updates can be slower and debounced
+            issue.check_for_status_update()
+            # Expire after 1 hour - in case of major backup
+            update_search_index_issue(args=[issue.pk], countdown=10, expires=3600)
 
         return event
 
