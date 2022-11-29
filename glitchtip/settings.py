@@ -358,7 +358,7 @@ if DATABASE_HOST and DATABASE_PASSWORD:
         "PORT": env.str("DATABASE_PORT", "5432"),
     }
 
-DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # We need to support both url and broken out host to support helm redis chart
 REDIS_HOST = env.str("REDIS_HOST", None)
