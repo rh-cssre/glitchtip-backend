@@ -82,6 +82,8 @@ build_arm_x86:
   image: docker:20
   needs:
     - buildx
+  variables:
+    DOCKER_HOST: tcp://docker:2375
   services:
     - docker:20-dind
   before_script:
