@@ -311,11 +311,12 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             for value in exception.get("values", []):
                 self.normalize_stacktrace(value.get("stacktrace"))
 
-        if release := data.get("release"):
-            release = self.get_release(release, project)
+        if not project.release_id and data.get("release"):
+            release = self.get_release(data.get("release"), project)
+            project.release_id = release.id
 
         for Processor in EVENT_PROCESSORS:
-            Processor(project, release, data).run()
+            Processor(project, project.release_id, data).run()
 
         title = eventtype.get_title(metadata)
         culprit = eventtype.get_location(data)
@@ -346,15 +347,14 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             if level:
                 defaults["level"] = level
 
-            if environment := data.get("environment"):
+            if not project.environment_id and data.get("environment"):
                 environment = self.get_environment(data["environment"], project)
+                project.environment_id = environment.id
             tags = []
-            if environment:
-                tags.append(("environment", environment.name))
-            if release:
-                tags.append(("release", release.version))
-            else:
-                release = None  # Anything falsey should be None
+            if project.environment_id:
+                tags.append(("environment", data.get("environment")))
+            if project.release_id:
+                tags.append(("release", data.get("release")))
             tags = self.generate_tags(data, tags)
             defaults["tags"] = {tag[0]: [tag[1]] for tag in tags}
 
@@ -382,8 +382,8 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 "type": self.type.label,
             }
 
-            if environment:
-                json_data["environment"] = environment.name
+            if project.environment_id:
+                json_data["environment"] = data.get("environment")
             if data.get("logentry"):
                 json_data["logentry"] = data.get("logentry")
 
@@ -416,7 +416,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 "errors": errors,
                 "timestamp": data.get("timestamp"),
                 "data": sanitize_bad_postgres_json(json_data),
-                "release": release,
+                "release_id": project.release_id,
             }
             if level:
                 params["level"] = level
