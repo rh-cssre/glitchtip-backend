@@ -13,6 +13,7 @@ class TasksTestCase(TestCase):
     def test_cleanup_old_events(self):
         events = baker.make("events.Event", _quantity=5, _fill_optional=["issue"])
         baker.make("events.Event", issue=events[0].issue, _quantity=5)
+        baker.make("user_reports.UserReport", issue=events[0].issue)
         cleanup_old_events()
         self.assertEqual(Event.objects.count(), 10)
         self.assertEqual(Issue.objects.count(), 5)

@@ -20,4 +20,5 @@ def cleanup_old_transaction_events():
     qs = TransactionEvent.objects.filter(created__lt=days_ago)
     qs._raw_delete(qs.db)
 
-    TransactionGroup.objects.filter(transactionevent=None).delete()
+    qs = TransactionGroup.objects.filter(transactionevent=None)
+    qs._raw_delete(qs.db)

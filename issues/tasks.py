@@ -3,6 +3,7 @@ from django.utils.timezone import now
 from django.conf import settings
 from celery import shared_task
 from events.models import Event
+from user_reports.models import UserReport
 from glitchtip.debounced_celery_task import debounced_task, debounced_wrap
 from .models import Issue
 
@@ -14,8 +15,11 @@ def cleanup_old_events():
     qs = Event.objects.filter(created__lt=now() - timedelta(days=days))
     # Fast bulk delete - see https://code.djangoproject.com/ticket/9519
     qs._raw_delete(qs.db)
-    # Do not optimize Issue with raw_delete as it has FK references to it.
-    Issue.objects.filter(event=None).delete()
+
+    empty_issues = Issue.objects.filter(event=None)
+    empty_issue_user_reports = UserReport.objects.filter(issue__in=empty_issues)
+    empty_issue_user_reports._raw_delete(empty_issue_user_reports.db)
+    empty_issues._raw_delete(empty_issues.db)
 
 
 @shared_task
