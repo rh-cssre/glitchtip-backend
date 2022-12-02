@@ -1430,7 +1430,7 @@ python-versions = ">=3.7"
 
 [[package]]
 name = "locust"
-version = "2.13.0"
+version = "2.13.1"
 description = "Developer friendly load testing framework"
 category = "dev"
 optional = false
@@ -3611,8 +3611,8 @@ lazy-object-proxy = [
     {file = "lazy_object_proxy-1.8.0-pp39-pypy39_pp73-any.whl", hash = "sha256:ce58b2b3734c73e68f0e30e4e725264d4d6be95818ec0a0be4bb6bf9a7e79aa8"},
 ]
 locust = [
-    {file = "locust-2.13.0-py3-none-any.whl", hash = "sha256:d747fb1be59d9e3f19e11fb90b8a50ad92b9615243ead67fc14e1e7421e5794e"},
-    {file = "locust-2.13.0.tar.gz", hash = "sha256:f603752ab9d4f7d6034c5896c71e6069be49060a5868d6eb4d6c7d32b1c031ae"},
+    {file = "locust-2.13.1-py3-none-any.whl", hash = "sha256:4f9e7a06934da7d747251dab5d66ec2aeecec2834d1f6f7793ce64976949096a"},
+    {file = "locust-2.13.1.tar.gz", hash = "sha256:875bb048b9845ba2592a65a9583a22a56d7910101cbd831fc4214548c8b54b18"},
 ]
 MarkupPy = [
     {file = "MarkupPy-1.14.tar.gz", hash = "sha256:1adee2c0a542af378fe84548ff6f6b0168f3cb7f426b46961038a2bcfaad0d5f"},
