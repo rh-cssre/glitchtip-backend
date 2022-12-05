@@ -18,7 +18,9 @@ WITH event_agg as (
     MAX(events_event.created) as new_last_seen,
     MAX(events_event.level) as new_level
     FROM events_event
+    LEFT JOIN issues_issue ON issues_issue.id = events_event.issue_id
     WHERE events_event.issue_id=update_issue_id
+    AND events_event.created > issues_issue.last_seen
 ), event_vector as (
     SELECT strip(COALESCE(generate_issue_tsvector(data), '') || COALESCE(issues_issue.search_vector, '')) as vector
     FROM events_event
@@ -37,9 +39,9 @@ WITH event_agg as (
 )
 UPDATE issues_issue
 SET
-  count = event_agg.new_count,
-  last_seen = event_agg.new_last_seen,
-  level = event_agg.new_level,
+  count = event_agg.new_count + issues_issue.count,
+  last_seen = GREATEST(event_agg.new_last_seen, issues_issue.last_seen),
+  level = GREATEST(event_agg.new_level, issues_issue.level),
   search_vector = CASE WHEN search_vector is null or length(search_vector) < 100000 THEN event_vector.vector ELSE search_vector END,
   tags = CASE WHEN event_Tags.new_tags is not null THEN event_tags.new_tags ELSE tags END
 FROM event_agg, event_vector, event_tags

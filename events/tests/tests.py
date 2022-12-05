@@ -96,6 +96,17 @@ class EventStoreTestCase(APITestCase):
         issue.refresh_from_db()
         self.assertEqual(issue.status, EventStatus.UNRESOLVED)
 
+    def test_issue_count(self):
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        self.client.post(self.url, data, format="json")
+        issue = Issue.objects.first()
+        self.assertEqual(issue.count, 1)
+        data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4ba"
+        self.client.post(self.url, data, format="json")
+        issue.refresh_from_db()
+        self.assertEqual(issue.count, 2)
+
     def test_performance(self):
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
@@ -105,7 +116,7 @@ class EventStoreTestCase(APITestCase):
 
         # Second event should have less queries
         data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4bb"
-        with self.assertNumQueries(8):
+        with self.assertNumQueries(6):
             res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 
@@ -187,7 +198,7 @@ class EventStoreTestCase(APITestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(
             Issue.objects.first().search_vector,
-            "",
+            None,
             "No tsvector is expected as it would exceed the Postgres limit",
         )
         data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4be"
@@ -235,6 +246,15 @@ class EventStoreTestCase(APITestCase):
             event.release.version,
             dict(event_json.get("tags")).values(),
         )
+
+    def test_event_release_blank(self):
+        """In the SDK, it's possible to set a release to a blank string"""
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        data["release"] = ""
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(Event.objects.first())
 
     def test_client_tags(self):
         with open("events/test_data/py_hi_event.json") as json_file:
