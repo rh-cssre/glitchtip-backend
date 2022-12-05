@@ -1088,7 +1088,7 @@ grpc = ["grpcio (>=1.38.0,<2.0dev)"]
 
 [[package]]
 name = "google-cloud-logging"
-version = "3.2.5"
+version = "3.3.0"
 description = "Stackdriver Logging API client library"
 category = "main"
 optional = false
@@ -3289,8 +3289,8 @@ google-cloud-core = [
     {file = "google_cloud_core-2.3.2-py2.py3-none-any.whl", hash = "sha256:8417acf6466be2fa85123441696c4badda48db314c607cf1e5d543fa8bdc22fe"},
 ]
 google-cloud-logging = [
-    {file = "google-cloud-logging-3.2.5.tar.gz", hash = "sha256:c1b078003f8fc2c0864af04651e2be1213e5b738ea83291e5ff5652529bc5e58"},
-    {file = "google_cloud_logging-3.2.5-py2.py3-none-any.whl", hash = "sha256:bc6c185f47b272a72015cd7dc3c8e5d06a6959d68c6ae9e04e7dbf5815126ed1"},
+    {file = "google-cloud-logging-3.3.0.tar.gz", hash = "sha256:aabd91888165d678ce3a1a1b96e6fdddfa0c43adf1a60a7d5a3e69d12a0ba07c"},
+    {file = "google_cloud_logging-3.3.0-py2.py3-none-any.whl", hash = "sha256:b83aa78ec8de23dbc29a961d3d359fadb13aa76937cc2fe6f416c946512bced4"},
 ]
 google-cloud-storage = [
     {file = "google-cloud-storage-2.6.0.tar.gz", hash = "sha256:104ca28ae61243b637f2f01455cc8a05e8f15a2a18ced96cb587241cdd3820f5"},
