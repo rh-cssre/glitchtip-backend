@@ -205,6 +205,26 @@ class EventStoreTestCase(APITestCase):
         res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 
+    def test_store_somewhat_large_data(self):
+        """
+        This test is expected to exceed the 1mb limit of a postgres tsvector
+        only when two events exist for 1 issue.
+        """
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+
+        data["platform"] = " ".join([str(random.random()) for _ in range(30000)])
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4be"
+        data["platform"] = " ".join([str(random.random()) for _ in range(30000)])
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(
+            Issue.objects.first().search_vector,
+            "tsvector is expected",
+        )
+
     @patch("events.views.logger")
     def test_invalid_event(self, mock_logger):
         with open("events/test_data/py_hi_event.json") as json_file:
