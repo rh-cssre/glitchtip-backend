@@ -7,7 +7,8 @@ from django.test import override_settings
 from model_bakery import baker
 from rest_framework.test import APITestCase
 
-from environments.models import Environment
+from environments.models import Environment, EnvironmentProject
+from releases.models import Release
 from glitchtip import test_utils  # pylint: disable=unused-import
 from issues.models import EventStatus, Issue
 
@@ -116,7 +117,7 @@ class EventStoreTestCase(APITestCase):
 
         # Second event should have less queries
         data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4bb"
-        with self.assertNumQueries(6):
+        with self.assertNumQueries(8):
             res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 
@@ -237,6 +238,9 @@ class EventStoreTestCase(APITestCase):
     def test_event_release(self):
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
+
+        baker.make("releases.Release", version=data.get("release"))
+
         self.client.post(self.url, data, format="json")
         event = Event.objects.first()
         event_json = event.event_json()
@@ -246,6 +250,8 @@ class EventStoreTestCase(APITestCase):
             event.release.version,
             dict(event_json.get("tags")).values(),
         )
+        self.assertTrue(Release.objects.filter(version=data.get("release"), projects=self.project).exists())
+
 
     def test_event_release_blank(self):
         """In the SDK, it's possible to set a release to a blank string"""
@@ -425,6 +431,23 @@ class EventStoreTestCase(APITestCase):
 
         res = self.client.post(self.url, data, format="json")
         self.assertTrue(Event.objects.filter().exists())
+
+    def test_repeat_environment(self):
+        existing_environment = baker.make("environments.Environment", name="staging")
+        data = {
+            "exception": [
+                {
+                    "type": "a",
+                    "value": "a",
+                    "module": None,
+                }
+            ],
+            "event_id": "11111111111111111111111111111111",
+            "environment": existing_environment.name,
+        }
+
+        res = self.client.post(self.url, data, format="json")
+        self.assertTrue(EnvironmentProject.objects.filter(environment__name=existing_environment.name, project=self.project).exists())
 
     def test_invalid_environment(self):
         data = {
