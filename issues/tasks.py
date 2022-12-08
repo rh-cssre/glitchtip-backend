@@ -3,7 +3,6 @@ from django.utils.timezone import now
 from django.conf import settings
 from celery import shared_task
 from events.models import Event
-from user_reports.models import UserReport
 from glitchtip.debounced_celery_task import debounced_task, debounced_wrap
 from .models import Issue
 
