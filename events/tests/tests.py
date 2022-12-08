@@ -250,8 +250,11 @@ class EventStoreTestCase(APITestCase):
             event.release.version,
             dict(event_json.get("tags")).values(),
         )
-        self.assertTrue(Release.objects.filter(version=data.get("release"), projects=self.project).exists())
-
+        self.assertTrue(
+            Release.objects.filter(
+                version=data.get("release"), projects=self.project
+            ).exists()
+        )
 
     def test_event_release_blank(self):
         """In the SDK, it's possible to set a release to a blank string"""
@@ -447,7 +450,11 @@ class EventStoreTestCase(APITestCase):
         }
 
         res = self.client.post(self.url, data, format="json")
-        self.assertTrue(EnvironmentProject.objects.filter(environment__name=existing_environment.name, project=self.project).exists())
+        self.assertTrue(
+            EnvironmentProject.objects.filter(
+                environment__name=existing_environment.name, project=self.project
+            ).exists()
+        )
 
     def test_invalid_environment(self):
         data = {
