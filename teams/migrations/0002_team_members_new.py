@@ -21,7 +21,7 @@ def move_members(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("organizations_ext", "0005_remove_organization_throttling_cycle_anchor"),
+        ("organizations_ext", "0001_squashed_0009_organization_scrub_ip_addresses"),
         ("teams", "0001_initial"),
     ]
 
