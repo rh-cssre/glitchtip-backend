@@ -14,7 +14,19 @@ def cleanup_old_events():
     qs = Event.objects.filter(created__lt=now() - timedelta(days=days))
     # Fast bulk delete - see https://code.djangoproject.com/ticket/9519
     qs._raw_delete(qs.db)
-    # Do not optimize Issue with raw_delete as it has FK references to it.
+
+    # Delete ~1k empty issues at a time until less than 1k remain then delete the rest. Avoids memory overload.
+    while True:
+        try:
+            empty_issue_delimiter = (
+                Issue.objects.filter(event=None)
+                .values_list("id", flat=True)[1000:1001]
+                .get()
+            )
+            Issue.objects.filter(event=None, id__lte=empty_issue_delimiter).delete()
+        except Issue.DoesNotExist:
+            break
+
     Issue.objects.filter(event=None).delete()
 
 
