@@ -98,7 +98,9 @@ urlpatterns += [
         name="event_json",
     ),
     path("api/settings/", SettingsView.as_view(), name="settings"),
+    path("rest-auth/login/", MFALoginView.as_view()),
     path("rest-auth/", include("dj_rest_auth.urls")),
+    path("rest-auth/registration/", include("dj_rest_auth.registration.urls")),
     re_path(
         r"^api/socialaccounts/(?P<pk>\d+)/disconnect/$",
         SocialAccountDisconnectView.as_view(),
@@ -114,7 +116,7 @@ urlpatterns += [
     # These routes belong to the Angular single page app
     re_path(r"^$", TemplateView.as_view(template_name="index.html")),
     re_path(
-        r"^(auth|login|register|(.*)/issues|(.*)/settings|(.*)/performance|(.*)/projects|organizations|profile|(.*)/uptime-monitors|accept|reset-password).*$",
+        r"^(auth|login|register|(.*)/issues|(.*)/settings|(.*)/performance|(.*)/projects|(.*)/releases|organizations|profile|(.*)/uptime-monitors|accept|reset-password).*$",
         TemplateView.as_view(template_name="index.html"),
     ),
     # These URLS are for generating reverse urls in django, but are not really present
@@ -145,9 +147,3 @@ if settings.DEBUG_TOOLBAR:
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-
-if settings.ENABLE_LOGIN_FORM:
-    urlpatterns += [
-        path("rest-auth/login/", MFALoginView.as_view()),
-        path("rest-auth/registration/", include("dj_rest_auth.registration.urls")),
-    ]
