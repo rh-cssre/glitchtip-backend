@@ -2,7 +2,7 @@ from django.contrib import admin
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 
-from .models import Project, ProjectKey
+from .models import Project, ProjectKey, UserProjectAlert
 
 
 class ProjectKeyResource(resources.ModelResource):
@@ -37,4 +37,15 @@ class ProjectAdmin(ImportExportModelAdmin):
     resource_class = ProjectResource
 
 
+class UserProjectAlertAdmin(admin.ModelAdmin):
+    list_display = ("user", "project", "status")
+    list_filter = ("status",)
+    search_fields = ("project__name", "user__email")
+    raw_id_fields = (
+        "user",
+        "project",
+    )
+
+
 admin.site.register(Project, ProjectAdmin)
+admin.site.register(UserProjectAlert, UserProjectAlertAdmin)
