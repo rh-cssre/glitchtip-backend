@@ -28,7 +28,7 @@ def cleanup_old_transaction_events():
                 .values_list("id", flat=True)[1000:1001]
                 .get()
             )
-            TransactionGroup.filter(
+            TransactionGroup.objects.filter(
                 transactionevent=None, id__lte=empty_group_delimiter
             ).delete()
         except TransactionGroup.DoesNotExist:
