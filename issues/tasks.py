@@ -16,18 +16,18 @@ def cleanup_old_events():
     qs._raw_delete(qs.db)
 
     # Delete ~1k empty issues at a time until less than 1k remain then delete the rest. Avoids memory overload.
+    queryset = Issue.objects.filter(event=None)
+
     while True:
         try:
-            empty_issue_delimiter = (
-                Issue.objects.filter(event=None)
-                .values_list("id", flat=True)[1000:1001]
-                .get()
-            )
-            Issue.objects.filter(event=None, id__lte=empty_issue_delimiter).delete()
+            empty_issue_delimiter = queryset.values_list("id", flat=True)[
+                1000:1001
+            ].get()
+            queryset.filter(id__lte=empty_issue_delimiter).delete()
         except Issue.DoesNotExist:
             break
 
-    Issue.objects.filter(event=None).delete()
+    queryset.delete()
 
 
 @shared_task
