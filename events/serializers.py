@@ -444,7 +444,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
         else:  # Updates can be slower and debounced
             issue.check_for_status_update()
             # Expire after 1 hour - in case of major backup
-            update_search_index_issue(args=[issue.pk], countdown=10, expires=3600)
+            update_search_index_issue(args=[issue.pk], countdown=10)
 
         return event
 
