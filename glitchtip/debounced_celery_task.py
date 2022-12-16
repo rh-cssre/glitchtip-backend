@@ -30,6 +30,7 @@ It would be preferrable to execute only first and last in a given time - 30 seco
 import functools
 from datetime import timedelta
 
+from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -81,11 +82,15 @@ def debounced_task(key_generator):
             key = f"{func.__module__}.{func.__name__}.{key_generator(*func_args, **func_kwargs)}"
             # redis incr sets a non-existant key to 1
             # django cache does not, making it non-atomic
-            con = get_redis_connection("default")
-            call_count = con.incr(CACHE_PREFIX + key)
-            if call_count == 1:
-                con.expire(CACHE_PREFIX + key, DEBOUNCE_EXPIRE)
-                kwargs["countdown"] = 0  # Execute first task immediately
+            if settings.CACHES["default"]["BACKEND"] == "django_redis.cache.RedisCache":
+                con = get_redis_connection("default")
+                call_count = con.incr(CACHE_PREFIX + key)
+                if call_count == 1:
+                    con.expire(CACHE_PREFIX + key, DEBOUNCE_EXPIRE)
+                    kwargs["countdown"] = 0  # Execute first task immediately
+            else:
+                cache.add(key, 0, DEBOUNCE_EXPIRE)
+                call_count = cache.incr(key)
             # Task should never expire, but better to expire if workers are overloaded
             # than to queue up and break further
             kwargs["expire"] = DEBOUNCE_EXPIRE
