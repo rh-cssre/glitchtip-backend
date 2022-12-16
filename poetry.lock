@@ -3671,14 +3671,14 @@ rsa = ["oauthlib[signedtoken] (>=3.0.0)"]
 
 [[package]]
 name = "rope"
-version = "1.5.1"
+version = "1.6.0"
 description = "a python refactoring library..."
 category = "dev"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "rope-1.5.1-py3-none-any.whl", hash = "sha256:d0514b3cddb1a9e103a040756fb53674828d73df70282b7d7d783a220b0354d8"},
-    {file = "rope-1.5.1.tar.gz", hash = "sha256:9761758c222df9466f08232bc046d182960ffa881c1c53bca9fafff210e8da7c"},
+    {file = "rope-1.6.0-py3-none-any.whl", hash = "sha256:2b4c6879422672f13958a6a36f063d1823d3ba9f0af933e7944293a5a33c8afc"},
+    {file = "rope-1.6.0.tar.gz", hash = "sha256:931aea154365556a7daac01cbcece0c9c118755bfff7c65ab242b69585167eca"},
 ]
 
 [package.dependencies]
