@@ -11,23 +11,38 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('organizations_ext', '0001_initial'),
-        ('projects', '0001_initial'),
+        ("organizations_ext", "0001_squashed_0009_organization_scrub_ip_addresses"),
+        ("projects", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Team',
+            name="Team",
             fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created', models.DateTimeField(auto_now_add=True, db_index=True)),
-                ('slug', models.SlugField()),
-                ('members', models.ManyToManyField(to=settings.AUTH_USER_MODEL)),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='teams', to='organizations_ext.Organization')),
-                ('projects', models.ManyToManyField(to='projects.Project')),
+                (
+                    "id",
+                    models.AutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("created", models.DateTimeField(auto_now_add=True, db_index=True)),
+                ("slug", models.SlugField()),
+                ("members", models.ManyToManyField(to=settings.AUTH_USER_MODEL)),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="teams",
+                        to="organizations_ext.Organization",
+                    ),
+                ),
+                ("projects", models.ManyToManyField(to="projects.Project")),
             ],
             options={
-                'unique_together': {('slug', 'organization')},
+                "unique_together": {("slug", "organization")},
             },
         ),
     ]

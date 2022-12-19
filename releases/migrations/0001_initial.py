@@ -10,41 +10,97 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('projects', '0007_auto_20201026_2354'),
-        ('organizations_ext', '0009_organization_scrub_ip_addresses'),
+        ("projects", "0007_auto_20201026_2354"),
+        ("organizations_ext", "0001_squashed_0009_organization_scrub_ip_addresses"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Release',
+            name="Release",
             fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('version', models.CharField(max_length=255)),
-                ('ref', models.CharField(blank=True, help_text='May be branch or tag name', max_length=255, null=True)),
-                ('url', models.URLField(blank=True, null=True)),
-                ('created', models.DateTimeField(auto_now_add=True, db_index=True)),
-                ('released', models.DateTimeField(blank=True, null=True)),
-                ('data', models.JSONField()),
-                ('commit_count', models.PositiveSmallIntegerField(default=0)),
-                ('deploy_count', models.PositiveSmallIntegerField(default=0)),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='organizations_ext.organization')),
-                ('owner', models.ForeignKey(blank=True, help_text='Release manager - the person initiating the release', null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL)),
-                ('projects', models.ManyToManyField(related_name='releases', to='projects.Project')),
+                (
+                    "id",
+                    models.AutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("version", models.CharField(max_length=255)),
+                (
+                    "ref",
+                    models.CharField(
+                        blank=True,
+                        help_text="May be branch or tag name",
+                        max_length=255,
+                        null=True,
+                    ),
+                ),
+                ("url", models.URLField(blank=True, null=True)),
+                ("created", models.DateTimeField(auto_now_add=True, db_index=True)),
+                ("released", models.DateTimeField(blank=True, null=True)),
+                ("data", models.JSONField()),
+                ("commit_count", models.PositiveSmallIntegerField(default=0)),
+                ("deploy_count", models.PositiveSmallIntegerField(default=0)),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="organizations_ext.organization",
+                    ),
+                ),
+                (
+                    "owner",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="Release manager - the person initiating the release",
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "projects",
+                    models.ManyToManyField(
+                        related_name="releases", to="projects.Project"
+                    ),
+                ),
             ],
             options={
-                'unique_together': {('organization', 'version')},
+                "unique_together": {("organization", "version")},
             },
         ),
         migrations.CreateModel(
-            name='ReleaseProject',
+            name="ReleaseProject",
             fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('project', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='projects.project')),
-                ('release', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='releases.release')),
+                (
+                    "id",
+                    models.AutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "project",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="projects.project",
+                    ),
+                ),
+                (
+                    "release",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="releases.release",
+                    ),
+                ),
             ],
             options={
-                'unique_together': {('project', 'release')},
+                "unique_together": {("project", "release")},
             },
         ),
     ]

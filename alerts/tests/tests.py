@@ -11,7 +11,7 @@ from glitchtip import test_utils  # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.models import EventStatus, Issue
 from organizations_ext.models import OrganizationUserRole
-from users.models import ProjectAlertStatus
+from projects.models import ProjectAlertStatus
 
 from ..models import Notification
 from ..tasks import process_event_alerts
@@ -83,9 +83,12 @@ class AlertTestCase(GlitchTipTestCase):
         self.assertEqual(Notification.objects.count(), 1)
 
     def test_alert_one_event(self):
-        """ Use same logic to send alert for every new issue """
+        """Use same logic to send alert for every new issue"""
         baker.make(
-            "alerts.ProjectAlert", project=self.project, timespan_minutes=1, quantity=1,
+            "alerts.ProjectAlert",
+            project=self.project,
+            timespan_minutes=1,
+            quantity=1,
         )
         issue = baker.make("issues.Issue", project=self.project)
         baker.make("events.Event", issue=issue)
@@ -94,7 +97,10 @@ class AlertTestCase(GlitchTipTestCase):
 
     def test_alert_on_regression(self):
         baker.make(
-            "alerts.ProjectAlert", project=self.project, timespan_minutes=1, quantity=1,
+            "alerts.ProjectAlert",
+            project=self.project,
+            timespan_minutes=1,
+            quantity=1,
         )
 
         # Make event
@@ -123,9 +129,12 @@ class AlertTestCase(GlitchTipTestCase):
         self.assertEqual(len(mail.outbox), 2)
 
     def test_alert_subscription_default_scope(self):
-        """ Subscribe by default should not result in alert emails for non-team members """
+        """Subscribe by default should not result in alert emails for non-team members"""
         baker.make(
-            "alerts.ProjectAlert", project=self.project, timespan_minutes=1, quantity=1,
+            "alerts.ProjectAlert",
+            project=self.project,
+            timespan_minutes=1,
+            quantity=1,
         )
 
         # user2 is an org member but not in a relevant team, should not receive alerts
@@ -155,12 +164,15 @@ class AlertWithUserProjectAlert(GlitchTipTestCase):
         self.now = timezone.now()
 
     def test_alert_enabled_user_project_alert_disabled(self):
-        """ A user should be able to disable their own notifications """
+        """A user should be able to disable their own notifications"""
         baker.make(
-            "alerts.ProjectAlert", project=self.project, timespan_minutes=1, quantity=1,
+            "alerts.ProjectAlert",
+            project=self.project,
+            timespan_minutes=1,
+            quantity=1,
         )
         baker.make(
-            "users.UserProjectAlert",
+            "projects.UserProjectAlert",
             user=self.user,
             project=self.project,
             status=ProjectAlertStatus.OFF,
@@ -170,14 +182,16 @@ class AlertWithUserProjectAlert(GlitchTipTestCase):
         org_user2 = self.organization.add_user(user2, OrganizationUserRole.ADMIN)
         self.team.members.add(org_user2)
         baker.make(
-            "users.UserProjectAlert", user=user2, status=ProjectAlertStatus.ON,
+            "projects.UserProjectAlert",
+            user=user2,
+            status=ProjectAlertStatus.ON,
         )
 
         user3 = baker.make("users.user")
         org_user3 = self.organization.add_user(user3, OrganizationUserRole.ADMIN)
         self.team.members.add(org_user3)
         baker.make(
-            "users.UserProjectAlert",
+            "projects.UserProjectAlert",
             user=user3,
             project=self.project,
             status=ProjectAlertStatus.ON,
@@ -192,7 +206,10 @@ class AlertWithUserProjectAlert(GlitchTipTestCase):
         self.user.subscribe_by_default = False
         self.user.save()
         baker.make(
-            "alerts.ProjectAlert", project=self.project, timespan_minutes=1, quantity=1,
+            "alerts.ProjectAlert",
+            project=self.project,
+            timespan_minutes=1,
+            quantity=1,
         )
 
         baker.make("events.Event", issue__project=self.project)
@@ -203,10 +220,13 @@ class AlertWithUserProjectAlert(GlitchTipTestCase):
         self.user.subscribe_by_default = False
         self.user.save()
         baker.make(
-            "alerts.ProjectAlert", project=self.project, timespan_minutes=1, quantity=1,
+            "alerts.ProjectAlert",
+            project=self.project,
+            timespan_minutes=1,
+            quantity=1,
         )
         baker.make(
-            "users.UserProjectAlert",
+            "projects.UserProjectAlert",
             user=self.user,
             project=self.project,
             status=ProjectAlertStatus.ON,
@@ -216,16 +236,19 @@ class AlertWithUserProjectAlert(GlitchTipTestCase):
         self.assertEqual(len(mail.outbox), 1)
 
     def test_user_project_alert_scope(self):
-        """ User project alert should not result in alert emails for non-team members """
+        """User project alert should not result in alert emails for non-team members"""
         baker.make(
-            "alerts.ProjectAlert", project=self.project, timespan_minutes=1, quantity=1,
+            "alerts.ProjectAlert",
+            project=self.project,
+            timespan_minutes=1,
+            quantity=1,
         )
 
         user2 = baker.make("users.user")
         self.organization.add_user(user2, OrganizationUserRole.MEMBER)
 
         baker.make(
-            "users.UserProjectAlert",
+            "projects.UserProjectAlert",
             user=user2,
             project=self.project,
             status=ProjectAlertStatus.ON,
