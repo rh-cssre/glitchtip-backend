@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 
 from anonymizeip import anonymize_ip
 from django.db import transaction
+from django.db.models.expressions import RawSQL, OuterRef
 from django.db.utils import IntegrityError
 from ipware import get_client_ip
 from rest_framework import serializers
@@ -106,7 +107,7 @@ class SentrySDKEventSerializer(BaseSerializer):
     server_name = serializers.CharField(required=False)
     sdk = serializers.JSONField(required=False)
     platform = serializers.CharField(required=False)
-    release = serializers.CharField(required=False, allow_null=True)
+    release = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     environment = ForgivingDisallowRegexField(
         required=False, allow_null=True, disallow_regex=r"^[^\n\r\f\/]*$"
     )
@@ -310,11 +311,12 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             for value in exception.get("values", []):
                 self.normalize_stacktrace(value.get("stacktrace"))
 
-        if release := data.get("release"):
-            release = self.get_release(release, project)
+        if not project.release_id and data.get("release"):
+            release = self.get_release(data.get("release"), project)
+            project.release_id = release.id
 
         for Processor in EVENT_PROCESSORS:
-            Processor(project, release, data).run()
+            Processor(project, project.release_id, data).run()
 
         title = eventtype.get_title(metadata)
         culprit = eventtype.get_location(data)
@@ -345,17 +347,18 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             if level:
                 defaults["level"] = level
 
-            if environment := data.get("environment"):
+            if not project.environment_id and data.get("environment"):
                 environment = self.get_environment(data["environment"], project)
+                project.environment_id = environment.id
             tags = []
-            if environment:
-                tags.append(("environment", environment.name))
-            if release:
-                tags.append(("release", release.version))
+            if project.environment_id:
+                tags.append(("environment", data.get("environment")))
+            if project.release_id:
+                tags.append(("release", data.get("release")))
             tags = self.generate_tags(data, tags)
             defaults["tags"] = {tag[0]: [tag[1]] for tag in tags}
 
-            issue, _ = Issue.objects.get_or_create(
+            issue, issue_created = Issue.objects.get_or_create(
                 title=sanitize_bad_postgres_chars(title),
                 culprit=sanitize_bad_postgres_chars(culprit),
                 project_id=project.id,
@@ -379,8 +382,8 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 "type": self.type.label,
             }
 
-            if environment:
-                json_data["environment"] = environment.name
+            if project.environment_id:
+                json_data["environment"] = data.get("environment")
             if data.get("logentry"):
                 json_data["logentry"] = data.get("logentry")
 
@@ -413,7 +416,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 "errors": errors,
                 "timestamp": data.get("timestamp"),
                 "data": sanitize_bad_postgres_json(json_data),
-                "release": release,
+                "release_id": project.release_id,
             }
             if level:
                 params["level"] = level
@@ -428,9 +431,20 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                     ) from err
                 raise err
 
-        issue.check_for_status_update()
-        # Expire after 1 hour - in case of major backup
-        update_search_index_issue(args=[issue.pk], countdown=10, expires=3600)
+        if issue_created:  # Do it right now, so that new issues look correct
+            event_data = Event.objects.filter(issue_id=OuterRef("id")).values("data")[
+                :1
+            ]
+            event_vector = event_data.annotate(
+                search_vector=RawSQL("select generate_issue_tsvector(data)", [])
+            ).values("search_vector")
+            Issue.objects.filter(pk=issue.pk).update(
+                search_vector=event_vector, last_seen=event.created
+            )
+        else:  # Updates can be slower and debounced
+            issue.check_for_status_update()
+            # Expire after 1 hour - in case of major backup
+            update_search_index_issue(args=[issue.pk], countdown=10)
 
         return event
 

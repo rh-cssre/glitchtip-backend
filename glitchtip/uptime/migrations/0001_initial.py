@@ -11,7 +11,10 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("organizations_ext", "0001_squashed_0009_organization_scrub_ip_addresses"),
+        (
+            "organizations_ext",
+            "0001_squashed_0009_organization_scrub_ip_addresses",
+        ),
         ("environments", "0002_auto_20201229_1643"),
         ("projects", "0008_alter_projectkey_created"),
     ]
@@ -79,7 +82,9 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
-            options={"abstract": False,},
+            options={
+                "abstract": False,
+            },
         ),
         migrations.CreateModel(
             name="MonitorCheck",
@@ -127,7 +132,9 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
-            options={"ordering": ("-created",),},
+            options={
+                "ordering": ("-created",),
+            },
         ),
         migrations.AddIndex(
             model_name="monitorcheck",

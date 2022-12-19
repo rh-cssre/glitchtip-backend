@@ -134,3 +134,31 @@ class ProjectKey(CreatedModel):
             self.project_id,
             self.public_key_hex,
         )
+
+
+class EventProjectHourlyStatistic(models.Model):
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
+    date = models.DateTimeField()
+    count = models.PositiveIntegerField()
+
+    class Meta:
+        unique_together = (("project", "date"),)
+
+
+class ProjectAlertStatus(models.IntegerChoices):
+    OFF = 0, "off"
+    ON = 1, "on"
+
+
+class UserProjectAlert(models.Model):
+    """
+    Determine if user alert notifications should always happen, never, or defer to default
+    Default is stored as the lack of record.
+    """
+
+    user = models.ForeignKey("users.User", on_delete=models.CASCADE)
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
+    status = models.PositiveSmallIntegerField(choices=ProjectAlertStatus.choices)
+
+    class Meta:
+        unique_together = ("user", "project")

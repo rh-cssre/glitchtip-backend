@@ -1,20 +1,63 @@
-# Credit https://gist.github.com/pardo/19d672235bbef6fa793a
-import functools
+"""
+Based on https://gist.github.com/pardo/19d672235bbef6fa793a
 
+Debounced tasks should
+
+- Execute on first call
+- Execute on last call (last being the last call within a countdown time)
+- Execute periodically in between (every 10, 100, 1000th)
+
+Examples:
+
+- 1 call happens, execute immediately
+- 99 calls happen in 2 seconds - execute 1st, 10th 99th)
+- 1 call happens every second forever - execute 1st, 10th, 100th, 1000th, 2000th, etc
+
+Limitations
+
+- 1 call happens, executes immediately. 2nd call happens 10 seconds later, delays for 10 seconds (undesirable)
+- Cache count expires, when this happens calls any in queue task will execute (but not new ones)
+
+Improvement Idea:
+
+It would be preferrable to execute only first and last in a given time - 30 seconds for example.
+
+1. Execute first without delay
+2. Wait up to 30 seconds for any other calls
+3. Execute again
+4. Ensure last call is always executed
+"""
+import functools
+from datetime import timedelta
+
+from django.conf import settings
 from django.core.cache import cache
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from django_redis import get_redis_connection
+
+from glitchtip.celery import app
+
+CACHE_PREFIX = ":1:"  # Django cache version
+# Limitation: When cache expires, in queue tasks will start executing every time
+# as long as debounce expire is significantly higher than countdown, this is rare
+# and only causes minor, unnecessary extra task running
+DEBOUNCE_EXPIRE = 1800  # 30 minutes
+# Run task on each mark, last mark will repeat
+# 10th, 100th, 1000th, 2000th, 3000th, etc
+RUN_ON = [10, 100, 1000]
 
 
 def debounced_wrap(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        key = kwargs.pop("key")  # it's required
+        key = kwargs.pop("key")
         call_count = kwargs.pop("call_count", 1)
         count = cache.get(key, 1)
-        if count > call_count:
-            # someone called the function again before the this was executed
-            return None
-        # I'm the last call
-        return func(*args, **kwargs)
+
+        # If last task, or on every RUN_ON
+        if count <= call_count or call_count in RUN_ON or call_count % RUN_ON[-1] == 0:
+            return func(*args, **kwargs)
 
     return wrapper
 
@@ -25,6 +68,9 @@ def debounced_task(key_generator):
     :param key_generator: function that knows how to generate a key from
     args and kwargs passed to func or a constant str used in the cache
     key will be prepended with function module and name
+
+    Run on first task, last task, and every few tasks in between
+
     :return: function that calls apply_async on the task keep that in mind when send the arguments
     """
 
@@ -34,8 +80,20 @@ def debounced_task(key_generator):
             func_args = kwargs.get("args", [])
             func_kwargs = kwargs.get("kwargs", {})
             key = f"{func.__module__}.{func.__name__}.{key_generator(*func_args, **func_kwargs)}"
-            cache.add(key, 0, 3600)
-            call_count = cache.incr(key)
+            # redis incr sets a non-existant key to 1
+            # django cache does not, making it non-atomic
+            if settings.CACHES["default"]["BACKEND"] == "django_redis.cache.RedisCache":
+                con = get_redis_connection("default")
+                call_count = con.incr(CACHE_PREFIX + key)
+                if call_count == 1:
+                    con.expire(CACHE_PREFIX + key, DEBOUNCE_EXPIRE)
+                    kwargs["countdown"] = 0  # Execute first task immediately
+            else:
+                cache.add(key, 0, DEBOUNCE_EXPIRE)
+                call_count = cache.incr(key)
+            # Task should never expire, but better to expire if workers are overloaded
+            # than to queue up and break further
+            kwargs["expire"] = DEBOUNCE_EXPIRE
             func_kwargs.update({"key": key, "call_count": call_count})
             kwargs["args"] = func_args
             kwargs["kwargs"] = func_kwargs
