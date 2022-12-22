@@ -25,7 +25,6 @@ from django_redis import get_redis_connection
 from glitchtip.celery import app
 
 CACHE_PREFIX = ":1:"  # Django cache version
-DEBOUNCE_EXPIRE = 10
 # Run task on each mark, last mark will repeat
 # 10th, 100th, 1000th, 2000th, 3000th, etc
 RUN_ON = [10, 100, 1000]
@@ -63,23 +62,26 @@ def debounced_task(key_generator):
             func_args = kwargs.get("args", [])
             func_kwargs = kwargs.get("kwargs", {})
             key = f"{func.__module__}.{func.__name__}.{key_generator(*func_args, **func_kwargs)}"
+            # Use countdown for expiration times on counter
+            kwargs["countdown"] = kwargs.get("countdown", 10)  # Defaults to 10
+            countdown = kwargs["countdown"]
             # redis-cache incr treats None as 0
             try:
                 with get_redis_connection("default") as con:
                     call_count = con.incr(CACHE_PREFIX + key)
                 # Reset expiration on each call
                 # Only redis-cache supports expire
-                cache.expire(key, timeout=DEBOUNCE_EXPIRE + 1)
+                cache.expire(key, timeout=countdown + 1)
             # django cache requires two non-atomic calls
             except NotImplementedError:
                 # Fallback method is limited and may execute more than desired
-                cache.add(key, 0, DEBOUNCE_EXPIRE)
+                cache.add(key, 0, countdown)
                 call_count = cache.incr(key)
             if call_count == 1:
                 kwargs["countdown"] = 0  # Execute first task immediately
             # Task should never expire, but better to expire if workers are overloaded
             # than to queue up and break further
-            kwargs["expire"] = DEBOUNCE_EXPIRE * 100
+            kwargs["expire"] = countdown * 100
             func_kwargs.update({"key": key, "call_count": call_count})
             kwargs["args"] = func_args
             kwargs["kwargs"] = func_kwargs

@@ -1,9 +1,12 @@
 import uuid
-from django.db import models
+
 from django.contrib.postgres.fields import HStoreField
-from user_reports.models import UserReport
+from django.db import models
+
 from glitchtip.base_models import CreatedModel
 from glitchtip.model_utils import FromStringIntegerChoices
+from projects.tasks import update_event_project_hourly_statistic
+from user_reports.models import UserReport
 
 
 class AbstractEvent(CreatedModel):
@@ -77,6 +80,14 @@ class Event(AbstractEvent):
 
     class Meta:
         ordering = ["-created"]
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new:
+            update_event_project_hourly_statistic(
+                args=[self.issue.project.pk, self.created], countdown=60
+            )
 
     def event_json(self):
         """
