@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 from anonymizeip import anonymize_ip
 from django.db import transaction
-from django.db.models.expressions import RawSQL, OuterRef
+from django.db.models.expressions import OuterRef, RawSQL
 from django.db.utils import IntegrityError
 from ipware import get_client_ip
 from rest_framework import serializers
@@ -444,7 +444,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
         else:  # Updates can be slower and debounced
             issue.check_for_status_update()
             # Expire after 1 hour - in case of major backup
-            update_search_index_issue(args=[issue.pk], countdown=10)
+            update_search_index_issue(args=[issue.pk])
 
         return event
 
