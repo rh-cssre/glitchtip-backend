@@ -8,6 +8,41 @@ END;
 $$ LANGUAGE plpgsql;;
 """
 
+# https://stackoverflow.com/a/42998229/443457
+JSONB_RECURSIVE_MERGE = """
+create or replace function remove_dupes(p_array jsonb)
+  returns jsonb
+as
+$$
+select jsonb_agg(distinct e)
+from jsonb_array_elements(p_array) as t(e);
+$$
+language sql;
+
+create or replace function jsonb_merge_deep(jsonb, jsonb)
+  returns jsonb
+  language sql
+  immutable
+as $func$
+  select case jsonb_typeof($1)
+    when 'object' then case jsonb_typeof($2)
+      when 'object' then (
+        select    jsonb_object_agg(k, case
+                    when e2.v is null then e1.v
+                    when e1.v is null then e2.v
+                    else jsonb_merge_deep(e1.v, e2.v)
+                  end)
+        from      jsonb_each($1) e1(k, v)
+        full join jsonb_each($2) e2(k, v) using (k)
+      )
+      else $2
+    end
+    when 'array' then remove_dupes($1 || $2)
+    else $2
+  end
+$func$;
+"""
+
 UPDATE_ISSUE_INDEX = """
 DROP PROCEDURE IF EXISTS update_issue_index;
 CREATE OR REPLACE PROCEDURE update_issue_index(update_issue_id integer)
@@ -16,33 +51,39 @@ AS $$
 WITH event_agg as (
     SELECT COUNT(events_event.event_id) as new_count,
     MAX(events_event.created) as new_last_seen,
-    MAX(events_event.level) as new_level
+    MAX(events_event.level) as new_level,
+    (
+      SELECT jsonb_object_agg(y.key, y.values) as new_tags FROM (
+        SELECT (a).key, array_agg(distinct(a).value) as values
+        FROM (
+          SELECT each(events_event.tags) as a
+          FROM events_event
+          LEFT JOIN issues_issue ON issues_issue.id = events_event.issue_id
+          WHERE events_event.issue_id=update_issue_id
+          AND events_event.created > issues_issue.last_seen
+          ) t GROUP by key
+      ) y
+    )
     FROM events_event
+    LEFT JOIN issues_issue ON issues_issue.id = events_event.issue_id
     WHERE events_event.issue_id=update_issue_id
+    AND events_event.created > issues_issue.last_seen
 ), event_vector as (
-    SELECT strip(COALESCE(generate_issue_tsvector(data), '') || COALESCE(issues_issue.search_vector, '')) as vector
+    SELECT strip(COALESCE(generate_issue_tsvector(data), '')) as vector
     FROM events_event
     LEFT JOIN issues_issue on issues_issue.id = events_event.issue_id
     WHERE events_event.issue_id=update_issue_id
+    AND events_event.created > issues_issue.last_seen
     limit 1
-), event_tags as (
-  SELECT jsonb_object_agg(y.key, y.values) as new_tags FROM (
-    SELECT (a).key, array_agg(distinct(a).value) as values
-    FROM (
-      SELECT each(tags) as a
-      FROM events_event
-      WHERE events_event.issue_id=update_issue_id
-    ) t GROUP by key
-  ) y
 )
 UPDATE issues_issue
 SET
-  count = event_agg.new_count,
-  last_seen = event_agg.new_last_seen,
-  level = event_agg.new_level,
-  search_vector = CASE WHEN search_vector is null or length(search_vector) < 100000 THEN event_vector.vector ELSE search_vector END,
-  tags = CASE WHEN event_Tags.new_tags is not null THEN event_tags.new_tags ELSE tags END
-FROM event_agg, event_vector, event_tags
+  count = event_agg.new_count + issues_issue.count,
+  last_seen = GREATEST(event_agg.new_last_seen, issues_issue.last_seen),
+  level = GREATEST(event_agg.new_level, issues_issue.level),
+  search_vector = CASE WHEN length(event_vector.vector) < 10000 THEN event_vector.vector || COALESCE(search_vector, '') ELSE search_vector END,
+  tags = CASE WHEN event_agg.new_tags is not null THEN jsonb_merge_deep(event_agg.new_tags, tags) ELSE tags END
+FROM event_agg, event_vector
 WHERE issues_issue.id = update_issue_id;
 $$;
 """

@@ -7,9 +7,16 @@ from rest_framework.fields import ChoiceField
 from .models import Monitor, MonitorCheck, MonitorType
 
 
-class MonitorCheckSerializer(serializers.ModelSerializer):
+class MonitorCheckRelatedSerializer(serializers.ModelSerializer):
     isUp = serializers.BooleanField(source="is_up")
     startCheck = serializers.DateTimeField(source="start_check")
+
+    class Meta:
+        model = MonitorCheck
+        fields = ("isUp", "startCheck", "reason")
+
+
+class MonitorCheckSerializer(MonitorCheckRelatedSerializer):
     responseTime = serializers.DurationField(source="response_time")
 
     class Meta:
@@ -35,7 +42,7 @@ class MonitorSerializer(serializers.ModelSerializer):
     heartbeatEndpoint = serializers.SerializerMethodField()
     projectName = serializers.SerializerMethodField()
     envName = serializers.SerializerMethodField()
-    checks = MonitorCheckSerializer(many=True, read_only=True)
+    checks = MonitorCheckRelatedSerializer(many=True, read_only=True)
 
     def get_isUp(self, obj):
         if hasattr(obj, "latest_is_up"):
