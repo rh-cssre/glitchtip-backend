@@ -44,6 +44,14 @@ $func$;
 """
 
 UPDATE_ISSUE_INDEX = """
+CREATE OR REPLACE FUNCTION concat_tsvector(tsvector, tsvector) RETURNS tsvector AS $$
+BEGIN
+    RETURN $1 || $2;
+    EXCEPTION WHEN program_limit_exceeded THEN
+    RETURN $1;
+END;
+$$ LANGUAGE plpgsql;;
+
 DROP PROCEDURE IF EXISTS update_issue_index;
 CREATE OR REPLACE PROCEDURE update_issue_index(update_issue_id integer)
 LANGUAGE SQL
@@ -69,7 +77,7 @@ WITH event_agg as (
     WHERE events_event.issue_id=update_issue_id
     AND events_event.created > issues_issue.last_seen
 ), event_vector as (
-    SELECT strip(COALESCE(generate_issue_tsvector(data), '')) as vector
+    SELECT strip(COALESCE(generate_issue_tsvector(data), ''::tsvector)) as vector
     FROM events_event
     LEFT JOIN issues_issue on issues_issue.id = events_event.issue_id
     WHERE events_event.issue_id=update_issue_id
@@ -81,7 +89,7 @@ SET
   count = event_agg.new_count + issues_issue.count,
   last_seen = GREATEST(event_agg.new_last_seen, issues_issue.last_seen),
   level = GREATEST(event_agg.new_level, issues_issue.level),
-  search_vector = CASE WHEN length(event_vector.vector) < 10000 THEN event_vector.vector || COALESCE(search_vector, '') ELSE search_vector END,
+  search_vector = concat_tsvector(COALESCE(search_vector, ''::tsvector), event_vector.vector),
   tags = CASE WHEN event_agg.new_tags is not null THEN jsonb_merge_deep(event_agg.new_tags, tags) ELSE tags END
 FROM event_agg, event_vector
 WHERE issues_issue.id = update_issue_id;
