@@ -1882,24 +1882,24 @@ grpc = ["grpcio (>=1.38.0,<2.0dev)"]
 
 [[package]]
 name = "google-cloud-logging"
-version = "3.3.1"
+version = "3.4.0"
 description = "Stackdriver Logging API client library"
 category = "main"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "google-cloud-logging-3.3.1.tar.gz", hash = "sha256:6f11415a2e9cc7b4de7a87cc3f9f575515fd683a423f6379940914a56616d705"},
-    {file = "google_cloud_logging-3.3.1-py2.py3-none-any.whl", hash = "sha256:c20ab956c48bef9539f805d64a10e6e5e5d30d80a254a3c9574f8249253870f8"},
+    {file = "google-cloud-logging-3.4.0.tar.gz", hash = "sha256:cde0f59fadb917468746252baf4b11ea00f6d686ef02139183eaf921f3aee6b4"},
+    {file = "google_cloud_logging-3.4.0-py2.py3-none-any.whl", hash = "sha256:afe1d558346e4a6ff8203bfb4266cff8f5fb46816ad0930a9af0d3956a218838"},
 ]
 
 [package.dependencies]
-google-api-core = {version = ">=1.32.0,<2.0.0 || >=2.8.0,<3.0.0dev", extras = ["grpc"]}
+google-api-core = {version = ">=1.33.2,<2.0.0 || >=2.8.0,<3.0.0dev", extras = ["grpc"]}
 google-cloud-appengine-logging = ">=0.1.0,<2.0.0dev"
 google-cloud-audit-log = ">=0.1.0,<1.0.0dev"
 google-cloud-core = ">=2.0.0,<3.0.0dev"
 grpc-google-iam-v1 = ">=0.12.4,<1.0.0dev"
 proto-plus = ">=1.22.0,<2.0.0dev"
-protobuf = ">=3.19.5,<3.20.0 || >3.20.0,<3.20.1 || >3.20.1,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<5.0.0dev"
+protobuf = ">=3.19.5,<3.20.0 || >3.20.0,<3.20.1 || >3.20.1,<4.21.0 || >4.21.0,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<5.0.0dev"
 
 [[package]]
 name = "google-cloud-storage"
