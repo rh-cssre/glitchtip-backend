@@ -22,11 +22,4 @@ class Migration(migrations.Migration):
             name="options",
             field=models.JSONField(default=dict),
         ),
-        migrations.AlterField(
-            model_name="userprojectalert",
-            name="id",
-            field=models.BigAutoField(
-                auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
-            ),
-        ),
     ]
