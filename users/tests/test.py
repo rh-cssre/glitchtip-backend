@@ -6,7 +6,8 @@ from model_bakery import baker
 from glitchtip import test_utils  # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from organizations_ext.models import OrganizationUserRole
-from ..models import UserProjectAlert, User
+from projects.models import UserProjectAlert
+from ..models import User
 
 
 class UserRegistrationTestCase(APITestCase):
@@ -198,7 +199,7 @@ class UsersTestCase(GlitchTipTestCase):
     def test_alerts_retrieve(self):
         url = reverse("user-detail", args=["me"]) + "notifications/alerts/"
         alert = baker.make(
-            "users.UserProjectAlert", user=self.user, project=self.project
+            "projects.UserProjectAlert", user=self.user, project=self.project
         )
         res = self.client.get(url)
         self.assertContains(res, self.project.id)

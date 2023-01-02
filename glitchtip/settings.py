@@ -98,6 +98,9 @@ GLITCHTIP_MAX_FILE_LIFE_DAYS = env.int(
 # Freezes acceptance of new events, for use during db maintenance
 MAINTENANCE_EVENT_FREEZE = env.bool("MAINTENANCE_EVENT_FREEZE", False)
 
+# Allows saving of spans on transactions.
+ENABLE_PERFORMANCE_SPANS = env.bool("ENABLE_PERFORMANCE_SPANS", True)
+
 # For development purposes only, prints out inbound event store json
 EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
 
@@ -124,7 +127,11 @@ SENTRY_TRACES_SAMPLE_RATE = env.float("SENTRY_TRACES_SAMPLE_RATE", 0.1)
 
 # Ignore whitenoise served static routes
 def traces_sampler(sampling_context):
-    if sampling_context.get("wsgi_environ", {}).get("PATH_INFO", "").startswith(STATIC_URL):
+    if (
+        sampling_context.get("wsgi_environ", {})
+        .get("PATH_INFO", "")
+        .startswith(STATIC_URL)
+    ):
         return 0.0
     return SENTRY_TRACES_SAMPLE_RATE
 
@@ -293,7 +300,9 @@ CSP_STYLE_SRC_ELEM = env.list(
     str,
     ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
 )
-CSP_FONT_SRC = env.list("CSP_FONT_SRC", str, ["'self'", "https://fonts.gstatic.com", "data:"])
+CSP_FONT_SRC = env.list(
+    "CSP_FONT_SRC", str, ["'self'", "https://fonts.gstatic.com", "data:"]
+)
 # Redoc requires blob
 CSP_WORKER_SRC = env.list("CSP_WORKER_SRC", str, ["'self'", "blob:"])
 
@@ -336,7 +345,9 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 # Database
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
 
-DATABASES = {"default": env.db(default="postgres://postgres:postgres@postgres:5432/postgres")}
+DATABASES = {
+    "default": env.db(default="postgres://postgres:postgres@postgres:5432/postgres")
+}
 # Support setting DATABASES in parts in order to get values from the postgresql helm chart
 DATABASE_HOST = env.str("DATABASE_HOST", None)
 DATABASE_PASSWORD = env.str("DATABASE_PASSWORD", None)
@@ -350,7 +361,7 @@ if DATABASE_HOST and DATABASE_PASSWORD:
         "PORT": env.str("DATABASE_PORT", "5432"),
     }
 
-DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # We need to support both url and broken out host to support helm redis chart
 REDIS_HOST = env.str("REDIS_HOST", None)
@@ -359,7 +370,9 @@ if REDIS_HOST:
     REDIS_DATABASE = env.str("REDIS_DATABASE", "0")
     REDIS_PASSWORD = env.str("REDIS_PASSWORD", None)
     if REDIS_PASSWORD:
-        REDIS_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DATABASE}"
+        REDIS_URL = (
+            f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DATABASE}"
+        )
     else:
         REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DATABASE}"
 else:
@@ -376,7 +389,9 @@ if CELERY_BROKER_URL.startswith("sentinel"):
 if socket_timeout := env.int("CELERY_BROKER_SOCKET_TIMEOUT", None):
     CELERY_BROKER_TRANSPORT_OPTIONS["socket_timeout"] = socket_timeout
 if broker_sentinel_password := env.str("CELERY_BROKER_SENTINEL_KWARGS_PASSWORD", None):
-    CELERY_BROKER_TRANSPORT_OPTIONS["sentinel_kwargs"] = {"password": broker_sentinel_password}
+    CELERY_BROKER_TRANSPORT_OPTIONS["sentinel_kwargs"] = {
+        "password": broker_sentinel_password
+    }
 
 CELERY_RESULT_BACKEND = "django-db"
 CELERY_RESULT_EXTENDED = True
@@ -426,11 +441,15 @@ if cache_sentinel_url := env.str("CACHE_SENTINEL_URL", None):
         cache_sentinel_host, cache_sentinel_port = cache_sentinel_url.split(":")
         SENTINELS = [(cache_sentinel_host, int(cache_sentinel_port))]
     except ValueError as err:
-        raise ImproperlyConfigured("Invalid cache redis sentinel url, format is host:port") from err
+        raise ImproperlyConfigured(
+            "Invalid cache redis sentinel url, format is host:port"
+        ) from err
     DJANGO_REDIS_CONNECTION_FACTORY = "django_redis.pool.SentinelConnectionFactory"
     CACHES["default"]["OPTIONS"]["SENTINELS"] = SENTINELS
 if cache_sentinel_password := env.str("CACHE_SENTINEL_PASSWORD", None):
-    CACHES["default"]["OPTIONS"]["SENTINEL_KWARGS"] = {"password": cache_sentinel_password}
+    CACHES["default"]["OPTIONS"]["SENTINEL_KWARGS"] = {
+        "password": cache_sentinel_password
+    }
 
 
 if os.environ.get("SESSION_ENGINE"):
@@ -492,7 +511,9 @@ GS_BUCKET_NAME = env("GS_BUCKET_NAME")
 GS_PROJECT_ID = env("GS_PROJECT_ID")
 
 if AWS_S3_ENDPOINT_URL:
-    MEDIA_URL = env.str("MEDIA_URL", "https://%s/%s/" % (AWS_S3_ENDPOINT_URL, AWS_LOCATION))
+    MEDIA_URL = env.str(
+        "MEDIA_URL", "https://%s/%s/" % (AWS_S3_ENDPOINT_URL, AWS_LOCATION)
+    )
     DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 else:
     MEDIA_URL = "media/"
@@ -504,7 +525,9 @@ STATICFILES_DIRS = [
 ]
 STATIC_ROOT = path("static/")
 STATICFILES_STORAGE = env("STATICFILES_STORAGE")
-EMAIL_BACKEND = env.str("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
+EMAIL_BACKEND = env.str(
+    "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
+)
 if os.getenv("EMAIL_HOST_USER"):
     EMAIL_HOST_USER = env.str("EMAIL_HOST_USER")
 if os.getenv("EMAIL_HOST_PASSWORD"):
@@ -552,7 +575,9 @@ if KEYCLOAK_URL := env.url("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_URL", None
 
     SOCIALACCOUNT_PROVIDERS["keycloak"] = {
         "KEYCLOAK_URL": KEYCLOAK_URL.geturl(),
-        "KEYCLOAK_REALM": env.str("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_REALM", None),
+        "KEYCLOAK_REALM": env.str(
+            "SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_REALM", None
+        ),
         "KEYCLOAK_URL_ALT": alt_url,
     }
 
@@ -575,9 +600,9 @@ ENABLE_ORGANIZATION_CREATION = env.bool(
     "ENABLE_OPEN_USER_REGISTRATION", env.bool("ENABLE_ORGANIZATION_CREATION", False)
 )
 
-REST_AUTH_REGISTER_PERMISSION_CLASSES = (("glitchtip.permissions.UserRegistrationPermission"),)
-# Enables login urls for glitchtip backend
-ENABLE_LOGIN_FORM = env.bool("ENABLE_LOGIN_FORM", False)
+REST_AUTH_REGISTER_PERMISSION_CLASSES = (
+    ("glitchtip.permissions.UserRegistrationPermission"),
+)
 
 AUTHENTICATION_BACKENDS = (
     # Needed to login by username in Django admin, regardless of `allauth`
@@ -710,7 +735,9 @@ if TESTING:
     CELERY_TASK_ALWAYS_EAGER = True
     STATICFILES_STORAGE = None
     # https://github.com/evansd/whitenoise/issues/215
-    warnings.filterwarnings("ignore", message="No directory at", module="whitenoise.base")
+    warnings.filterwarnings(
+        "ignore", message="No directory at", module="whitenoise.base"
+    )
 if CELERY_TASK_ALWAYS_EAGER:
     CACHES = {
         "default": {

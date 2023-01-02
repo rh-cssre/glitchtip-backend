@@ -18,7 +18,9 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("quantity", nargs="?", type=int)
         parser.add_argument(
-            "--only-real", action="store_true", help="Only include real sample events",
+            "--only-real",
+            action="store_true",
+            help="Only include real sample events",
         )
         parser.add_argument(
             "--only-fake",
@@ -27,8 +29,10 @@ class Command(BaseCommand):
         )
 
     def generate_real_event(self, project, unique_issue=False):
-        """ Generate an event based on real sample data """
+        """Generate an event based on real sample data"""
         data = event_generator.generate_random_event(unique_issue)
+        project.release_id = None
+        project.environment_id = None
         serializer = EventStoreAPIView().get_event_serializer_class(data)(
             data=data, context={"project": project}
         )

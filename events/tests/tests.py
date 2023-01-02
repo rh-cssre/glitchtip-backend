@@ -7,7 +7,8 @@ from django.test import override_settings
 from model_bakery import baker
 from rest_framework.test import APITestCase
 
-from environments.models import Environment
+from environments.models import Environment, EnvironmentProject
+from releases.models import Release
 from glitchtip import test_utils  # pylint: disable=unused-import
 from issues.models import EventStatus, Issue
 
@@ -96,16 +97,27 @@ class EventStoreTestCase(APITestCase):
         issue.refresh_from_db()
         self.assertEqual(issue.status, EventStatus.UNRESOLVED)
 
+    def test_issue_count(self):
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        self.client.post(self.url, data, format="json")
+        issue = Issue.objects.first()
+        self.assertEqual(issue.count, 1)
+        data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4ba"
+        self.client.post(self.url, data, format="json")
+        issue.refresh_from_db()
+        self.assertEqual(issue.count, 2)
+
     def test_performance(self):
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
-        with self.assertNumQueries(15):
+        with self.assertNumQueries(18):
             res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 
         # Second event should have less queries
         data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4bb"
-        with self.assertNumQueries(8):
+        with self.assertNumQueries(11):
             res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 
@@ -187,12 +199,32 @@ class EventStoreTestCase(APITestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(
             Issue.objects.first().search_vector,
-            "",
+            None,
             "No tsvector is expected as it would exceed the Postgres limit",
         )
         data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4be"
         res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
+
+    def test_store_somewhat_large_data(self):
+        """
+        This test is expected to exceed the 1mb limit of a postgres tsvector
+        only when two events exist for 1 issue.
+        """
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+
+        data["platform"] = " ".join([str(random.random()) for _ in range(30000)])
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4be"
+        data["platform"] = " ".join([str(random.random()) for _ in range(30000)])
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(
+            Issue.objects.first().search_vector,
+            "tsvector is expected",
+        )
 
     @patch("events.views.logger")
     def test_invalid_event(self, mock_logger):
@@ -226,6 +258,9 @@ class EventStoreTestCase(APITestCase):
     def test_event_release(self):
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
+
+        baker.make("releases.Release", version=data.get("release"))
+
         self.client.post(self.url, data, format="json")
         event = Event.objects.first()
         event_json = event.event_json()
@@ -235,6 +270,20 @@ class EventStoreTestCase(APITestCase):
             event.release.version,
             dict(event_json.get("tags")).values(),
         )
+        self.assertTrue(
+            Release.objects.filter(
+                version=data.get("release"), projects=self.project
+            ).exists()
+        )
+
+    def test_event_release_blank(self):
+        """In the SDK, it's possible to set a release to a blank string"""
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        data["release"] = ""
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(Event.objects.first())
 
     def test_client_tags(self):
         with open("events/test_data/py_hi_event.json") as json_file:
@@ -405,6 +454,27 @@ class EventStoreTestCase(APITestCase):
 
         res = self.client.post(self.url, data, format="json")
         self.assertTrue(Event.objects.filter().exists())
+
+    def test_repeat_environment(self):
+        existing_environment = baker.make("environments.Environment", name="staging")
+        data = {
+            "exception": [
+                {
+                    "type": "a",
+                    "value": "a",
+                    "module": None,
+                }
+            ],
+            "event_id": "11111111111111111111111111111111",
+            "environment": existing_environment.name,
+        }
+
+        res = self.client.post(self.url, data, format="json")
+        self.assertTrue(
+            EnvironmentProject.objects.filter(
+                environment__name=existing_environment.name, project=self.project
+            ).exists()
+        )
 
     def test_invalid_environment(self):
         data = {

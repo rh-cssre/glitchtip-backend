@@ -1,8 +1,10 @@
+from datetime import timedelta
 from urllib.parse import urlparse
 from uuid import uuid4
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Count, Q
 from django.utils.text import slugify
 from django_extensions.db.fields import AutoSlugField
 
@@ -134,3 +136,82 @@ class ProjectKey(CreatedModel):
             self.project_id,
             self.public_key_hex,
         )
+
+
+class EventProjectHourlyStatistic(models.Model):
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
+    date = models.DateTimeField()
+    count = models.PositiveIntegerField()
+
+    class Meta:
+        unique_together = (("project", "date"),)
+
+    @classmethod
+    def update(cls, project_id: int, start_time: "datetime"):
+        """
+        Update current hour and last hour statistics
+        start_time should be the time of the last known event creation
+        This method recalculates both stats, replacing any previous entry
+        """
+        current_hour = start_time.replace(second=0, microsecond=0, minute=0)
+        next_hour = current_hour + timedelta(hours=1)
+        previous_hour = current_hour - timedelta(hours=1)
+        event_counts = Project.objects.filter(pk=project_id).aggregate(
+            previous_hour_count=Count(
+                "issue__event",
+                filter=Q(
+                    issue__event__created__gte=previous_hour,
+                    issue__event__created__lt=current_hour,
+                ),
+            ),
+            current_hour_count=Count(
+                "issue__event",
+                filter=Q(
+                    issue__event__created__gte=current_hour,
+                    issue__event__created__lt=next_hour,
+                ),
+            ),
+        )
+        statistics = []
+        if event_counts["previous_hour_count"]:
+            statistics.append(
+                cls(
+                    project_id=project_id,
+                    date=previous_hour,
+                    count=event_counts["previous_hour_count"],
+                )
+            )
+        if event_counts["current_hour_count"]:
+            statistics.append(
+                cls(
+                    project_id=project_id,
+                    date=current_hour,
+                    count=event_counts["current_hour_count"],
+                )
+            )
+        if statistics:
+            cls.objects.bulk_create(
+                statistics,
+                update_conflicts=True,
+                unique_fields=["project", "date"],
+                update_fields=["count"],
+            )
+
+
+class ProjectAlertStatus(models.IntegerChoices):
+    OFF = 0, "off"
+    ON = 1, "on"
+
+
+class UserProjectAlert(models.Model):
+    """
+    Determine if user alert notifications should always happen, never, or defer to default
+    Default is stored as the lack of record.
+    """
+
+    user = models.ForeignKey("users.User", on_delete=models.CASCADE)
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
+    status = models.PositiveSmallIntegerField(choices=ProjectAlertStatus.choices)
+
+    class Meta:
+        unique_together = ("user", "project")
