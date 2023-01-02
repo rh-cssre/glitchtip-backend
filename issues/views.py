@@ -125,12 +125,15 @@ class IssueViewSet(
         return qs
 
     def bulk_update(self, request, *args, **kwargs):
+        """Limited to pagination page count limit"""
         queryset = self.filter_queryset(self.get_queryset())
         ids = request.GET.getlist("id")
         if ids:
             queryset = queryset.filter(id__in=ids)
         status = EventStatus.from_string(request.data.get("status"))
-        queryset.update(status=status)
+        self.queryset.filter(pk__in=queryset[: self.pagination_class.max_hits]).update(
+            status=status
+        )
         return Response({"status": status.label})
 
     def serialize_tags(self, rows):
