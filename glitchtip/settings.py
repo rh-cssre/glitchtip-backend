@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/dev/ref/settings/
 
 import logging
 import os
+import re
 import sys
 import warnings
 from datetime import timedelta
@@ -189,6 +190,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.microsoft",
     "allauth.socialaccount.providers.nextcloud",
     "allauth.socialaccount.providers.keycloak",
+    "allauth.socialaccount.providers.openid_connect",
     "anymail",
     "corsheaders",
     "django_celery_results",
@@ -580,6 +582,26 @@ if KEYCLOAK_URL := env.url("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_URL", None
         ),
         "KEYCLOAK_URL_ALT": alt_url,
     }
+
+# Parse oidc settings as nested dict in array. Example:
+# SOCIALACCOUNT_PROVIDERS_openid_connect_SERVERS_0_id: "g-oidc"
+# SOCIALACCOUNT_PROVIDERS_openid_connect_SERVERS_0_server_url: "https://accounts.google.com"
+oidc_prefix = "SOCIALACCOUNT_PROVIDERS_openid_connect_SERVERS_"
+oidc_pattern = re.compile(r"{prefix}\w+".format(prefix=oidc_prefix))
+oidc_servers = {}
+for key, value in {
+    key.replace(oidc_prefix, ""): val
+    for key, val in os.environ.items()
+    if oidc_pattern.match(key)
+}.items():
+    number, setting = key.split("_", 1)
+    if number in oidc_servers:
+        oidc_servers[number][setting] = value
+    else:
+        oidc_servers[number] = {setting: value}
+oidc_servers = [x for x in oidc_servers.values()]
+SOCIALACCOUNT_PROVIDERS["openid_connect"] = {"SERVERS": oidc_servers}
+
 
 OLD_PASSWORD_FIELD_ENABLED = True
 LOGOUT_ON_PASSWORD_CHANGE = False
