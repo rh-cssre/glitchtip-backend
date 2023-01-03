@@ -138,13 +138,14 @@ class ProjectKey(CreatedModel):
         )
 
 
-class EventProjectHourlyStatistic(models.Model):
+class ProjectStatisticBase(models.Model):
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
     date = models.DateTimeField()
     count = models.PositiveIntegerField()
 
     class Meta:
         unique_together = (("project", "date"),)
+        abstract = True
 
     @classmethod
     def update(cls, project_id: int, start_time: "datetime"):
@@ -156,21 +157,9 @@ class EventProjectHourlyStatistic(models.Model):
         current_hour = start_time.replace(second=0, microsecond=0, minute=0)
         next_hour = current_hour + timedelta(hours=1)
         previous_hour = current_hour - timedelta(hours=1)
-        event_counts = Project.objects.filter(pk=project_id).aggregate(
-            previous_hour_count=Count(
-                "issue__event",
-                filter=Q(
-                    issue__event__created__gte=previous_hour,
-                    issue__event__created__lt=current_hour,
-                ),
-            ),
-            current_hour_count=Count(
-                "issue__event",
-                filter=Q(
-                    issue__event__created__gte=current_hour,
-                    issue__event__created__lt=next_hour,
-                ),
-            ),
+        projects = Project.objects.filter(pk=project_id)
+        event_counts = cls.aggregate_queryset(
+            projects, previous_hour, current_hour, next_hour
         )
         statistics = []
         if event_counts["previous_hour_count"]:
@@ -196,6 +185,60 @@ class EventProjectHourlyStatistic(models.Model):
                 unique_fields=["project", "date"],
                 update_fields=["count"],
             )
+
+
+class TransactionEventProjectHourlyStatistic(ProjectStatisticBase):
+    @classmethod
+    def aggregate_queryset(
+        cls,
+        project_queryset,
+        previous_hour: "datetime",
+        current_hour: "datetime",
+        next_hour: "datetime",
+    ):
+        return project_queryset.aggregate(
+            previous_hour_count=Count(
+                "transactiongroup__transactionevent",
+                filter=Q(
+                    transactiongroup__transactionevent__created__gte=previous_hour,
+                    transactiongroup__transactionevent__created__lt=current_hour,
+                ),
+            ),
+            current_hour_count=Count(
+                "transactiongroup__transactionevent",
+                filter=Q(
+                    transactiongroup__transactionevent__created__gte=current_hour,
+                    transactiongroup__transactionevent__created__lt=next_hour,
+                ),
+            ),
+        )
+
+
+class EventProjectHourlyStatistic(ProjectStatisticBase):
+    @classmethod
+    def aggregate_queryset(
+        cls,
+        project_queryset,
+        previous_hour: "datetime",
+        current_hour: "datetime",
+        next_hour: "datetime",
+    ):
+        return project_queryset.aggregate(
+            previous_hour_count=Count(
+                "issue__event",
+                filter=Q(
+                    issue__event__created__gte=previous_hour,
+                    issue__event__created__lt=current_hour,
+                ),
+            ),
+            current_hour_count=Count(
+                "issue__event",
+                filter=Q(
+                    issue__event__created__gte=current_hour,
+                    issue__event__created__lt=next_hour,
+                ),
+            ),
+        )
 
 
 class ProjectAlertStatus(models.IntegerChoices):
