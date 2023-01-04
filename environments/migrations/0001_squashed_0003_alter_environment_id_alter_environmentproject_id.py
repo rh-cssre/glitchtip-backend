@@ -16,7 +16,10 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("organizations_ext", "0001_squashed_0009_organization_scrub_ip_addresses"),
-        ("projects", "0007_auto_20201026_2354"),
+        (
+            "projects",
+            "0001_squashed_0009_alter_project_id_alter_projectcounter_id_and_more",
+        ),
     ]
 
     operations = [

@@ -113,20 +113,30 @@ class SentrySDKEventSerializer(BaseSerializer):
     )
     _meta = serializers.JSONField(required=False)
 
-    def get_environment(self, name: str, project):
-        environment, _ = Environment.objects.get_or_create(
-            name=name[: Environment._meta.get_field("name").max_length],
-            organization=project.organization,
-        )
-        environment.projects.add(project)
-        return environment
+    def set_environment(self, name: str, project) -> str:
+        if not project.environment_id and name:
+            environment, _ = Environment.objects.get_or_create(
+                name=name[: Environment._meta.get_field("name").max_length],
+                organization=project.organization,
+            )
+            environment.projects.add(project)
+            project.environment_id = environment.id
+            return environment.name
+        return name
 
-    def get_release(self, version: str, project):
-        release, _ = Release.objects.get_or_create(
-            version=version, organization=project.organization
-        )
-        release.projects.add(project)
-        return release
+    def set_release(self, version: str, project) -> str:
+        """
+        Set project.release_id if not already so
+        Create needed Release if necessary
+        """
+        if not project.release_id and version:
+            release, _ = Release.objects.get_or_create(
+                version=version, organization=project.organization
+            )
+            release.projects.add(project)
+            project.release_id = release.id
+            return release.version
+        return version
 
 
 class FormattedMessageSerializer(serializers.Serializer):
@@ -311,9 +321,13 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             for value in exception.get("values", []):
                 self.normalize_stacktrace(value.get("stacktrace"))
 
-        if not project.release_id and data.get("release"):
-            release = self.get_release(data.get("release"), project)
-            project.release_id = release.id
+        tags = []
+        release = self.set_release(data.get("release"), project)
+        if project.release_id:
+            tags.append(("release", release))
+        environment = self.set_environment(data.get("environment"), project)
+        if project.environment_id:
+            tags.append(("environment", environment))
 
         for Processor in EVENT_PROCESSORS:
             Processor(project, project.release_id, data).run()
@@ -347,14 +361,6 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             if level:
                 defaults["level"] = level
 
-            if not project.environment_id and data.get("environment"):
-                environment = self.get_environment(data["environment"], project)
-                project.environment_id = environment.id
-            tags = []
-            if project.environment_id:
-                tags.append(("environment", data.get("environment")))
-            if project.release_id:
-                tags.append(("release", data.get("release")))
             tags = self.generate_tags(data, tags)
             defaults["tags"] = {tag[0]: [tag[1]] for tag in tags}
 

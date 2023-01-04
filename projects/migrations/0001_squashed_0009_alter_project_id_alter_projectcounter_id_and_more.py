@@ -10,13 +10,6 @@ import uuid
 class Migration(migrations.Migration):
 
     replaces = [
-        ("projects", "0001_initial"),
-        ("projects", "0002_auto_20200429_2329"),
-        ("projects", "0003_projectcounter"),
-        ("projects", "0004_auto_20200805_0107"),
-        ("projects", "0005_project_first_event"),
-        ("projects", "0006_project_scrub_ip_addresses"),
-        ("projects", "0007_auto_20201026_2354"),
         ("projects", "0008_alter_projectkey_created"),
         ("projects", "0009_alter_project_id_alter_projectcounter_id_and_more"),
         ("projects", "0010_rename_useralert"),
