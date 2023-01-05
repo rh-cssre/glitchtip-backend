@@ -617,6 +617,12 @@ REST_AUTH_REGISTER_SERIALIZERS = {
 REST_AUTH_TOKEN_MODEL = None
 REST_AUTH_TOKEN_CREATOR = "users.utils.noop_token_creator"
 
+# Remove in GlitchTip4.0
+if "ENABLE_OPEN_USER_REGISTRATION" in os.environ:
+    warnings.warn(
+        "ENABLE_OPEN_USER_REGISTRATION is deprecated. Set ENABLE_ORGANIZATION_CREATION instead.",
+        DeprecationWarning,
+    )
 ENABLE_USER_REGISTRATION = env.bool("ENABLE_USER_REGISTRATION", True)
 ENABLE_ORGANIZATION_CREATION = env.bool(
     "ENABLE_OPEN_USER_REGISTRATION", env.bool("ENABLE_ORGANIZATION_CREATION", False)
