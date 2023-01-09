@@ -38,7 +38,7 @@ class MonitorSerializer(serializers.ModelSerializer):
     isUp = serializers.SerializerMethodField()
     lastChange = serializers.SerializerMethodField()
     monitorType = ChoiceField(choices=MonitorType.choices, source="monitor_type")
-    expectedStatus = serializers.IntegerField(source="expected_status")
+    expectedStatus = serializers.IntegerField(source="expected_status", allow_null=True)
     heartbeatEndpoint = serializers.SerializerMethodField()
     projectName = serializers.SerializerMethodField()
     envName = serializers.SerializerMethodField()
@@ -113,5 +113,12 @@ class MonitorSerializer(serializers.ModelSerializer):
         ]:
             raise serializers.ValidationError(
                 "URL is required for " + data["monitor_type"]
+            )
+        if data.get("expected_status") is None and data["monitor_type"] in [
+            MonitorType.GET,
+            MonitorType.POST,
+        ]:
+            raise serializers.ValidationError(
+                "Expected status is required for " + data["monitor_type"]
             )
         return data
