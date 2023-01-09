@@ -10,24 +10,51 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('projects', '0007_auto_20201026_2354'),
-        ('performance', '0002_auto_20210124_1745'),
+        (
+            "projects",
+            "0001_squashed_0009_alter_project_id_alter_projectcounter_id_and_more",
+        ),
+        ("performance", "0002_auto_20210124_1745"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='TransactionEvent',
+            name="TransactionEvent",
             fields=[
-                ('event_id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('created', models.DateTimeField(auto_now_add=True, db_index=True)),
-                ('data', models.JSONField(help_text='General event data that is searchable')),
-                ('timestamp', models.DateTimeField(blank=True, help_text='Date created as claimed by client it came from', null=True)),
-                ('transaction', models.CharField(max_length=1024)),
-                ('start_timestamp', models.DateTimeField()),
-                ('project', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='projects.project')),
+                (
+                    "event_id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                ("created", models.DateTimeField(auto_now_add=True, db_index=True)),
+                (
+                    "data",
+                    models.JSONField(help_text="General event data that is searchable"),
+                ),
+                (
+                    "timestamp",
+                    models.DateTimeField(
+                        blank=True,
+                        help_text="Date created as claimed by client it came from",
+                        null=True,
+                    ),
+                ),
+                ("transaction", models.CharField(max_length=1024)),
+                ("start_timestamp", models.DateTimeField()),
+                (
+                    "project",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="projects.project",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-created'],
+                "ordering": ["-created"],
             },
         ),
     ]
