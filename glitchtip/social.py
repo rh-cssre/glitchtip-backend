@@ -167,17 +167,23 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
 
 
 class GenericMFAMixin:
-    client_class = OAuth2Client  # Needed for Github. Would this ever break a provider?
+    client_class = OAuth2Client  # Only OAuth2 client is supported
 
     @property
     def callback_url(self):
-        provider_id = self.adapter_class.provider_id
+        # Set dynamic OIDC provider ID
+        provider_id = self.kwargs.get("provider", self.adapter_class.provider_id)
         return DOMAIN + "/auth/" + provider_id
 
     @property
     def adapter_class(self):
         provider = self.kwargs.get("provider")
-        return SOCIAL_ADAPTER_MAP[provider]
+        adapter_class = SOCIAL_ADAPTER_MAP.get(
+            provider, SOCIAL_ADAPTER_MAP["openid_connect"]
+        )
+        # Set dynamic OIDC provider ID
+        adapter_class.provider_id = provider
+        return adapter_class
 
 
 class GlitchTipSocialConnectView(GenericMFAMixin, SocialConnectView):
