@@ -54,6 +54,9 @@ class SubscriptionAPITestCase(APITestCase):
         self.assertContains(res, subscription.id)
 
     def test_events_count(self):
+        """
+        Event count should be accurate and work when there are multiple subscriptions for a given customer
+        """
         customer = baker.make("djstripe.Customer", subscriber=self.organization)
         baker.make(
             "djstripe.Subscription",
@@ -61,6 +64,14 @@ class SubscriptionAPITestCase(APITestCase):
             livemode=False,
             current_period_start=timezone.make_aware(timezone.datetime(2020, 1, 2)),
             current_period_end=timezone.make_aware(timezone.datetime(2020, 2, 2)),
+        )
+        baker.make(
+            "djstripe.Subscription",
+            customer=customer,
+            livemode=False,
+            status="Cancelled",
+            current_period_start=timezone.make_aware(timezone.datetime(2019, 1, 2)),
+            current_period_end=timezone.make_aware(timezone.datetime(2019, 2, 2)),
         )
         url = (
             reverse("subscription-detail", args=[self.organization.slug])
