@@ -196,7 +196,11 @@ class TransactionEventProjectHourlyStatistic(ProjectStatisticBase):
         current_hour: "datetime",
         next_hour: "datetime",
     ):
-        return project_queryset.aggregate(
+        # Redundant filter optimization - otherwise all rows are scanned
+        return project_queryset.filter(
+            transactiongroup__transactionevent__created__gte=previous_hour,
+            transactiongroup__transactionevent__created__lt=next_hour,
+        ).aggregate(
             previous_hour_count=Count(
                 "transactiongroup__transactionevent",
                 filter=Q(
@@ -223,7 +227,11 @@ class EventProjectHourlyStatistic(ProjectStatisticBase):
         current_hour: "datetime",
         next_hour: "datetime",
     ):
-        return project_queryset.aggregate(
+        # Redundant filter optimization - otherwise all rows are scanned
+        return project_queryset.filter(
+            issue__event__created__gte=previous_hour,
+            issue__event__created__lt=next_hour,
+        ).aggregate(
             previous_hour_count=Count(
                 "issue__event",
                 filter=Q(
