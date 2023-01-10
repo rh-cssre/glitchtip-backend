@@ -190,7 +190,7 @@ class OrganizationManager(OrgManager):
             + F("uptime_check_event_count")
             + F("file_size"),
         )
-        return queryset
+        return queryset.distinct("pk")
 
 
 class Organization(SharedBaseModel, OrganizationBase):
