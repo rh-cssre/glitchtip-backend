@@ -161,9 +161,12 @@ class OrganizationManager(OrgManager):
                 ),
                 0,
             ),
-            transaction_count=SubqueryCount(
-                "projects__transactiongroup__transactionevent",
-                filter=subscription_filter,
+            transaction_count=Coalesce(
+                SubquerySum(
+                    "projects__transactioneventprojecthourlystatistic__count",
+                    filter=event_subscription_filter,
+                ),
+                0,
             ),
             uptime_check_event_count=SubqueryCount(
                 "monitor__checks", filter=subscription_filter
