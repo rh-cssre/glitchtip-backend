@@ -86,7 +86,7 @@ class Event(AbstractEvent):
         super().save(*args, **kwargs)
         if is_new:
             update_event_project_hourly_statistic(
-                args=[self.issue.project.pk, self.created], countdown=60
+                args=[self.issue.project_id, self.created], countdown=60
             )
 
     def event_json(self):
