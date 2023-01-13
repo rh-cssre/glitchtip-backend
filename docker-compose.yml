@@ -37,3 +37,11 @@ services:
     depends_on: *default-depends_on
     volumes: *default-volumes
     environment: *default-environment
+  #flower:
+  #  build: .
+  #  command: bin/run-flower.sh
+  #  depends_on: *default-depends_on
+  #  volumes: *default-volumes
+  #  environment: *default-environment
+  #  ports:
+  #    - 5555:5555

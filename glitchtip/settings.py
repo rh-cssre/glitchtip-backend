@@ -193,7 +193,6 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.openid_connect",
     "anymail",
     "corsheaders",
-    "django_celery_results",
     "django_filters",
     "django_extensions",
     "django_rest_mfa",
@@ -395,9 +394,6 @@ if broker_sentinel_password := env.str("CELERY_BROKER_SENTINEL_KWARGS_PASSWORD",
         "password": broker_sentinel_password
     }
 
-CELERY_RESULT_BACKEND = "django-db"
-CELERY_RESULT_EXTENDED = True
-CELERY_CACHE_BACKEND = "django-cache"
 CELERY_BEAT_SCHEDULE = {
     "send-alert-notifications": {
         "task": "alerts.tasks.process_event_alerts",
