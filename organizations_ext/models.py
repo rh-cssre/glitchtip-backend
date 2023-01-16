@@ -134,6 +134,7 @@ class OrganizationUserRole(models.IntegerChoices):
 class OrganizationManager(OrgManager):
     def with_event_counts(self, current_period=True):
         subscription_filter = Q()
+        event_subscription_filter = Q()
         if current_period and settings.BILLING_ENABLED:
             subscription_filter = Q(
                 created__gte=OuterRef(
@@ -143,14 +144,29 @@ class OrganizationManager(OrgManager):
                     "djstripe_customers__subscriptions__current_period_end"
                 ),
             )
+            event_subscription_filter = Q(
+                date__gte=OuterRef(
+                    "djstripe_customers__subscriptions__current_period_start"
+                ),
+                date__lt=OuterRef(
+                    "djstripe_customers__subscriptions__current_period_end"
+                ),
+            )
 
         queryset = self.annotate(
-            issue_event_count=SubqueryCount(
-                "projects__issue__event", filter=subscription_filter
+            issue_event_count=Coalesce(
+                SubquerySum(
+                    "projects__eventprojecthourlystatistic__count",
+                    filter=event_subscription_filter,
+                ),
+                0,
             ),
-            transaction_count=SubqueryCount(
-                "projects__transactiongroup__transactionevent",
-                filter=subscription_filter,
+            transaction_count=Coalesce(
+                SubquerySum(
+                    "projects__transactioneventprojecthourlystatistic__count",
+                    filter=event_subscription_filter,
+                ),
+                0,
             ),
             uptime_check_event_count=SubqueryCount(
                 "monitor__checks", filter=subscription_filter
@@ -177,7 +193,7 @@ class OrganizationManager(OrgManager):
             + F("uptime_check_event_count")
             + F("file_size"),
         )
-        return queryset
+        return queryset.distinct("pk")
 
 
 class Organization(SharedBaseModel, OrganizationBase):

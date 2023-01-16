@@ -5,14 +5,12 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
-    dependencies = [
-        ('projects', '0007_auto_20201026_2354'),
-    ]
+    dependencies = []
 
     operations = [
         migrations.AlterField(
-            model_name='projectkey',
-            name='created',
+            model_name="projectkey",
+            name="created",
             field=models.DateTimeField(auto_now_add=True, db_index=True),
         ),
     ]

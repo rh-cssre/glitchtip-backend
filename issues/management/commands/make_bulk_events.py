@@ -8,6 +8,7 @@ from issues.models import Issue
 from issues.tasks import update_search_index_issue
 from organizations_ext.models import Organization
 from projects.models import Project
+from projects.tasks import update_event_project_hourly_statistic
 
 from events.test_data import bulk_event_data
 
@@ -62,6 +63,7 @@ class Command(BaseCommand):
             quantity -= batch_size
 
         update_search_index_issue(args=[issue.pk])
+        update_event_project_hourly_statistic(args=[project.pk, event.created])
         self.stdout.write(
             self.style.SUCCESS('Successfully created "%s" events' % options["quantity"])
         )
