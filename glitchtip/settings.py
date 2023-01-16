@@ -360,6 +360,8 @@ if DATABASE_HOST and DATABASE_PASSWORD:
         "PASSWORD": DATABASE_PASSWORD,
         "HOST": DATABASE_HOST,
         "PORT": env.str("DATABASE_PORT", "5432"),
+        "CONN_MAX_AGE": env.int("DATABASE_CONN_MAX_AGE", 0),
+        "CONN_HEALTH_CHECKS": env.bool("DATABASE_CONN_HEALTH_CHECKS", False),
     }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

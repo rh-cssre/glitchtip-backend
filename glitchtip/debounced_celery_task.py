@@ -14,15 +14,10 @@ Examples:
 - 1 call happens every second forever - execute 1st, 10th, 100th, 1000th, 2000th, etc
 """
 import functools
-from datetime import timedelta
 
-from django.conf import settings
 from django.core.cache import cache
-from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from django_redis import get_redis_connection
 
-from glitchtip.celery import app
 
 CACHE_PREFIX = ":1:"  # Django cache version
 # Run task on each mark, last mark will repeat
