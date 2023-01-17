@@ -91,7 +91,7 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         if team_slug:
             queryset = queryset.filter(team__slug=team_slug)
         return queryset.select_related("organization", "user").prefetch_related(
-            "user__socialaccount_set"
+            "user__socialaccount_set", "organization__owner"
         )
 
     def get_object(self):
@@ -179,6 +179,25 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
             organization=org_user.organization, role__gte=required_role
         ).exists():
             raise exceptions.PermissionDenied("Must be admin to modify teams")
+
+    @action(detail=True, methods=["post"])
+    def set_owner(self, request, *args, **kwargs):
+        """
+        Set this team member as the one and only one Organization owner
+        Only an existing Owner or user with the "org:admin" scope is able to perform this.
+        """
+        new_owner = self.get_object()
+        organization = new_owner.organization
+        user = request.user
+        if not (
+            organization.is_owner(user)
+            or organization.organization_users.filter(
+                user=user, role=OrganizationUserRole.OWNER
+            )
+        ):
+            raise exceptions.PermissionDenied("Only owner may set organization owner.")
+        organization.change_owner(new_owner)
+        return self.retrieve(request, *args, **kwargs)
 
     @action(
         detail=True,

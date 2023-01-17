@@ -25,6 +25,15 @@ class OrganizationUsersAPITestCase(APITestCase):
             kwargs={"organization_slug": self.organization.slug},
         )
 
+    def get_org_member_detail_url(self, organization_slug, pk):
+        return reverse(
+            "organization-members-detail",
+            kwargs={
+                "organization_slug": organization_slug,
+                "pk": pk,
+            },
+        )
+
     def test_organization_users_list(self):
         res = self.client.get(self.users_url)
         self.assertContains(res, self.user.email)
@@ -36,13 +45,7 @@ class OrganizationUsersAPITestCase(APITestCase):
         Org Member email should refer to the invited email before acceptance
         After acceptance, it should refer to the user's primary email address
         """
-        url = reverse(
-            "organization-members-detail",
-            kwargs={
-                "organization_slug": self.organization.slug,
-                "pk": self.org_user.pk,
-            },
-        )
+        url = self.get_org_member_detail_url(self.organization.slug, self.org_user.pk)
         res = self.client.get(url)
         self.assertEqual(res.data["email"], self.user.email)
 
@@ -66,46 +69,25 @@ class OrganizationUsersAPITestCase(APITestCase):
         team = baker.make("teams.Team", organization=self.organization)
         team.members.add(self.org_user)
 
-        url = reverse(
-            "organization-members-detail",
-            kwargs={
-                "organization_slug": self.organization.slug,
-                "pk": self.org_user.pk,
-            },
-        )
+        url = self.get_org_member_detail_url(self.organization.slug, self.org_user.pk)
         res = self.client.get(url)
         self.assertContains(res, self.user.email)
         self.assertContains(res, team.slug)
         self.assertNotContains(res, other_user.email)
 
-        url = reverse(
-            "organization-members-detail",
-            kwargs={"organization_slug": self.organization.slug, "pk": "me"},
-        )
+        url = self.get_org_member_detail_url(self.organization.slug, "me")
         res = self.client.get(url)
         self.assertContains(res, self.user.email)
         self.assertNotContains(res, other_user.email)
 
-        url = reverse(
-            "organization-members-detail",
-            kwargs={
-                "organization_slug": other_organization.slug,
-                "pk": other_org_user.pk,
-            },
-        )
+        url = self.get_org_member_detail_url(self.organization.slug, other_org_user.pk)
         res = self.client.get(url)
         self.assertEqual(res.status_code, 404)
 
     def test_organization_users_add_team_member(self):
         team = baker.make("teams.Team", organization=self.organization)
         url = (
-            reverse(
-                "organization-members-detail",
-                kwargs={
-                    "organization_slug": self.organization.slug,
-                    "pk": self.org_user.pk,
-                },
-            )
+            self.get_org_member_detail_url(self.organization.slug, self.org_user.pk)
             + f"teams/{team.slug}/"
         )
 
@@ -121,13 +103,7 @@ class OrganizationUsersAPITestCase(APITestCase):
     def test_organization_users_add_self_team_member(self):
         team = baker.make("teams.Team", organization=self.organization)
         url = (
-            reverse(
-                "organization-members-detail",
-                kwargs={
-                    "organization_slug": self.organization.slug,
-                    "pk": "me",
-                },
-            )
+            self.get_org_member_detail_url(self.organization.slug, "me")
             + f"teams/{team.slug}/"
         )
 
@@ -214,13 +190,7 @@ class OrganizationUsersAPITestCase(APITestCase):
         team = baker.make("teams.Team", organization=self.organization)
 
         url = (
-            reverse(
-                "organization-members-detail",
-                kwargs={
-                    "organization_slug": self.organization.slug,
-                    "pk": self.org_user.pk,
-                },
-            )
+            self.get_org_member_detail_url(self.organization.slug, self.org_user.pk)
             + f"teams/{team.slug}/"
         )
 
@@ -241,13 +211,7 @@ class OrganizationUsersAPITestCase(APITestCase):
         other_user = baker.make("users.User")
         other_org_user = self.organization.add_user(other_user)
         other_org_user_url = (
-            reverse(
-                "organization-members-detail",
-                kwargs={
-                    "organization_slug": self.organization.slug,
-                    "pk": other_org_user.pk,
-                },
-            )
+            self.get_org_member_detail_url(self.organization.slug, other_org_user.pk)
             + f"teams/{team.slug}/"
         )
         res = self.client.post(other_org_user_url)
@@ -318,7 +282,7 @@ class OrganizationUsersAPITestCase(APITestCase):
             "user": "new@example.com",
         }
         res = self.client.post(self.members_url, data)
-        self.assertEquals(res.status_code, 403)
+        self.assertEqual(res.status_code, 403)
 
     def test_organization_users_reinvite(self):
         other_user = baker.make("users.user")
@@ -328,13 +292,7 @@ class OrganizationUsersAPITestCase(APITestCase):
             organization=self.organization,
         )
 
-        url = reverse(
-            "organization-members-detail",
-            kwargs={
-                "organization_slug": self.organization.slug,
-                "pk": other_org_user.pk,
-            },
-        )
+        url = self.get_org_member_detail_url(self.organization.slug, other_org_user.pk)
         data = {"reinvite": 1}
         res = self.client.put(url, data)
         self.assertContains(res, other_user.email)
@@ -344,13 +302,7 @@ class OrganizationUsersAPITestCase(APITestCase):
         other_user = baker.make("users.user")
         other_org_user = self.organization.add_user(other_user)
 
-        url = reverse(
-            "organization-members-detail",
-            kwargs={
-                "organization_slug": self.organization.slug,
-                "pk": other_org_user.pk,
-            },
-        )
+        url = self.get_org_member_detail_url(self.organization.slug, other_org_user.pk)
 
         new_role = OrganizationUserRole.ADMIN
         data = {"role": new_role.label.lower(), "teams": []}
@@ -368,13 +320,7 @@ class OrganizationUsersAPITestCase(APITestCase):
         other_user = baker.make("users.user")
         other_org_user = self.organization.add_user(other_user)
 
-        url = reverse(
-            "organization-members-detail",
-            kwargs={
-                "organization_slug": self.organization.slug,
-                "pk": other_org_user.pk,
-            },
-        )
+        url = self.get_org_member_detail_url(self.organization.slug, other_org_user.pk)
 
         new_role = OrganizationUserRole.ADMIN
         data = {"role": new_role.label.lower(), "teams": []}
@@ -385,13 +331,7 @@ class OrganizationUsersAPITestCase(APITestCase):
         other_user = baker.make("users.user")
         other_org_user = self.organization.add_user(other_user)
 
-        url = reverse(
-            "organization-members-detail",
-            kwargs={
-                "organization_slug": self.organization.slug,
-                "pk": other_org_user.pk,
-            },
-        )
+        url = self.get_org_member_detail_url(self.organization.slug, other_org_user.pk)
 
         res = self.client.delete(url)
         self.assertEqual(res.status_code, 204)
@@ -403,14 +343,20 @@ class OrganizationUsersAPITestCase(APITestCase):
         other_user = baker.make("users.user")
         other_org_user = self.organization.add_user(other_user)
 
-        url = reverse(
-            "organization-members-detail",
-            kwargs={
-                "organization_slug": self.organization.slug,
-                "pk": other_org_user.pk,
-            },
-        )
+        url = self.get_org_member_detail_url(self.organization.slug, other_org_user.pk)
 
         res = self.client.delete(url)
         self.assertEqual(res.status_code, 403)
         self.assertEqual(other_user.organizations_ext_organizationuser.count(), 1)
+
+    def test_organization_members_set_owner(self):
+        other_user = baker.make("users.user")
+        other_org_user = self.organization.add_user(other_user)
+
+        url = (
+            self.get_org_member_detail_url(self.organization.slug, other_org_user.pk)
+            + "set_owner/"
+        )
+
+        res = self.client.post(url)
+        self.assertTrue(res.data["isOwner"])
