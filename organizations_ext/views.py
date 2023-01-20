@@ -193,7 +193,7 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
             organization.is_owner(user)
             or organization.organization_users.filter(
                 user=user, role=OrganizationUserRole.OWNER
-            )
+            ).exists()
         ):
             raise exceptions.PermissionDenied("Only owner may set organization owner.")
         organization.change_owner(new_owner)

@@ -352,11 +352,39 @@ class OrganizationUsersAPITestCase(APITestCase):
     def test_organization_members_set_owner(self):
         other_user = baker.make("users.user")
         other_org_user = self.organization.add_user(other_user)
+        random_org_user = baker.make("organizations_ext.OrganizationUser")
+
+        url = (
+            self.get_org_member_detail_url(self.organization.slug, random_org_user.pk)
+            + "set_owner/"
+        )
+        res = self.client.post(url)
+        self.assertEqual(
+            res.status_code, 404, "Don't set random unrelated users as owner"
+        )
 
         url = (
             self.get_org_member_detail_url(self.organization.slug, other_org_user.pk)
             + "set_owner/"
         )
-
         res = self.client.post(url)
-        self.assertTrue(res.data["isOwner"])
+        self.assertTrue(
+            res.data["isOwner"], "Current owner may set another org member as owner"
+        )
+
+        url = (
+            self.get_org_member_detail_url(self.organization.slug, self.org_user.pk)
+            + "set_owner/"
+        )
+        self.org_user.role = OrganizationUserRole.MANAGER
+        self.org_user.save()
+        res = self.client.post(url)
+        self.assertEqual(
+            res.status_code, 403, "Can't set self as owner with only manager role"
+        )
+
+        self.org_user.role = OrganizationUserRole.OWNER
+        self.org_user.save()
+        res = self.client.post(url)
+        self.assertTrue(res.data["isOwner"], "Owner role may set org member as owner")
+        self.assertEqual(self.organization.owners.count(), 1)
