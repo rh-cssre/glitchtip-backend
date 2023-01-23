@@ -1,32 +1,18 @@
-from django.core.management.base import BaseCommand
 from django.utils import timezone
-from model_bakery import baker
-from model_bakery.random_gen import gen_json, gen_slug
 
-from organizations_ext.models import Organization
+from glitchtip.base_commands import MakeSampleCommand
 from performance.models import TransactionEvent
 from performance.test_data import generate_fake_transaction_event
-from projects.models import Project, TransactionEventProjectHourlyStatistic
-
-baker.generators.add("organizations.fields.SlugField", gen_slug)
-baker.generators.add("django.db.models.JSONField", gen_json)
+from projects.models import TransactionEventProjectHourlyStatistic
 
 
-class Command(BaseCommand):
+class Command(MakeSampleCommand):
     help = (
         "Create a large number of transaction events for dev and demonstration purposes"
     )
 
-    def add_arguments(self, parser):
-        parser.add_argument("quantity", nargs="?", type=int, default=10000)
-
     def handle(self, *args, **options):
-        organization = Organization.objects.first()
-        if not organization:
-            organization = baker.make("organizations_ext.Organization")
-        project = Project.objects.filter(organization=organization).first()
-        if not project:
-            project = baker.make("projects.Project", organization=organization)
+        super().handle(*args, **options)
 
         quantity = options["quantity"]
         batch_size = 10000
@@ -41,16 +27,14 @@ class Command(BaseCommand):
                 batch_size = quantity
             event_list = []
             for _ in range(batch_size):
-                event = generate_fake_transaction_event(project, timezone.now())
+                event = generate_fake_transaction_event(self.project, timezone.now())
                 event_list.append(event)
             TransactionEvent.objects.bulk_create(event_list)
             quantity -= batch_size
-            self.stdout.write(self.style.NOTICE("."), ending="")
+            self.progress_tick()
 
-        TransactionEventProjectHourlyStatistic.update(project.pk, timezone.now())
+        TransactionEventProjectHourlyStatistic.update(self.project.pk, timezone.now())
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                'Successfully created "%s" transaction events' % options["quantity"]
-            )
+        self.success_message(
+            'Successfully created "%s" transaction events' % options["quantity"]
         )
