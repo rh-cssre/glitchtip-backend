@@ -122,3 +122,7 @@ class MonitorSerializer(serializers.ModelSerializer):
                 "Expected status is required for " + data["monitor_type"]
             )
         return data
+
+
+class MonitorDetailSerializer(MonitorSerializer):
+    checks = MonitorCheckSerializer(many=True, read_only=True)

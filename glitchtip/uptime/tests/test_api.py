@@ -103,6 +103,8 @@ class UptimeAPITestCase(GlitchTipTestCase):
         self.assertTrue(Monitor.objects.filter(expected_status=None).exists())
 
     def test_monitor_retrieve(self):
+        """Test monitor details endpoint. Unlike the list view,
+        checks here should include response time for the frontend graph"""
         environment = baker.make(
             "environments.Environment", organization=self.organization
         )
@@ -136,6 +138,7 @@ class UptimeAPITestCase(GlitchTipTestCase):
         self.assertEqual(res.data["isUp"], True)
         self.assertEqual(res.data["lastChange"], "2021-09-19T15:39:31Z")
         self.assertEqual(res.data["environment"], environment.pk)
+        self.assertTrue(res.data["checks"][0]["responseTime"])
 
     def test_monitor_checks_list(self):
         monitor = baker.make(
