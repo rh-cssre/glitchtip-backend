@@ -12,7 +12,7 @@ class CommandsTestCase(TestCase):
 
     def test_make_sample_issues(self):
         """Default is one random event"""
-        management.call_command("make_sample_issues")
+        management.call_command("make_sample_issues", quantity=1)
         self.assertEqual(Event.objects.all().count(), 1)
 
     def test_make_sample_events(self):
@@ -31,5 +31,5 @@ class CommandsTestCase(TestCase):
 
     def test_make_sample_issues_fake(self):
         """Default is one random event"""
-        management.call_command("make_sample_issues", only_fake=True)
+        management.call_command("make_sample_issues", only_fake=True, quantity=1)
         self.assertEqual(Event.objects.all().count(), 1)
