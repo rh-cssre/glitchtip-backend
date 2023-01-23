@@ -6,7 +6,7 @@ from model_bakery.random_gen import gen_json, gen_slug
 from organizations_ext.models import Organization
 from performance.models import TransactionEvent
 from performance.test_data import generate_fake_transaction_event
-from projects.models import Project
+from projects.models import Project, TransactionEventProjectHourlyStatistic
 
 baker.generators.add("organizations.fields.SlugField", gen_slug)
 baker.generators.add("django.db.models.JSONField", gen_json)
@@ -46,6 +46,8 @@ class Command(BaseCommand):
             TransactionEvent.objects.bulk_create(event_list)
             quantity -= batch_size
             self.stdout.write(self.style.NOTICE("."), ending="")
+
+        TransactionEventProjectHourlyStatistic.update(project.pk, timezone.now())
 
         self.stdout.write(
             self.style.SUCCESS(
