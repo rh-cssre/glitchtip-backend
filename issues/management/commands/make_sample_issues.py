@@ -1,22 +1,18 @@
 import random
 
-from django.core.management.base import BaseCommand
 from model_bakery import baker
-from model_bakery.random_gen import gen_json, gen_slug
 
 from events.test_data import event_generator
 from events.views import EventStoreAPIView
+from glitchtip.base_commands import MakeSampleCommand
 from projects.models import Project
 
-baker.generators.add("organizations.fields.SlugField", gen_slug)
-baker.generators.add("django.db.models.JSONField", gen_json)
 
-
-class Command(BaseCommand):
+class Command(MakeSampleCommand):
     help = "Create sample issues and events for dev and demonstration purposes"
 
     def add_arguments(self, parser):
-        parser.add_argument("quantity", nargs="?", type=int)
+        super().add_arguments(parser)
         parser.add_argument(
             "--only-real",
             action="store_true",
@@ -40,11 +36,7 @@ class Command(BaseCommand):
         serializer.save()
 
     def handle(self, *args, **options):
-        project = Project.objects.first()
-        if not project:
-            project = baker.make("projects.Project")
-        if options["quantity"] is None:
-            options["quantity"] = 1
+        super().handle(*args, **options)
         quantity = options["quantity"]
 
         only_real = options["only_real"]
@@ -52,16 +44,14 @@ class Command(BaseCommand):
 
         if only_real:
             for _ in range(quantity):
-                self.generate_real_event(project)
+                self.generate_real_event(self.project)
         elif only_fake:
-            baker.make("events.Event", issue__project=project, _quantity=quantity)
+            baker.make("events.Event", issue__project=self.project, _quantity=quantity)
         else:
             for _ in range(quantity):
                 if random.choice([0, 1]):  # nosec
-                    baker.make("events.Event", issue__project=project)
+                    baker.make("events.Event", issue__project=self.project)
                 else:
-                    self.generate_real_event(project)
+                    self.generate_real_event(self.project)
 
-        self.stdout.write(
-            self.style.SUCCESS('Successfully created "%s" events' % quantity)
-        )
+        self.success_message('Successfully created "%s" events' % quantity)

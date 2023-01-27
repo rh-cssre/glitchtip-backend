@@ -1,35 +1,24 @@
-from django.core.management.base import BaseCommand
 from model_bakery import baker
-from model_bakery.random_gen import gen_json, gen_slug
 
 from events.models import Event
-from events.test_data import event_generator
+from events.test_data import bulk_event_data, event_generator
+from glitchtip.base_commands import MakeSampleCommand
 from issues.models import Issue
 from issues.tasks import update_search_index_issue
 from organizations_ext.models import Organization
 from projects.models import Project
 from projects.tasks import update_event_project_hourly_statistic
 
-from events.test_data import bulk_event_data
 
-baker.generators.add("organizations.fields.SlugField", gen_slug)
-baker.generators.add("django.db.models.JSONField", gen_json)
-
-
-class Command(BaseCommand):
+class Command(MakeSampleCommand):
     help = "Create an issue with a large number of events for dev and demonstration purposes"
 
     def add_arguments(self, parser):
-        parser.add_argument("quantity", nargs="?", type=int, default=10000)
+        super().add_arguments(parser)
         parser.add_argument("batch_size", nargs="?", type=int, default=10000)
 
     def handle(self, *args, **options):
-        organization = Organization.objects.first()
-        if not organization:
-            organization = baker.make("organizations_ext.Organization")
-        project = Project.objects.filter(organization=organization).first()
-        if not project:
-            project = baker.make("projects.Project", organization=organization)
+        super().handle(*args, **options)
         issue_data = bulk_event_data.large_event
         title = issue_data.get("title")
         culprit = issue_data.get("culprit")
@@ -38,7 +27,7 @@ class Command(BaseCommand):
             title=title,
             culprit=culprit,
             metadata=metadata,
-            project=project,
+            project=self.project,
         )
 
         quantity = options["quantity"]
@@ -63,7 +52,6 @@ class Command(BaseCommand):
             quantity -= batch_size
 
         update_search_index_issue(args=[issue.pk])
-        update_event_project_hourly_statistic(args=[project.pk, event.created])
-        self.stdout.write(
-            self.style.SUCCESS('Successfully created "%s" events' % options["quantity"])
-        )
+        update_event_project_hourly_statistic(args=[self.project.pk, event.created])
+
+        self.success_message('Successfully created "%s" events' % options["quantity"])
