@@ -347,11 +347,11 @@ class OrganizationUsersAPITestCase(APITestCase):
 
         third_user = baker.make("users.user")
         third_org_user = self.organization.add_user(third_user)
-        changer_ownership_url = (
+        change_ownership_url = (
             self.get_org_member_detail_url(self.organization.slug, third_org_user.pk)
             + "set_owner/"
         )
-        self.client.post(changer_ownership_url)
+        self.client.post(change_ownership_url)
 
         res = self.client.delete(url)
         self.assertEqual(
