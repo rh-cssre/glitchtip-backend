@@ -63,7 +63,7 @@ class UserViewSet(viewsets.ModelViewSet):
         ):
             return Response(
                 data={
-                    "message": "User is orgnanization owner. Delete organization or transfer ownership first."
+                    "message": "User is organization owner. Delete organization or transfer ownership first."
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )

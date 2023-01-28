@@ -337,6 +337,29 @@ class OrganizationUsersAPITestCase(APITestCase):
         self.assertEqual(res.status_code, 204)
         self.assertEqual(other_user.organizations_ext_organizationuser.count(), 0)
 
+        url = self.get_org_member_detail_url(self.organization.slug, self.org_user.pk)
+        res = self.client.delete(url)
+        self.assertEqual(
+            res.status_code,
+            400,
+            "Org owner should not be able to remove themselves from org",
+        )
+
+        third_user = baker.make("users.user")
+        third_org_user = self.organization.add_user(third_user)
+        change_ownership_url = (
+            self.get_org_member_detail_url(self.organization.slug, third_org_user.pk)
+            + "set_owner/"
+        )
+        self.client.post(change_ownership_url)
+
+        res = self.client.delete(url)
+        self.assertEqual(
+            res.status_code,
+            204,
+            "Can remove self after transferring ownership",
+        )
+
     def test_organization_users_delete_without_permissions(self):
         self.org_user.role = OrganizationUserRole.ADMIN
         self.org_user.save()
