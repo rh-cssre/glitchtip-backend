@@ -15,7 +15,7 @@ class FilterTestCase(GlitchTipTestCase):
         self.url = reverse("issue-list")
 
     def test_filter_by_date(self):
-        """ A user should be able to filter by start and end datetimes. """
+        """A user should be able to filter by start and end datetimes."""
         with freeze_time(timezone.datetime(1999, 1, 1)):
             event1 = baker.make("events.Event", issue__project=self.project)
         with freeze_time(timezone.datetime(2010, 1, 1)):
@@ -238,3 +238,12 @@ class SearchTestCase(GlitchTipTestCase):
         self.assertContains(res, "matchingEventId")
         self.assertContains(res, event2.event_id.hex)
         self.assertEqual(res.headers.get("X-Sentry-Direct-Hit"), "1")
+
+        event3 = baker.make(
+            "events.Event", issue=event.issue, data={"name": "plum sauce"}
+        )
+        update_search_index_all_issues()
+        res = self.client.get(self.url + '?query=is:unresolved "plum sauce"')
+        self.assertContains(res, event3.issue.title)
+        res = self.client.get(self.url + '?query=is:unresolved "apple sauce"')
+        self.assertContains(res, event.issue.title)

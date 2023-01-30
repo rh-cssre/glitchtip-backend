@@ -9,40 +9,79 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('projects', '0007_auto_20201026_2354'),
-        ('organizations_ext', '0009_organization_scrub_ip_addresses'),
+        (
+            "projects",
+            "0001_squashed_0009_alter_project_id_alter_projectcounter_id_and_more",
+        ),
+        ("organizations_ext", "0001_squashed_0009_organization_scrub_ip_addresses"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Environment',
+            name="Environment",
             fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=256)),
-                ('created', models.DateTimeField(auto_now_add=True, db_index=True)),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='organizations_ext.organization')),
+                (
+                    "id",
+                    models.AutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=256)),
+                ("created", models.DateTimeField(auto_now_add=True, db_index=True)),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="organizations_ext.organization",
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='EnvironmentProject',
+            name="EnvironmentProject",
             fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_hidden', models.BooleanField()),
-                ('created', models.DateTimeField(auto_now_add=True, db_index=True)),
-                ('environment', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='environments.environment')),
-                ('project', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='projects.project')),
+                (
+                    "id",
+                    models.AutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_hidden", models.BooleanField()),
+                ("created", models.DateTimeField(auto_now_add=True, db_index=True)),
+                (
+                    "environment",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="environments.environment",
+                    ),
+                ),
+                (
+                    "project",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="projects.project",
+                    ),
+                ),
             ],
             options={
-                'unique_together': {('project', 'environment')},
+                "unique_together": {("project", "environment")},
             },
         ),
         migrations.AddField(
-            model_name='environment',
-            name='projects',
-            field=models.ManyToManyField(through='environments.EnvironmentProject', to='projects.Project'),
+            model_name="environment",
+            name="projects",
+            field=models.ManyToManyField(
+                through="environments.EnvironmentProject", to="projects.Project"
+            ),
         ),
         migrations.AlterUniqueTogether(
-            name='environment',
-            unique_together={('organization', 'name')},
+            name="environment",
+            unique_together={("organization", "name")},
         ),
     ]

@@ -89,6 +89,19 @@ class UptimeAPITestCase(GlitchTipTestCase):
         res = self.client.post(self.list_url, data)
         self.assertEqual(res.status_code, 400)
 
+    def test_create_expected_status(self):
+        data = {
+            "monitorType": "Ping",
+            "name": "Test",
+            "url": "http://example.com",
+            "expectedStatus": None,
+            "interval": "00:01:00",
+            "project": self.project.pk,
+        }
+        res = self.client.post(self.list_url, data, format="json")
+        self.assertEqual(res.status_code, 201)
+        self.assertTrue(Monitor.objects.filter(expected_status=None).exists())
+
     def test_monitor_retrieve(self):
         environment = baker.make(
             "environments.Environment", organization=self.organization
