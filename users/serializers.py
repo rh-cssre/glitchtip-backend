@@ -57,10 +57,14 @@ class SocialAppSerializer(serializers.ModelSerializer):
         fields = ("provider", "name", "client_id", "authorize_url", "scopes")
 
     def get_authorize_url(self, obj):
-        adapter = SOCIAL_ADAPTER_MAP.get(obj.provider, None)
+        provider_name = (
+            providers.registry.by_id(obj.provider).get_package().split(".")[-1]
+        )
         request = self.context.get("request")
+        adapter = SOCIAL_ADAPTER_MAP.get(provider_name, None)(request)
         if adapter:
-            return adapter(request).authorize_url
+            adapter.provider_id = obj.provider
+            return adapter.authorize_url
 
     def get_scopes(self, obj):
         request = self.context.get("request")

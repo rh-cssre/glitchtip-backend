@@ -11,7 +11,8 @@ from dj_rest_auth.registration.views import (
 from allauth.account.models import EmailAddress
 from organizations_ext.models import Organization
 from users.utils import is_user_registration_open
-from .models import User, UserProjectAlert
+from projects.models import UserProjectAlert
+from .models import User
 from .serializers import (
     UserSerializer,
     UserNotificationsSerializer,

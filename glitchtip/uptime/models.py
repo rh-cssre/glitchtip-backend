@@ -46,7 +46,9 @@ class Monitor(CreatedModel):
     )
     name = models.CharField(max_length=200)
     url = models.URLField(max_length=2000, blank=True)
-    expected_status = models.PositiveSmallIntegerField(default=200)
+    expected_status = models.PositiveSmallIntegerField(
+        default=200, blank=True, null=True
+    )
     expected_body = models.CharField(max_length=2000, blank=True)
     environment = models.ForeignKey(
         "environments.Environment",
