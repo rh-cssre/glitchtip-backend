@@ -106,7 +106,7 @@ build_arm_x86:
 
 
 update_deps:
-  image: renovate/renovate:latest
+  image: renovate/renovate:33
   variables:
     RENOVATE_PLATFORM: gitlab
     RENOVATE_ENDPOINT: https://gitlab.com/api/v4
