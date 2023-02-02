@@ -13,7 +13,7 @@ from organizations.base import (
 )
 from organizations.fields import SlugField
 from organizations.managers import OrgManager
-from organizations.signals import user_added
+from organizations.signals import owner_changed, user_added
 from sql_util.utils import SubqueryCount, SubquerySum
 
 # Defines which scopes belong to which role
@@ -276,6 +276,22 @@ class Organization(SharedBaseModel, OrganizationBase):
     def get_user_scopes(self, user):
         org_user = self.organization_users.get(user=user)
         return org_user.get_scopes()
+
+    def change_owner(self, new_owner):
+        """
+        Changes ownership of an organization.
+        """
+        old_owner = self.owner.organization_user
+        self.owner.organization_user = new_owner
+        self.owner.save()
+
+        owner_changed.send(sender=self, old=old_owner, new=new_owner)
+
+    def is_owner(self, user):
+        """
+        Returns True is user is the organization's owner, otherwise false
+        """
+        return self.owner.organization_user.user == user
 
 
 class OrganizationUser(SharedBaseModel, OrganizationUserBase):

@@ -41,6 +41,7 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
     teams = serializers.SlugRelatedField(
         many=True, write_only=True, slug_field="slug", queryset=Team.objects.none()
     )
+    isOwner = serializers.SerializerMethodField()
 
     class Meta:
         model = OrganizationUser
@@ -53,6 +54,7 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
             "email",
             "teams",
             "pending",
+            "isOwner",
         )
 
     def __init__(self, *args, request_user=None, **kwargs):
@@ -71,6 +73,11 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
             extra_kwargs["user"] = {"read_only": True}
 
         return extra_kwargs
+
+    def get_isOwner(self, obj):
+        if owner := obj.organization.owner:
+            return owner.organization_user_id == obj.id
+        return False
 
     def create(self, validated_data):
         role = OrganizationUserRole.from_string(validated_data.get("get_role"))
