@@ -12,6 +12,7 @@ baker.generators.add("django.db.models.JSONField", gen_json)
 class MakeSampleCommand(BaseCommand):
     organization = None
     project = None
+    batch_size = 10000
 
     def add_org_project_arguments(self, parser):
         parser.add_argument("--org", type=str, help="Organization slug")

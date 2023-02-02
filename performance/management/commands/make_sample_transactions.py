@@ -15,7 +15,7 @@ class Command(MakeSampleCommand):
         super().handle(*args, **options)
 
         quantity = options["quantity"]
-        batch_size = 10000
+        batch_size = self.batch_size
 
         if quantity < batch_size:
             batches = 1
