@@ -7,9 +7,12 @@ from .models import Issue
 
 class IssueFilter(filters.FilterSet):
     created = StartEndRelativeIsoDateTimeRangeFilter(
-        field_name="created", label="Issue created",
+        field_name="created",
+        label="Issue created",
     )
-    project = filters.ModelMultipleChoiceFilter(queryset=Project.objects.all())
+    project = filters.ModelMultipleChoiceFilter(
+        queryset=Project.objects.all(), distinct=False
+    )
 
     class Meta:
         model = Issue
