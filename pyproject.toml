@@ -42,8 +42,8 @@ uwsgi-chunked = "^0.1.8"
 django-import-export = "^3.0.0"
 flower = "^1.2.0"
 
-[tool.poetry.dev-dependencies]
-black = "^22.1.0"
+[tool.poetry.group.dev.dependencies]
+black = "^23.0.0"
 ipdb = "^0.13.2"
 pylint = "^2.4.4"
 pylint-django = "^2.0.13"
@@ -59,9 +59,6 @@ django-sslserver = "^0.22"
 aioresponses = "^0.7.2"
 isort = "^5.9.3"
 requests-mock = "^1.9.3"
-
-[tool.poetry.group.dev.dependencies]
-black = "^23.0.0"
 
 [tool.isort]
 profile = "black"
