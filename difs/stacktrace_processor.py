@@ -1,13 +1,9 @@
 import copy
 import logging
-from symbolic import (
-    Archive, SymCache, parse_addr, ProguardMapper
-)
+from symbolic import Archive, SymCache, parse_addr, ProguardMapper
 from symbolic.demangle import demangle_name
 
-alternative_arch = {
-    "x86": ["x86", "x86_64"]
-}
+alternative_arch = {"x86": ["x86", "x86_64"]}
 
 
 class ResolvedStacktrace:
@@ -82,19 +78,14 @@ class StacktraceProcessor:
         if cls.is_android_event(event):
             return cls.resolve_proguard_stacktrace(stacktrace, symbol_file)
 
-        return cls.resolve_native_stacktrace(
-            stacktrace,
-            symbol_file,
-            arch=arch
-        )
+        return cls.resolve_native_stacktrace(stacktrace, symbol_file, arch=arch)
 
     @classmethod
     def resolve_proguard_stacktrace(cls, stacktrace, symbol_file):
         try:
             mapper = ProguardMapper.open(symbol_file)
         except Exception as e:
-            getLogger().error(
-                f"StacktraceProcessor: Open symbol file failed: {e}")
+            getLogger().error(f"StacktraceProcessor: Open symbol file failed: {e}")
             return
 
         try:
@@ -120,10 +111,7 @@ class StacktraceProcessor:
 
                 resolved_frames[index] = frame
 
-            return ResolvedStacktrace(
-                score=score,
-                frames=resolved_frames
-            )
+            return ResolvedStacktrace(score=score, frames=resolved_frames)
 
         except Exception as e:
             getLogger().error(f"StacktraceProcessor: Unexpected error: {e}")
@@ -137,8 +125,7 @@ class StacktraceProcessor:
             obj = find_arch_object(archive, arch)
             sym_cache = SymCache.from_object(obj)
         except Exception as e:
-            getLogger().error(
-                f"StacktraceProcessor: Open symbol file failed: {e}")
+            getLogger().error(f"StacktraceProcessor: Open symbol file failed: {e}")
             return
 
         try:
@@ -154,10 +141,7 @@ class StacktraceProcessor:
                 addr = instruction_addr - image_addr
                 symbol = sym_cache.lookup(addr)
                 digested_symbol = digest_symbol(symbol)
-                if (
-                    digested_symbol is not None and
-                    digested_symbol.symbol == function
-                ):
+                if digested_symbol is not None and digested_symbol.symbol == function:
                     frame["resolved"] = True
                     frame["filename"] = digested_symbol.filename
                     frame["lineNo"] = digested_symbol.line
@@ -166,10 +150,7 @@ class StacktraceProcessor:
 
                 resolved_frames.append(frame)
 
-            return ResolvedStacktrace(
-                score=score,
-                frames=resolved_frames
-            )
+            return ResolvedStacktrace(score=score, frames=resolved_frames)
         except Exception as e:
             getLogger().error(f"StacktraceProcessor: Unexpected error: {e}")
 

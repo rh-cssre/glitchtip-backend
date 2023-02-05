@@ -42,7 +42,7 @@ class OrganizationPrimaryKeySerializer(serializers.PrimaryKeyRelatedField):
 
 
 class OrganizationSelectSerializer(serializers.Serializer):
-    """ Organization in which user is owner of """
+    """Organization in which user is owner of"""
 
     organization = OrganizationPrimaryKeySerializer()
 
@@ -52,7 +52,7 @@ class PlanForOrganizationSerializer(OrganizationSelectSerializer):
 
 
 class CreateSubscriptionSerializer(PlanForOrganizationSerializer):
-    """A serializer used to create a Subscription. Only works with free plans. """
+    """A serializer used to create a Subscription. Only works with free plans."""
 
     subscription = SubscriptionSerializer(read_only=True)
 

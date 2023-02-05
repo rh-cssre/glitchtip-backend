@@ -8,7 +8,6 @@ import uuid
 
 
 class Migration(migrations.Migration):
-
     replaces = [
         ("events", "0001_squashed_0003_auto_20210116_2110"),
         ("events", "0002_auto_20210122_1836"),

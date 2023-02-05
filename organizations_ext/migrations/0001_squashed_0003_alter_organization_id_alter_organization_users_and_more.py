@@ -9,7 +9,6 @@ import organizations.fields
 
 
 class Migration(migrations.Migration):
-
     replaces = [
         ("organizations_ext", "0001_squashed_0009_organization_scrub_ip_addresses"),
         ("organizations_ext", "0002_organizationinvitation"),

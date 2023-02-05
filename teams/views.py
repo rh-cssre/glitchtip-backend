@@ -7,7 +7,7 @@ from .permissions import TeamPermission
 
 
 class NestedTeamViewSet(viewsets.ModelViewSet):
-    """ Teams for an Organization """
+    """Teams for an Organization"""
 
     queryset = Team.objects.all()
     serializer_class = TeamSerializer

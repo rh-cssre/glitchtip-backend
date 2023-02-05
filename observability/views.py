@@ -11,4 +11,3 @@ class DjangoPrometheusMetrics(APIView):
 
     def get(self, request):
         return exports.ExportToDjangoView(request)
-

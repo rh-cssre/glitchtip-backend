@@ -34,7 +34,7 @@ class Release(CreatedModel):
 
 
 class ReleaseProject(models.Model):
-    """ Through model may be used to store cached event counts in the future """
+    """Through model may be used to store cached event counts in the future"""
 
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
     release = models.ForeignKey(Release, on_delete=models.CASCADE)

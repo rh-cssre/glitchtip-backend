@@ -15,7 +15,8 @@ class WebhookTestCase(TestCase):
     @mock.patch("requests.post")
     def test_send_webhook(self, mock_post):
         send_webhook(
-            TEST_URL, "from unit test",
+            TEST_URL,
+            "from unit test",
         )
         mock_post.assert_called_once()
 
@@ -31,7 +32,10 @@ class WebhookTestCase(TestCase):
     def test_trigger_webhook(self, mock_post):
         project = baker.make("projects.Project")
         alert = baker.make(
-            "alerts.ProjectAlert", project=project, timespan_minutes=1, quantity=2,
+            "alerts.ProjectAlert",
+            project=project,
+            timespan_minutes=1,
+            quantity=2,
         )
         baker.make(
             "alerts.AlertRecipient",

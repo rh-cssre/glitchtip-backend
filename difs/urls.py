@@ -1,7 +1,5 @@
 from django.urls import path
-from .views import (
-    DifsAssembleAPIView, ProjectReprocessingAPIView, DsymsAPIView
-)
+from .views import DifsAssembleAPIView, ProjectReprocessingAPIView, DsymsAPIView
 
 
 urlpatterns = [
@@ -13,11 +11,11 @@ urlpatterns = [
     path(
         "projects/<slug:organization_slug>/<slug:project_slug>/reprocessing/",  # noqa
         ProjectReprocessingAPIView.as_view(),
-        name="project-reporcessing"
+        name="project-reporcessing",
     ),
     path(
         "projects/<slug:organization_slug>/<slug:project_slug>/files/dsyms/",  # noqa
         DsymsAPIView.as_view(),
-        name="dyms"
-    )
+        name="dyms",
+    ),
 ]

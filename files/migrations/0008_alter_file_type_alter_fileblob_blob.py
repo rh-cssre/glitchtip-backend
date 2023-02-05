@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("files", "0001_squashed_0007_remove_file_blobs_file_blob"),
     ]

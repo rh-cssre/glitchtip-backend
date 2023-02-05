@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("users", "0001_squashed_0008_alter_user_id_alter_user_options_and_more"),
     ]

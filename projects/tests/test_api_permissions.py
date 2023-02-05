@@ -146,4 +146,3 @@ class ProjectKeyAPIPermissionTests(APIPermissionTestCase):
         self.assertPutReqStatusCode(self.detail_url, data, 403)
         self.auth_token.add_permission("project:write")
         self.assertPutReqStatusCode(self.detail_url, data, 200)
-

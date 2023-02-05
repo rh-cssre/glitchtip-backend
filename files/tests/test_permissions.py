@@ -19,4 +19,3 @@ class ChunkUploadAPIPermissionTests(APIPermissionTestCase):
         self.assertGetReqStatusCode(self.url, 403)
         self.auth_token.add_permission("project:write")
         self.assertGetReqStatusCode(self.url, 200)
-

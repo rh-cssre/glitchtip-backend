@@ -9,7 +9,6 @@ from issues.migrations.sql.triggers import UPDATE_ISSUE_TRIGGER
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [

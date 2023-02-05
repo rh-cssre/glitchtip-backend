@@ -38,18 +38,23 @@ class EventTagTestCase(TestCase):
                 event = self.make_fake_event_with_ua(ua_test_case["ua_string"])
                 context = processor.get_context(event)
                 self.assertEqual(
-                    context, ua_test_case[processor.name], str(processor),
+                    context,
+                    ua_test_case[processor.name],
+                    str(processor),
                 )
 
     def test_user_agent_context_processor_no_ua(self):
-        """ Missing UA header should return None """
+        """Missing UA header should return None"""
         event = {
             "request": {
                 "headers": [
                     ["Accept-Encoding", "gzip"],
                     ["Connection", "Keep-Alive"],
                     ["Content-Length", "123"],
-                    ["Content-Type", "multipart/form-data; boundary=1M",],
+                    [
+                        "Content-Type",
+                        "multipart/form-data; boundary=1M",
+                    ],
                     ["Host", "example.com"],
                 ]
             }

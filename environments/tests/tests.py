@@ -94,4 +94,3 @@ class EnvironmentProjectTestCase(GlitchTipTestCase):
         res = self.client.put(detail_url, data)
         self.assertContains(res, "true")
         self.assertTrue(EnvironmentProject.objects.filter(is_hidden=True).exists())
-

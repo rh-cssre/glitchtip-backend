@@ -14,4 +14,3 @@ class APITokenAdmin(admin.ModelAdmin):
 
 
 admin.site.register(APIToken, APITokenAdmin)
-

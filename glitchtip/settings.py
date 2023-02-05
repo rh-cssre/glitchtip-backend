@@ -109,6 +109,7 @@ EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
 # https://docs.djangoproject.com/en/dev/howto/static-files/
 STATIC_URL = "/static/"
 
+
 # GlitchTip can track GlitchTip's own errors.
 # If enabling this, use a different server to avoid infinite loops.
 def before_send(event, hint):
@@ -125,6 +126,7 @@ SENTRY_DSN = env.str("SENTRY_DSN", None)
 SENTRY_FRONTEND_DSN = env.str("SENTRY_FRONTEND_DSN", SENTRY_DSN)
 # Set traces_sample_rate to 1.0 to capture 100%. Recommended to keep this value low.
 SENTRY_TRACES_SAMPLE_RATE = env.float("SENTRY_TRACES_SAMPLE_RATE", 0.1)
+
 
 # Ignore whitenoise served static routes
 def traces_sampler(sampling_context):
@@ -771,6 +773,7 @@ if CELERY_TASK_ALWAYS_EAGER:
 
 MFA_SERVER_NAME = GLITCHTIP_URL.hostname
 FIDO_SERVER_ID = GLITCHTIP_URL.hostname
+
 
 # Workaround for error encountered at build time (source: https://github.com/axnsan12/drf-yasg/issues/761#issuecomment-1014530805)
 class NoSourceMapsStorage(CompressedManifestStaticFilesStorage):

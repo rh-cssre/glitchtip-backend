@@ -11,7 +11,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     replaces = [
         ("alerts", "0001_initial"),
         ("alerts", "0002_auto_20210314_2022"),

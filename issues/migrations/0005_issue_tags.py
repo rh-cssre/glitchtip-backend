@@ -7,7 +7,6 @@ from .sql.functions import GENERATE_ISSUE_TSVECTOR
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("issues", "0004_alter_issue_id"),
     ]

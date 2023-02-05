@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("organizations_ext", "0001_squashed_0009_organization_scrub_ip_addresses"),
         ("teams", "0002_team_members_new"),

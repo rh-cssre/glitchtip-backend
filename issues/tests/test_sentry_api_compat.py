@@ -235,7 +235,10 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         self.assertCompareData(
             res.data,
             sentry_data,
-            ["message", "title",],
+            [
+                "message",
+                "title",
+            ],
         )
         self.assertEqual(res.data["entries"][0], sentry_data["entries"][0])
 
@@ -261,7 +264,10 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         self.assertCompareData(
             res.data,
             sentry_data,
-            ["message", "title",],
+            [
+                "message",
+                "title",
+            ],
         )
         self.assertEqual(res.data["entries"][0], sentry_data["entries"][0])
 

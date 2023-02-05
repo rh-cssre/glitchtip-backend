@@ -41,4 +41,3 @@ class OrganizationReferenceSerializer(serializers.ModelSerializer):
 
     def get_isAcceptingEvents(self, obj):
         return obj.is_accepting_events
-

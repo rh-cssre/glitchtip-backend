@@ -15,7 +15,7 @@ from .models import File, FileBlob
 from .exceptions import AssembleChecksumMismatch, AssembleArtifactsError
 
 
-MAX_FILE_SIZE = 2 ** 31  # 2GB is the maximum offset supported by fileblob
+MAX_FILE_SIZE = 2**31  # 2GB is the maximum offset supported by fileblob
 
 
 class ChunkFileState(Enum):

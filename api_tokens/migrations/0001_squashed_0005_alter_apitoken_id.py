@@ -8,7 +8,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     replaces = [
         ("api_tokens", "0001_initial"),
         ("api_tokens", "0002_auto_20200821_1446"),

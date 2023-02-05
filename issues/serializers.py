@@ -290,7 +290,7 @@ class IssueSerializer(serializers.ModelSerializer):
         )
 
     def to_representation(self, obj):
-        """ Workaround for "type" and "matchingEventId" fields """
+        """Workaround for "type" and "matchingEventId" fields"""
         primitive_repr = super().to_representation(obj)
         primitive_repr["type"] = obj.get_type_display()
 

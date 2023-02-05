@@ -8,9 +8,7 @@ class DebugInformationFile(CreatedModel):
     """
 
     class Meta:
-        indexes = [
-            models.Index(fields=["project", "file"])
-        ]
+        indexes = [models.Index(fields=["project", "file"])]
 
     name = models.TextField()
 

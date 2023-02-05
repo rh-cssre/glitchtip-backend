@@ -27,7 +27,9 @@ class NestedProjectViewSet(viewsets.ModelViewSet):
         queryset = self.filter_queryset(self.get_queryset())
         slug = self.kwargs.get("project_slug", self.kwargs.get("slug"))
         obj = get_object_or_404(
-            queryset, slug=slug, organization__slug=self.kwargs["organization_slug"],
+            queryset,
+            slug=slug,
+            organization__slug=self.kwargs["organization_slug"],
         )
 
         self.check_object_permissions(self.request, obj)
@@ -127,7 +129,7 @@ class ProjectTeamViewSet(NestedTeamViewSet):
         organization_slug=None,
         team_slug=None,
     ):
-        """ Add/remove team to a project """
+        """Add/remove team to a project"""
         team = get_object_or_404(self.get_queryset(), slug=team_slug)
         project = get_object_or_404(
             Project,

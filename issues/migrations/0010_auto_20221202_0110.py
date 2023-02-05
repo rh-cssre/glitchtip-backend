@@ -5,7 +5,6 @@ from .sql.functions import JSONB_RECURSIVE_MERGE
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("issues", "0009_alter_issue_id"),
     ]

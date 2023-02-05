@@ -6,7 +6,7 @@ from user_agents import parse
 
 
 class UserAgentContextProcessor:
-    """ Abstract class for processing user agent related contexts """
+    """Abstract class for processing user agent related contexts"""
 
     def get_context(self, event) -> Optional[Dict[str, str]]:
         headers = event.get("request", {}).get("headers", {})

@@ -8,7 +8,6 @@ import uuid
 
 
 class Migration(migrations.Migration):
-
     replaces = [
         ("projects", "0008_alter_projectkey_created"),
         ("projects", "0009_alter_project_id_alter_projectcounter_id_and_more"),

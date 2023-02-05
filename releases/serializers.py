@@ -70,7 +70,9 @@ class ReleaseFileSerializer(serializers.ModelSerializer):
 
         try:
             release_file = ReleaseFile.objects.create(
-                release=release, file=file, name=full_name,
+                release=release,
+                file=file,
+                name=full_name,
             )
         except IntegrityError:
             file.delete()
@@ -84,4 +86,3 @@ class AssembleSerializer(serializers.Serializer):
     chunks = serializers.ListField(
         child=serializers.RegexField("^[a-fA-F0-9]+$", max_length=40, min_length=40)
     )
-

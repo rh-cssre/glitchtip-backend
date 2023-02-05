@@ -30,7 +30,6 @@ class FilterTestCase(GlitchTipTestCase):
         self.assertNotContains(res, event3.issue.title)
 
     def test_list_relative_datetime_filter(self):
-
         now = timezone.now()
         last_minute = now - datetime.timedelta(minutes=1)
         with freeze_time(last_minute):

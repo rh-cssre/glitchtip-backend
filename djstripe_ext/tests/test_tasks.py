@@ -12,10 +12,14 @@ class OrganizationWarnThrottlingTestCase(TestCase):
     def test_warn_organization_throttle(self):
         user = baker.make("users.User")
         project = baker.make(
-            "projects.Project", organization__owner__organization_user__user=user,
+            "projects.Project",
+            organization__owner__organization_user__user=user,
         )
         plan = baker.make(
-            "djstripe.Plan", active=True, amount=0, product__metadata={"events": "10"},
+            "djstripe.Plan",
+            active=True,
+            amount=0,
+            product__metadata={"events": "10"},
         )
 
         project2 = baker.make(

@@ -11,7 +11,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     replaces = [
         ("files", "0001_initial"),
         ("files", "0002_fileblob_organizations"),

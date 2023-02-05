@@ -8,7 +8,8 @@ from .models import TransactionGroup
 
 class TransactionGroupFilter(filters.FilterSet):
     transaction_created = StartEndRelativeIsoDateTimeRangeFilter(
-        field_name="transactionevent__created", label="Transaction created",
+        field_name="transactionevent__created",
+        label="Transaction created",
     )
     project = filters.ModelMultipleChoiceFilter(queryset=Project.objects.all())
     query = filters.CharFilter(

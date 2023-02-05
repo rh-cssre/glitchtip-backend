@@ -92,4 +92,3 @@ def trim(
     if object_hook is None:
         return result
     return object_hook(result)
-

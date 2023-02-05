@@ -4,7 +4,7 @@ from projects.serializers.base_serializers import ProjectReferenceSerializer
 
 
 class RelatedTeamSerializer(serializers.ModelSerializer):
-    """ Less detailed team serializer intended for nested relations """
+    """Less detailed team serializer intended for nested relations"""
 
     id = serializers.CharField(read_only=True)
 
@@ -23,14 +23,7 @@ class TeamSerializer(RelatedTeamSerializer):
     projects = ProjectReferenceSerializer(many=True, read_only=True)
 
     class Meta(RelatedTeamSerializer.Meta):
-        fields = (
-            "dateCreated",
-            "id",
-            "isMember",
-            "memberCount",
-            "slug",
-            "projects"
-        )
+        fields = ("dateCreated", "id", "isMember", "memberCount", "slug", "projects")
 
     def get_isMember(self, obj):
         user = self.context["request"].user

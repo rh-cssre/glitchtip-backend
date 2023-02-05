@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     replaces = [
         ("environments", "0001_initial"),
         ("environments", "0002_auto_20201229_1643"),

@@ -16,4 +16,3 @@ class ObservabilityAPITestCase(APITestCase):
         url = reverse("prometheus-django-metrics")
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-

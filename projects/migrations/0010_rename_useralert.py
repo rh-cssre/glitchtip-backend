@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("projects", "0009_alter_project_id_alter_projectcounter_id_and_more"),
     ]

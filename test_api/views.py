@@ -57,19 +57,23 @@ class SeedDataAPIView(APIView):
 
         Monitor.objects.filter(name="cytestmonitor").delete()
         Monitor.objects.create(
-            name = "cytestmonitor",
+            name="cytestmonitor",
             organization=organization,
             project=project,
             url="https://www.google.com",
             monitor_type="Ping",
-            interval="00:01:00"
+            interval="00:01:00",
         )
 
-        if (request.query_params.get("extras")):
+        if request.query_params.get("extras"):
             project_name = "SwitchGrip"
-            project2 = Project.objects.create(name=project_name, organization=organization)
+            project2 = Project.objects.create(
+                name=project_name, organization=organization
+            )
             project_name = "PitchFlip"
-            project3 = Project.objects.create(name=project_name, organization=organization, platform="JavaScript")
+            project3 = Project.objects.create(
+                name=project_name, organization=organization, platform="JavaScript"
+            )
             team.projects.add(project)
             team.projects.add(project2)
             team.projects.add(project3)

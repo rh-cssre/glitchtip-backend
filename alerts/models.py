@@ -20,7 +20,7 @@ class ProjectAlert(CreatedModel):
 
 
 class AlertRecipient(models.Model):
-    """ An asset that accepts an alert such as email, SMS, webhooks """
+    """An asset that accepts an alert such as email, SMS, webhooks"""
 
     class RecipientType(models.TextChoices):
         EMAIL = "email", _("Email")
