@@ -1,10 +1,11 @@
 import random
-from model_bakery.recipe import Recipe
+
 from model_bakery.random_gen import gen_string
+from model_bakery.recipe import Recipe
 
 from events.models import Event
-from .models import Issue
 
+from .models import Issue
 
 title_choices = [
     "OperationalError: string is too long for tsvector",

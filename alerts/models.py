@@ -1,6 +1,8 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+
 from glitchtip.base_models import CreatedModel
+
 from .email import send_email_notification
 from .webhooks import send_webhook_notification
 

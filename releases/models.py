@@ -1,5 +1,7 @@
 from hashlib import sha1
+
 from django.db import models
+
 from glitchtip.base_models import CreatedModel
 
 

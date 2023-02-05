@@ -1,6 +1,6 @@
 from django.urls import path
-from .views import DifsAssembleAPIView, ProjectReprocessingAPIView, DsymsAPIView
 
+from .views import DifsAssembleAPIView, DsymsAPIView, ProjectReprocessingAPIView
 
 urlpatterns = [
     path(

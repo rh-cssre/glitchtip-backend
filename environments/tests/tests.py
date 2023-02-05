@@ -1,8 +1,9 @@
 from django.shortcuts import reverse
 from model_bakery import baker
 
-from ..models import EnvironmentProject
 from glitchtip.test_utils.test_case import GlitchTipTestCase
+
+from ..models import EnvironmentProject
 
 
 class EnvironmentTestCase(GlitchTipTestCase):

@@ -1,9 +1,7 @@
 from django.shortcuts import reverse
-
-from rest_framework.test import APIClient
-from rest_framework.test import APITestCase
-from rest_framework import status
 from model_bakery import baker
+from rest_framework import status
+from rest_framework.test import APIClient, APITestCase
 
 
 class ObservabilityAPITestCase(APITestCase):

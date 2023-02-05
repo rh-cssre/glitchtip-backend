@@ -8,9 +8,9 @@ from model_bakery import baker
 from rest_framework.test import APITestCase
 
 from environments.models import Environment, EnvironmentProject
-from releases.models import Release
 from glitchtip import test_utils  # pylint: disable=unused-import
 from issues.models import EventStatus, Issue
+from releases.models import Release
 
 from ..models import Event, LogLevel
 from ..test_data.csp import mdn_sample_csp

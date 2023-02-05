@@ -1,11 +1,13 @@
-from hashlib import sha1
-import tempfile
 import mmap
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from hashlib import sha1
 
 from django.core.files.base import File as FileObj
 from django.db import models, transaction
+
 from glitchtip.base_models import CreatedModel
+
 from .exceptions import AssembleChecksumMismatch
 
 

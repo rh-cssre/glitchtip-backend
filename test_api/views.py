@@ -1,14 +1,15 @@
-from django.conf import settings
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
-from rest_framework.exceptions import NotFound
 from allauth.account.models import EmailAddress
-from users.models import User
-from organizations_ext.models import Organization
-from teams.models import Team
-from projects.models import Project
+from django.conf import settings
+from rest_framework.exceptions import NotFound
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
 from glitchtip.uptime.models import Monitor
+from organizations_ext.models import Organization
+from projects.models import Project
+from teams.models import Team
+from users.models import User
 
 
 class SeedDataAPIView(APIView):

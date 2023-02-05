@@ -1,7 +1,9 @@
 from rest_framework import viewsets
+
+from glitchtip.permissions import UserOnlyPermission
+
 from .models import APIToken
 from .serializers import APITokenSerializer
-from glitchtip.permissions import UserOnlyPermission
 
 
 class APITokenViewSet(viewsets.ModelViewSet):

@@ -1,6 +1,6 @@
-from .platform import get_behavior_family_for_platform
 import re
 
+from .platform import get_behavior_family_for_platform
 
 _windecl_hash = re.compile(r"^@?(.*?)@[0-9]+$")
 _rust_hash = re.compile(r"::h[a-z0-9]{16}$")

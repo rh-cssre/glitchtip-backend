@@ -1,8 +1,11 @@
 from datetime import timedelta
+
+from celery import shared_task
 from django.db.models import Count
 from django.utils import timezone
-from celery import shared_task
+
 from projects.models import Project
+
 from .models import Notification
 
 

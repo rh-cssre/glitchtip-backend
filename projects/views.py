@@ -1,14 +1,16 @@
-from rest_framework import viewsets, exceptions, status
+from django.shortcuts import get_object_or_404
+from rest_framework import exceptions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter
 from rest_framework.response import Response
-from django.shortcuts import get_object_or_404
+
+from organizations_ext.models import Organization, OrganizationUserRole
 from teams.models import Team
 from teams.views import NestedTeamViewSet
-from organizations_ext.models import Organization, OrganizationUserRole
+
 from .models import Project, ProjectKey
-from .serializers.serializers import ProjectSerializer, ProjectKeySerializer
-from .permissions import ProjectPermission, ProjectKeyPermission
+from .permissions import ProjectKeyPermission, ProjectPermission
+from .serializers.serializers import ProjectKeySerializer, ProjectSerializer
 
 
 class NestedProjectViewSet(viewsets.ModelViewSet):

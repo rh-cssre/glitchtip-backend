@@ -1,4 +1,5 @@
 from glitchtip.test_utils.test_case import GlitchTipTestCase
+
 from ..serializers import TransactionEventSerializer
 
 

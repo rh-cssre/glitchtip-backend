@@ -1,12 +1,13 @@
 import json
-from typing import List, Dict, Union
-from django.utils import dateparse
-from django.urls import reverse
-from events.test_data.django_error_factory import message
-from events.test_data.csp import mdn_sample_csp
-from glitchtip.test_utils.test_case import GlitchTipTestCase
-from events.models import Event, LogLevel
+from typing import Dict, List, Union
 
+from django.urls import reverse
+from django.utils import dateparse
+
+from events.models import Event, LogLevel
+from events.test_data.csp import mdn_sample_csp
+from events.test_data.django_error_factory import message
+from glitchtip.test_utils.test_case import GlitchTipTestCase
 
 TEST_DATA_DIR = "events/test_data"
 

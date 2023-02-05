@@ -1,19 +1,21 @@
 """ Partial port of sentry/tasks/assemble.py """
-from enum import Enum
 import hashlib
+import json
 import shutil
 import tempfile
+from enum import Enum
 from os import path
-import json
+
 from django.core.cache import cache
 from django.core.files import File
-from django.db import transaction, IntegrityError
+from django.db import IntegrityError, transaction
+
 from organizations_ext.models import Organization
 from releases.models import Release, ReleaseFile
 from sentry.utils.zip import safe_extract_zip
-from .models import File, FileBlob
-from .exceptions import AssembleChecksumMismatch, AssembleArtifactsError
 
+from .exceptions import AssembleArtifactsError, AssembleChecksumMismatch
+from .models import File, FileBlob
 
 MAX_FILE_SIZE = 2**31  # 2GB is the maximum offset supported by fileblob
 

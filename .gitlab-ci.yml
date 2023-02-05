@@ -40,8 +40,9 @@ lint:
   script:
     - curl -sSL https://install.python-poetry.org | python3 -
     - $POETRY_HOME/bin/poetry install --no-interaction --no-ansi
-    # - isort --check glitchtip not compatible with black :(
-    # - pylint --load-plugins=pylint_django --django-settings-module=glitchtip.settings --disable=R glitchtip
+    - black --check .
+    - isort --check .
+    #- pylint --load-plugins=pylint_django --django-settings-module=glitchtip.settings --disable=R glitchtip
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 

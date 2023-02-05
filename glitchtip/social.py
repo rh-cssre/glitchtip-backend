@@ -1,5 +1,5 @@
-from allauth.account.adapter import DefaultAccountAdapter
 from allauth.account import app_settings as allauth_settings
+from allauth.account.adapter import DefaultAccountAdapter
 from allauth.account.auth_backends import AuthenticationBackend
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter, get_adapter
 from allauth.socialaccount.helpers import complete_social_login
@@ -18,6 +18,7 @@ from rest_framework import serializers
 from rest_framework.response import Response
 
 from users.utils import is_user_registration_open
+
 from .constants import SOCIAL_ADAPTER_MAP
 
 DOMAIN = settings.GLITCHTIP_URL.geturl()

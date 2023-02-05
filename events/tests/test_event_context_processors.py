@@ -1,4 +1,5 @@
 from django.test import TestCase
+
 from ..event_context_processors import (
     EVENT_CONTEXT_PROCESSORS,
     UserAgentContextProcessor,

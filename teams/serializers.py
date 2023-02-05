@@ -1,6 +1,8 @@
 from rest_framework import serializers
-from .models import Team
+
 from projects.serializers.base_serializers import ProjectReferenceSerializer
+
+from .models import Team
 
 
 class RelatedTeamSerializer(serializers.ModelSerializer):

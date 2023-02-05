@@ -1,7 +1,8 @@
 """
 Roughly a replacement of sentry/plugins/sentry_useragents but for contexts instead of tags
 """
-from typing import Optional, Dict
+from typing import Dict, Optional
+
 from user_agents import parse
 
 

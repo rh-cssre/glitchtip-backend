@@ -1,6 +1,7 @@
 from django.urls import reverse
-from rest_framework.test import APITestCase
 from model_bakery import baker
+from rest_framework.test import APITestCase
+
 from glitchtip import test_utils  # pylint: disable=unused-import
 
 

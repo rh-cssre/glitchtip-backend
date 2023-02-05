@@ -1,12 +1,14 @@
 from unittest import mock
+
 from django.test import TestCase
 from model_bakery import baker
-from glitchtip import test_utils  # pylint: disable=unused-import
-from events.models import LogLevel
-from ..tasks import process_event_alerts
-from ..models import AlertRecipient, Notification
-from ..webhooks import send_webhook, send_issue_as_webhook
 
+from events.models import LogLevel
+from glitchtip import test_utils  # pylint: disable=unused-import
+
+from ..models import AlertRecipient, Notification
+from ..tasks import process_event_alerts
+from ..webhooks import send_issue_as_webhook, send_webhook
 
 TEST_URL = "https://burkesoftware.rocket.chat/hooks/Y8TttGY7RvN7Qm3gD/rqhHLiRSvYRZ8BhbhhhLYumdMksWnyj3Dqsqt8QKrmbNndXH"
 

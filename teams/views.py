@@ -1,9 +1,11 @@
 from django.shortcuts import get_object_or_404
-from rest_framework import viewsets, exceptions
+from rest_framework import exceptions, viewsets
+
 from organizations_ext.models import Organization, OrganizationUserRole
-from .serializers import TeamSerializer
+
 from .models import Team
 from .permissions import TeamPermission
+from .serializers import TeamSerializer
 
 
 class NestedTeamViewSet(viewsets.ModelViewSet):

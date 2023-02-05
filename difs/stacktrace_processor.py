@@ -1,6 +1,7 @@
 import copy
 import logging
-from symbolic import Archive, SymCache, parse_addr, ProguardMapper
+
+from symbolic import Archive, ProguardMapper, SymCache, parse_addr
 from symbolic.demangle import demangle_name
 
 alternative_arch = {"x86": ["x86", "x86_64"]}

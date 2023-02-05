@@ -1,13 +1,15 @@
 from rest_framework import serializers, status
 from rest_framework.exceptions import APIException, PermissionDenied
+
 from projects.serializers.base_serializers import ProjectReferenceWithMemberSerializer
-from users.serializers import UserSerializer
-from teams.serializers import TeamSerializer
 from teams.models import Team
+from teams.serializers import TeamSerializer
 from users.models import User
+from users.serializers import UserSerializer
 from users.utils import is_user_registration_open
+
+from ..models import ROLES, OrganizationUser, OrganizationUserRole
 from .base_serializers import OrganizationReferenceSerializer
-from ..models import OrganizationUser, OrganizationUserRole, ROLES
 
 
 class OrganizationSerializer(OrganizationReferenceSerializer):

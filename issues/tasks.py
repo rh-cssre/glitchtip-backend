@@ -1,9 +1,12 @@
 from datetime import timedelta
-from django.utils.timezone import now
-from django.conf import settings
+
 from celery import shared_task
+from django.conf import settings
+from django.utils.timezone import now
+
 from events.models import Event
 from glitchtip.debounced_celery_task import debounced_task, debounced_wrap
+
 from .models import Issue
 
 

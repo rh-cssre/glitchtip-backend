@@ -1,11 +1,13 @@
-from unittest.mock import patch
 from unittest import skipIf
-from django.shortcuts import reverse
+from unittest.mock import patch
+
 from django.conf import settings
+from django.shortcuts import reverse
 from django.utils import timezone
-from rest_framework.test import APITestCase
-from model_bakery import baker
 from freezegun import freeze_time
+from model_bakery import baker
+from rest_framework.test import APITestCase
+
 from glitchtip import test_utils  # pylint: disable=unused-import
 
 

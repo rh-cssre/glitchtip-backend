@@ -18,7 +18,6 @@ import functools
 from django.core.cache import cache
 from django_redis import get_redis_connection
 
-
 CACHE_PREFIX = ":1:"  # Django cache version
 # Run task on each mark, last mark will repeat
 # 10th, 100th, 1000th, 2000th, 3000th, etc

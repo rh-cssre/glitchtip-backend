@@ -1,7 +1,9 @@
 from django.shortcuts import reverse
 from model_bakery import baker
+
 from glitchtip import test_utils  # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
+
 from ..models import ProjectAlert
 
 

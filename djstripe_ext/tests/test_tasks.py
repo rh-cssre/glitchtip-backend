@@ -1,10 +1,13 @@
 from datetime import timedelta
+
 from django.core import mail
 from django.test import TestCase
 from django.utils import timezone
-from model_bakery import baker
 from freezegun import freeze_time
+from model_bakery import baker
+
 from glitchtip import test_utils  # pylint: disable=unused-import
+
 from ..tasks import warn_organization_throttle
 
 
