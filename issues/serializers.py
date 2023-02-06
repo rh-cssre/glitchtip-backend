@@ -1,11 +1,13 @@
 from rest_framework import serializers
-from projects.serializers.base_serializers import ProjectReferenceSerializer
-from user_reports.serializers import UserReportSerializer
-from sentry.interfaces.stacktrace import get_context
-from glitchtip.serializers import FlexibleDateTimeField
-from releases.serializers import ReleaseSerializer
+
 from events.models import Event
-from .models import Issue, EventType, EventStatus
+from glitchtip.serializers import FlexibleDateTimeField
+from projects.serializers.base_serializers import ProjectReferenceSerializer
+from releases.serializers import ReleaseSerializer
+from sentry.interfaces.stacktrace import get_context
+from user_reports.serializers import UserReportSerializer
+
+from .models import EventStatus, EventType, Issue
 
 
 class EventUserSerializer(serializers.Serializer):
@@ -290,7 +292,7 @@ class IssueSerializer(serializers.ModelSerializer):
         )
 
     def to_representation(self, obj):
-        """ Workaround for "type" and "matchingEventId" fields """
+        """Workaround for "type" and "matchingEventId" fields"""
         primitive_repr = super().to_representation(obj)
         primitive_repr["type"] = obj.get_type_display()
 
