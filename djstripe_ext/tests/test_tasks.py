@@ -1,10 +1,13 @@
 from datetime import timedelta
+
 from django.core import mail
 from django.test import TestCase
 from django.utils import timezone
-from model_bakery import baker
 from freezegun import freeze_time
+from model_bakery import baker
+
 from glitchtip import test_utils  # pylint: disable=unused-import
+
 from ..tasks import warn_organization_throttle
 
 
@@ -12,10 +15,14 @@ class OrganizationWarnThrottlingTestCase(TestCase):
     def test_warn_organization_throttle(self):
         user = baker.make("users.User")
         project = baker.make(
-            "projects.Project", organization__owner__organization_user__user=user,
+            "projects.Project",
+            organization__owner__organization_user__user=user,
         )
         plan = baker.make(
-            "djstripe.Plan", active=True, amount=0, product__metadata={"events": "10"},
+            "djstripe.Plan",
+            active=True,
+            amount=0,
+            product__metadata={"events": "10"},
         )
 
         project2 = baker.make(

@@ -18,7 +18,6 @@ def reverse_func(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("files", "0006_alter_file_headers"),
     ]

@@ -1,8 +1,10 @@
 import datetime
+
 from django.shortcuts import reverse
 from django.utils import timezone
-from model_bakery import baker
 from freezegun import freeze_time
+from model_bakery import baker
+
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 
 
