@@ -1,8 +1,10 @@
-from rest_framework import viewsets, exceptions
+from rest_framework import exceptions, viewsets
+
 from projects.models import Project
+
 from .models import ProjectAlert
-from .serializers import ProjectAlertSerializer
 from .permissions import ProjectAlertPermission
+from .serializers import ProjectAlertSerializer
 
 
 class ProjectAlertViewSet(viewsets.ModelViewSet):

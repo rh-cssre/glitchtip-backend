@@ -8,7 +8,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -17,14 +16,58 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='APIToken',
+            name="APIToken",
             fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('token', models.CharField(default=api_tokens.models.generate_token, max_length=40, unique=True)),
-                ('label', models.CharField(blank=True, max_length=255)),
-                ('scopes', bitfield.models.BitField(('project:read', 'project:write', 'project:admin', 'project:releases', 'team:read', 'team:write', 'team:admin', 'event:read', 'event:write', 'event:admin', 'org:read', 'org:write', 'org:admin', 'member:read', 'member:write', 'member:admin'), default=None)),
-                ('created', models.DateTimeField(auto_now_add=True)),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.AutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "token",
+                    models.CharField(
+                        default=api_tokens.models.generate_token,
+                        max_length=40,
+                        unique=True,
+                    ),
+                ),
+                ("label", models.CharField(blank=True, max_length=255)),
+                (
+                    "scopes",
+                    bitfield.models.BitField(
+                        (
+                            "project:read",
+                            "project:write",
+                            "project:admin",
+                            "project:releases",
+                            "team:read",
+                            "team:write",
+                            "team:admin",
+                            "event:read",
+                            "event:write",
+                            "event:admin",
+                            "org:read",
+                            "org:write",
+                            "org:admin",
+                            "member:read",
+                            "member:write",
+                            "member:admin",
+                        ),
+                        default=None,
+                    ),
+                ),
+                ("created", models.DateTimeField(auto_now_add=True)),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
         ),
     ]
