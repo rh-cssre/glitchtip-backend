@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import ProjectAlert, AlertRecipient
+
+from .models import AlertRecipient, ProjectAlert
 
 
 class AlertRecipientSerializer(serializers.ModelSerializer):

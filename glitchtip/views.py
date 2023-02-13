@@ -10,7 +10,6 @@ from organizations_ext.utils import is_organization_creation_open
 from users.serializers import SocialAppSerializer, UserSerializer
 from users.utils import is_user_registration_open
 
-
 try:
     from djstripe.settings import djstripe_settings
 except ImportError:

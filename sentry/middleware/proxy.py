@@ -1,7 +1,8 @@
 import io
 import logging
-import six
 import zlib
+
+import six
 
 try:
     import uwsgi
