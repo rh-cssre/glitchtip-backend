@@ -21,7 +21,7 @@ def cleanup_old_transaction_events():
     qs._raw_delete(qs.db)
 
     # Delete ~1k empty transaction groups at a time until less than 1k remain then delete the rest. Avoids memory overload.
-    queryset = TransactionGroup.objects.filter(transactionevent=None)
+    queryset = TransactionGroup.objects.filter(transactionevent=None).order_by("id")
 
     while True:
         try:
