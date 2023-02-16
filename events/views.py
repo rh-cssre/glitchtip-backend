@@ -232,7 +232,7 @@ class EnvelopeAPIView(BaseEventAPIView):
             return self.process_event(event_data, request, project)
         elif message_header.get("type") == "session":
             return Response(
-                {"message": "Session events are not supported at this time."},
+                {"message": "Attempted to record a session event, which are not supported. This is safe to ignore. You may be able to suppress this message by disabling auto session tracking in your SDK. See https://gitlab.com/glitchtip/glitchtip-backend/-/issues/206"},
                 status=status.HTTP_501_NOT_IMPLEMENTED,
             )
 
