@@ -1,9 +1,7 @@
 from django.shortcuts import reverse
-
-from rest_framework.test import APIClient
-from rest_framework.test import APITestCase
-from rest_framework import status
 from model_bakery import baker
+from rest_framework import status
+from rest_framework.test import APIClient, APITestCase
 
 
 class ObservabilityAPITestCase(APITestCase):
@@ -16,4 +14,3 @@ class ObservabilityAPITestCase(APITestCase):
         url = reverse("prometheus-django-metrics")
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-

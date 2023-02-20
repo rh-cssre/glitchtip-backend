@@ -11,6 +11,8 @@ from .csp import mdn_sample_csp
 events = django_error_factory.all_django_events
 events.append(mdn_sample_csp)
 
+things = ["a", "b", "c", None]
+
 
 def get_random_string(length=16):
     letters = string.ascii_lowercase
@@ -23,6 +25,8 @@ def make_event_unique(event, unique_issue=False):
     new_event = copy.deepcopy(event)
     new_event["event_id"] = uuid.uuid4().hex
     new_event["timestamp"] = timezone.now().isoformat()
+    new_event["release"] = random.choice(things)
+    new_event["environment"] = random.choice(things)
     if unique_issue:
         title = get_random_string()
         if "message" in new_event:
