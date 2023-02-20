@@ -73,7 +73,8 @@ class StatsV2View(views.APIView):
         if category == "error":
             with connection.cursor() as cursor:
                 cursor.execute(
-                    EVENT_TIME_SERIES_SQL, [start, end, interval, project_ids],
+                    EVENT_TIME_SERIES_SQL,
+                    [start, end, interval, project_ids],
                 )
                 series = cursor.fetchall()
         else:
@@ -81,7 +82,11 @@ class StatsV2View(views.APIView):
 
         data = {
             "intervals": [row[0] for row in series],
-            "groups": [{"series": {field: [row[1] for row in series]},}],
+            "groups": [
+                {
+                    "series": {field: [row[1] for row in series]},
+                }
+            ],
         }
 
         return Response(data)

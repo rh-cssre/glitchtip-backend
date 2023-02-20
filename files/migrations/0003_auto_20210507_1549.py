@@ -4,39 +4,48 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('files', '0002_fileblob_organizations'),
+        ("files", "0002_fileblob_organizations"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='fileblob',
-            name='organizations',
+            model_name="fileblob",
+            name="organizations",
         ),
         migrations.AddField(
-            model_name='fileblob',
-            name='size',
+            model_name="fileblob",
+            name="size",
             field=models.PositiveIntegerField(null=True),
         ),
         migrations.AlterField(
-            model_name='fileblob',
-            name='id',
-            field=models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID'),
+            model_name="fileblob",
+            name="id",
+            field=models.AutoField(
+                auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+            ),
         ),
         migrations.CreateModel(
-            name='File',
+            name="File",
             fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created', models.DateTimeField(auto_now_add=True, db_index=True)),
-                ('name', models.TextField()),
-                ('headers', models.JSONField()),
-                ('size', models.PositiveIntegerField(null=True)),
-                ('checksum', models.CharField(db_index=True, max_length=40, null=True)),
-                ('blobs', models.ManyToManyField(to='files.FileBlob')),
+                (
+                    "id",
+                    models.AutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("created", models.DateTimeField(auto_now_add=True, db_index=True)),
+                ("name", models.TextField()),
+                ("headers", models.JSONField()),
+                ("size", models.PositiveIntegerField(null=True)),
+                ("checksum", models.CharField(db_index=True, max_length=40, null=True)),
+                ("blobs", models.ManyToManyField(to="files.FileBlob")),
             ],
             options={
-                'abstract': False,
+                "abstract": False,
             },
         ),
     ]
