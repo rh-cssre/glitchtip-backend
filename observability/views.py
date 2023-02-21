@@ -1,4 +1,3 @@
-from django.urls import path
 from django_prometheus import exports
 from rest_framework.permissions import IsAdminUser
 from rest_framework.views import APIView
