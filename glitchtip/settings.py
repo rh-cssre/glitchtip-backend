@@ -234,6 +234,11 @@ if SECRET_KEY == "change_me" and DEBUG is True:
 ENABLE_OBSERVABILITY_API = env("ENABLE_OBSERVABILITY_API")
 # Workaround https://github.com/korfuri/django-prometheus/issues/34
 PROMETHEUS_EXPORT_MIGRATIONS = False
+# https://github.com/korfuri/django-prometheus/blob/master/documentation/exports.md#exporting-metrics-in-a-wsgi-application-with-multiple-processes-per-process
+if start_port := env.int("METRICS_START_PORT", None):
+    PROMETHEUS_METRICS_EXPORT_PORT_RANGE = range(
+        start_port, start_port + env.int("UWSGI_WORKERS", 1)
+    )
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
