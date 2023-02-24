@@ -5,6 +5,7 @@ from django.db.models import Count
 from django.utils import timezone
 
 from issues.models import Issue
+
 from .models import Notification, ProjectAlert
 
 
