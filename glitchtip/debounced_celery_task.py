@@ -15,13 +15,14 @@ Examples:
 """
 import functools
 
+from django.conf import settings
 from django.core.cache import cache
 from django_redis import get_redis_connection
 
 CACHE_PREFIX = ":1:"  # Django cache version
 # Run task on each mark, last mark will repeat
-# 10th, 100th, 1000th, 2000th, 3000th, etc
-RUN_ON = [10, 100, 1000]
+# 60th, 300th, 1000th, 2000th, etc
+RUN_ON = [60, 300, 1000]
 
 
 def debounced_wrap(func):
@@ -57,7 +58,9 @@ def debounced_task(key_generator):
             func_kwargs = kwargs.get("kwargs", {})
             key = f"{func.__module__}.{func.__name__}.{key_generator(*func_args, **func_kwargs)}"
             # Use countdown for expiration times on counter
-            kwargs["countdown"] = kwargs.get("countdown", 10)  # Defaults to 10
+            kwargs["countdown"] = kwargs.get(
+                "countdown", settings.TASK_DEBOUNCE_DELAY
+            )  # Defaults to 60
             countdown = kwargs["countdown"]
             # redis-cache incr treats None as 0
             try:
