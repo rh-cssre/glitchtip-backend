@@ -60,7 +60,7 @@ def debounced_task(key_generator):
             # Use countdown for expiration times on counter
             kwargs["countdown"] = kwargs.get(
                 "countdown", settings.TASK_DEBOUNCE_DELAY
-            )  # Defaults to 60
+            )  # Defaults to 30
             countdown = kwargs["countdown"]
             # redis-cache incr treats None as 0
             try:
