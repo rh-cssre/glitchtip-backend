@@ -4,33 +4,32 @@ from celery import shared_task
 from django.db.models import Count
 from django.utils import timezone
 
-from projects.models import Project
-
-from .models import Notification
+from issues.models import Issue
+from .models import Notification, ProjectAlert
 
 
 @shared_task
 def process_event_alerts():
     """Inspect alerts and determine if new notifications need sent"""
     now = timezone.now()
-    for project in Project.objects.all():
-        for alert in project.projectalert_set.filter(
-            quantity__isnull=False, timespan_minutes__isnull=False
-        ):
-            start_time = now - timedelta(minutes=alert.timespan_minutes)
-            quantity_in_timespan = alert.quantity
-            issues = (
-                project.issue_set.filter(
-                    notification__isnull=True,
-                    event__created__gte=start_time,
-                )
-                .annotate(num_events=Count("event"))
-                .filter(num_events__gte=quantity_in_timespan)
+    for alert in ProjectAlert.objects.filter(
+        quantity__isnull=False, timespan_minutes__isnull=False
+    ):
+        start_time = now - timedelta(minutes=alert.timespan_minutes)
+        quantity_in_timespan = alert.quantity
+        issues = (
+            Issue.objects.filter(
+                project_id=alert.project_id,
+                notification__isnull=True,
+                event__created__gte=start_time,
             )
-            if issues:
-                notification = alert.notification_set.create()
-                notification.issues.add(*issues)
-                send_notification.delay(notification.pk)
+            .annotate(num_events=Count("event"))
+            .filter(num_events__gte=quantity_in_timespan)
+        )
+        if issues:
+            notification = alert.notification_set.create()
+            notification.issues.add(*issues)
+            send_notification.delay(notification.pk)
 
 
 @shared_task

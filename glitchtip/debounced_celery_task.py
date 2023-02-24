@@ -21,8 +21,8 @@ from django_redis import get_redis_connection
 
 CACHE_PREFIX = ":1:"  # Django cache version
 # Run task on each mark, last mark will repeat
-# 60th, 300th, 1000th, 2000th, etc
-RUN_ON = [60, 300, 1000]
+# 30th, 250th, 1000th, 2000th, etc
+RUN_ON = [30, 250, 1000]
 
 
 def debounced_wrap(func):
