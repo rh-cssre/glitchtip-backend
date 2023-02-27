@@ -52,6 +52,22 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;;
 
+CREATE OR REPLACE FUNCTION collect_tag (jsonb, hstore)
+returns jsonb language sql
+as $$
+    SELECT jsonb_merge_deep(jsonb_object_agg(y.key, y.values), $1) FROM (
+        SELECT (a).key, array_agg(distinct(a).value) as values FROM (
+            select each($2) as a
+        ) t GROUP by key
+    ) y
+$$;
+
+CREATE OR REPLACE AGGREGATE agg_collect_tags (hstore) (
+    sfunc = collect_tag,
+    stype = jsonb,
+    initcond = '{}'
+);
+
 DROP PROCEDURE IF EXISTS update_issue_index;
 CREATE OR REPLACE PROCEDURE update_issue_index(update_issue_id integer)
 LANGUAGE SQL
@@ -60,18 +76,7 @@ WITH event_agg as (
     SELECT COUNT(events_event.event_id) as new_count,
     MAX(events_event.created) as new_last_seen,
     MAX(events_event.level) as new_level,
-    (
-      SELECT jsonb_object_agg(y.key, y.values) as new_tags FROM (
-        SELECT (a).key, array_agg(distinct(a).value) as values
-        FROM (
-          SELECT each(events_event.tags) as a
-          FROM events_event
-          LEFT JOIN issues_issue ON issues_issue.id = events_event.issue_id
-          WHERE events_event.issue_id=update_issue_id
-          AND events_event.created > issues_issue.last_seen
-          ) t GROUP by key
-      ) y
-    )
+    agg_collect_tags(events_event.tags) as new_tags
     FROM events_event
     LEFT JOIN issues_issue ON issues_issue.id = events_event.issue_id
     WHERE events_event.issue_id=update_issue_id
