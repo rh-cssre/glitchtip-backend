@@ -1,8 +1,9 @@
 import stripe
 from django.conf import settings
 from django.core.cache import cache
+from django.db.models import Prefetch
 from django.http import Http404
-from djstripe.models import Customer, Product, Subscription
+from djstripe.models import Customer, Plan, Product, Subscription
 from djstripe.settings import djstripe_settings
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status, views, viewsets
@@ -100,7 +101,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         plan__active=True,
         metadata__events__isnull=False,
         metadata__is_public="true",
-    ).prefetch_related("plan_set")
+    ).prefetch_related(Prefetch("plan_set", queryset=Plan.objects.filter(active=True)))
     serializer_class = ProductSerializer
 
 

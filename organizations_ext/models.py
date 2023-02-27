@@ -13,7 +13,7 @@ from organizations.base import (
 )
 from organizations.fields import SlugField
 from organizations.managers import OrgManager
-from organizations.signals import user_added
+from organizations.signals import owner_changed, user_added
 from sql_util.utils import SubqueryCount, SubquerySum
 
 # Defines which scopes belong to which role
@@ -134,6 +134,7 @@ class OrganizationUserRole(models.IntegerChoices):
 class OrganizationManager(OrgManager):
     def with_event_counts(self, current_period=True):
         subscription_filter = Q()
+        event_subscription_filter = Q()
         if current_period and settings.BILLING_ENABLED:
             subscription_filter = Q(
                 created__gte=OuterRef(
@@ -143,14 +144,29 @@ class OrganizationManager(OrgManager):
                     "djstripe_customers__subscriptions__current_period_end"
                 ),
             )
+            event_subscription_filter = Q(
+                date__gte=OuterRef(
+                    "djstripe_customers__subscriptions__current_period_start"
+                ),
+                date__lt=OuterRef(
+                    "djstripe_customers__subscriptions__current_period_end"
+                ),
+            )
 
         queryset = self.annotate(
-            issue_event_count=SubqueryCount(
-                "projects__issue__event", filter=subscription_filter
+            issue_event_count=Coalesce(
+                SubquerySum(
+                    "projects__eventprojecthourlystatistic__count",
+                    filter=event_subscription_filter,
+                ),
+                0,
             ),
-            transaction_count=SubqueryCount(
-                "projects__transactiongroup__transactionevent",
-                filter=subscription_filter,
+            transaction_count=Coalesce(
+                SubquerySum(
+                    "projects__transactioneventprojecthourlystatistic__count",
+                    filter=event_subscription_filter,
+                ),
+                0,
             ),
             uptime_check_event_count=SubqueryCount(
                 "monitor__checks", filter=subscription_filter
@@ -177,7 +193,7 @@ class OrganizationManager(OrgManager):
             + F("uptime_check_event_count")
             + F("file_size"),
         )
-        return queryset
+        return queryset.distinct("pk")
 
 
 class Organization(SharedBaseModel, OrganizationBase):
@@ -260,6 +276,22 @@ class Organization(SharedBaseModel, OrganizationBase):
     def get_user_scopes(self, user):
         org_user = self.organization_users.get(user=user)
         return org_user.get_scopes()
+
+    def change_owner(self, new_owner):
+        """
+        Changes ownership of an organization.
+        """
+        old_owner = self.owner.organization_user
+        self.owner.organization_user = new_owner
+        self.owner.save()
+
+        owner_changed.send(sender=self, old=old_owner, new=new_owner)
+
+    def is_owner(self, user):
+        """
+        Returns True is user is the organization's owner, otherwise false
+        """
+        return self.owner.organization_user.user == user
 
 
 class OrganizationUser(SharedBaseModel, OrganizationUserBase):

@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('files', '0005_file_type_fileblobindex'),
+        ("files", "0005_file_type_fileblobindex"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='file',
-            name='headers',
+            model_name="file",
+            name="headers",
             field=models.JSONField(blank=True, null=True),
         ),
     ]
