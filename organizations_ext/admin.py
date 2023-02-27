@@ -106,6 +106,8 @@ class OrganizationUserResource(resources.ModelResource):
 
 class OrganizationUserAdmin(BaseOrganizationUserAdmin, ImportExportModelAdmin):
     list_display = ["user", "organization", "role", "email"]
+    search_fields = ("email", "user__email", "organization__name")
+    list_filter = ("role",)
     resource_class = OrganizationUserResource
 
 
