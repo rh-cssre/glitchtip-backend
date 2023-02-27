@@ -1311,18 +1311,17 @@ hiredis = ["redis[hiredis] (>=3,!=4.0.0,!=4.0.1)"]
 
 [[package]]
 name = "django-rest-mfa"
-version = "1.2.0"
+version = "1.2.1"
 description = "Django Rest Framework Endpoints for MFA including TOTP and FIDO2"
 category = "main"
 optional = false
 python-versions = ">=3.8.0,<4.0.0"
 files = [
-    {file = "django-rest-mfa-1.2.0.tar.gz", hash = "sha256:645b6516c58447601930417e4e7de393fd893393706be0344c4eec9ea2d31b08"},
-    {file = "django_rest_mfa-1.2.0-py3-none-any.whl", hash = "sha256:3c9510d76a7afd2567c038294f9a765c8cf8ef86d2dbc8cb0488192f3a9d522b"},
+    {file = "django_rest_mfa-1.2.1-py3-none-any.whl", hash = "sha256:14a9945dacd6ba5d540e99b708e751d937844083d2b71317d24b4af9d2221746"},
+    {file = "django_rest_mfa-1.2.1.tar.gz", hash = "sha256:92dcf44b3c8d010d2a8c8eb60bdcb1f6e2921a908fadbecb2c89a6de2a0729a0"},
 ]
 
 [package.dependencies]
-dj-rest-auth = ">=2.1.7,<3.0.0"
 djangorestframework = ">=3.12.4,<4.0.0"
 fido2 = ">=1.0.0,<2.0.0"
 pyotp = ">=2.6.0,<3.0.0"
