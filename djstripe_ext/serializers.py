@@ -1,5 +1,5 @@
 from django.core.exceptions import SuspiciousOperation
-from djstripe.models import Customer, Plan, Product
+from djstripe.models import Customer, Price, Product, SubscriptionItem
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
@@ -16,23 +16,52 @@ class BaseProductSerializer(ModelSerializer):
         fields = ("id", "name", "description", "type", "metadata")
 
 
-class PlanSerializer(ModelSerializer):
+class BasePriceSerializer(ModelSerializer):
+    class Meta:
+        model = Price
+        fields = (
+            "id",
+            "nickname",
+            "currency",
+            "type",
+            "unit_amount",
+            "human_readable_price",
+            "metadata",
+        )
+
+
+class PriceSerializer(BasePriceSerializer):
     product = BaseProductSerializer()
 
-    class Meta:
-        model = Plan
-        fields = ("id", "nickname", "amount", "metadata", "product")
+    class Meta(BasePriceSerializer.Meta):
+        fields = (
+            "id",
+            "nickname",
+            "currency",
+            "unit_amount",
+            "human_readable_price",
+            "metadata",
+            "product",
+        )
 
 
 class ProductSerializer(BaseProductSerializer):
-    plans = PlanSerializer(many=True, source="plan_set")
+    prices = BasePriceSerializer(many=True)
 
     class Meta(BaseProductSerializer.Meta):
-        fields = ("id", "name", "description", "type", "plans", "metadata")
+        fields = ("id", "name", "description", "type", "prices", "metadata")
+
+
+class SubscriptionItemSerializer(ModelSerializer):
+    price = PriceSerializer()
+
+    class Meta:
+        model = SubscriptionItem
+        fields = ("id", "price")
 
 
 class SubscriptionSerializer(BaseSubscriptionSerializer):
-    plan = PlanSerializer(read_only=True)
+    items = SubscriptionItemSerializer(many=True)
 
 
 class OrganizationPrimaryKeySerializer(serializers.PrimaryKeyRelatedField):
@@ -49,26 +78,26 @@ class OrganizationSelectSerializer(serializers.Serializer):
     organization = OrganizationPrimaryKeySerializer()
 
 
-class PlanForOrganizationSerializer(OrganizationSelectSerializer):
-    plan = serializers.SlugRelatedField(queryset=Plan.objects.all(), slug_field="id")
+class PriceForOrganizationSerializer(OrganizationSelectSerializer):
+    price = serializers.SlugRelatedField(queryset=Price.objects.all(), slug_field="id")
 
 
-class CreateSubscriptionSerializer(PlanForOrganizationSerializer):
-    """A serializer used to create a Subscription. Only works with free plans."""
+class CreateSubscriptionSerializer(PriceForOrganizationSerializer):
+    """A serializer used to create a Subscription. Only works with free prices."""
 
     subscription = SubscriptionSerializer(read_only=True)
 
-    def create(self, data):
-        organization = data["organization"]
-        plan = data["plan"]
-        if plan.amount != 0.0:
+    def create(self, validated_data):
+        organization = validated_data["organization"]
+        price = validated_data["price"]
+        if price.amount != 0.0:
             raise SuspiciousOperation(
                 "Cannot subscribe to non-free plan without payment"
             )
         customer, _ = Customer.get_or_create(subscriber=organization)
-        subscription = customer.subscribe(items=[{"plan": plan}])
+        subscription = customer.subscribe(items=[{"price": price}])
         return {
-            "plan": plan,
+            "price": price,
             "organization": organization,
             "subscription": subscription,
         }
