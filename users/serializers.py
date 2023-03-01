@@ -15,6 +15,8 @@ from dj_rest_auth.serializers import PasswordResetSerializer
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
+import hashlib
+import hmac
 
 from glitchtip.constants import SOCIAL_ADAPTER_MAP
 
@@ -158,6 +160,21 @@ class UserSerializer(serializers.ModelSerializer):
             "email",
             "options",
         )
+
+
+class CurrentUserSerializer(UserSerializer):
+    chatwootIdentityToken = serializers.SerializerMethodField()
+
+    class Meta(UserSerializer.Meta):
+        fields = UserSerializer.Meta.fields + ("chatwootIdentityToken",)
+
+    def get_chatwootIdentityToken(self, obj):
+        if settings.CHATWOOT_WEBSITE_TOKEN and settings.CHATWOOT_IDENTITY_TOKEN:
+            secret = bytes(settings.CHATWOOT_IDENTITY_TOKEN, "utf-8")
+            message = bytes(str(obj.id), "utf-8")
+
+            hash = hmac.new(secret, message, hashlib.sha256)
+            return hash.hexdigest()
 
 
 class RegisterSerializer(BaseRegisterSerializer):

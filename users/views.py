@@ -17,6 +17,7 @@ from users.utils import is_user_registration_open
 from .models import User
 from .serializers import (
     ConfirmEmailAddressSerializer,
+    CurrentUserSerializer,
     EmailAddressSerializer,
     UserNotificationsSerializer,
     UserSerializer,
@@ -43,6 +44,11 @@ class UserViewSet(viewsets.ModelViewSet):
         if self.kwargs.get("pk") == "me":
             return self.request.user
         return super().get_object()
+
+    def get_serializer_class(self):
+        if self.kwargs.get("pk") == "me":
+            return CurrentUserSerializer
+        return super().get_serializer_class()
 
     def perform_create(self, serializer):
         organization_slug = self.kwargs.get("organization_slug")
