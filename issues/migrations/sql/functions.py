@@ -95,7 +95,7 @@ SET
   last_seen = GREATEST(event_agg.new_last_seen, issues_issue.last_seen),
   level = GREATEST(event_agg.new_level, issues_issue.level),
   search_vector = concat_tsvector(COALESCE(search_vector, ''::tsvector), event_vector.vector),
-  tags = CASE WHEN event_agg.new_tags is not null THEN jsonb_merge_deep(event_agg.new_tags, tags) ELSE tags END
+  tags = COALESCE(jsonb_merge_deep(event_agg.new_tags, tags), '{}')
 FROM event_agg, event_vector
 WHERE issues_issue.id = update_issue_id;
 $$;
