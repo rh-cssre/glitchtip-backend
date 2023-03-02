@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+
 from allauth.account import app_settings
 from allauth.account.adapter import get_adapter
 from allauth.account.forms import default_token_generator
@@ -15,8 +18,6 @@ from dj_rest_auth.serializers import PasswordResetSerializer
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
-import hashlib
-import hmac
 
 from glitchtip.constants import SOCIAL_ADAPTER_MAP
 
