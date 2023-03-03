@@ -341,33 +341,40 @@ SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", False)
 SESSION_COOKIE_SAMESITE = env.str("SESSION_COOKIE_SAMESITE", "Lax")
 
 DEFAULT_FROM_EMAIL = env.str("DEFAULT_FROM_EMAIL", "webmaster@localhost")
+
+ANYMAIL_SETTINGS = [
+    "MAILGUN_API_KEY",
+    "MAILGUN_SENDER_DOMAIN",
+    "MAILGUN_API_URL",
+    "MAILGUN_WEBHOOK_SIGNING_KEY",
+    "SENDGRID_API_KEY",
+    "SENDGRID_API_URL",
+    "POSTMARK_SERVER_TOKEN",
+    "POSTMARK_API_URL",
+    "MANDRILL_API_KEY",
+    "MANDRILL_WEBHOOK_KEY",
+    "MANDRILL_WEBHOOK_URL",
+    "MANDRILL_API_URL",
+    "SENDINBLUE_API_KEY",
+    "SENDINBLUE_API_URL",
+    "MAILJET_API_KEY",
+    "MAILJET_SECRET_KEY",
+    "MAILJET_API_URL",
+    "POSTAL_API_KEY",
+    "POSTAL_API_URL",
+    "POSTAL_WEBHOOK_KEY",
+    "SPARKPOST_API_KEY",
+    "SPARKPOST_API_URL",
+    "SPARKPOST_TRACK_INITIAL_OPEN_AS_OPENED",
+]
+
 ANYMAIL = {
-    "MAILGUN_API_KEY": env.str("MAILGUN_API_KEY", None),
-    "MAILGUN_SENDER_DOMAIN": env.str("MAILGUN_SENDER_DOMAIN", None),
-    "MAILGUN_API_URL": env.str("MAILGUN_API_URL", "https://api.mailgun.net/v3"),
-    "MAILGUN_WEBHOOK_SIGNING_KEY": env.str("MAILGUN_WEBHOOK_SIGNING_KEY", None),
-    "SENDGRID_API_KEY": env.str("SENDGRID_API_KEY", None),
-    "SENDGRID_API_URL": env.str("SENDGRID_API_URL", "https://api.sendgrid.com/v3/"),
-    "POSTMARK_SERVER_TOKEN": env.str("POSTMARK_SERVER_TOKEN", None),
-    "POSTMARK_API_URL": env.str("POSTMARK_API_URL", "https://api.postmarkapp.com/"),
-    "MANDRILL_API_KEY": env.str("MANDRILL_API_KEY", None),
-    "MANDRILL_WEBHOOK_KEY": env.str("MANDRILL_WEBHOOK_KEY", None),
-    "MANDRILL_WEBHOOK_URL": env.str("MANDRILL_WEBHOOK_URL", None),
-    "MANDRILL_API_URL": env.str("MANDRILL_API_URL", "https://mandrillapp.com/api/1.0"),
-    "SENDINBLUE_API_KEY": env.str("SENDINBLUE_API_KEY", None),
-    "SENDINBLUE_API_URL": env.str("SENDINBLUE_API_URL", "https://api.sendinblue.com/v3/"),
-    "MAILJET_API_KEY": env.str("MAILJET_API_KEY", None),
-    "MAILJET_SECRET_KEY": env.str("MAILJET_SECRET_KEY", None),
-    "MAILJET_API_URL": env.str("MAILJET_API_URL", "https://api.mailjet.com/v3.1/"),
-    "POSTAL_API_KEY": env.str("POSTAL_API_KEY", None),
-    "POSTAL_API_URL": env.str("POSTAL_API_URL", None),
-    "POSTAL_WEBHOOK_KEY": env.str("POSTAL_WEBHOOK_KEY", None),
-    "SPARKPOST_API_KEY": env.str("SPARKPOST_API_KEY", None),
-    "SPARKPOST_API_URL": env.str("SPARKPOST_API_URL", "https://api.sparkpost.com/api/v1"),
-    "SPARKPOST_TRACK_INITIAL_OPEN_AS_OPENED": env.bool("SPARKPOST_TRACK_INITIAL_OPEN_AS_OPENED", False),
+    anymail_var: env.str(anymail_var)
+    for anymail_var in ANYMAIL_SETTINGS
+    if anymail_var in os.environ
 }
 
-ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
+ACCOUNT_EMAIL_SUBJECT_PREFIX = env.str("ACCOUNT_EMAIL_SUBJECT_PREFIX", "")
 
 # Database
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
