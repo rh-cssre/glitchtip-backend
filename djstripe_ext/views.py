@@ -21,7 +21,7 @@ from .serializers import (
 )
 
 
-class SubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
+class SubscriptionViewSet(viewsets.ModelViewSet):
     """
     View subscription status and create new free tier subscriptions
 
@@ -106,13 +106,19 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     unit_amount is price in cents
     """
 
-    queryset = Product.objects.filter(
-        active=True,
-        livemode=settings.STRIPE_LIVE_MODE,
-        plan__active=True,
-        metadata__events__isnull=False,
-        metadata__is_public="true",
-    ).prefetch_related(Prefetch("prices", queryset=Price.objects.filter(active=True)))
+    queryset = (
+        Product.objects.filter(
+            active=True,
+            livemode=settings.STRIPE_LIVE_MODE,
+            prices__active=True,
+            metadata__events__isnull=False,
+            metadata__is_public="true",
+        )
+        .prefetch_related(
+            Prefetch("prices", queryset=Price.objects.filter(active=True))
+        )
+        .distinct()
+    )
     serializer_class = ProductSerializer
 
 

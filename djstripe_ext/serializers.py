@@ -90,7 +90,7 @@ class CreateSubscriptionSerializer(PriceForOrganizationSerializer):
     def create(self, validated_data):
         organization = validated_data["organization"]
         price = validated_data["price"]
-        if price.amount != 0.0:
+        if price.unit_amount != 0.0:
             raise SuspiciousOperation(
                 "Cannot subscribe to non-free plan without payment"
             )
