@@ -164,12 +164,12 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class CurrentUserSerializer(UserSerializer):
-    chatwootIdentityToken = serializers.SerializerMethodField()
+    chatwootIdentifierHash = serializers.SerializerMethodField()
 
     class Meta(UserSerializer.Meta):
-        fields = UserSerializer.Meta.fields + ("chatwootIdentityToken",)
+        fields = UserSerializer.Meta.fields + ("chatwootIdentifierHash",)
 
-    def get_chatwootIdentityToken(self, obj):
+    def get_chatwootIdentifierHash(self, obj):
         if settings.CHATWOOT_WEBSITE_TOKEN and settings.CHATWOOT_IDENTITY_TOKEN:
             secret = bytes(settings.CHATWOOT_IDENTITY_TOKEN, "utf-8")
             message = bytes(str(obj.id), "utf-8")
