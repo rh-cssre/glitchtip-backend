@@ -229,7 +229,12 @@ class SubscriptionIntegrationAPITestCase(APITestCase):
         self.organization = baker.make("organizations_ext.Organization")
         self.organization.add_user(self.user)
         # Make these in this manner to avoid syncing data to stripe actual
-        self.plan = baker.make("djstripe.Plan", active=True, amount=0)
+        self.price = baker.make(
+            "djstripe.Price",
+            active=True,
+            unit_amount=0,
+            billing_scheme=BillingScheme.per_unit,
+        )
         self.customer = baker.make(
             "djstripe.Customer", subscriber=self.organization, livemode=False
         )
@@ -250,9 +255,9 @@ class SubscriptionIntegrationAPITestCase(APITestCase):
         )
         djstripe_customer_subscribe_mock.return_value = subscription
 
-        data = {"plan": self.plan.id, "organization": self.organization.id}
+        data = {"price": self.price.id, "organization": self.organization.id}
         res = self.client.post(self.list_url, data)
-        self.assertContains(res, self.plan.id, status_code=201)
+        self.assertContains(res, self.price.id, status_code=201)
         djstripe_customer_subscribe_mock.assert_called_once()
 
         res = self.client.get(self.detail_url)
