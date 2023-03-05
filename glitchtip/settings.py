@@ -635,20 +635,6 @@ oidc_servers = [x for x in oidc_servers.values()]
 SOCIALACCOUNT_PROVIDERS["openid_connect"] = {"SERVERS": oidc_servers}
 
 
-OLD_PASSWORD_FIELD_ENABLED = True
-LOGOUT_ON_PASSWORD_CHANGE = False
-
-REST_AUTH_SERIALIZERS = {
-    "USER_DETAILS_SERIALIZER": "users.serializers.UserSerializer",
-    "TOKEN_SERIALIZER": "users.serializers.NoopTokenSerializer",
-    "PASSWORD_RESET_SERIALIZER": "users.serializers.PasswordSetResetSerializer",
-}
-REST_AUTH_REGISTER_SERIALIZERS = {
-    "REGISTER_SERIALIZER": "users.serializers.RegisterSerializer",
-}
-REST_AUTH_TOKEN_MODEL = None
-REST_AUTH_TOKEN_CREATOR = "users.utils.noop_token_creator"
-
 # Remove in GlitchTip4.0
 if "ENABLE_OPEN_USER_REGISTRATION" in os.environ:
     warnings.warn(
@@ -660,9 +646,18 @@ ENABLE_ORGANIZATION_CREATION = env.bool(
     "ENABLE_OPEN_USER_REGISTRATION", env.bool("ENABLE_ORGANIZATION_CREATION", False)
 )
 
-REST_AUTH_REGISTER_PERMISSION_CLASSES = (
-    ("glitchtip.permissions.UserRegistrationPermission"),
-)
+REST_AUTH = {
+    "TOKEN_MODEL": None,
+    "TOKEN_CREATOR": "users.utils.noop_token_creator",
+    "REGISTER_PERMISSION_CLASSES": (
+        "glitchtip.permissions.UserRegistrationPermission",
+    ),
+    "REGISTER_SERIALIZER": "users.serializers.RegisterSerializer",
+    "USER_DETAILS_SERIALIZER": "users.serializers.UserSerializer",
+    "TOKEN_SERIALIZER": "users.serializers.NoopTokenSerializer",
+    "PASSWORD_RESET_SERIALIZER": "users.serializers.PasswordSetResetSerializer",
+    "OLD_PASSWORD_FIELD_ENABLED": True,
+}
 
 AUTHENTICATION_BACKENDS = (
     # Needed to login by username in Django admin, regardless of `allauth`
