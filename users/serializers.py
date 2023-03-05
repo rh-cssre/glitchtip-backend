@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+
 from allauth.account import app_settings
 from allauth.account.adapter import get_adapter
 from allauth.account.forms import default_token_generator
@@ -158,6 +161,21 @@ class UserSerializer(serializers.ModelSerializer):
             "email",
             "options",
         )
+
+
+class CurrentUserSerializer(UserSerializer):
+    chatwootIdentifierHash = serializers.SerializerMethodField()
+
+    class Meta(UserSerializer.Meta):
+        fields = UserSerializer.Meta.fields + ("chatwootIdentifierHash",)
+
+    def get_chatwootIdentifierHash(self, obj):
+        if settings.CHATWOOT_WEBSITE_TOKEN and settings.CHATWOOT_IDENTITY_TOKEN:
+            secret = bytes(settings.CHATWOOT_IDENTITY_TOKEN, "utf-8")
+            message = bytes(str(obj.id), "utf-8")
+
+            hash = hmac.new(secret, message, hashlib.sha256)
+            return hash.hexdigest()
 
 
 class RegisterSerializer(BaseRegisterSerializer):
