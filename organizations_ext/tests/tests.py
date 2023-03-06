@@ -1,10 +1,11 @@
 from django.conf import settings
 from django.shortcuts import reverse
-from django.test import TestCase, RequestFactory
-from rest_framework.test import APITestCase
+from django.test import RequestFactory, TestCase
 from model_bakery import baker
-from organizations_ext.models import OrganizationUser, OrganizationUserRole
+from rest_framework.test import APITestCase
+
 from glitchtip import test_utils  # pylint: disable=unused-import
+from organizations_ext.models import OrganizationUser, OrganizationUserRole
 
 
 class OrganizationModelTestCase(TestCase):

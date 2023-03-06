@@ -1,4 +1,5 @@
 from locust import HttpUser, between, task
+
 from events.test_data.event_generator import generate_random_event
 
 
