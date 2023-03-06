@@ -30,6 +30,12 @@ class OrganizationMemberPermission(ScopedPermission):
                 current_scopes = request.auth.get_scopes()
                 return any(s in allowed_scopes for s in current_scopes)
             return bool(request.user and request.user.is_authenticated)
+        if view.action == "set_owner":
+            if request.auth:
+                allowed_scopes = ["org:admin"]
+                current_scopes = request.auth.get_scopes()
+                return any(s in allowed_scopes for s in current_scopes)
+            return bool(request.user and request.user.is_authenticated)
         return super().has_permission(request, view)
 
     def get_user_scopes(self, obj, user):

@@ -4,6 +4,7 @@ from django.db import models
 
 from events.models import AbstractEvent
 from glitchtip.base_models import CreatedModel
+from projects.tasks import update_transaction_event_project_hourly_statistic
 
 
 class TransactionGroup(CreatedModel):
@@ -33,6 +34,14 @@ class TransactionEvent(AbstractEvent):
 
     def __str__(self):
         return str(self.trace_id)
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new:
+            update_transaction_event_project_hourly_statistic(
+                args=[self.group.project_id, self.created], countdown=60
+            )
 
 
 class Span(CreatedModel):

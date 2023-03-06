@@ -10,6 +10,7 @@ from .models import Monitor, MonitorCheck
 from .serializers import (
     HeartBeatCheckSerializer,
     MonitorCheckSerializer,
+    MonitorDetailSerializer,
     MonitorSerializer,
 )
 from .tasks import send_monitor_notification
@@ -36,6 +37,11 @@ class MonitorViewSet(viewsets.ModelViewSet):
     queryset = Monitor.objects.with_check_annotations()
     serializer_class = MonitorSerializer
 
+    def get_serializer_class(self):
+        if self.action in ["retrieve"]:
+            return MonitorDetailSerializer
+        return super().get_serializer_class()
+
     def get_queryset(self):
         if not self.request.user.is_authenticated:
             return self.queryset.none()
@@ -46,21 +52,25 @@ class MonitorViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(organization__slug=organization_slug)
 
         subqueryset = Subquery(
-            MonitorCheck.objects.filter(
-                monitor=OuterRef("monitor")
-            ).order_by("-start_check").values_list("id", flat=True)[:60]
+            MonitorCheck.objects.filter(monitor=OuterRef("monitor"))
+            .order_by("-start_check")
+            .values_list("id", flat=True)[:60]
         )
 
         # Optimization hack, we know the checks will be recent. No need to sort all checks ever.
         hours_ago = timezone.now() - timezone.timedelta(hours=12)
-        queryset = queryset.prefetch_related(
-            Prefetch(
-                "checks",
-                queryset=MonitorCheck.objects.filter(
-                    id__in=subqueryset, start_check__gt=hours_ago
-                ).order_by("-start_check"),
+        queryset = (
+            queryset.prefetch_related(
+                Prefetch(
+                    "checks",
+                    queryset=MonitorCheck.objects.filter(
+                        id__in=subqueryset, start_check__gt=hours_ago
+                    ).order_by("-start_check"),
+                )
             )
-        ).select_related("project").distinct()
+            .select_related("project")
+            .distinct()
+        )
         return queryset
 
     def perform_create(self, serializer):
