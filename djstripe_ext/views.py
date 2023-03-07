@@ -145,7 +145,7 @@ class CreateStripeSubscriptionCheckout(views.APIView):
                 payment_method_types=["card"],
                 line_items=[
                     {
-                        "price": serializer.validated_data["plan"].id,
+                        "price": serializer.validated_data["price"].id,
                         "quantity": 1,
                     }
                 ],
