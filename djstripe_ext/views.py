@@ -3,7 +3,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Prefetch
 from django.http import Http404
-from djstripe.models import Customer, Plan, Product, Subscription
+from djstripe.models import Customer, Price, Product, Subscription, SubscriptionItem
 from djstripe.settings import djstripe_settings
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status, views, viewsets
@@ -15,7 +15,7 @@ from organizations_ext.models import Organization
 from .serializers import (
     CreateSubscriptionSerializer,
     OrganizationSelectSerializer,
-    PlanForOrganizationSerializer,
+    PriceForOrganizationSerializer,
     ProductSerializer,
     SubscriptionSerializer,
 )
@@ -43,6 +43,11 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
             return self.queryset.filter(
                 livemode=settings.STRIPE_LIVE_MODE,
                 customer__subscriber__users=self.request.user,
+            ).prefetch_related(
+                Prefetch(
+                    "items",
+                    queryset=SubscriptionItem.objects.select_related("price__product"),
+                )
             )
         return self.queryset.none()
 
@@ -63,8 +68,8 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
                 ).update(is_accepting_events=True)
 
             return subscription
-        except Subscription.DoesNotExist:
-            raise Http404
+        except Subscription.DoesNotExist as exc:
+            raise Http404 from exc
 
     @action(detail=True, methods=["get"])
     def events_count(self, *args, **kwargs):
@@ -95,13 +100,25 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
 
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Product.objects.filter(
-        active=True,
-        livemode=settings.STRIPE_LIVE_MODE,
-        plan__active=True,
-        metadata__events__isnull=False,
-        metadata__is_public="true",
-    ).prefetch_related(Prefetch("plan_set", queryset=Plan.objects.filter(active=True)))
+    """
+    Stripe Product + Prices
+
+    unit_amount is price in cents
+    """
+
+    queryset = (
+        Product.objects.filter(
+            active=True,
+            livemode=settings.STRIPE_LIVE_MODE,
+            prices__active=True,
+            metadata__events__isnull=False,
+            metadata__is_public="true",
+        )
+        .prefetch_related(
+            Prefetch("prices", queryset=Price.objects.filter(active=True))
+        )
+        .distinct()
+    )
     serializer_class = ProductSerializer
 
 
@@ -109,7 +126,7 @@ class CreateStripeSubscriptionCheckout(views.APIView):
     """Create Stripe Checkout, send to client for redirecting to Stripe"""
 
     def get_serializer(self, *args, **kwargs):
-        return PlanForOrganizationSerializer(
+        return PriceForOrganizationSerializer(
             data=self.request.data, context={"request": self.request}
         )
 
@@ -128,7 +145,7 @@ class CreateStripeSubscriptionCheckout(views.APIView):
                 payment_method_types=["card"],
                 line_items=[
                     {
-                        "price": serializer.validated_data["plan"].id,
+                        "price": serializer.validated_data["price"].id,
                         "quantity": 1,
                     }
                 ],
