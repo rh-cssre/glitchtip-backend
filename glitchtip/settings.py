@@ -23,7 +23,6 @@ from celery.schedules import crontab
 from corsheaders.defaults import default_headers
 from django.core.exceptions import ImproperlyConfigured
 from sentry_sdk.integrations.django import DjangoIntegration
-from whitenoise.storage import CompressedManifestStaticFilesStorage
 
 env = environ.Env(
     ALLOWED_HOSTS=(list, ["*"]),
@@ -44,7 +43,7 @@ env = environ.Env(
     STATIC_URL=(str, "/"),
     STATICFILES_STORAGE=(
         str,
-        "glitchtip.settings.NoSourceMapsStorage",
+        "whitenoise.storage.CompressedManifestStaticFilesStorage",
     ),
     ENABLE_OBSERVABILITY_API=(bool, False),
 )
@@ -799,19 +798,3 @@ if CELERY_TASK_ALWAYS_EAGER:
 
 MFA_SERVER_NAME = GLITCHTIP_URL.hostname
 FIDO_SERVER_ID = GLITCHTIP_URL.hostname
-
-
-# Workaround for error encountered at build time (source: https://github.com/axnsan12/drf-yasg/issues/761#issuecomment-1014530805)
-class NoSourceMapsStorage(CompressedManifestStaticFilesStorage):
-    patterns = (
-        (
-            "*.css",
-            (
-                "(?P<matched>url\\(['\"]{0,1}\\s*(?P<url>.*?)[\"']{0,1}\\))",
-                (
-                    "(?P<matched>@import\\s*[\"']\\s*(?P<url>.*?)[\"'])",
-                    '@import url("%(url)s")',
-                ),
-            ),
-        ),
-    )
