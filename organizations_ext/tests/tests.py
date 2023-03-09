@@ -1,11 +1,10 @@
-from django.conf import settings
 from django.shortcuts import reverse
-from django.test import RequestFactory, TestCase
+from django.test import TestCase
 from model_bakery import baker
 from rest_framework.test import APITestCase
 
 from glitchtip import test_utils  # pylint: disable=unused-import
-from organizations_ext.models import OrganizationUser, OrganizationUserRole
+from organizations_ext.models import OrganizationUser
 
 
 class OrganizationModelTestCase(TestCase):
@@ -24,18 +23,6 @@ class OrganizationModelTestCase(TestCase):
         self.assertEqual(organization.email, user.email)
         self.assertEqual(organization.users.count(), 2)
         self.assertEqual(organization.owners.count(), 1)
-
-    def test_organization_request_callback(self):
-        user = baker.make("users.user")
-        organization = baker.make("organizations_ext.Organization")
-        organization.add_user(user)
-
-        factory = RequestFactory()
-        request = factory.get("/")
-        request.user = user
-
-        callback = settings.DJSTRIPE_SUBSCRIBER_MODEL_REQUEST_CALLBACK
-        self.assertEqual(callback(request), organization)
 
     def test_slug_reserved_words(self):
         """Reserve some words for frontend routing needs"""

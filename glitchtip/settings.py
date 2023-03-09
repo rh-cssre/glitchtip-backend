@@ -731,12 +731,7 @@ if LOGGING_HANDLER_CLASS is not logging.StreamHandler:
 
 
 def organization_request_callback(request):
-    """Gets an organization instance from the id passed through ``request``"""
-    user = request.user
-    if user:
-        return user.organizations_ext_organization.filter(
-            owner__organization_user__user=user
-        ).first()
+    raise ImproperlyConfigured("Organization request callback not configured.")
 
 
 # Set to track activity with Plausible
@@ -753,7 +748,6 @@ I_PAID_FOR_GLITCHTIP = env.bool("I_PAID_FOR_GLITCHTIP", False)
 # Max events per month for free tier
 BILLING_FREE_TIER_EVENTS = env.int("BILLING_FREE_TIER_EVENTS", 1000)
 DJSTRIPE_SUBSCRIBER_MODEL = "organizations_ext.Organization"
-DJSTRIPE_SUBSCRIBER_MODEL_REQUEST_CALLBACK = organization_request_callback
 DJSTRIPE_USE_NATIVE_JSONFIELD = True
 DJSTRIPE_FOREIGN_KEY_TO_FIELD = "djstripe_id"
 STRIPE_AUTOMATIC_TAX = env.bool("STRIPE_AUTOMATIC_TAX", False)
