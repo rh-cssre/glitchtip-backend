@@ -731,7 +731,7 @@ if LOGGING_HANDLER_CLASS is not logging.StreamHandler:
 
 
 def organization_request_callback(request):
-    raise ImproperlyConfigured("Organization request callback not configured.")
+    raise ImproperlyConfigured("Organization request callback required by dj-stripe but not used.")
 
 
 # Set to track activity with Plausible
