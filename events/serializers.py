@@ -328,6 +328,8 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
         environment = self.set_environment(data.get("environment"), project)
         if project.environment_id:
             tags.append(("environment", environment))
+        if data.get("server_name"):
+            tags.append(("server_name", data.get("server_name")))
 
         for Processor in EVENT_PROCESSORS:
             Processor(project, project.release_id, data).run()
