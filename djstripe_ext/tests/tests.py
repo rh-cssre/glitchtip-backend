@@ -184,27 +184,22 @@ class ProductAPITestCase(APITestCase):
         self.assertNotContains(res, hidden_price.id)
 
 
+# Price ID must be from a real price actually set up on Stripe Test account
 class StripeAPITestCase(APITestCase):
     @skipIf(
         settings.STRIPE_TEST_PUBLIC_KEY == "fake", "requires real Stripe test API key"
     )
     def test_create_checkout(self):
         url = reverse("create-stripe-subscription-checkout")
-        plan = baker.make(
-            "djstripe.Plan",
-            amount=1,
-            livemode=False,
-            active=True,
-            id="price_HNfVNr3ohLWkmv",
-            description="Small - 100k events",
-            product__active=True,
-            product__livemode=False,
+        price = baker.make(
+            "djstripe.Price",
+            id="price_1MZhMWJ4NuO0bv3IGMoDoFFI",
         )
         user = baker.make("users.user")
         organization = baker.make("organizations_ext.Organization")
         organization.add_user(user)
         self.client.force_login(user)
-        data = {"plan": plan.id, "organization": organization.id}
+        data = {"price": price.id, "organization": organization.id}
 
         res = self.client.post(url, data)
         self.assertEqual(res.status_code, 200)
