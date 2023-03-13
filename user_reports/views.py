@@ -1,16 +1,18 @@
 import json
-from django.db import IntegrityError
+
 from django.conf import settings
+from django.db import IntegrityError
 from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
-from rest_framework import views, viewsets, exceptions, permissions, renderers
+from rest_framework import exceptions, permissions, renderers, views, viewsets
 from rest_framework.response import Response
 
-from projects.models import ProjectKey
 from events.models import Event
 from issues.permissions import EventPermission
-from .models import UserReport
+from projects.models import ProjectKey
+
 from .forms import UserReportForm
+from .models import UserReport
 from .serializers import ErrorPageEmbedSerializer, UserReportSerializer
 
 

@@ -1,7 +1,9 @@
 from django.shortcuts import reverse
 from model_bakery import baker
+
 from glitchtip import test_utils  # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
+
 from ..models import ProjectAlert
 
 
@@ -15,18 +17,20 @@ class AlertAPITestCase(GlitchTipTestCase):
         )
         url = reverse(
             "project-alerts-list",
-            kwargs={"project_pk": f"{self.organization.slug}/{self.project.slug}",},
+            kwargs={
+                "project_pk": f"{self.organization.slug}/{self.project.slug}",
+            },
         )
         res = self.client.get(url)
         self.assertContains(res, alert.timespan_minutes)
 
     def test_retrieve_with_second_team(self):
-        baker.make(
-            "alerts.ProjectAlert", project=self.project, timespan_minutes=60
-        )
+        baker.make("alerts.ProjectAlert", project=self.project, timespan_minutes=60)
         url = reverse(
             "project-alerts-list",
-            kwargs={"project_pk": f"{self.organization.slug}/{self.project.slug}",},
+            kwargs={
+                "project_pk": f"{self.organization.slug}/{self.project.slug}",
+            },
         )
 
         team2 = baker.make("teams.Team", organization=self.organization)
@@ -38,7 +42,9 @@ class AlertAPITestCase(GlitchTipTestCase):
     def test_project_alerts_create(self):
         url = reverse(
             "project-alerts-list",
-            kwargs={"project_pk": f"{self.organization.slug}/{self.project.slug}",},
+            kwargs={
+                "project_pk": f"{self.organization.slug}/{self.project.slug}",
+            },
         )
         data = {
             "name": "foo",
@@ -60,7 +66,9 @@ class AlertAPITestCase(GlitchTipTestCase):
 
         url = reverse(
             "project-alerts-list",
-            kwargs={"project_pk": f"{self.organization.slug}/{self.project.slug}",},
+            kwargs={
+                "project_pk": f"{self.organization.slug}/{self.project.slug}",
+            },
         )
         data = {
             "name": "foo",
@@ -109,7 +117,7 @@ class AlertAPITestCase(GlitchTipTestCase):
         self.assertEqual(project_alert.quantity, 2)
 
     def test_project_alerts_update_auth(self):
-        """ Cannot update alert on project that user does not belong to """
+        """Cannot update alert on project that user does not belong to"""
         alert = baker.make("alerts.ProjectAlert", timespan_minutes=60)
         url = reverse(
             "project-alerts-detail",

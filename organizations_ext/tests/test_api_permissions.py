@@ -1,7 +1,8 @@
 from django.urls import reverse
 from model_bakery import baker
-from organizations_ext.models import OrganizationUserRole
+
 from glitchtip.test_utils.test_case import APIPermissionTestCase
+from organizations_ext.models import OrganizationUserRole
 
 
 class OrganizationAPIPermissionTests(APIPermissionTestCase):
@@ -60,6 +61,12 @@ class OrganizationAPIPermissionTests(APIPermissionTestCase):
 class OrganizationMemberAPIPermissionTests(APIPermissionTestCase):
     def setUp(self):
         self.create_user_org()
+
+        # Change owner to avoid restrictions on org owners
+        # deleting their own organization
+        new_user = baker.make("users.User")
+        new_owner = self.organization.add_user(new_user)
+        self.organization.change_owner(new_owner)
         self.set_client_credentials(self.auth_token.token)
         self.list_url = reverse(
             "organization-members-list",
@@ -124,4 +131,3 @@ class OrganizationMemberAPIPermissionTests(APIPermissionTestCase):
         self.assertDeleteReqStatusCode(url, 403)
         self.auth_token.add_permissions(["org:read", "org:write"])
         self.assertDeleteReqStatusCode(url, 200)
-
