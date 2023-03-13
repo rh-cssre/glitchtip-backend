@@ -1,8 +1,10 @@
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework_nested import routers
+
 from glitchtip.routers import BulkSimpleRouter
-from projects.views import NestedProjectViewSet
 from organizations_ext.views import OrganizationMemberViewSet
+from projects.views import NestedProjectViewSet
+
 from .views import TeamViewSet
 
 router = BulkSimpleRouter()

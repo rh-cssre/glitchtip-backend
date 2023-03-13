@@ -1,5 +1,6 @@
-from rest_framework import serializers
 from bitfield.types import BitHandler
+from rest_framework import serializers
+
 from .models import APIToken
 
 
