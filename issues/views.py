@@ -239,7 +239,7 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
         qs = (
             super()
             .get_queryset()
-            .filter(issue__project__team__members__user=self.request.user)
+            .filter(issue__project__organization__users=self.request.user)
         )
         if "issue_pk" in self.kwargs:
             qs = qs.filter(issue=self.kwargs["issue_pk"])
@@ -276,7 +276,7 @@ class EventJsonView(views.APIView):
                 Event.objects.filter(
                     pk=event,
                     issue__project__organization__slug=org,
-                    issue__project__team__members__user=self.request.user,
+                    issue__project__organization__users=self.request.user,
                 )
                 .distinct()
                 .get()
