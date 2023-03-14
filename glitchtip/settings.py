@@ -224,6 +224,7 @@ INSTALLED_APPS += [
     "teams",
     "releases",
     "difs",
+    "comments",
 ]
 
 # Ensure no one uses runsslserver in production
