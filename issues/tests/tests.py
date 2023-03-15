@@ -234,6 +234,25 @@ class IssuesAPITestCase(GlitchTipTestCase):
         self.assertEqual(issues[0].status, status_to_set)
         self.assertEqual(issues[1].status, status_to_set)
 
+    def test_bulk_delete_via_ids(self):
+        """Bulk delete Issues with ids"""
+        issues = baker.make(Issue, project=self.project, _quantity=2)
+        url = f"{self.url}?id={issues[0].id}&id={issues[1].id}"
+        res = self.client.delete(url)
+        issues = Issue.objects.all().count()
+        self.assertEqual(issues, 0)
+
+    def test_bulk_delete_via_search(self):
+        """Bulk delete Issues via search string"""
+        project2 = baker.make("projects.Project", organization=self.organization)
+        project2.team_set.add(self.team)
+        issue1 = baker.make(Issue, project=self.project)
+        issue2 = baker.make(Issue, project=project2)
+        url = f"{self.url}?query=is:unresolved&project={self.project.id}"
+        res = self.client.delete(url)
+        self.assertEqual(Issue.objects.filter(id=issue1.id).exists(), False)
+        self.assertEqual(Issue.objects.filter(id=issue2.id).exists(), True)
+
     def test_bulk_update_query(self):
         """Bulk update only supports Issue status"""
         project2 = baker.make("projects.Project", organization=self.organization)

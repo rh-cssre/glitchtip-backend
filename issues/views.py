@@ -144,6 +144,16 @@ class IssueViewSet(
         )
         return Response({"status": status.label})
 
+    def bulk_delete(self, request, *args, **kwargs):
+        """Limited to pagination page count limit"""
+        queryset = self.filter_queryset(self.get_queryset())
+        ids = request.GET.getlist("id")
+        if len(ids) > 0:
+            queryset = queryset.filter(id__in=ids)
+        count = self.queryset.filter(pk__in=queryset[: self.pagination_class.max_hits]).delete()
+
+        return Response({"deleted": count})
+
     def serialize_tags(self, rows):
         return [
             {
