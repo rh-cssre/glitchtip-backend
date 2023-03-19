@@ -11,10 +11,11 @@ from organizations.base import (
     OrganizationOwnerBase,
     OrganizationUserBase,
 )
-from organizations.fields import SlugField
 from organizations.managers import OrgManager
 from organizations.signals import owner_changed, user_added
 from sql_util.utils import SubqueryCount, SubquerySum
+
+from .fields import OrganizationSlugField
 
 # Defines which scopes belong to which role
 # Credit to sentry/conf/server.py
@@ -197,7 +198,7 @@ class OrganizationManager(OrgManager):
 
 
 class Organization(SharedBaseModel, OrganizationBase):
-    slug = SlugField(
+    slug = OrganizationSlugField(
         max_length=200,
         blank=False,
         editable=True,
