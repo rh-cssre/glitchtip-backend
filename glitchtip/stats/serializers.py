@@ -34,4 +34,3 @@ class StatsV2Serializer(serializers.Serializer):
         if series_quantity > 1000:
             raise serializers.ValidationError({"end": "Too many intervals"})
         return data
-

@@ -1,12 +1,14 @@
 from django.core import mail
 from django.test import TestCase, override_settings
 from django.utils import timezone
-from model_bakery import baker
 from freezegun import freeze_time
+from model_bakery import baker
+
 from glitchtip import test_utils  # pylint: disable=unused-import
+
 from ..tasks import (
-    set_organization_throttle,
     get_free_tier_organizations_with_event_count,
+    set_organization_throttle,
 )
 
 

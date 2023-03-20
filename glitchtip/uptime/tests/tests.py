@@ -9,7 +9,7 @@ from model_bakery import baker
 
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from organizations_ext.models import OrganizationUserRole
-from users.models import ProjectAlertStatus
+from projects.models import ProjectAlertStatus
 
 from ..constants import MonitorType
 from ..models import Monitor, MonitorCheck
@@ -168,7 +168,7 @@ class UptimeTestCase(GlitchTipTestCase):
         self.organization.add_user(user2, OrganizationUserRole.MEMBER)
 
         baker.make(
-            "users.UserProjectAlert",
+            "projects.UserProjectAlert",
             user=user2,
             project=self.project,
             status=ProjectAlertStatus.ON,
