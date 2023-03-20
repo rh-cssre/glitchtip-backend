@@ -1,7 +1,5 @@
 variables:
   PROJECT_NAME: glitchtip
-  IMAGE_NAME: registry.gitlab.com/glitchtip/glitchtip-backend
-  CONTAINER_TEST_IMAGE: registry.gitlab.com/glitchtip/glitchtip-backend:$CI_BUILD_REF_NAME
   PIP_DISABLE_PIP_VERSION_CHECK: "on"
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
   POETRY_VIRTUALENVS_CREATE: "false"
@@ -42,27 +40,28 @@ lint:
   script:
     - curl -sSL https://install.python-poetry.org | python3 -
     - $POETRY_HOME/bin/poetry install --no-interaction --no-ansi
-    # - isort --check glitchtip not compatible with black :(
-    # - pylint --load-plugins=pylint_django --django-settings-module=glitchtip.settings --disable=R glitchtip
+    - black --check .
+    - isort --check .
+    #- pylint --load-plugins=pylint_django --django-settings-module=glitchtip.settings --disable=R glitchtip
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 
 build:
-  image: docker:20
+  image: docker:23
   rules:
     # Run only on protected branches that are not tagged and not merge requests
     - if: '$CI_PIPELINE_SOURCE != "merge_request_event" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_TAG =~ "/^$/"'
   services:
-    - docker:20-dind
+    - docker:23-dind
   script:
     - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN registry.gitlab.com
-    - docker build -t $CONTAINER_TEST_IMAGE --build-arg IS_CI="True" .
-    - docker push $CONTAINER_TEST_IMAGE
+    - docker build -t ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME//\//-} --build-arg IS_CI="True" .
+    - docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME//\//-}
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 
 buildx:
-  image: docker:20-git
+  image: docker:23-git
   variables:
     GIT_STRATEGY: none
   artifacts:
@@ -70,7 +69,7 @@ buildx:
       - buildx
     expire_in: 1 hour
   services:
-    - docker:20-dind
+    - docker:23-dind
   script:
     - export DOCKER_BUILDKIT=1
     - git clone https://github.com/docker/buildx.git ./docker-buildx
@@ -81,11 +80,11 @@ buildx:
     - if: $CI_COMMIT_TAG =~ /^v\d+.\d+.\d+/
 
 build_arm_x86:
-  image: docker:20
+  image: docker:23
   needs:
     - buildx
   services:
-    - docker:20-dind
+    - docker:23-dind
   before_script:
     - mkdir -p ~/.docker/cli-plugins
     - mv buildx ~/.docker/cli-plugins/docker-buildx
@@ -108,7 +107,7 @@ build_arm_x86:
 
 
 update_deps:
-  image: renovate/renovate:latest
+  image: renovate/renovate:35
   variables:
     RENOVATE_PLATFORM: gitlab
     RENOVATE_ENDPOINT: https://gitlab.com/api/v4

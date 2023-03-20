@@ -120,6 +120,29 @@ class EventTestCase(GlitchTipTestCase):
         res = self.client.get(url)
         self.assertEqual(res.status_code, 404)
 
+    def test_two_teams_event_detail(self):
+        """
+        Addresses https://gitlab.com/glitchtip/glitchtip-backend/-/issues/215
+        Ensure a user can be in more than one team on the same project
+        """
+        team = baker.make("teams.Team", organization=self.organization)
+        team2 = baker.make("teams.Team", organization=self.organization)
+        team.members.add(self.org_user)
+        team2.members.add(self.org_user)
+        self.project.team_set.add(team)
+        self.project.team_set.add(team2)
+        issue = baker.make("issues.Issue", project=self.project)
+        event = baker.make("events.Event", issue=issue)
+        url = reverse(
+            "issue-events-detail",
+            kwargs={
+                "issue_pk": event.issue.id,
+                "pk": event.event_id_hex,
+            },
+        )
+        res = self.client.get(url)
+        self.assertContains(res, event.event_id_hex)
+
 
 class IssuesAPITestCase(GlitchTipTestCase):
     def setUp(self):

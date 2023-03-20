@@ -1,11 +1,13 @@
-from hashlib import sha1
-import tempfile
 import mmap
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from hashlib import sha1
 
 from django.core.files.base import File as FileObj
 from django.db import models, transaction
+
 from glitchtip.base_models import CreatedModel
+
 from .exceptions import AssembleChecksumMismatch
 
 
@@ -29,6 +31,7 @@ class FileBlob(CreatedModel):
     GlitchTip uses Django FileField and does split files into chunks.
     The FileBlob's still provide file deduplication.
     """
+
     blob = models.FileField(upload_to="uploads/file_blobs")
     size = models.PositiveIntegerField(null=True)
     checksum = models.CharField(max_length=40, unique=True)
@@ -76,6 +79,7 @@ class File(CreatedModel):
     """
     Port of sentry.models.file.File
     """
+
     name = models.TextField()
     type = models.CharField(max_length=64)
     headers = models.JSONField(blank=True, null=True)
@@ -160,6 +164,7 @@ class FileBlobIndex(models.Model):
     Ported from OSS Sentry. Should be removed as GlitchTip does not
     split file blobs into chunks.
     """
+
     file = models.ForeignKey(File, on_delete=models.CASCADE)
     blob = models.ForeignKey(FileBlob, on_delete=models.CASCADE)
     offset = models.PositiveIntegerField()

@@ -1,7 +1,8 @@
-from django.conf import settings
 from celery import shared_task
+from django.conf import settings
+
+from .email import InvitationEmail, MetQuotaEmail
 from .models import Organization
-from .email import MetQuotaEmail, InvitationEmail
 
 
 def get_free_tier_organizations_with_event_count():

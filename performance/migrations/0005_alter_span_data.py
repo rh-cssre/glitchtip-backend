@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('performance', '0004_remove_transactionevent_project_and_more'),
+        ("performance", "0004_remove_transactionevent_project_and_more"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='span',
-            name='data',
+            model_name="span",
+            name="data",
             field=models.JSONField(default=dict),
         ),
     ]

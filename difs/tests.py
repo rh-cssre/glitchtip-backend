@@ -101,7 +101,6 @@ class DsymsAPIViewTestCase(GlitchTipTestCase):
         with patch("zipfile.is_zipfile", return_value=True), patch(
             "zipfile.ZipFile"
         ) as ZipFile:
-
             ZipFile.return_value.__enter__.return_value = uploaded_zip_file
             yield
 
