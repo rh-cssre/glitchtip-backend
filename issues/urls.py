@@ -1,11 +1,10 @@
 from django.urls import include, path
 from rest_framework_nested import routers
 
-from comments.views import CommentViewSet
 from glitchtip.routers import BulkSimpleRouter
 from user_reports.views import UserReportViewSet
 
-from .views import EventViewSet, IssueViewSet
+from .views import CommentViewSet, EventViewSet, IssueViewSet
 
 router = BulkSimpleRouter()
 router.register(r"issues", IssueViewSet)

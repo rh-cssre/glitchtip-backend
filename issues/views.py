@@ -5,7 +5,7 @@ from django.db import connection
 from django.db.models.expressions import RawSQL
 from django.http import HttpResponseNotFound
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import mixins, views, viewsets
+from rest_framework import exceptions, mixins, views, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 from rest_framework.filters import OrderingFilter
@@ -14,9 +14,14 @@ from rest_framework.response import Response
 from events.models import Event
 
 from .filters import IssueFilter
-from .models import EventStatus, Issue
+from .models import Comment, EventStatus, Issue
 from .permissions import EventPermission, IssuePermission
-from .serializers import EventDetailSerializer, EventSerializer, IssueSerializer
+from .serializers import (
+    CommentSerializer,
+    EventDetailSerializer,
+    EventSerializer,
+    IssueSerializer,
+)
 
 
 class IssueViewSet(
@@ -284,3 +289,32 @@ class EventJsonView(views.APIView):
         except Event.DoesNotExist:
             return HttpResponseNotFound()
         return Response(event.event_json())
+
+
+class CommentViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    queryset = Comment.objects.all()
+    serializer_class = CommentSerializer
+
+    def get_queryset(self):
+        if not self.request.user.is_authenticated:
+            return self.queryset.none()
+        queryset = super().get_queryset()
+        issue_id = self.kwargs.get("issue_pk")
+        if issue_id:
+            queryset = queryset.filter(issue_id=issue_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        try:
+            issue = Issue.objects.get(
+                id=self.kwargs.get("issue_pk"),
+            )
+        except Issue.DoesNotExist:
+            raise exceptions.ValidationError("Issue does not exist")
+        serializer.save(issue=issue, user=self.request.user)

@@ -106,3 +106,9 @@ class Issue(CreatedModel):
         """
         with connection.cursor() as cursor:
             cursor.execute("CALL update_issue_index(%s)", [issue_id])
+
+
+class Comment(CreatedModel):
+    issue = models.ForeignKey("issues.Issue", on_delete=models.CASCADE)
+    user = models.ForeignKey("users.User", null=True, on_delete=models.SET_NULL)
+    text = models.TextField(blank=True, null=True)

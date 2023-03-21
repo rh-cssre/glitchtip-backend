@@ -1,5 +1,4 @@
 from django.shortcuts import reverse
-from django.test import TestCase
 from model_bakery import baker
 
 from glitchtip.test_utils.test_case import GlitchTipTestCase
@@ -25,11 +24,11 @@ class CommentsApiTestCase(GlitchTipTestCase):
 
     def test_comments_list(self):
         comments = baker.make(
-            "comments.Comment", issue=self.issue, _fill_optional=["text"], _quantity=3
+            "issues.Comment", issue=self.issue, _fill_optional=["text"], _quantity=3
         )
         other_issue = baker.make("issues.Issue")
         other_comment = baker.make(
-            "comments.Comment", issue=other_issue, _fill_optional=["text"]
+            "issues.Comment", issue=other_issue, _fill_optional=["text"]
         )
 
         res = self.client.get(self.url)
@@ -38,7 +37,7 @@ class CommentsApiTestCase(GlitchTipTestCase):
 
     def test_comment_update(self):
         comment = baker.make(
-            "comments.Comment",
+            "issues.Comment",
             issue=self.issue,
             user=self.user,
             _fill_optional=["text"],
@@ -54,7 +53,7 @@ class CommentsApiTestCase(GlitchTipTestCase):
 
     def test_comment_delete(self):
         comment = baker.make(
-            "comments.Comment",
+            "issues.Comment",
             issue=self.issue,
             user=self.user,
             _fill_optional=["text"],
