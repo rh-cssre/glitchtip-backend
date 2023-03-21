@@ -21,6 +21,7 @@ import environ
 import sentry_sdk
 from celery.schedules import crontab
 from corsheaders.defaults import default_headers
+from django.conf import global_settings
 from django.core.exceptions import ImproperlyConfigured
 from sentry_sdk.integrations.django import DjangoIntegration
 
@@ -784,7 +785,7 @@ elif TESTING:
 CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", False)
 if TESTING:
     CELERY_TASK_ALWAYS_EAGER = True
-    STATICFILES_STORAGE = None
+    STATICFILES_STORAGE = global_settings.STATICFILES_STORAGE
     # https://github.com/evansd/whitenoise/issues/215
     warnings.filterwarnings(
         "ignore", message="No directory at", module="whitenoise.base"
