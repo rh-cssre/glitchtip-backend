@@ -300,6 +300,7 @@ class CommentViewSet(
 ):
     queryset = Comment.objects.all()
     serializer_class = CommentSerializer
+    permission_classes = [EventPermission]
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
