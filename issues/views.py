@@ -159,7 +159,7 @@ class IssueViewSet(
         Filter with query param key=<your key>
         """
         instance = self.get_object()
-        keys = tuple(request.GET.getlist("key"))
+        keys = request.GET.getlist("key")
         with connection.cursor() as cursor:
             if keys:
                 query = """
@@ -170,7 +170,7 @@ class IssueViewSet(
                     WHERE issue_id=%s
                 )
                 AS stat
-                WHERE key in %s
+                WHERE key = ANY(%s)
                 GROUP BY key, value
                 ORDER BY count DESC, value
                 limit 100;
