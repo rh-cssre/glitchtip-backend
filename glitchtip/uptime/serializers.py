@@ -7,9 +7,16 @@ from rest_framework.fields import ChoiceField
 from .models import Monitor, MonitorCheck, MonitorType
 
 
-class MonitorCheckSerializer(serializers.ModelSerializer):
+class MonitorCheckRelatedSerializer(serializers.ModelSerializer):
     isUp = serializers.BooleanField(source="is_up")
     startCheck = serializers.DateTimeField(source="start_check")
+
+    class Meta:
+        model = MonitorCheck
+        fields = ("isUp", "startCheck", "reason")
+
+
+class MonitorCheckSerializer(MonitorCheckRelatedSerializer):
     responseTime = serializers.DurationField(source="response_time")
 
     class Meta:
@@ -31,11 +38,11 @@ class MonitorSerializer(serializers.ModelSerializer):
     isUp = serializers.SerializerMethodField()
     lastChange = serializers.SerializerMethodField()
     monitorType = ChoiceField(choices=MonitorType.choices, source="monitor_type")
-    expectedStatus = serializers.IntegerField(source="expected_status")
+    expectedStatus = serializers.IntegerField(source="expected_status", allow_null=True)
     heartbeatEndpoint = serializers.SerializerMethodField()
     projectName = serializers.SerializerMethodField()
     envName = serializers.SerializerMethodField()
-    checks = MonitorCheckSerializer(many=True, read_only=True)
+    checks = MonitorCheckRelatedSerializer(many=True, read_only=True)
 
     def get_isUp(self, obj):
         if hasattr(obj, "latest_is_up"):
@@ -107,4 +114,15 @@ class MonitorSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "URL is required for " + data["monitor_type"]
             )
+        if data.get("expected_status") is None and data["monitor_type"] in [
+            MonitorType.GET,
+            MonitorType.POST,
+        ]:
+            raise serializers.ValidationError(
+                "Expected status is required for " + data["monitor_type"]
+            )
         return data
+
+
+class MonitorDetailSerializer(MonitorSerializer):
+    checks = MonitorCheckSerializer(many=True, read_only=True)

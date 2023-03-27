@@ -17,7 +17,7 @@ LEFT JOIN events_event event
 ON event.created >= gs.ts AND event.created < gs.ts +  interval '1 hour'
 LEFT JOIN issues_issue issue
 ON event.issue_id = issue.id or event is null
-WHERE issue.project_id IN %s
+WHERE issue.project_id = ANY(%s)
 GROUP BY gs.ts ORDER BY gs.ts;
 """
 
@@ -66,14 +66,15 @@ class StatsV2View(views.APIView):
         )
         if serializer.validated_data.get("project"):
             projects = projects.filter(pk__in=serializer.validated_data["project"])
-        project_ids = tuple(projects.values_list("id", flat=True))
+        project_ids = list(projects.values_list("id", flat=True))
         if not project_ids:
             return Response(status=HTTP_404_NOT_FOUND)
 
         if category == "error":
             with connection.cursor() as cursor:
                 cursor.execute(
-                    EVENT_TIME_SERIES_SQL, [start, end, interval, project_ids],
+                    EVENT_TIME_SERIES_SQL,
+                    [start, end, interval, project_ids],
                 )
                 series = cursor.fetchall()
         else:
@@ -81,7 +82,11 @@ class StatsV2View(views.APIView):
 
         data = {
             "intervals": [row[0] for row in series],
-            "groups": [{"series": {field: [row[1] for row in series]},}],
+            "groups": [
+                {
+                    "series": {field: [row[1] for row in series]},
+                }
+            ],
         }
 
         return Response(data)
