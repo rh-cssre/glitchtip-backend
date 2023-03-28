@@ -217,7 +217,7 @@ class IssueSerializer(serializers.ModelSerializer):
     level = serializers.CharField(source="get_level_display", read_only=True)
     logger = serializers.CharField(default=None, read_only=True)
     metadata = serializers.JSONField(default=dict, read_only=True)
-    numComments = serializers.IntegerField(default=0, read_only=True)
+    numComments = serializers.SerializerMethodField()
     permalink = serializers.CharField(default="Not implemented", read_only=True)
     project = ProjectReferenceSerializer(read_only=True)
     shareId = serializers.IntegerField(default=None, read_only=True)
@@ -301,6 +301,10 @@ class IssueSerializer(serializers.ModelSerializer):
             del primitive_repr["matchingEventId"]
 
         return primitive_repr
+
+    def get_numComments(self, obj):
+        if hasattr(obj, "numComments"):
+            return obj.numComments
 
     def get_matchingEventId(self, obj):
         matching_event_id = self.context.get("matching_event_id")

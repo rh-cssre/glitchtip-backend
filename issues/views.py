@@ -2,6 +2,7 @@ import shlex
 import uuid
 
 from django.db import connection
+from django.db.models import Count
 from django.db.models.expressions import RawSQL
 from django.http import HttpResponseNotFound
 from django_filters.rest_framework import DjangoFilterBackend
@@ -125,6 +126,7 @@ class IssueViewSet(
             qs.select_related("project")
             .defer("search_vector")
             .prefetch_related("userreport_set")
+            .annotate(numComments=Count("comment"))
         )
 
         return qs
