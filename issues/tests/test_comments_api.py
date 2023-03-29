@@ -22,13 +22,6 @@ class CommentsApiTestCase(GlitchTipTestCase):
         self.assertEqual(res.status_code, 201)
         self.assertEqual(res.data["data"]["text"], "Test")
 
-    def test_max_comments_limit(self):
-        baker.make("issues.Comment", issue=self.issue, _quantity=50)
-        data = {"data": {"text": "Test"}}
-        res = self.client.post(self.url, data, format="json")
-
-        self.assertEqual(res.status_code, 400)
-
     def test_comments_list(self):
         comments = baker.make(
             "issues.Comment", issue=self.issue, _fill_optional=["text"], _quantity=3

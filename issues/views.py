@@ -320,6 +320,4 @@ class CommentViewSet(
             )
         except Issue.DoesNotExist:
             raise exceptions.ValidationError("Issue does not exist")
-        if Comment.objects.filter(issue=self.kwargs.get("issue_pk")).count() >= 50:
-            raise exceptions.ValidationError("Maximum number of comments reached")
         serializer.save(issue=issue, user=self.request.user)
