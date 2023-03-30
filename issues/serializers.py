@@ -1,4 +1,4 @@
-from rest_framework import serializers
+from rest_framework import exceptions, serializers
 
 from events.models import Event
 from glitchtip.serializers import FlexibleDateTimeField
@@ -6,8 +6,9 @@ from projects.serializers.base_serializers import ProjectReferenceSerializer
 from releases.serializers import ReleaseSerializer
 from sentry.interfaces.stacktrace import get_context
 from user_reports.serializers import UserReportSerializer
+from users.serializers import UserSerializer
 
-from .models import EventStatus, EventType, Issue
+from .models import Comment, EventStatus, EventType, Issue
 
 
 class EventUserSerializer(serializers.Serializer):
@@ -216,7 +217,7 @@ class IssueSerializer(serializers.ModelSerializer):
     level = serializers.CharField(source="get_level_display", read_only=True)
     logger = serializers.CharField(default=None, read_only=True)
     metadata = serializers.JSONField(default=dict, read_only=True)
-    numComments = serializers.IntegerField(default=0, read_only=True)
+    numComments = serializers.IntegerField(source="num_comments", read_only=True)
     permalink = serializers.CharField(default="Not implemented", read_only=True)
     project = ProjectReferenceSerializer(read_only=True)
     shareId = serializers.IntegerField(default=None, read_only=True)
@@ -307,3 +308,34 @@ class IssueSerializer(serializers.ModelSerializer):
             return matching_event_id
 
         return None
+
+
+class CommentDataSerializer(serializers.Field):
+    def to_internal_value(self, data):
+        try:
+            text = data["text"]
+        except Exception:
+            raise exceptions.ValidationError(
+                "Comment text should be sent as nested dictionary."
+            )
+        return text
+
+    def to_representation(self, value):
+        return {"text": value}
+
+
+class CommentSerializer(serializers.ModelSerializer):
+    data = CommentDataSerializer(source="text")
+    type = serializers.CharField(default="note", read_only=True)
+    dateCreated = serializers.DateTimeField(source="created", read_only=True)
+    user = UserSerializer(required=False, read_only=True)
+
+    class Meta:
+        model = Comment
+        fields = (
+            "id",
+            "data",
+            "type",
+            "dateCreated",
+            "user",
+        )
