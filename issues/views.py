@@ -307,7 +307,11 @@ class CommentViewSet(
     def get_queryset(self):
         if not self.request.user.is_authenticated:
             return self.queryset.none()
-        queryset = super().get_queryset()
+        queryset = (
+            super()
+            .get_queryset()
+            .filter(issue__project__organization__users=self.request.user)
+        )
         issue_id = self.kwargs.get("issue_pk")
         if issue_id:
             queryset = queryset.filter(issue_id=issue_id)
@@ -317,6 +321,7 @@ class CommentViewSet(
         try:
             issue = Issue.objects.get(
                 id=self.kwargs.get("issue_pk"),
+                project__organization__users=self.request.user
             )
         except Issue.DoesNotExist:
             raise exceptions.ValidationError("Issue does not exist")

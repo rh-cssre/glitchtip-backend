@@ -16,24 +16,38 @@ class CommentsApiTestCase(GlitchTipTestCase):
 
     def test_comment_creation(self):
         data = {"data": {"text": "Test"}}
+        not_my_issue = baker.make("issues.Issue")
 
         res = self.client.post(self.url, data, format="json")
 
         self.assertEqual(res.status_code, 201)
         self.assertEqual(res.data["data"]["text"], "Test")
 
+        url = reverse(
+            "issue-comments-list",
+            kwargs={"issue_pk": not_my_issue.pk},
+        )
+        res = self.client.post(url, data, format="json")
+        self.assertEqual(res.status_code, 400)
+
     def test_comments_list(self):
         comments = baker.make(
             "issues.Comment", issue=self.issue, _fill_optional=["text"], _quantity=3
         )
-        other_issue = baker.make("issues.Issue")
-        other_comment = baker.make(
-            "issues.Comment", issue=other_issue, _fill_optional=["text"]
+        not_my_issue = baker.make("issues.Issue")
+        not_my_comment = baker.make(
+            "issues.Comment", issue=not_my_issue, _fill_optional=["text"]
         )
 
         res = self.client.get(self.url)
         self.assertContains(res, comments[2].text)
-        self.assertNotContains(res, other_comment.text)
+
+        url = reverse(
+            "issue-comments-list",
+            kwargs={"issue_pk": not_my_issue.pk},
+        )
+        res = self.client.get(url)
+        self.assertEqual(len(res.data), 0)
 
     def test_comment_update(self):
         comment = baker.make(
