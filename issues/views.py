@@ -321,7 +321,7 @@ class CommentViewSet(
         try:
             issue = Issue.objects.get(
                 id=self.kwargs.get("issue_pk"),
-                project__organization__users=self.request.user
+                project__organization__users=self.request.user,
             )
         except Issue.DoesNotExist:
             raise exceptions.ValidationError("Issue does not exist")
