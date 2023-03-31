@@ -125,8 +125,9 @@ class IssueViewSet(
         qs = (
             qs.select_related("project")
             .defer("search_vector")
-            .prefetch_related("userreport_set")
-            .annotate(num_comments=Count("comment"))
+            .annotate(
+                num_comments=Count("comment"), user_report_count=(Count("userreport"))
+            )
         )
 
         return qs

@@ -228,7 +228,7 @@ class IssueSerializer(serializers.ModelSerializer):
     subscriptionDetails = serializers.CharField(default=None, read_only=True)
     type = serializers.CharField(source="get_type_display", read_only=True)
     userReportCount = serializers.IntegerField(
-        source="userreport_set.count", read_only=True
+        source="user_report_count", read_only=True
     )
     userCount = serializers.IntegerField(default=0, read_only=True)
     matchingEventId = serializers.SerializerMethodField()
