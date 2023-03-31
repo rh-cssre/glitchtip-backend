@@ -69,11 +69,13 @@ class UptimeAPITestCase(GlitchTipTestCase):
             "expectedStatus": 200,
             "interval": "00:01:00",
             "project": self.project.pk,
+            "timeout": 25,
         }
         res = self.client.post(self.list_url, data)
         self.assertEqual(res.status_code, 201)
         monitor = Monitor.objects.all().first()
         self.assertEqual(monitor.name, data["name"])
+        self.assertEqual(monitor.timeout, data["timeout"])
         self.assertEqual(monitor.organization, self.organization)
         self.assertEqual(monitor.project, self.project)
 
@@ -85,6 +87,18 @@ class UptimeAPITestCase(GlitchTipTestCase):
             "expectedStatus": 200,
             "interval": "00:01:00",
             "project": self.project.pk,
+        }
+        res = self.client.post(self.list_url, data)
+        self.assertEqual(res.status_code, 400)
+
+        data = {
+            "monitorType": "Ping",
+            "name": "Test",
+            "url": "https://www.google.com",
+            "expectedStatus": 200,
+            "interval": "00:01:00",
+            "project": self.project.pk,
+            "timeout": 999,
         }
         res = self.client.post(self.list_url, data)
         self.assertEqual(res.status_code, 400)

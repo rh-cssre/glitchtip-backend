@@ -2,7 +2,7 @@ import uuid
 from datetime import timedelta
 
 from django.conf import settings
-from django.core.validators import MaxValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import OuterRef, Subquery
 
@@ -68,6 +68,12 @@ class Monitor(CreatedModel):
     interval = models.DurationField(
         default=timedelta(minutes=1),
         validators=[MaxValueValidator(timedelta(hours=23, minutes=59, seconds=59))],
+    )
+    timeout = models.PositiveSmallIntegerField(
+        blank=True,
+        null=True,
+        validators=[MaxValueValidator(28), MinValueValidator(1)],
+        help_text="Blank implies default value",
     )
 
     objects = MonitorManager()

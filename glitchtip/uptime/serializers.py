@@ -92,6 +92,7 @@ class MonitorSerializer(serializers.ModelSerializer):
             "heartbeatEndpoint",
             "projectName",
             "envName",
+            "timeout",
         )
         read_only_fields = (
             "organization",
