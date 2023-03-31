@@ -456,7 +456,7 @@ class IssuesAPITestCase(GlitchTipTestCase):
         )
 
         url = reverse("issue-detail", args=[issue.id])
-        with self.assertNumQueries(7):  # Includes many auth related queries
+        with self.assertNumQueries(6):  # Includes many auth related queries
             start = timer()
             res = self.client.get(url + "tags/")
             end = timer()
@@ -466,7 +466,7 @@ class IssuesAPITestCase(GlitchTipTestCase):
         issue = baker.make("issues.Issue", project=self.project)
         baker.make("issues.Comment", issue=issue, _quantity=2)
 
-        with self.assertNumQueries(5):
+        with self.assertNumQueries(4):
             res = self.client.get(self.url)
         self.assertEqual(res.data[0]["numComments"], 2)
 
