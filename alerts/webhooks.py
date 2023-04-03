@@ -1,10 +1,11 @@
-from typing import List, TYPE_CHECKING, Optional
-from dataclasses import dataclass, asdict
-import requests
+from dataclasses import asdict, dataclass
+from typing import TYPE_CHECKING, List, Optional
 
+import requests
 
 if TYPE_CHECKING:
     from issues.models import Issue
+
     from .models import Notification
 
 
