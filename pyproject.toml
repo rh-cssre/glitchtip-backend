@@ -7,7 +7,7 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.8"
-Django = "~4.1.0"
+Django = "~4.2.0"
 djangorestframework = "^3.12.1"
 django-allauth = "~0.54.0"
 django-cors-headers = "^3.2.0"
