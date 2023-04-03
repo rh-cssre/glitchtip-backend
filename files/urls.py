@@ -1,6 +1,6 @@
 from django.urls import path
-from .views import ChunkUploadAPIView
 
+from .views import ChunkUploadAPIView
 
 urlpatterns = [
     path(

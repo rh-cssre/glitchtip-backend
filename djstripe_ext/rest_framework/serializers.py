@@ -5,10 +5,9 @@
 
 """
 
+from djstripe.models import Subscription
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
-
-from djstripe.models import Subscription
 
 
 class SubscriptionSerializer(ModelSerializer):
