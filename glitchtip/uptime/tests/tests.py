@@ -1,5 +1,6 @@
 import asyncio
 from unittest import mock
+from datetime import timedelta
 
 from aioresponses import aioresponses
 from django.core import mail
@@ -13,7 +14,7 @@ from projects.models import ProjectAlertStatus
 
 from ..constants import MonitorType
 from ..models import Monitor, MonitorCheck
-from ..tasks import dispatch_checks
+from ..tasks import dispatch_checks, bucket_monitors
 from ..utils import fetch_all
 
 
@@ -236,3 +237,18 @@ class UptimeTestCase(GlitchTipTestCase):
         baker.make(Monitor, monitor_type=MonitorType.HEARTBEAT, project=self.project)
         dispatch_checks()
         self.assertEqual(len(mail.outbox), 0)
+
+    @mock.patch("glitchtip.uptime.tasks.perform_checks.run")
+    def test_bucket_monitors(self, _):
+        interval_timeouts = [
+            [1, 10],
+            [3, 20],
+            [3, None],
+            [10, 10],
+            [2, 40],
+            [3, 50],
+        ]
+        for interval, timeout in interval_timeouts:
+            baker.make(Monitor, interval=timedelta(seconds=interval), timeout=timeout)
+        monitors = Monitor.objects.all()
+        bucket_monitors(monitors, 1)

@@ -68,12 +68,14 @@ class Monitor(CreatedModel):
     interval = models.DurationField(
         default=timedelta(minutes=1),
         validators=[MaxValueValidator(timedelta(hours=23, minutes=59, seconds=59))],
+        db_index=True,
     )
     timeout = models.PositiveSmallIntegerField(
         blank=True,
         null=True,
-        validators=[MaxValueValidator(28), MinValueValidator(1)],
+        validators=[MaxValueValidator(30), MinValueValidator(1)],
         help_text="Blank implies default value",
+        db_index=True,
     )
 
     objects = MonitorManager()
@@ -93,6 +95,11 @@ class Monitor(CreatedModel):
 
     def get_detail_url(self):
         return f"{settings.GLITCHTIP_URL.geturl()}/{self.project.organization.slug}/uptime-monitors/{self.pk}"
+
+    @property
+    def int_timeout(self):
+        """Get timeout as integer (coalesce null as 20)"""
+        return self.timeout or 20
 
 
 class MonitorCheck(CreatedModel):

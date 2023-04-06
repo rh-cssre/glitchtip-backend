@@ -4,10 +4,13 @@ from typing import List
 
 from celery import shared_task
 from django.conf import settings
-from django.db import transaction
+from django.core.cache import cache
+from django.db import models, transaction
 from django.db.models import DateTimeField, ExpressionWrapper, F, OuterRef, Q, Subquery
+from django.db.models.expressions import Func
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django_redis import get_redis_connection
 
 from alerts.models import AlertRecipient
 
@@ -16,41 +19,88 @@ from .models import Monitor, MonitorCheck
 from .utils import fetch_all
 from .webhooks import send_uptime_as_webhook
 
+UPTIME_COUNTER_KEY = "uptime_counter"
+UPTIME_TICK_EXPIRE = 2147483647
+UPTIME_CHECK_INTERVAL = settings.UPTIME_CHECK_INTERVAL
 
-@shared_task
+
+class Epoch(Func):
+    template = "EXTRACT(epoch FROM %(expressions)s)::INTEGER"
+    output_field = models.IntegerField()
+
+
+def bucket_monitors(monitors, tick: int, check_interval=UPTIME_CHECK_INTERVAL):
+    """
+    Sort monitors into buckets based on:
+
+    Each interval group.
+    <30 seconds timeout vs >= 30 (potentially slow)
+
+    Example: if there is one monior with interval of 1 and the check interval is 10,
+    this monitor should run every time. The return should be a list of 10 ticks with
+    the same monitor in each
+
+    Result:
+    {1, {True: [monitor, monitor]}}
+    {1, {False: [monitor]}}
+    {2, {True: [monitor]}}
+    """
+    result = []
+    fast_monitors = [monitor for monitor in monitors if (monitor.int_timeout < 30)]
+    slow_monitors = [monitor for monitor in monitors if (monitor.int_timeout >= 30)]
+    result = {}
+    for i in range(tick, tick + check_interval):
+        fast_tick_monitors = [
+            monitor
+            for monitor in monitors
+            if tick % monitor.interval.seconds == 0 and monitor.int_timeout < 30
+        ]
+        slow_tick_monitors = [
+            monitor
+            for monitor in monitors
+            if tick % monitor.interval.seconds == 0 and monitor.int_timeout >= 30
+        ]
+        if fast_monitors or slow_monitors:
+            result[i] = {}
+            if fast_monitors:
+                result[i][True] = fast_monitors
+            if slow_monitors:
+                result[i][False] = slow_monitors
+    return result
+
+
+@shared_task()
 def dispatch_checks():
     """
     dispatch monitor checks tasks in batches, include start time for check
     """
     now = timezone.now()
-    latest_check = Subquery(
-        MonitorCheck.objects.filter(monitor_id=OuterRef("id"))
-        .order_by("-start_check")
-        .values("start_check")[:1]
-    )
+    try:
+        with get_redis_connection() as con:
+            tick = con.incr(UPTIME_COUNTER_KEY)
+            if tick >= UPTIME_TICK_EXPIRE:
+                con.delete(UPTIME_COUNTER_KEY)
+    except NotImplementedError:
+        cache.add(UPTIME_COUNTER_KEY, 0, UPTIME_TICK_EXPIRE)
+        tick = cache.incr(UPTIME_COUNTER_KEY)
     # Use of atomic solves iterator() with pgbouncer InvalidCursorName issue
     # https://docs.djangoproject.com/en/3.2/ref/databases/#transaction-pooling-server-side-cursors
     with transaction.atomic():
         monitor_ids = (
             Monitor.objects.filter(organization__is_accepting_events=True)
-            .annotate(
-                last_min_check=ExpressionWrapper(
-                    now - F("interval"), output_field=DateTimeField()
-                ),
-                latest_check=latest_check,
-            )
-            .filter(Q(latest_check__lte=F("last_min_check")) | Q(latest_check=None))
-            .values_list("id", flat=True)
+            .annotate(mod=tick % Epoch(F("interval")))
+            .filter(mod__lt=UPTIME_CHECK_INTERVAL)
+            .values_list("id", "interval", "timeout")
         )
         batch_size = 100
         batch_ids = []
-        for i, monitor_id in enumerate(monitor_ids.iterator(), 1):
+        for i, monitor_id in enumerate(monitor_ids.iterator(chunk_size=10), 1):
             batch_ids.append(monitor_id)
             if i % batch_size == 0:
-                perform_checks.apply_async(args=(batch_ids, now), expires=60)
+                # perform_checks.apply_async(args=(batch_ids, now), expires=60)
                 batch_ids = []
-        if len(batch_ids) > 0:
-            perform_checks.delay(batch_ids, now)
+        # if len(batch_ids) > 0:
+        # perform_checks.delay(batch_ids, now)
 
 
 @shared_task
