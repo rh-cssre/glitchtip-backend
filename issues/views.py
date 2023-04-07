@@ -124,7 +124,7 @@ class IssueViewSet(
 
         qs = (
             qs.select_related("project")
-            .defer("search_vector")
+            .defer("search_vector", "tags")
             .annotate(
                 num_comments=Count("comment"), user_report_count=(Count("userreport"))
             )
@@ -170,14 +170,16 @@ class IssueViewSet(
         keys = request.GET.getlist("key")
         with connection.cursor() as cursor:
             if keys:
+                # The limit 2000000 prevents excessive load times
                 query = """
                 SELECT key, value, count(*)
                 FROM (
-                    SELECT (each(tags)).key, (each(tags)).value
+                    SELECT (each(tags)).*
                     FROM events_event
                     WHERE issue_id=%s
+                    LIMIT 2000000
                 )
-                AS stat
+                AS stat(key, value)
                 WHERE key = ANY(%s)
                 GROUP BY key, value
                 ORDER BY count DESC, value
@@ -188,11 +190,12 @@ class IssueViewSet(
                 query = """
                 SELECT key, value, count(*)
                 FROM (
-                    SELECT (each(tags)).key, (each(tags)).value
+                    SELECT (each(tags)).*
                     FROM events_event
                     WHERE issue_id=%s
+                    LIMIT 2000000
                 )
-                AS stat
+                AS stat(key, value)
                 GROUP BY key, value
                 ORDER BY count DESC, value
                 limit 100;
@@ -259,7 +262,11 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(
                 issue__project__slug=self.kwargs["project_slug"],
             )
-        qs = qs.prefetch_related("tags__key")
+        qs = (
+            qs.select_related("issue__project__organization")
+            .prefetch_related("tags__key")
+            .defer("issue__tags", "issue__search_vector")
+        )
         return qs
 
     @action(detail=False, methods=["get"])
