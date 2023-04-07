@@ -5,8 +5,8 @@ from model_bakery import baker
 from events.models import Event
 from events.test_data import bulk_event_data, event_generator
 from events.views import EventStoreAPIView
-from glitchtip.utils import get_random_string
 from glitchtip.base_commands import MakeSampleCommand
+from glitchtip.utils import get_random_string
 from projects.models import Project
 
 
