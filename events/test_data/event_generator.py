@@ -1,9 +1,10 @@
 import copy
 import random
-import string
 import uuid
 
 from django.utils import timezone
+
+from glitchtip.utils import get_random_string
 
 from . import django_error_factory
 from .csp import mdn_sample_csp
@@ -12,12 +13,6 @@ events = django_error_factory.all_django_events
 events.append(mdn_sample_csp)
 
 things = ["a", "b", "c", None]
-
-
-def get_random_string(length=16):
-    letters = string.ascii_lowercase
-    result_str = "".join(random.choice(letters) for i in range(length))
-    return result_str
 
 
 def make_event_unique(event, unique_issue=False):
