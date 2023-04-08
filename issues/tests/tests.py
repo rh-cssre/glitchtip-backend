@@ -466,9 +466,9 @@ class IssuesAPITestCase(GlitchTipTestCase):
         issue = baker.make("issues.Issue", project=self.project)
         baker.make("issues.Comment", issue=issue, _quantity=2)
 
-        with self.assertNumQueries(4):
-            res = self.client.get(self.url)
-        self.assertEqual(res.data[0]["numComments"], 2)
+        with self.assertNumQueries(5):
+            res = self.client.get(self.url + f"{issue.pk}/")
+        self.assertEqual(res.data["numComments"], 2)
 
     def test_issue_tag_detail(self):
         issue = baker.make("issues.Issue", project=self.project)
