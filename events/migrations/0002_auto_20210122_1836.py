@@ -4,20 +4,23 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('events', '0001_squashed_0003_auto_20210116_2110'),
+        ("events", "0001_squashed_0003_auto_20210116_2110"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='event',
-            name='errors',
-            field=models.JSONField(blank=True, help_text='Event processing errors from event intake, including validation errors', null=True),
+            model_name="event",
+            name="errors",
+            field=models.JSONField(
+                blank=True,
+                help_text="Event processing errors from event intake, including validation errors",
+                null=True,
+            ),
         ),
         migrations.AlterField(
-            model_name='event',
-            name='data',
-            field=models.JSONField(help_text='General event data that is searchable'),
+            model_name="event",
+            name="data",
+            field=models.JSONField(help_text="General event data that is searchable"),
         ),
     ]
