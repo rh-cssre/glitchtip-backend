@@ -2,10 +2,9 @@ import binascii
 import os
 from typing import List
 
+from bitfield import BitField
 from django.conf import settings
 from django.db import models
-
-from bitfield import BitField
 
 from glitchtip.base_models import CreatedModel
 
@@ -56,12 +55,12 @@ class APIToken(CreatedModel):
         return [i[0] for i in self.scopes.items() if i[1] is True]
 
     def add_permission(self, permission: str):
-        """ Add permission flag to scopes and save """
+        """Add permission flag to scopes and save"""
         setattr(self.scopes, permission, True)
         self.save(update_fields=["scopes"])
 
     def add_permissions(self, permissions: List[str]):
-        """ Add permission flags to scopes and save """
+        """Add permission flags to scopes and save"""
         for permission in permissions:
             setattr(self.scopes, permission, True)
         self.save(update_fields=["scopes"])
