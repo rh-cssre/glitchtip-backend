@@ -11,6 +11,7 @@ class Bit(object):
     """
     Represents a single Bit.
     """
+
     def __init__(self, number, is_set=True):
         self.number = number
         self.is_set = bool(is_set)
@@ -20,7 +21,11 @@ class Bit(object):
             self.mask = ~self.mask
 
     def __repr__(self):
-        return '<%s: number=%d, is_set=%s>' % (self.__class__.__name__, self.number, self.is_set)
+        return "<%s: number=%d, is_set=%s>" % (
+            self.__class__.__name__,
+            self.number,
+            self.is_set,
+        )
 
     # def __str__(self):
     #     if self.is_set:
@@ -117,6 +122,7 @@ class BitHandler(object):
     """
     Represents an array of bits, each as a ``Bit`` object.
     """
+
     def __init__(self, value, keys, labels=None):
         # TODO: change to bitarray?
         if value:
@@ -147,7 +153,12 @@ class BitHandler(object):
         return cmp(self._value, other)
 
     def __repr__(self):
-        return '<%s: %s>' % (self.__class__.__name__, ', '.join('%s=%s' % (k, self.get_bit(n).is_set) for n, k in enumerate(self._keys)),)
+        return "<%s: %s>" % (
+            self.__class__.__name__,
+            ", ".join(
+                "%s=%s" % (k, self.get_bit(n).is_set) for n, k in enumerate(self._keys)
+            ),
+        )
 
     def __str__(self):
         return str(self._value)
@@ -186,17 +197,17 @@ class BitHandler(object):
         return bool(self.get_bit(bit_number))
 
     def __getattr__(self, key):
-        if key.startswith('_'):
+        if key.startswith("_"):
             return object.__getattribute__(self, key)
         if key not in self._keys:
-            raise AttributeError('%s is not a valid flag' % key)
+            raise AttributeError("%s is not a valid flag" % key)
         return self.get_bit(self._keys.index(key))
 
     def __setattr__(self, key, value):
-        if key.startswith('_'):
+        if key.startswith("_"):
             return object.__setattr__(self, key, value)
         if key not in self._keys:
-            raise AttributeError('%s is not a valid flag' % key)
+            raise AttributeError("%s is not a valid flag" % key)
         self.set_bit(self._keys.index(key), value)
 
     def __iter__(self):
@@ -207,6 +218,7 @@ class BitHandler(object):
 
     def _get_mask(self):
         return self._value
+
     mask = property(_get_mask)
 
     def evaluate(self, evaluator, qn, connection):
@@ -221,7 +233,7 @@ class BitHandler(object):
         if true_or_false:
             self._value |= mask
         else:
-            self._value &= (~mask)
+            self._value &= ~mask
         return Bit(bit_number, self._value & mask != 0)
 
     def keys(self):
@@ -243,4 +255,3 @@ class BitHandler(object):
         if isinstance(flag, Bit):
             flag = flag.number
         return self._labels[flag]
-

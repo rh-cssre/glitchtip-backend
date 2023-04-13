@@ -1,13 +1,12 @@
 from __future__ import absolute_import
 
 import six
-
 from django.db.models import signals
-from django.db.models.fields import Field, BigIntegerField
+from django.db.models.fields import BigIntegerField, Field
 
 from bitfield.forms import BitFormField
 from bitfield.query import BitQueryLookupWrapper
-from bitfield.types import BitHandler, Bit
+from bitfield.types import Bit, BitHandler
 
 # Count binary capacity. Truncate "0b" prefix from binary form.
 # Twice faster than bin(i)[2:] or math.floor(math.log(i))
@@ -17,7 +16,7 @@ MAX_FLAG_COUNT = int(len(bin(BigIntegerField.MAX_BIGINT)) - 2)
 class BitFieldFlags(object):
     def __init__(self, flags):
         if len(flags) > MAX_FLAG_COUNT:
-            raise ValueError('Too many flags')
+            raise ValueError("Too many flags")
         self._flags = flags
 
     def __repr__(self):
@@ -28,7 +27,7 @@ class BitFieldFlags(object):
             yield flag
 
     def __getattr__(self, key):
-        if key == '_flags':
+        if key == "_flags":
             # Since __getattr__ is for fallback, reaching here from Python
             # means that there's no '_flags' attribute in this object,
             # which may be caused by intermediate state while copying etc.
@@ -77,6 +76,7 @@ class BitFieldCreator(object):
     an older version of the instance and a newer version of the class is
     available (usually during deploys).
     """
+
     def __init__(self, field):
         self.field = field
 
@@ -94,7 +94,6 @@ class BitFieldCreator(object):
 
 
 class BitField(BigIntegerField):
-
     def contribute_to_class(self, cls, name, **kwargs):
         super(BitField, self).contribute_to_class(cls, name, **kwargs)
         setattr(cls, self.name, BitFieldCreator(self))
@@ -102,14 +101,18 @@ class BitField(BigIntegerField):
     def __init__(self, flags, default=None, *args, **kwargs):
         if isinstance(flags, dict):
             # Get only integer keys in correct range
-            valid_keys = (k for k in flags.keys() if isinstance(k, int) and (0 <= k < MAX_FLAG_COUNT))
+            valid_keys = (
+                k
+                for k in flags.keys()
+                if isinstance(k, int) and (0 <= k < MAX_FLAG_COUNT)
+            )
             if not valid_keys:
-                raise ValueError('Wrong keys or empty dictionary')
+                raise ValueError("Wrong keys or empty dictionary")
             # Fill list with values from dict or with empty values
-            flags = [flags.get(i, '') for i in range(max(valid_keys) + 1)]
+            flags = [flags.get(i, "") for i in range(max(valid_keys) + 1)]
 
         if len(flags) > MAX_FLAG_COUNT:
-            raise ValueError('Too many flags')
+            raise ValueError("Too many flags")
 
         self._arg_flags = flags
         flags = list(flags)
@@ -157,7 +160,7 @@ class BitField(BigIntegerField):
             if isinstance(value, six.integer_types) and value < 0:
                 new_value = 0
                 for bit_number, _ in enumerate(self.flags):
-                    new_value |= (value & (2 ** bit_number))
+                    new_value |= value & (2**bit_number)
                 value = new_value
 
             value = BitHandler(value, self.flags, self.labels)
@@ -180,16 +183,16 @@ class CompositeBitFieldWrapper(object):
         self.fields = fields
 
     def __getattr__(self, attr):
-        if attr == 'fields':
+        if attr == "fields":
             return super(CompositeBitFieldWrapper, self).__getattr__(attr)
 
         for field in self.fields:
             if hasattr(field, attr):
                 return getattr(field, attr)
-        raise AttributeError('%s is not a valid flag' % attr)
+        raise AttributeError("%s is not a valid flag" % attr)
 
     def __hasattr__(self, attr):
-        if attr == 'fields':
+        if attr == "fields":
             return super(CompositeBitFieldWrapper, self).__hasattr__(attr)
 
         for field in self.fields:
@@ -198,7 +201,7 @@ class CompositeBitFieldWrapper(object):
         return False
 
     def __setattr__(self, attr, value):
-        if attr == 'fields':
+        if attr == "fields":
             super(CompositeBitFieldWrapper, self).__setattr__(attr, value)
             return
 
@@ -206,7 +209,7 @@ class CompositeBitFieldWrapper(object):
             if hasattr(field, attr):
                 setattr(field, attr, value)
                 return
-        raise AttributeError('%s is not a valid flag' % attr)
+        raise AttributeError("%s is not a valid flag" % attr)
 
 
 class CompositeBitField(object):
@@ -228,15 +231,16 @@ class CompositeBitField(object):
 
     def validate_fields(self, sender, **kwargs):
         cls = sender
-        model_fields = dict([
-            (f.name, f) for f in cls._meta.fields if f.name in self.fields])
+        model_fields = dict(
+            [(f.name, f) for f in cls._meta.fields if f.name in self.fields]
+        )
         all_flags = sum([model_fields[f].flags for f in self.fields], [])
         if len(all_flags) != len(set(all_flags)):
-            raise ValueError('BitField flags must be unique.')
+            raise ValueError("BitField flags must be unique.")
 
     def __get__(self, instance, instance_type=None):
         fields = [getattr(instance, f) for f in self.fields]
         return CompositeBitFieldWrapper(fields)
 
     def __set__(self, *args, **kwargs):
-        raise NotImplementedError('CompositeBitField cannot be set.')
+        raise NotImplementedError("CompositeBitField cannot be set.")

@@ -1,12 +1,13 @@
 import django
 import six
-
 from django.core.exceptions import ValidationError
+
 if django.VERSION < (2, 0):
     from django.utils.translation import ugettext_lazy as _
 else:
     # Aliased since Django 2.0 https://github.com/django/django/blob/2.0/django/utils/translation/__init__.py#L80-L81
     from django.utils.translation import gettext_lazy as _
+
 from django.contrib.admin import FieldListFilter
 from django.contrib.admin.options import IncorrectLookupParameters
 
@@ -24,12 +25,12 @@ class BitFieldListFilter(FieldListFilter):
         self.flags = field.flags
         self.labels = field.labels
         super(BitFieldListFilter, self).__init__(
-            field, request, params, model, model_admin, field_path)
+            field, request, params, model, model_admin, field_path
+        )
 
     def queryset(self, request, queryset):
         filter_kwargs = dict(
-            (p, BitHandler(v, ()))
-            for p, v in six.iteritems(self.used_parameters)
+            (p, BitHandler(v, ())) for p, v in six.iteritems(self.used_parameters)
         )
         if not filter_kwargs:
             return queryset
@@ -43,14 +44,14 @@ class BitFieldListFilter(FieldListFilter):
 
     def choices(self, cl):
         yield {
-            'selected': self.lookup_val == 0,
-            'query_string': cl.get_query_string({}, [self.lookup_kwarg]),
-            'display': _('All'),
+            "selected": self.lookup_val == 0,
+            "query_string": cl.get_query_string({}, [self.lookup_kwarg]),
+            "display": _("All"),
         }
         for number, flag in enumerate(self.flags):
             bit_mask = Bit(number).mask
             yield {
-                'selected': self.lookup_val == bit_mask,
-                'query_string': cl.get_query_string({self.lookup_kwarg: bit_mask}),
-                'display': self.labels[number],
+                "selected": self.lookup_val == bit_mask,
+                "query_string": cl.get_query_string({self.lookup_kwarg: bit_mask}),
+                "display": self.labels[number],
             }
