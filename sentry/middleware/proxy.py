@@ -63,9 +63,9 @@ class ZDecoder(io.RawIOBase):
 
         n = 0
         max_length = len(buf)
-        # DOS mitigation - disallow unzipped payloads higher than upload max memory size
+        # DOS mitigation - block unzipped payloads larger than max allowed size
         self.counter += 1
-        if self.counter * max_length > settings.DATA_UPLOAD_MAX_MEMORY_SIZE:
+        if self.counter * max_length > settings.GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE:
             raise RequestDataTooBig()
 
         while max_length > 0:
