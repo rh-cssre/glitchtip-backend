@@ -15,7 +15,7 @@ from projects.models import ProjectAlertStatus
 
 from ..constants import MonitorType
 from ..models import Monitor, MonitorCheck
-from ..tasks import bucket_monitors, dispatch_checks, UPTIME_COUNTER_KEY
+from ..tasks import UPTIME_COUNTER_KEY, bucket_monitors, dispatch_checks
 from ..utils import fetch_all
 
 
