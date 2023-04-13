@@ -86,7 +86,7 @@ GLITCHTIP_URL = env.url("GLITCHTIP_URL", default_url)
 if GLITCHTIP_URL.scheme not in ["http", "https"]:
     raise ImproperlyConfigured("GLITCHTIP_DOMAIN must start with http or https")
 
-# Used to mitigate DOS risk from large unzipped request payloads
+# Limits size (in bytes) of uncompressed event payloads. Mitigates DOS risk.
 GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE = env.int(
     "GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE", global_settings.DATA_UPLOAD_MAX_MEMORY_SIZE
 )
