@@ -41,38 +41,49 @@ def bucket_monitors(monitors, tick: int, check_interval=UPTIME_CHECK_INTERVAL):
     the same monitor in each
 
     Result:
+    {tick: {is_fast: monitors[]}}
     {1, {True: [monitor, monitor]}}
     {1, {False: [monitor]}}
     {2, {True: [monitor]}}
     """
-    result = []
-    fast_monitors = [monitor for monitor in monitors if (monitor.int_timeout < 30)]
-    slow_monitors = [monitor for monitor in monitors if (monitor.int_timeout >= 30)]
     result = {}
     for i in range(tick, tick + check_interval):
         fast_tick_monitors = [
             monitor
             for monitor in monitors
-            if tick % monitor.interval.seconds == 0 and monitor.int_timeout < 30
+            if i % monitor.interval.seconds == 0 and monitor.int_timeout < 30
         ]
         slow_tick_monitors = [
             monitor
             for monitor in monitors
-            if tick % monitor.interval.seconds == 0 and monitor.int_timeout >= 30
+            if i % monitor.interval.seconds == 0 and monitor.int_timeout >= 30
         ]
-        if fast_monitors or slow_monitors:
+        if fast_tick_monitors or slow_tick_monitors:
             result[i] = {}
-            if fast_monitors:
-                result[i][True] = fast_monitors
-            if slow_monitors:
-                result[i][False] = slow_monitors
+            if fast_tick_monitors:
+                result[i][True] = fast_tick_monitors
+            if slow_tick_monitors:
+                result[i][False] = slow_tick_monitors
     return result
 
 
 @shared_task()
 def dispatch_checks():
     """
-    dispatch monitor checks tasks in batches, include start time for check
+    Dispatch monitor checks tasks in batches, include start time for check
+
+    Track each "second tick". A tick is the number of seconds away from an arbitrary start time.
+    Fetch each monitor that would need to run in the next UPTIME_CHECK_INTERVAL
+    Determine when monitors need to run based on each second tick and whether it's
+    timeout is fast or slow (group slow together)
+    For example, if our check interval is 10 and the monitor should run every 2 seconds,
+    there should be 5 checks run every other second
+
+    This method reduces the number of necessary celery tasks and sql queries. While keeping
+    the timing percise and allowing for any arbitrary interval (to the second).
+    It also has no need to track state of previous checks.
+
+    Check result DB writes are then batched for better performance.
     """
     now = timezone.now()
     try:
@@ -83,24 +94,21 @@ def dispatch_checks():
     except NotImplementedError:
         cache.add(UPTIME_COUNTER_KEY, 0, UPTIME_TICK_EXPIRE)
         tick = cache.incr(UPTIME_COUNTER_KEY)
-    # Use of atomic solves iterator() with pgbouncer InvalidCursorName issue
-    # https://docs.djangoproject.com/en/3.2/ref/databases/#transaction-pooling-server-side-cursors
-    with transaction.atomic():
-        monitor_ids = (
-            Monitor.objects.filter(organization__is_accepting_events=True)
-            .annotate(mod=tick % Epoch(F("interval")))
-            .filter(mod__lt=UPTIME_CHECK_INTERVAL)
-            .values_list("id", "interval", "timeout")
-        )
-        batch_size = 100
-        batch_ids = []
-        for i, monitor_id in enumerate(monitor_ids.iterator(chunk_size=10), 1):
-            batch_ids.append(monitor_id)
-            if i % batch_size == 0:
-                # perform_checks.apply_async(args=(batch_ids, now), expires=60)
-                batch_ids = []
-        # if len(batch_ids) > 0:
-        # perform_checks.delay(batch_ids, now)
+    tick = tick * settings.UPTIME_CHECK_INTERVAL
+    monitors = (
+        Monitor.objects.filter(organization__is_accepting_events=True)
+        .annotate(mod=tick % Epoch(F("interval")))
+        .filter(mod__lt=UPTIME_CHECK_INTERVAL)
+        .only("id", "interval", "timeout")
+    )
+    for i, (tick, bucket) in enumerate(bucket_monitors(monitors, tick).items()):
+        for is_fast, monitors_to_dispatch in bucket.items():
+            run_time = now + timedelta(seconds=i)
+            perform_checks.apply_async(
+                args=([m.pk for m in monitors_to_dispatch], run_time),
+                eta=run_time,
+                expires=run_time + timedelta(minutes=1),
+            )
 
 
 @shared_task

@@ -1,9 +1,10 @@
 import asyncio
-from unittest import mock
 from datetime import timedelta
+from unittest import mock
 
 from aioresponses import aioresponses
 from django.core import mail
+from django.core.cache import cache
 from django.urls import reverse
 from freezegun import freeze_time
 from model_bakery import baker
@@ -14,7 +15,7 @@ from projects.models import ProjectAlertStatus
 
 from ..constants import MonitorType
 from ..models import Monitor, MonitorCheck
-from ..tasks import dispatch_checks, bucket_monitors
+from ..tasks import bucket_monitors, dispatch_checks, UPTIME_COUNTER_KEY
 from ..utils import fetch_all
 
 
@@ -29,6 +30,7 @@ class UptimeTestCase(GlitchTipTestCase):
             baker.make(MonitorCheck, monitor=mon1)
 
         self.assertEqual(mocked.call_count, 2)
+        cache.set(UPTIME_COUNTER_KEY, 59)
         with freeze_time("2020-01-02"):
             baker.make(MonitorCheck, monitor=mon2)
             dispatch_checks()
@@ -57,8 +59,9 @@ class UptimeTestCase(GlitchTipTestCase):
             dispatch_checks()
         self.assertEqual(mon.checks.count(), 1)
 
+        cache.set(UPTIME_COUNTER_KEY, 59)
         with freeze_time("2020-01-02"):
-            with self.assertNumQueries(5):
+            with self.assertNumQueries(3):
                 dispatch_checks()
         self.assertEqual(mon.checks.count(), 2)
 
@@ -91,6 +94,7 @@ class UptimeTestCase(GlitchTipTestCase):
             )
 
         mocked.get(test_url, status=500)
+        cache.set(UPTIME_COUNTER_KEY, 59)
         with freeze_time("2020-01-02"):
             dispatch_checks()
         self.assertEqual(len(mail.outbox), 1)
@@ -98,11 +102,13 @@ class UptimeTestCase(GlitchTipTestCase):
         mock_post.assert_called_once()
 
         mocked.get(test_url, status=500)
+        cache.set(UPTIME_COUNTER_KEY, 59)
         with freeze_time("2020-01-03"):
             dispatch_checks()
         self.assertEqual(len(mail.outbox), 1)
 
         mocked.get(test_url, status=200)
+        cache.set(UPTIME_COUNTER_KEY, 59)
         with freeze_time("2020-01-04"):
             dispatch_checks()
         self.assertEqual(len(mail.outbox), 2)
@@ -146,7 +152,8 @@ class UptimeTestCase(GlitchTipTestCase):
             )
 
         mocked.get(test_url, status=500)
-        with self.assertNumQueries(12):
+        cache.set(UPTIME_COUNTER_KEY, 59)
+        with self.assertNumQueries(10):
             with freeze_time("2020-01-02"):
                 dispatch_checks()
             self.assertNotIn(user2.email, mail.outbox[0].to)
@@ -186,7 +193,8 @@ class UptimeTestCase(GlitchTipTestCase):
             )
 
         mocked.get(test_url, status=500)
-        with self.assertNumQueries(12):
+        cache.set(UPTIME_COUNTER_KEY, 59)
+        with self.assertNumQueries(10):
             with freeze_time("2020-01-02"):
                 dispatch_checks()
             self.assertNotIn(user2.email, mail.outbox[0].to)
@@ -219,14 +227,17 @@ class UptimeTestCase(GlitchTipTestCase):
         self.assertTrue(monitor.checks.filter(is_up=True).exists())
         self.assertEqual(len(mail.outbox), 0)
 
+        cache.set(UPTIME_COUNTER_KEY, 59)
         with freeze_time("2020-01-02"):
             dispatch_checks()
         self.assertEqual(len(mail.outbox), 1)
 
+        cache.set(UPTIME_COUNTER_KEY, 59)
         with freeze_time("2020-01-03"):
             dispatch_checks()  # Still down
         self.assertEqual(len(mail.outbox), 1)
 
+        cache.set(UPTIME_COUNTER_KEY, 59)
         with freeze_time("2020-01-04"):
             self.client.post(url)  # Back up
         self.assertEqual(len(mail.outbox), 2)
@@ -251,4 +262,4 @@ class UptimeTestCase(GlitchTipTestCase):
         for interval, timeout in interval_timeouts:
             baker.make(Monitor, interval=timedelta(seconds=interval), timeout=timeout)
         monitors = Monitor.objects.all()
-        bucket_monitors(monitors, 1)
+        result = bucket_monitors(monitors, 1)
