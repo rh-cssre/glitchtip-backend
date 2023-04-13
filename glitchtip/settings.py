@@ -86,6 +86,11 @@ GLITCHTIP_URL = env.url("GLITCHTIP_URL", default_url)
 if GLITCHTIP_URL.scheme not in ["http", "https"]:
     raise ImproperlyConfigured("GLITCHTIP_DOMAIN must start with http or https")
 
+# Limits size (in bytes) of uncompressed event payloads. Mitigates DOS risk.
+GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE = env.int(
+    "GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE", global_settings.DATA_UPLOAD_MAX_MEMORY_SIZE
+)
+
 # Events and associated data older than this will be deleted from the database
 GLITCHTIP_MAX_EVENT_LIFE_DAYS = env.int("GLITCHTIP_MAX_EVENT_LIFE_DAYS", default=90)
 GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS = env.int(
