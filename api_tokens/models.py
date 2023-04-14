@@ -2,10 +2,10 @@ import binascii
 import os
 from typing import List
 
-from bitfield import BitField
 from django.conf import settings
 from django.db import models
 
+from bitfield import BitField
 from glitchtip.base_models import CreatedModel
 
 
