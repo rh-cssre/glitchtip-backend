@@ -419,11 +419,15 @@ if REDIS_HOST:
         REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DATABASE}"
 else:
     REDIS_URL = env.str("REDIS_URL", "redis://redis:6379/0")
+REDIS_RETRY = env.bool("REDIS_RETRY", True)
+REDIS_MAX_CONNECTIONS = env.int("REDIS_MAX_CONNECTIONS", 100)
 CELERY_BROKER_URL = env.str("CELERY_BROKER_URL", REDIS_URL)
 CELERY_BROKER_TRANSPORT_OPTIONS = {
     "fanout_prefix": True,
     "fanout_patterns": True,
 }
+CELERY_REDIS_RETRY_ON_TIMEOUT = REDIS_RETRY
+CELERY_REDIS_MAX_CONNECTIONS = REDIS_MAX_CONNECTIONS
 if CELERY_BROKER_URL.startswith("sentinel"):
     CELERY_BROKER_TRANSPORT_OPTIONS["master_name"] = env.str(
         "CELERY_BROKER_MASTER_NAME", "mymaster"
@@ -475,6 +479,12 @@ else:  # Default to REDIS when unset
             "BACKEND": "django_redis.cache.RedisCache",
             "LOCATION": REDIS_URL,
             "PARSER_CLASS": "redis.connection.HiredisParser",
+            "OPTIONS": {
+                "CONNECTION_POOL_KWARGS": {
+                    "retry_on_timeout": REDIS_RETRY,
+                    "max_connections": REDIS_MAX_CONNECTIONS,
+                }
+            },
         }
     }
 if cache_sentinel_url := env.str("CACHE_SENTINEL_URL", None):
