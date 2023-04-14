@@ -15,7 +15,7 @@ from django_redis import get_redis_connection
 from alerts.models import AlertRecipient
 
 from .email import MonitorEmail
-from .models import Monitor, MonitorCheck
+from .models import Monitor, MonitorCheck, MonitorType
 from .utils import fetch_all
 from .webhooks import send_uptime_as_webhook
 
@@ -99,6 +99,7 @@ def dispatch_checks():
         Monitor.objects.filter(organization__is_accepting_events=True)
         .annotate(mod=tick % Epoch(F("interval")))
         .filter(mod__lt=UPTIME_CHECK_INTERVAL)
+        .exclude(Q(url="") & ~Q(monitor_type=MonitorType.HEARTBEAT))
         .only("id", "interval", "timeout")
     )
     for i, (tick, bucket) in enumerate(bucket_monitors(monitors, tick).items()):
@@ -124,12 +125,15 @@ def perform_checks(monitor_ids: List[int], now=None):
         now = timezone.now()
     # Convert queryset to raw list[dict] for asyncio operations
     monitors = list(
-        Monitor.objects.with_check_annotations()
-        .filter(pk__in=monitor_ids)
-        .exclude(url="")
-        .values()
+        Monitor.objects.with_check_annotations().filter(pk__in=monitor_ids).values()
     )
     results = asyncio.run(fetch_all(monitors))
+    # Filter out "up" heartbeats
+    results = [
+        result
+        for result in results
+        if result["monitor_type"] != MonitorType.HEARTBEAT or result["is_up"] is False
+    ]
     monitor_checks = MonitorCheck.objects.bulk_create(
         [
             MonitorCheck(

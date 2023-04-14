@@ -7,8 +7,10 @@ import aiohttp
 from aiohttp import ClientTimeout
 from aiohttp.client_exceptions import ClientConnectorError
 from django.conf import settings
+from django.utils import timezone
 
 from .constants import MonitorCheckReason, MonitorType
+from .models import MonitorCheck
 
 DEFAULT_TIMEOUT = 20  # Seconds
 
@@ -29,6 +31,16 @@ async def process_response(monitor, response):
 async def fetch(session, monitor):
     url = monitor["url"]
     monitor["is_up"] = False
+
+    if (
+        monitor["monitor_type"] == MonitorType.HEARTBEAT
+        and await MonitorCheck.objects.filter(
+            monitor_id=monitor["id"],
+            start_check__gte=timezone.now() - monitor["interval"],
+        ).aexists()
+    ):
+        monitor["is_up"] = True
+
     timeout = ClientTimeout(total=monitor["timeout"] or DEFAULT_TIMEOUT)
     start = time.monotonic()
     try:
