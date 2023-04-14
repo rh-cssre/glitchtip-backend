@@ -68,15 +68,13 @@ class Monitor(CreatedModel):
     )
     interval = models.DurationField(
         default=timedelta(minutes=1),
-        validators=[MaxValueValidator(timedelta(hours=23, minutes=59, seconds=59))],
-        db_index=True,
+        validators=[MaxValueValidator(timedelta(hours=24))],
     )
     timeout = models.PositiveSmallIntegerField(
         blank=True,
         null=True,
-        validators=[MaxValueValidator(30), MinValueValidator(1)],
-        help_text="Blank implies default value",
-        db_index=True,
+        validators=[MaxValueValidator(60), MinValueValidator(1)],
+        help_text="Blank implies default value of 20",
     )
 
     objects = MonitorManager()
