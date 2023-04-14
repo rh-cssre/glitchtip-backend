@@ -124,7 +124,10 @@ def perform_checks(monitor_ids: List[int], now=None):
         now = timezone.now()
     # Convert queryset to raw list[dict] for asyncio operations
     monitors = list(
-        Monitor.objects.with_check_annotations().filter(pk__in=monitor_ids).values()
+        Monitor.objects.with_check_annotations()
+        .filter(pk__in=monitor_ids)
+        .exclude(url="")
+        .values()
     )
     results = asyncio.run(fetch_all(monitors))
     monitor_checks = MonitorCheck.objects.bulk_create(

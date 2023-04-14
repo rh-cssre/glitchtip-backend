@@ -2,6 +2,7 @@ import uuid
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import OuterRef, Subquery
@@ -92,6 +93,10 @@ class Monitor(CreatedModel):
 
         if self.monitor_type != MonitorType.HEARTBEAT:
             perform_checks.apply_async(args=([self.pk],), countdown=1)
+
+    def clean(self):
+        if self.monitor_type != MonitorType.HEARTBEAT and not self.url:
+            raise ValidationError("Monitor URL is required")
 
     def get_detail_url(self):
         return f"{settings.GLITCHTIP_URL.geturl()}/{self.project.organization.slug}/uptime-monitors/{self.pk}"
