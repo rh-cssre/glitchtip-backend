@@ -2,7 +2,8 @@ import io
 import logging
 import zlib
 
-import six
+from django.conf import settings
+from django.core.exceptions import RequestDataTooBig
 
 try:
     import uwsgi
@@ -48,6 +49,7 @@ class ZDecoder(io.RawIOBase):
         self.fp = fp
         self.z = z
         self.flushed = None
+        self.counter = 0
 
     def readable(self):
         return True
@@ -61,6 +63,10 @@ class ZDecoder(io.RawIOBase):
 
         n = 0
         max_length = len(buf)
+        # DOS mitigation - block unzipped payloads larger than max allowed size
+        self.counter += 1
+        if self.counter * max_length > settings.GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE:
+            raise RequestDataTooBig()
 
         while max_length > 0:
             if self.flushed is None:
@@ -196,6 +202,6 @@ class ContentLengthHeaderMiddleware(object):
             return response
 
         if not response.streaming:
-            response["Content-Length"] = six.text_type(len(response.content))
+            response["Content-Length"] = str(len(response.content))
 
         return response

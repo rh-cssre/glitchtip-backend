@@ -109,7 +109,7 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
         group, group_created = TransactionGroup.objects.get_or_create(
             project=self.context.get("project"),
             transaction=data["transaction"],
-            op=contexts["trace"]["op"],
+            op=contexts["trace"].get("op", ""),
             method=data.get("request", {}).get("method"),
             defaults=defaults,
         )
