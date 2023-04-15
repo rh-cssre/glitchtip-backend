@@ -29,9 +29,7 @@ async def process_response(monitor, response):
 
 
 async def fetch(session, monitor):
-    url = monitor["url"]
     monitor["is_up"] = False
-
     if monitor["monitor_type"] == MonitorType.HEARTBEAT:
         if await MonitorCheck.objects.filter(
             monitor_id=monitor["id"],
@@ -40,6 +38,7 @@ async def fetch(session, monitor):
             monitor["is_up"] = True
         return monitor
 
+    url = monitor["url"]
     timeout = ClientTimeout(total=monitor["timeout"] or DEFAULT_TIMEOUT)
     start = time.monotonic()
     try:
