@@ -32,14 +32,13 @@ async def fetch(session, monitor):
     url = monitor["url"]
     monitor["is_up"] = False
 
-    if (
-        monitor["monitor_type"] == MonitorType.HEARTBEAT
-        and await MonitorCheck.objects.filter(
+    if monitor["monitor_type"] == MonitorType.HEARTBEAT:
+        if await MonitorCheck.objects.filter(
             monitor_id=monitor["id"],
             start_check__gte=timezone.now() - monitor["interval"],
-        ).aexists()
-    ):
-        monitor["is_up"] = True
+        ).aexists():
+            monitor["is_up"] = True
+        return monitor
 
     timeout = ClientTimeout(total=monitor["timeout"] or DEFAULT_TIMEOUT)
     start = time.monotonic()
