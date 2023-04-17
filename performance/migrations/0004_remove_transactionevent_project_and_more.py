@@ -16,7 +16,6 @@ def reverse_func(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("projects", "0008_alter_projectkey_created"),
         ("performance", "0003_transactionevent"),
