@@ -1,8 +1,9 @@
-from urllib.parse import parse_qs
-from typing import List
 import re
+from typing import List
+from urllib.parse import parse_qs
+
 from rest_framework import serializers
-from rest_framework.exceptions import ValidationError, ErrorDetail
+from rest_framework.exceptions import ErrorDetail, ValidationError
 
 
 class ErrorValueDetail(ErrorDetail):

@@ -1,30 +1,32 @@
 from django.core.exceptions import ObjectDoesNotExist
-from django.shortcuts import get_object_or_404
 from django.http import Http404
+from django.shortcuts import get_object_or_404
 from drf_yasg.utils import swagger_auto_schema
-from rest_framework import viewsets, views, exceptions, permissions
+from organizations.backends import invitation_backend
+from rest_framework import exceptions, permissions, status, views, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import OrderingFilter
 from rest_framework.response import Response
-from rest_framework.exceptions import PermissionDenied
-from organizations.backends import invitation_backend
+
 from organizations_ext.utils import is_organization_creation_open
-from teams.serializers import TeamSerializer
 from projects.views import NestedProjectViewSet
+from teams.serializers import TeamSerializer
+
+from .invitation_backend import InvitationTokenGenerator
+from .models import Organization, OrganizationUser, OrganizationUserRole
 from .permissions import (
-    OrganizationPermission,
     OrganizationMemberPermission,
     OrganizationMemberTeamsPermission,
+    OrganizationPermission,
 )
-from .invitation_backend import InvitationTokenGenerator
-from .models import Organization, OrganizationUserRole, OrganizationUser
 from .serializers.serializers import (
-    OrganizationSerializer,
+    AcceptInviteSerializer,
     OrganizationDetailSerializer,
-    OrganizationUserSerializer,
+    OrganizationSerializer,
     OrganizationUserDetailSerializer,
     OrganizationUserProjectsSerializer,
-    AcceptInviteSerializer,
+    OrganizationUserSerializer,
     ReinviteSerializer,
 )
 
@@ -91,7 +93,7 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         if team_slug:
             queryset = queryset.filter(team__slug=team_slug)
         return queryset.select_related("organization", "user").prefetch_related(
-            "user__socialaccount_set"
+            "user__socialaccount_set", "organization__owner"
         )
 
     def get_object(self):
@@ -161,6 +163,18 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         invitation_backend().send_invitation(org_user)
         return org_user
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if hasattr(instance, "organizationowner"):
+            return Response(
+                data={
+                    "message": "User is organization owner. Transfer ownership first."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     def check_team_member_permission(self, org_user, user, team):
         """Check if user has permission to update team members"""
         open_membership = org_user.organization.open_membership
@@ -179,6 +193,25 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
             organization=org_user.organization, role__gte=required_role
         ).exists():
             raise exceptions.PermissionDenied("Must be admin to modify teams")
+
+    @action(detail=True, methods=["post"])
+    def set_owner(self, request, *args, **kwargs):
+        """
+        Set this team member as the one and only one Organization owner
+        Only an existing Owner or user with the "org:admin" scope is able to perform this.
+        """
+        new_owner = self.get_object()
+        organization = new_owner.organization
+        user = request.user
+        if not (
+            organization.is_owner(user)
+            or organization.organization_users.filter(
+                user=user, role=OrganizationUserRole.OWNER
+            ).exists()
+        ):
+            raise exceptions.PermissionDenied("Only owner may set organization owner.")
+        organization.change_owner(new_owner)
+        return self.retrieve(request, *args, **kwargs)
 
     @action(
         detail=True,

@@ -4,15 +4,13 @@ from datetime import timedelta
 from ssl import SSLError
 
 import aiohttp
+from aiohttp import ClientTimeout
 from aiohttp.client_exceptions import ClientConnectorError
 from django.conf import settings
 
 from .constants import MonitorCheckReason, MonitorType
 
-DEFAULT_TIMEOUT = 30
-DEFAULT_PING_TIMEOUT = 30
-DEFAULT_AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT)
-PING_AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=DEFAULT_PING_TIMEOUT)
+DEFAULT_TIMEOUT = 20  # Seconds
 
 
 async def process_response(monitor, response):
@@ -31,16 +29,17 @@ async def process_response(monitor, response):
 async def fetch(session, monitor):
     url = monitor["url"]
     monitor["is_up"] = False
+    timeout = ClientTimeout(total=monitor["timeout"] or DEFAULT_TIMEOUT)
     start = time.monotonic()
     try:
         if monitor["monitor_type"] == MonitorType.PING:
-            async with session.head(url, timeout=PING_AIOHTTP_TIMEOUT):
+            async with session.head(url, timeout=timeout):
                 monitor["is_up"] = True
         elif monitor["monitor_type"] == MonitorType.GET:
-            async with session.get(url, timeout=DEFAULT_AIOHTTP_TIMEOUT) as response:
+            async with session.get(url, timeout=timeout) as response:
                 await process_response(monitor, response)
         elif monitor["monitor_type"] == MonitorType.POST:
-            async with session.post(url, timeout=DEFAULT_AIOHTTP_TIMEOUT) as response:
+            async with session.post(url, timeout=timeout) as response:
                 await process_response(monitor, response)
         monitor["response_time"] = timedelta(seconds=time.monotonic() - start)
     except SSLError:

@@ -1,7 +1,8 @@
 from django.urls import reverse
 from model_bakery import baker
-from organizations_ext.models import OrganizationUserRole
+
 from glitchtip.test_utils.test_case import GlitchTipTestCase
+from organizations_ext.models import OrganizationUserRole
 
 
 class ProjectTeamViewTestCase(GlitchTipTestCase):
@@ -28,7 +29,7 @@ class ProjectTeamViewTestCase(GlitchTipTestCase):
         self.assertTrue(new_project.team_set.exists())
 
     def test_project_team_add_project_no_perms(self):
-        """ User must be manager or above to manage project teams """
+        """User must be manager or above to manage project teams"""
         new_project = baker.make("projects.Project", organization=self.organization)
         user = baker.make("users.user")
         self.client.force_login(user)
@@ -49,4 +50,3 @@ class ProjectTeamViewTestCase(GlitchTipTestCase):
         res = self.client.delete(url + self.team.slug + "/")
         self.assertContains(res, self.project.slug)
         self.assertFalse(self.project.team_set.exists())
-
