@@ -26,7 +26,7 @@ class HeartBeatCheckView(CreateAPIView):
             organization__slug=self.kwargs.get("organization_slug"),
             endpoint_id=self.kwargs.get("endpoint_id"),
         )
-        monitor_check = serializer.save(monitor=monitor, is_up=True)
+        monitor_check = serializer.save(monitor=monitor, is_up=True, reason=None)
         if monitor.latest_is_up is False:
             send_monitor_notification.delay(
                 monitor_check.pk, False, monitor.last_change

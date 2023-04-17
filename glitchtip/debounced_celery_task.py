@@ -64,7 +64,7 @@ def debounced_task(key_generator):
             countdown = kwargs["countdown"]
             # redis-cache incr treats None as 0
             try:
-                with get_redis_connection("default") as con:
+                with get_redis_connection() as con:
                     call_count = con.incr(CACHE_PREFIX + key)
                 # Reset expiration on each call
                 # Only redis-cache supports expire

@@ -15,7 +15,6 @@ import os
 import re
 import sys
 import warnings
-from datetime import timedelta
 
 import environ
 import sentry_sdk
@@ -441,6 +440,7 @@ if broker_sentinel_password := env.str("CELERY_BROKER_SENTINEL_KWARGS_PASSWORD",
 
 # Time in seconds to debounce some frequently run tasks
 TASK_DEBOUNCE_DELAY = env.int("TASK_DEBOUNCE_DELAY", 30)
+UPTIME_CHECK_INTERVAL = 10
 CELERY_BEAT_SCHEDULE = {
     "send-alert-notifications": {
         "task": "alerts.tasks.process_event_alerts",
@@ -464,7 +464,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     "uptime-dispatch-checks": {
         "task": "glitchtip.uptime.tasks.dispatch_checks",
-        "schedule": timedelta(seconds=30),
+        "schedule": UPTIME_CHECK_INTERVAL,
     },
 }
 
