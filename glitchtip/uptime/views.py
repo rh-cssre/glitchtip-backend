@@ -1,6 +1,6 @@
-from django.db.models import OuterRef, Prefetch, Subquery
+from django.db.models import F, Prefetch, Window
+from django.db.models.functions import RowNumber
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from rest_framework import exceptions, permissions, viewsets
 from rest_framework.generics import CreateAPIView
 
@@ -51,21 +51,18 @@ class MonitorViewSet(viewsets.ModelViewSet):
         if organization_slug:
             queryset = queryset.filter(organization__slug=organization_slug)
 
-        subqueryset = Subquery(
-            MonitorCheck.objects.filter(monitor=OuterRef("monitor"))
-            .order_by("-start_check")
-            .values_list("id", flat=True)[:60]
-        )
-
-        # Optimization hack, we know the checks will be recent. No need to sort all checks ever.
-        hours_ago = timezone.now() - timezone.timedelta(hours=12)
+        # Fetch latest 60 checks for each monitor
         queryset = (
             queryset.prefetch_related(
                 Prefetch(
                     "checks",
-                    queryset=MonitorCheck.objects.filter(
-                        id__in=subqueryset, start_check__gt=hours_ago
-                    ).order_by("-start_check"),
+                    queryset=MonitorCheck.objects.annotate(
+                        row_number=Window(
+                            expression=RowNumber(),
+                            order_by="-start_check",
+                            partition_by=F("monitor_id"),
+                        ),
+                    ).filter(row_number__lte=60),
                 )
             )
             .select_related("project")
