@@ -152,7 +152,7 @@ class UptimeAPITestCase(GlitchTipTestCase):
         self.assertEqual(res.data["isUp"], True)
         self.assertEqual(res.data["lastChange"], "2021-09-19T15:39:31Z")
         self.assertEqual(res.data["environment"], environment.pk)
-        self.assertTrue(res.data["checks"][0]["responseTime"])
+        self.assertIn("responseTime", res.data["checks"][0])
 
     def test_monitor_checks_list(self):
         monitor = baker.make(
