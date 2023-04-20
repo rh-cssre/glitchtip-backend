@@ -123,3 +123,54 @@ class OrganizationThrottlingTestCase(TestCase):
             )
         with self.assertNumQueries(4):
             set_organization_throttle()
+
+    @override_settings(BILLING_FREE_TIER_EVENTS=1)
+    def test_no_plan_throttle(self):
+        """
+        It's possible to not sign up for a free plan, they should be limited to free tier events
+        """
+        organization = baker.make("organizations_ext.Organization")
+        user = baker.make("users.user")
+        organization.add_user(user)
+        project = baker.make("projects.Project", organization=organization)
+        baker.make("events.Event", issue__project=project, _quantity=2)
+        set_organization_throttle()
+        organization.refresh_from_db()
+        self.assertFalse(organization.is_accepting_events)
+
+        # Make plan active
+        customer = baker.make(
+            "djstripe.Customer", subscriber=organization, livemode=False
+        )
+        plan = baker.make("djstripe.Plan", active=True, amount=1)
+        subscription = baker.make(
+            "djstripe.Subscription",
+            customer=customer,
+            livemode=False,
+            plan=plan,
+            status="active",
+            current_period_end="2000-01-31",
+        )
+        set_organization_throttle()
+        organization.refresh_from_db()
+        self.assertTrue(organization.is_accepting_events)
+
+        # Cancel plan
+        subscription.status = "canceled"
+        subscription.save()
+        set_organization_throttle()
+        organization.refresh_from_db()
+        self.assertFalse(organization.is_accepting_events)
+
+        # Add new active plan (still has canceled plan)
+        subscription = baker.make(
+            "djstripe.Subscription",
+            customer=customer,
+            livemode=False,
+            plan=plan,
+            status="active",
+            current_period_end="2000-01-31",
+        )
+        set_organization_throttle()
+        organization.refresh_from_db()
+        self.assertTrue(organization.is_accepting_events)
