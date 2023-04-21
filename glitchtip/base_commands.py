@@ -6,6 +6,7 @@ from organizations_ext.models import Organization
 from projects.models import Project
 
 baker.generators.add("organizations.fields.SlugField", gen_slug)
+baker.generators.add("organizations_ext.fields.OrganizationSlugField", gen_slug)
 baker.generators.add("django.db.models.JSONField", gen_json)
 
 

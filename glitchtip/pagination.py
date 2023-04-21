@@ -29,7 +29,8 @@ class LinkHeaderPagination(CursorPagination):
 
     def get_count(self, queryset):
         """Count with max limit, to prevent slowdown"""
-        return queryset[: self.max_hits].count()
+        # Remove order by, it can slow down counts but has no effect
+        return queryset.order_by()[: self.max_hits].count()
 
     def get_paginated_response(self, data):
         next_url = self.get_next_link()
