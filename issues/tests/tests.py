@@ -24,7 +24,7 @@ class EventTestCase(GlitchTipTestCase):
         baker.make("events.Event", issue__project=self.project, _quantity=3)
         not_my_event = baker.make("events.Event")
 
-        with self.assertNumQueries(4):
+        with self.assertNumQueries(3):
             res = self.client.get(self.url)
         self.assertContains(res, event.pk.hex)
         self.assertNotContains(res, not_my_event.pk.hex)

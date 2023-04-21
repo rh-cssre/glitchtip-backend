@@ -19,9 +19,13 @@ class LinkHeaderPagination(CursorPagination):
     max_hits = 1000
 
     def paginate_queryset(self, queryset, request, view=None):
-        self.count = self.get_count(queryset)
         try:
-            return super().paginate_queryset(queryset, request, view)
+            page = super().paginate_queryset(queryset, request, view)
+            if self.has_next:
+                self.count = self.get_count(queryset)
+            else:
+                self.count = len(page)
+            return page
         except ValueError as err:
             # https://gitlab.com/glitchtip/glitchtip-backend/-/issues/136
             logging.warning("Pagination received invalid cursor", exc_info=True)
