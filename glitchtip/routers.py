@@ -17,6 +17,7 @@ class BulkSimpleRouter(routers.SimpleRouter):
             "get": "list",
             "post": "create",
             "put": "bulk_update",
+            "delete": "bulk_delete",
         },
         name="{basename}-list",
         detail=False,
