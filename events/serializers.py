@@ -170,7 +170,7 @@ class MessageField(serializers.CharField):
 
 class LogEntrySerializer(serializers.Serializer):
     formatted = serializers.CharField(required=False)
-    message = serializers.CharField(required=False, blank=True)
+    message = serializers.CharField(required=False, allow_blank=True)
     params = serializers.JSONField(required=False)
 
     def validate(self, attrs):
