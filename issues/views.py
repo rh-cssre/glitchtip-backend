@@ -148,7 +148,9 @@ class IssueViewSet(
         ids = request.GET.getlist("id")
         if len(ids) > 0:
             queryset = queryset.filter(id__in=ids)
-        count = self.queryset.filter(pk__in=queryset[: self.pagination_class.max_hits]).delete()
+        count = self.queryset.filter(
+            pk__in=queryset[: self.pagination_class.max_hits]
+        ).delete()
 
         return Response(status=204)
 
