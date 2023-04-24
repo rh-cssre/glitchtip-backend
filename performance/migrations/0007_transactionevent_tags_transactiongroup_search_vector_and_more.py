@@ -6,25 +6,26 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('performance', '0006_rename_title_transactiongroup_transaction_and_more'),
+        ("performance", "0006_rename_title_transactiongroup_transaction_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='transactionevent',
-            name='tags',
+            model_name="transactionevent",
+            name="tags",
             field=django.contrib.postgres.fields.hstore.HStoreField(default=dict),
         ),
         migrations.AddField(
-            model_name='transactiongroup',
-            name='search_vector',
-            field=django.contrib.postgres.search.SearchVectorField(editable=False, null=True),
+            model_name="transactiongroup",
+            name="search_vector",
+            field=django.contrib.postgres.search.SearchVectorField(
+                editable=False, null=True
+            ),
         ),
         migrations.AddField(
-            model_name='transactiongroup',
-            name='tags',
+            model_name="transactiongroup",
+            name="tags",
             field=models.JSONField(default=dict),
         ),
     ]

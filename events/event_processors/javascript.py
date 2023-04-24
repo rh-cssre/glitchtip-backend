@@ -64,7 +64,7 @@ class JavascriptEventProcessor(EventProcessorBase):
     release_files = None
 
     def should_run(self):
-        return self.data.get("platform") in ("javascript", "node") and self.release
+        return self.data.get("platform") in ("javascript", "node") and self.release_id
 
     def get_stacktraces(self):
         exceptions = get_path(self.data, "exception", "values", filter=True, default=())
@@ -159,7 +159,7 @@ class JavascriptEventProcessor(EventProcessorBase):
         filenames = {frame["filename"].split("/")[-1] for frame in frames}
         # Make a guess at which files are relevant, match then better after
         source_files = File.objects.filter(
-            releasefile__release=self.release,
+            releasefile__release_id=self.release_id,
             name__in={filename + ".map" for filename in filenames} | filenames,
         )
 
