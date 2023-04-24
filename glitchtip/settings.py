@@ -12,17 +12,17 @@ https://docs.djangoproject.com/en/dev/ref/settings/
 
 import logging
 import os
+import re
 import sys
 import warnings
-from datetime import timedelta
 
 import environ
 import sentry_sdk
 from celery.schedules import crontab
 from corsheaders.defaults import default_headers
+from django.conf import global_settings
 from django.core.exceptions import ImproperlyConfigured
 from sentry_sdk.integrations.django import DjangoIntegration
-from whitenoise.storage import CompressedManifestStaticFilesStorage
 
 env = environ.Env(
     ALLOWED_HOSTS=(list, ["*"]),
@@ -43,7 +43,7 @@ env = environ.Env(
     STATIC_URL=(str, "/"),
     STATICFILES_STORAGE=(
         str,
-        "glitchtip.settings.NoSourceMapsStorage",
+        "whitenoise.storage.CompressedManifestStaticFilesStorage",
     ),
     ENABLE_OBSERVABILITY_API=(bool, False),
 )
@@ -85,6 +85,11 @@ GLITCHTIP_URL = env.url("GLITCHTIP_URL", default_url)
 if GLITCHTIP_URL.scheme not in ["http", "https"]:
     raise ImproperlyConfigured("GLITCHTIP_DOMAIN must start with http or https")
 
+# Limits size (in bytes) of uncompressed event payloads. Mitigates DOS risk.
+GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE = env.int(
+    "GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE", global_settings.DATA_UPLOAD_MAX_MEMORY_SIZE
+)
+
 # Events and associated data older than this will be deleted from the database
 GLITCHTIP_MAX_EVENT_LIFE_DAYS = env.int("GLITCHTIP_MAX_EVENT_LIFE_DAYS", default=90)
 GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS = env.int(
@@ -98,12 +103,16 @@ GLITCHTIP_MAX_FILE_LIFE_DAYS = env.int(
 # Freezes acceptance of new events, for use during db maintenance
 MAINTENANCE_EVENT_FREEZE = env.bool("MAINTENANCE_EVENT_FREEZE", False)
 
+# Allows saving of spans on transactions.
+ENABLE_PERFORMANCE_SPANS = env.bool("ENABLE_PERFORMANCE_SPANS", True)
+
 # For development purposes only, prints out inbound event store json
 EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/dev/howto/static-files/
 STATIC_URL = "/static/"
+
 
 # GlitchTip can track GlitchTip's own errors.
 # If enabling this, use a different server to avoid infinite loops.
@@ -122,9 +131,14 @@ SENTRY_FRONTEND_DSN = env.str("SENTRY_FRONTEND_DSN", SENTRY_DSN)
 # Set traces_sample_rate to 1.0 to capture 100%. Recommended to keep this value low.
 SENTRY_TRACES_SAMPLE_RATE = env.float("SENTRY_TRACES_SAMPLE_RATE", 0.1)
 
+
 # Ignore whitenoise served static routes
 def traces_sampler(sampling_context):
-    if sampling_context.get("wsgi_environ", {}).get("PATH_INFO", "").startswith(STATIC_URL):
+    if (
+        sampling_context.get("wsgi_environ", {})
+        .get("PATH_INFO", "")
+        .startswith(STATIC_URL)
+    ):
         return 0.0
     return SENTRY_TRACES_SAMPLE_RATE
 
@@ -182,9 +196,9 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.microsoft",
     "allauth.socialaccount.providers.nextcloud",
     "allauth.socialaccount.providers.keycloak",
+    "allauth.socialaccount.providers.openid_connect",
     "anymail",
     "corsheaders",
-    "django_celery_results",
     "django_filters",
     "django_extensions",
     "django_rest_mfa",
@@ -224,6 +238,11 @@ if SECRET_KEY == "change_me" and DEBUG is True:
 ENABLE_OBSERVABILITY_API = env("ENABLE_OBSERVABILITY_API")
 # Workaround https://github.com/korfuri/django-prometheus/issues/34
 PROMETHEUS_EXPORT_MIGRATIONS = False
+# https://github.com/korfuri/django-prometheus/blob/master/documentation/exports.md#exporting-metrics-in-a-wsgi-application-with-multiple-processes-per-process
+if start_port := env.int("METRICS_START_PORT", None):
+    PROMETHEUS_METRICS_EXPORT_PORT_RANGE = range(
+        start_port, start_port + env.int("UWSGI_WORKERS", 1)
+    )
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -281,6 +300,7 @@ if env.str("STRIPE_TEST_PUBLIC_KEY", None) or env.str("STRIPE_LIVE_PUBLIC_KEY", 
 
 # Set to chatwoot website token to enable live help widget. Assumes app.chatwoot.com.
 CHATWOOT_WEBSITE_TOKEN = env.str("CHATWOOT_WEBSITE_TOKEN", None)
+CHATWOOT_IDENTITY_TOKEN = env.str("CHATWOOT_IDENTITY_TOKEN", None)
 
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", str, [])
 SECURE_BROWSER_XSS_FILTER = True
@@ -293,7 +313,9 @@ CSP_STYLE_SRC_ELEM = env.list(
     str,
     ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
 )
-CSP_FONT_SRC = env.list("CSP_FONT_SRC", str, ["'self'", "https://fonts.gstatic.com", "data:"])
+CSP_FONT_SRC = env.list(
+    "CSP_FONT_SRC", str, ["'self'", "https://fonts.gstatic.com", "data:"]
+)
 # Redoc requires blob
 CSP_WORKER_SRC = env.list("CSP_WORKER_SRC", str, ["'self'", "blob:"])
 
@@ -324,19 +346,47 @@ SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", False)
 SESSION_COOKIE_SAMESITE = env.str("SESSION_COOKIE_SAMESITE", "Lax")
 
 DEFAULT_FROM_EMAIL = env.str("DEFAULT_FROM_EMAIL", "webmaster@localhost")
+
+ANYMAIL_SETTINGS = [
+    "MAILGUN_API_KEY",
+    "MAILGUN_SENDER_DOMAIN",
+    "MAILGUN_API_URL",
+    "MAILGUN_WEBHOOK_SIGNING_KEY",
+    "SENDGRID_API_KEY",
+    "SENDGRID_API_URL",
+    "POSTMARK_SERVER_TOKEN",
+    "POSTMARK_API_URL",
+    "MANDRILL_API_KEY",
+    "MANDRILL_WEBHOOK_KEY",
+    "MANDRILL_WEBHOOK_URL",
+    "MANDRILL_API_URL",
+    "SENDINBLUE_API_KEY",
+    "SENDINBLUE_API_URL",
+    "MAILJET_API_KEY",
+    "MAILJET_SECRET_KEY",
+    "MAILJET_API_URL",
+    "POSTAL_API_KEY",
+    "POSTAL_API_URL",
+    "POSTAL_WEBHOOK_KEY",
+    "SPARKPOST_API_KEY",
+    "SPARKPOST_API_URL",
+    "SPARKPOST_TRACK_INITIAL_OPEN_AS_OPENED",
+]
+
 ANYMAIL = {
-    "MAILGUN_API_KEY": env.str("MAILGUN_API_KEY", None),
-    "MAILGUN_SENDER_DOMAIN": env.str("MAILGUN_SENDER_DOMAIN", None),
-    "MAILGUN_API_URL": env.str("MAILGUN_API_URL", "https://api.mailgun.net/v3"),
-    "SENDGRID_API_KEY": env.str("SENDGRID_API_KEY", None),
+    anymail_var: env.str(anymail_var)
+    for anymail_var in ANYMAIL_SETTINGS
+    if anymail_var in os.environ
 }
 
-ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
+ACCOUNT_EMAIL_SUBJECT_PREFIX = env.str("ACCOUNT_EMAIL_SUBJECT_PREFIX", "")
 
 # Database
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
 
-DATABASES = {"default": env.db(default="postgres://postgres:postgres@postgres:5432/postgres")}
+DATABASES = {
+    "default": env.db(default="postgres://postgres:postgres@postgres:5432/postgres")
+}
 # Support setting DATABASES in parts in order to get values from the postgresql helm chart
 DATABASE_HOST = env.str("DATABASE_HOST", None)
 DATABASE_PASSWORD = env.str("DATABASE_PASSWORD", None)
@@ -348,9 +398,11 @@ if DATABASE_HOST and DATABASE_PASSWORD:
         "PASSWORD": DATABASE_PASSWORD,
         "HOST": DATABASE_HOST,
         "PORT": env.str("DATABASE_PORT", "5432"),
+        "CONN_MAX_AGE": env.int("DATABASE_CONN_MAX_AGE", 0),
+        "CONN_HEALTH_CHECKS": env.bool("DATABASE_CONN_HEALTH_CHECKS", False),
     }
 
-DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # We need to support both url and broken out host to support helm redis chart
 REDIS_HOST = env.str("REDIS_HOST", None)
@@ -359,16 +411,24 @@ if REDIS_HOST:
     REDIS_DATABASE = env.str("REDIS_DATABASE", "0")
     REDIS_PASSWORD = env.str("REDIS_PASSWORD", None)
     if REDIS_PASSWORD:
-        REDIS_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DATABASE}"
+        REDIS_URL = (
+            f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DATABASE}"
+        )
     else:
         REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DATABASE}"
 else:
     REDIS_URL = env.str("REDIS_URL", "redis://redis:6379/0")
+REDIS_RETRY = env.bool("REDIS_RETRY", True)
+REDIS_MAX_CONNECTIONS = env.int("REDIS_MAX_CONNECTIONS", 100)
 CELERY_BROKER_URL = env.str("CELERY_BROKER_URL", REDIS_URL)
 CELERY_BROKER_TRANSPORT_OPTIONS = {
     "fanout_prefix": True,
     "fanout_patterns": True,
+    "retry_on_timeout": REDIS_RETRY,
+    "max_connections": REDIS_MAX_CONNECTIONS,
 }
+CELERY_REDIS_RETRY_ON_TIMEOUT = REDIS_RETRY
+CELERY_REDIS_MAX_CONNECTIONS = REDIS_MAX_CONNECTIONS
 if CELERY_BROKER_URL.startswith("sentinel"):
     CELERY_BROKER_TRANSPORT_OPTIONS["master_name"] = env.str(
         "CELERY_BROKER_MASTER_NAME", "mymaster"
@@ -376,11 +436,13 @@ if CELERY_BROKER_URL.startswith("sentinel"):
 if socket_timeout := env.int("CELERY_BROKER_SOCKET_TIMEOUT", None):
     CELERY_BROKER_TRANSPORT_OPTIONS["socket_timeout"] = socket_timeout
 if broker_sentinel_password := env.str("CELERY_BROKER_SENTINEL_KWARGS_PASSWORD", None):
-    CELERY_BROKER_TRANSPORT_OPTIONS["sentinel_kwargs"] = {"password": broker_sentinel_password}
+    CELERY_BROKER_TRANSPORT_OPTIONS["sentinel_kwargs"] = {
+        "password": broker_sentinel_password
+    }
 
-CELERY_RESULT_BACKEND = "django-db"
-CELERY_RESULT_EXTENDED = True
-CELERY_CACHE_BACKEND = "django-cache"
+# Time in seconds to debounce some frequently run tasks
+TASK_DEBOUNCE_DELAY = env.int("TASK_DEBOUNCE_DELAY", 30)
+UPTIME_CHECK_INTERVAL = 10
 CELERY_BEAT_SCHEDULE = {
     "send-alert-notifications": {
         "task": "alerts.tasks.process_event_alerts",
@@ -404,7 +466,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     "uptime-dispatch-checks": {
         "task": "glitchtip.uptime.tasks.dispatch_checks",
-        "schedule": timedelta(seconds=30),
+        "schedule": UPTIME_CHECK_INTERVAL,
     },
 }
 
@@ -419,6 +481,12 @@ else:  # Default to REDIS when unset
             "BACKEND": "django_redis.cache.RedisCache",
             "LOCATION": REDIS_URL,
             "PARSER_CLASS": "redis.connection.HiredisParser",
+            "OPTIONS": {
+                "CONNECTION_POOL_KWARGS": {
+                    "retry_on_timeout": REDIS_RETRY,
+                    "max_connections": REDIS_MAX_CONNECTIONS,
+                }
+            },
         }
     }
 if cache_sentinel_url := env.str("CACHE_SENTINEL_URL", None):
@@ -426,11 +494,15 @@ if cache_sentinel_url := env.str("CACHE_SENTINEL_URL", None):
         cache_sentinel_host, cache_sentinel_port = cache_sentinel_url.split(":")
         SENTINELS = [(cache_sentinel_host, int(cache_sentinel_port))]
     except ValueError as err:
-        raise ImproperlyConfigured("Invalid cache redis sentinel url, format is host:port") from err
+        raise ImproperlyConfigured(
+            "Invalid cache redis sentinel url, format is host:port"
+        ) from err
     DJANGO_REDIS_CONNECTION_FACTORY = "django_redis.pool.SentinelConnectionFactory"
     CACHES["default"]["OPTIONS"]["SENTINELS"] = SENTINELS
 if cache_sentinel_password := env.str("CACHE_SENTINEL_PASSWORD", None):
-    CACHES["default"]["OPTIONS"]["SENTINEL_KWARGS"] = {"password": cache_sentinel_password}
+    CACHES["default"]["OPTIONS"]["SENTINEL_KWARGS"] = {
+        "password": cache_sentinel_password
+    }
 
 
 if os.environ.get("SESSION_ENGINE"):
@@ -468,8 +540,6 @@ TIME_ZONE = "UTC"
 
 USE_I18N = True
 
-USE_L10N = True
-
 USE_TZ = True
 
 SITE_ID = 1
@@ -492,7 +562,9 @@ GS_BUCKET_NAME = env("GS_BUCKET_NAME")
 GS_PROJECT_ID = env("GS_PROJECT_ID")
 
 if AWS_S3_ENDPOINT_URL:
-    MEDIA_URL = env.str("MEDIA_URL", "https://%s/%s/" % (AWS_S3_ENDPOINT_URL, AWS_LOCATION))
+    MEDIA_URL = env.str(
+        "MEDIA_URL", "https://%s/%s/" % (AWS_S3_ENDPOINT_URL, AWS_LOCATION)
+    )
     DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 else:
     MEDIA_URL = "media/"
@@ -504,7 +576,9 @@ STATICFILES_DIRS = [
 ]
 STATIC_ROOT = path("static/")
 STATICFILES_STORAGE = env("STATICFILES_STORAGE")
-EMAIL_BACKEND = env.str("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
+EMAIL_BACKEND = env.str(
+    "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
+)
 if os.getenv("EMAIL_HOST_USER"):
     EMAIL_HOST_USER = env.str("EMAIL_HOST_USER")
 if os.getenv("EMAIL_HOST_PASSWORD"):
@@ -552,32 +626,55 @@ if KEYCLOAK_URL := env.url("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_URL", None
 
     SOCIALACCOUNT_PROVIDERS["keycloak"] = {
         "KEYCLOAK_URL": KEYCLOAK_URL.geturl(),
-        "KEYCLOAK_REALM": env.str("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_REALM", None),
+        "KEYCLOAK_REALM": env.str(
+            "SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_REALM", None
+        ),
         "KEYCLOAK_URL_ALT": alt_url,
     }
 
-OLD_PASSWORD_FIELD_ENABLED = True
-LOGOUT_ON_PASSWORD_CHANGE = False
+# Parse oidc settings as nested dict in array. Example:
+# SOCIALACCOUNT_PROVIDERS_openid_connect_SERVERS_0_id: "g-oidc"
+# SOCIALACCOUNT_PROVIDERS_openid_connect_SERVERS_0_server_url: "https://accounts.google.com"
+oidc_prefix = "SOCIALACCOUNT_PROVIDERS_openid_connect_SERVERS_"
+oidc_pattern = re.compile(r"{prefix}\w+".format(prefix=oidc_prefix))
+oidc_servers = {}
+for key, value in {
+    key.replace(oidc_prefix, ""): val
+    for key, val in os.environ.items()
+    if oidc_pattern.match(key)
+}.items():
+    number, setting = key.split("_", 1)
+    if number in oidc_servers:
+        oidc_servers[number][setting] = value
+    else:
+        oidc_servers[number] = {setting: value}
+oidc_servers = [x for x in oidc_servers.values()]
+SOCIALACCOUNT_PROVIDERS["openid_connect"] = {"SERVERS": oidc_servers}
 
-REST_AUTH_SERIALIZERS = {
-    "USER_DETAILS_SERIALIZER": "users.serializers.UserSerializer",
-    "TOKEN_SERIALIZER": "users.serializers.NoopTokenSerializer",
-    "PASSWORD_RESET_SERIALIZER": "users.serializers.PasswordSetResetSerializer",
-}
-REST_AUTH_REGISTER_SERIALIZERS = {
-    "REGISTER_SERIALIZER": "users.serializers.RegisterSerializer",
-}
-REST_AUTH_TOKEN_MODEL = None
-REST_AUTH_TOKEN_CREATOR = "users.utils.noop_token_creator"
 
+# Remove in GlitchTip4.0
+if "ENABLE_OPEN_USER_REGISTRATION" in os.environ:
+    warnings.warn(
+        "ENABLE_OPEN_USER_REGISTRATION is deprecated. Set ENABLE_ORGANIZATION_CREATION instead.",
+        DeprecationWarning,
+    )
 ENABLE_USER_REGISTRATION = env.bool("ENABLE_USER_REGISTRATION", True)
 ENABLE_ORGANIZATION_CREATION = env.bool(
     "ENABLE_OPEN_USER_REGISTRATION", env.bool("ENABLE_ORGANIZATION_CREATION", False)
 )
 
-REST_AUTH_REGISTER_PERMISSION_CLASSES = (("glitchtip.permissions.UserRegistrationPermission"),)
-# Enables login urls for glitchtip backend
-ENABLE_LOGIN_FORM = env.bool("ENABLE_LOGIN_FORM", False)
+REST_AUTH = {
+    "TOKEN_MODEL": None,
+    "TOKEN_CREATOR": "users.utils.noop_token_creator",
+    "REGISTER_PERMISSION_CLASSES": (
+        "glitchtip.permissions.UserRegistrationPermission",
+    ),
+    "REGISTER_SERIALIZER": "users.serializers.RegisterSerializer",
+    "USER_DETAILS_SERIALIZER": "users.serializers.UserSerializer",
+    "TOKEN_SERIALIZER": "users.serializers.NoopTokenSerializer",
+    "PASSWORD_RESET_SERIALIZER": "users.serializers.PasswordSetResetSerializer",
+    "OLD_PASSWORD_FIELD_ENABLED": True,
+}
 
 AUTHENTICATION_BACKENDS = (
     # Needed to login by username in Django admin, regardless of `allauth`
@@ -651,12 +748,9 @@ if LOGGING_HANDLER_CLASS is not logging.StreamHandler:
 
 
 def organization_request_callback(request):
-    """Gets an organization instance from the id passed through ``request``"""
-    user = request.user
-    if user:
-        return user.organizations_ext_organization.filter(
-            owner__organization_user__user=user
-        ).first()
+    raise ImproperlyConfigured(
+        "Organization request callback required by dj-stripe but not used."
+    )
 
 
 # Set to track activity with Plausible
@@ -708,9 +802,11 @@ elif TESTING:
 CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", False)
 if TESTING:
     CELERY_TASK_ALWAYS_EAGER = True
-    STATICFILES_STORAGE = None
+    STATICFILES_STORAGE = global_settings.STATICFILES_STORAGE
     # https://github.com/evansd/whitenoise/issues/215
-    warnings.filterwarnings("ignore", message="No directory at", module="whitenoise.base")
+    warnings.filterwarnings(
+        "ignore", message="No directory at", module="whitenoise.base"
+    )
 if CELERY_TASK_ALWAYS_EAGER:
     CACHES = {
         "default": {
@@ -720,18 +816,3 @@ if CELERY_TASK_ALWAYS_EAGER:
 
 MFA_SERVER_NAME = GLITCHTIP_URL.hostname
 FIDO_SERVER_ID = GLITCHTIP_URL.hostname
-
-# Workaround for error encountered at build time (source: https://github.com/axnsan12/drf-yasg/issues/761#issuecomment-1014530805)
-class NoSourceMapsStorage(CompressedManifestStaticFilesStorage):
-    patterns = (
-        (
-            "*.css",
-            (
-                "(?P<matched>url\\(['\"]{0,1}\\s*(?P<url>.*?)[\"']{0,1}\\))",
-                (
-                    "(?P<matched>@import\\s*[\"']\\s*(?P<url>.*?)[\"'])",
-                    '@import url("%(url)s")',
-                ),
-            ),
-        ),
-    )

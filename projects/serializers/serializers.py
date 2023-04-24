@@ -1,10 +1,12 @@
 from rest_framework import serializers
+
 from organizations_ext.serializers.base_serializers import (
     OrganizationReferenceSerializer,
 )
 from teams.serializers import RelatedTeamSerializer
-from .base_serializers import ProjectReferenceWithMemberSerializer
+
 from ..models import ProjectKey
+from .base_serializers import ProjectReferenceWithMemberSerializer
 
 
 class ProjectKeySerializer(serializers.ModelSerializer):
