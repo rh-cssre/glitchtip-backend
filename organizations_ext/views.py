@@ -10,7 +10,6 @@ from rest_framework.filters import OrderingFilter
 from rest_framework.response import Response
 
 from organizations_ext.utils import is_organization_creation_open
-from projects.views import NestedProjectViewSet
 from teams.serializers import TeamSerializer
 
 from .invitation_backend import InvitationTokenGenerator
@@ -299,21 +298,3 @@ class AcceptInviteView(views.APIView):
             }
         )
         return Response(serializer.data)
-
-
-class OrganizationProjectsViewSet(NestedProjectViewSet):
-    def get_queryset(self, *args, **kwargs):
-        queryset = super().get_queryset(*args, **kwargs)
-        queries = self.request.GET.get("query")
-        # Pretty simplistic filters that don't match how django-filter works
-        # If this needs used more extensively, it should be abstracted more
-        if queries:
-            for query in queries.split():
-                query_part = query.split(":", 1)
-                if len(query_part) == 2:
-                    query_name, query_value = query_part
-                    if query_name == "team":
-                        queryset = queryset.filter(team__slug=query_value)
-                    if query_name == "!team":
-                        queryset = queryset.exclude(team__slug=query_value)
-        return queryset
