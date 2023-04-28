@@ -27,31 +27,42 @@ class Command(MakeSampleCommand):
 
         monitor_quantity = options["monitor_quantity"]
         checks_quantity_per = options["checks_quantity_per"]
-        for x in range(monitor_quantity):
-            monitor = Monitor.objects.create(
+
+        monitors = [
+            Monitor(
                 project=self.project,
-                name=f"Test Monitor #{x}",
+                name=f"Test Monitor #{i}",
                 organization=self.organization,
                 url="https://example.com",
                 interval="60",
                 monitor_type="Ping",
                 expected_status="200",
             )
+            for i in range(monitor_quantity)
+        ]
+        Monitor.objects.bulk_create(monitors)
 
-            checks = []
-            for y in range(checks_quantity_per):
-                with freeze_time(timezone.now() - timezone.timedelta(minutes=y)):
-                    checks.append(
-                        MonitorCheck(
-                            monitor=monitor,
-                            is_up=True,
-                            start_check=timezone.now() - timezone.timedelta(minutes=y),
-                            response_time=timezone.timedelta(
-                                milliseconds=randrange(1, 5000)
-                            ),
-                        )
+        # Create checks sequentially based on time
+        # Creates a better representation of data on disk
+        checks = []
+        start_time = timezone.now() - timezone.timedelta(minutes=checks_quantity_per)
+        for time_i in range(checks_quantity_per):
+            for monitor in monitors:
+                checks.append(
+                    MonitorCheck(
+                        monitor=monitor,
+                        is_up=True,
+                        start_check=start_time + timezone.timedelta(minutes=time_i),
+                        response_time=timezone.timedelta(
+                            milliseconds=randrange(1, 5000)
+                        ),
                     )
+                )
+            if len(checks) > 10000:
+                MonitorCheck.objects.bulk_create(checks)
+                self.progress_tick()
+                checks = []
+        if checks:
             MonitorCheck.objects.bulk_create(checks)
-            self.progress_tick()
 
         self.success_message('Successfully created "%s" monitors' % monitor_quantity)
