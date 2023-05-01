@@ -1,6 +1,6 @@
-from django.db.models import OuterRef, Prefetch, Subquery
+from django.db.models import F, Prefetch, Window
+from django.db.models.functions import RowNumber
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from rest_framework import exceptions, permissions, viewsets
 from rest_framework.generics import CreateAPIView
 
@@ -10,6 +10,7 @@ from .models import Monitor, MonitorCheck
 from .serializers import (
     HeartBeatCheckSerializer,
     MonitorCheckSerializer,
+    MonitorDetailSerializer,
     MonitorSerializer,
 )
 from .tasks import send_monitor_notification
@@ -25,7 +26,7 @@ class HeartBeatCheckView(CreateAPIView):
             organization__slug=self.kwargs.get("organization_slug"),
             endpoint_id=self.kwargs.get("endpoint_id"),
         )
-        monitor_check = serializer.save(monitor=monitor, is_up=True)
+        monitor_check = serializer.save(monitor=monitor, is_up=True, reason=None)
         if monitor.latest_is_up is False:
             send_monitor_notification.delay(
                 monitor_check.pk, False, monitor.last_change
@@ -36,6 +37,11 @@ class MonitorViewSet(viewsets.ModelViewSet):
     queryset = Monitor.objects.with_check_annotations()
     serializer_class = MonitorSerializer
 
+    def get_serializer_class(self):
+        if self.action in ["retrieve"]:
+            return MonitorDetailSerializer
+        return super().get_serializer_class()
+
     def get_queryset(self):
         if not self.request.user.is_authenticated:
             return self.queryset.none()
@@ -45,22 +51,23 @@ class MonitorViewSet(viewsets.ModelViewSet):
         if organization_slug:
             queryset = queryset.filter(organization__slug=organization_slug)
 
-        subqueryset = Subquery(
-            MonitorCheck.objects.filter(
-                monitor=OuterRef("monitor")
-            ).order_by("-start_check").values_list("id", flat=True)[:60]
-        )
-
-        # Optimization hack, we know the checks will be recent. No need to sort all checks ever.
-        hours_ago = timezone.now() - timezone.timedelta(hours=12)
-        queryset = queryset.prefetch_related(
-            Prefetch(
-                "checks",
-                queryset=MonitorCheck.objects.filter(
-                    id__in=subqueryset, start_check__gt=hours_ago
-                ).order_by("-start_check"),
+        # Fetch latest 60 checks for each monitor
+        queryset = (
+            queryset.prefetch_related(
+                Prefetch(
+                    "checks",
+                    queryset=MonitorCheck.objects.annotate(
+                        row_number=Window(
+                            expression=RowNumber(),
+                            order_by="-start_check",
+                            partition_by=F("monitor_id"),
+                        ),
+                    ).filter(row_number__lte=60),
+                )
             )
-        ).select_related("project").distinct()
+            .select_related("project")
+            .distinct()
+        )
         return queryset
 
     def perform_create(self, serializer):
