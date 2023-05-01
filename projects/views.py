@@ -1,14 +1,16 @@
-from rest_framework import viewsets, exceptions, status
+from django.shortcuts import get_object_or_404
+from rest_framework import exceptions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter
 from rest_framework.response import Response
-from django.shortcuts import get_object_or_404
+
+from organizations_ext.models import Organization, OrganizationUserRole
 from teams.models import Team
 from teams.views import NestedTeamViewSet
-from organizations_ext.models import Organization, OrganizationUserRole
+
 from .models import Project, ProjectKey
-from .serializers.serializers import ProjectSerializer, ProjectKeySerializer
-from .permissions import ProjectPermission, ProjectKeyPermission
+from .permissions import ProjectKeyPermission, ProjectPermission
+from .serializers.serializers import ProjectKeySerializer, ProjectSerializer
 
 
 class NestedProjectViewSet(viewsets.ModelViewSet):
@@ -27,7 +29,9 @@ class NestedProjectViewSet(viewsets.ModelViewSet):
         queryset = self.filter_queryset(self.get_queryset())
         slug = self.kwargs.get("project_slug", self.kwargs.get("slug"))
         obj = get_object_or_404(
-            queryset, slug=slug, organization__slug=self.kwargs["organization_slug"],
+            queryset,
+            slug=slug,
+            organization__slug=self.kwargs["organization_slug"],
         )
 
         self.check_object_permissions(self.request, obj)
@@ -127,7 +131,7 @@ class ProjectTeamViewSet(NestedTeamViewSet):
         organization_slug=None,
         team_slug=None,
     ):
-        """ Add/remove team to a project """
+        """Add/remove team to a project"""
         team = get_object_or_404(self.get_queryset(), slug=team_slug)
         project = get_object_or_404(
             Project,
