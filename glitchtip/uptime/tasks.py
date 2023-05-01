@@ -178,7 +178,7 @@ def send_monitor_notification(monitor_check_id: int, went_down: bool, last_chang
 @shared_task
 def cleanup_old_monitor_checks():
     """Delete older checks and associated data"""
-    days = settings.GLITCHTIP_MAX_EVENT_LIFE_DAYS
+    days = settings.GLITCHTIP_MAX_UPTIME_CHECK_LIFE_DAYS
     qs = MonitorCheck.objects.filter(
         start_check__lt=timezone.now() - timedelta(days=days)
     )
