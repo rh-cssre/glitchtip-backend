@@ -6,8 +6,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import OuterRef, Subquery
-
-from glitchtip.base_models import CreatedModel
+from django.utils.timezone import now
 
 from .constants import MonitorCheckReason, MonitorType
 
@@ -35,7 +34,8 @@ class MonitorManager(models.Manager):
         )
 
 
-class Monitor(CreatedModel):
+class Monitor(models.Model):
+    created = models.DateTimeField(auto_now_add=True)
     monitor_type = models.CharField(
         max_length=12, choices=MonitorType.choices, default=MonitorType.PING
     )
@@ -79,6 +79,9 @@ class Monitor(CreatedModel):
 
     objects = MonitorManager()
 
+    class Meta:
+        indexes = [models.Index(fields=["-created"])]
+
     def __str__(self):
         return self.name
 
@@ -105,13 +108,14 @@ class Monitor(CreatedModel):
         return self.timeout or 20
 
 
-class MonitorCheck(CreatedModel):
+class MonitorCheck(models.Model):
     monitor = models.ForeignKey(
         Monitor, on_delete=models.CASCADE, related_name="checks"
     )
     is_up = models.BooleanField()
     start_check = models.DateTimeField(
-        help_text="Time when the start of this check was performed"
+        default=now,
+        help_text="Time when the start of this check was performed",
     )
     reason = models.PositiveSmallIntegerField(
         choices=MonitorCheckReason.choices, default=0, null=True, blank=True
@@ -120,10 +124,8 @@ class MonitorCheck(CreatedModel):
     data = models.JSONField(null=True, blank=True)
 
     class Meta:
-        indexes = [
-            models.Index(fields=["start_check", "monitor"]),
-        ]
-        ordering = ("-created",)
+        indexes = [models.Index(fields=["monitor", "-start_check"])]
+        ordering = ("-start_check",)
 
     def __str__(self):
         return self.up_or_down

@@ -5,8 +5,8 @@ from typing import List
 from celery import shared_task
 from django.conf import settings
 from django.core.cache import cache
-from django.db import models, transaction
-from django.db.models import DateTimeField, ExpressionWrapper, F, OuterRef, Q, Subquery
+from django.db import models
+from django.db.models import F, Q
 from django.db.models.expressions import Func
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -178,7 +178,9 @@ def send_monitor_notification(monitor_check_id: int, went_down: bool, last_chang
 @shared_task
 def cleanup_old_monitor_checks():
     """Delete older checks and associated data"""
-    days = settings.GLITCHTIP_MAX_EVENT_LIFE_DAYS
-    qs = MonitorCheck.objects.filter(created__lt=timezone.now() - timedelta(days=days))
+    days = settings.GLITCHTIP_MAX_UPTIME_CHECK_LIFE_DAYS
+    qs = MonitorCheck.objects.filter(
+        start_check__lt=timezone.now() - timedelta(days=days)
+    )
     # pylint: disable=protected-access
     qs._raw_delete(qs.db)  # noqa

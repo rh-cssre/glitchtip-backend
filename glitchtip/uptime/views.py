@@ -1,9 +1,11 @@
 from django.db.models import F, Prefetch, Window
 from django.db.models.functions import RowNumber
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import exceptions, permissions, viewsets
 from rest_framework.generics import CreateAPIView
 
+from glitchtip.pagination import LinkHeaderPagination
 from organizations_ext.models import Organization
 
 from .models import Monitor, MonitorCheck
@@ -52,22 +54,23 @@ class MonitorViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(organization__slug=organization_slug)
 
         # Fetch latest 60 checks for each monitor
-        queryset = (
-            queryset.prefetch_related(
-                Prefetch(
-                    "checks",
-                    queryset=MonitorCheck.objects.annotate(
-                        row_number=Window(
-                            expression=RowNumber(),
-                            order_by="-start_check",
-                            partition_by=F("monitor_id"),
-                        ),
-                    ).filter(row_number__lte=60),
+        queryset = queryset.prefetch_related(
+            Prefetch(
+                "checks",
+                queryset=MonitorCheck.objects.filter(  # Optimization
+                    start_check__gt=timezone.now() - timezone.timedelta(hours=12)
                 )
+                .annotate(
+                    row_number=Window(
+                        expression=RowNumber(),
+                        order_by="-start_check",
+                        partition_by=F("monitor"),
+                    ),
+                )
+                .filter(row_number__lte=60)
+                .distinct(),
             )
-            .select_related("project")
-            .distinct()
-        )
+        ).select_related("project")
         return queryset
 
     def perform_create(self, serializer):
@@ -75,14 +78,19 @@ class MonitorViewSet(viewsets.ModelViewSet):
             organization = Organization.objects.get(
                 slug=self.kwargs.get("organization_slug"), users=self.request.user
             )
-        except Organization.DoesNotExist:
-            raise exceptions.ValidationError("Organization not found")
+        except Organization.DoesNotExist as exc:
+            raise exceptions.ValidationError("Organization not found") from exc
         serializer.save(organization=organization)
+
+
+class MonitorCheckPagination(LinkHeaderPagination):
+    ordering = "-start_check"
 
 
 class MonitorCheckViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = MonitorCheck.objects.all()
     serializer_class = MonitorCheckSerializer
+    pagination_class = MonitorCheckPagination
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
@@ -95,4 +103,4 @@ class MonitorCheckViewSet(viewsets.ReadOnlyModelViewSet):
         monitor_pk = self.kwargs.get("monitor_pk")
         if monitor_pk:
             queryset = queryset.filter(monitor__pk=monitor_pk)
-        return queryset
+        return queryset.only("is_up", "start_check", "reason", "response_time")

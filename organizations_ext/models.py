@@ -136,6 +136,7 @@ class OrganizationManager(OrgManager):
     def with_event_counts(self, current_period=True):
         subscription_filter = Q()
         event_subscription_filter = Q()
+        checks_subscription_filter = Q()
         if current_period and settings.BILLING_ENABLED:
             subscription_filter = Q(
                 created__gte=OuterRef(
@@ -150,6 +151,14 @@ class OrganizationManager(OrgManager):
                     "djstripe_customers__subscriptions__current_period_start"
                 ),
                 date__lt=OuterRef(
+                    "djstripe_customers__subscriptions__current_period_end"
+                ),
+            )
+            checks_subscription_filter = Q(
+                start_check__gte=OuterRef(
+                    "djstripe_customers__subscriptions__current_period_start"
+                ),
+                start_check__lt=OuterRef(
                     "djstripe_customers__subscriptions__current_period_end"
                 ),
             )
@@ -170,7 +179,7 @@ class OrganizationManager(OrgManager):
                 0,
             ),
             uptime_check_event_count=SubqueryCount(
-                "monitor__checks", filter=subscription_filter
+                "monitor__checks", filter=checks_subscription_filter
             ),
             file_size=(
                 Coalesce(
