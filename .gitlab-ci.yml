@@ -54,7 +54,7 @@ build:
   services:
     - docker:23-dind
   script:
-    - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN registry.gitlab.com
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN registry.gitlab.com
     - docker build -t ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME//\//-} --build-arg IS_CI="True" .
     - docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME//\//-}
   rules:
