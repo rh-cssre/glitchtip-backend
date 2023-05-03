@@ -48,6 +48,9 @@ class Command(MakeSampleCommand):
         start_time = timezone.now() - timezone.timedelta(minutes=checks_quantity_per)
         for time_i in range(checks_quantity_per):
             for monitor in monitors:
+                import ipdb
+
+                ipdb.set_trace()
                 checks.append(
                     MonitorCheck(
                         monitor=monitor,
