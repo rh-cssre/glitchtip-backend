@@ -18,6 +18,14 @@ ON event_stat.date >= gs.ts AND event_stat.date < gs.ts +  interval '1 hour'
 WHERE event_stat.project_id = ANY(%s) or event_stat is null
 GROUP BY gs.ts ORDER BY gs.ts;
 """
+TRANSACTION_TIME_SERIES_SQL = """
+SELECT gs.ts, sum(transaction_stat.count)
+FROM generate_series(%s, %s, %s::interval) gs (ts)
+LEFT JOIN projects_transactioneventprojecthourlystatistic transaction_stat
+ON transaction_stat.date >= gs.ts AND transaction_stat.date < gs.ts +  interval '1 hour'
+WHERE transaction_stat.project_id = ANY(%s) or transaction_stat is null
+GROUP BY gs.ts ORDER BY gs.ts;
+"""
 
 
 class StatsV2View(views.APIView):
@@ -72,6 +80,13 @@ class StatsV2View(views.APIView):
             with connection.cursor() as cursor:
                 cursor.execute(
                     EVENT_TIME_SERIES_SQL,
+                    [start, end, interval, project_ids],
+                )
+                series = cursor.fetchall()
+        elif category == "transaction":
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    TRANSACTION_TIME_SERIES_SQL,
                     [start, end, interval, project_ids],
                 )
                 series = cursor.fetchall()
