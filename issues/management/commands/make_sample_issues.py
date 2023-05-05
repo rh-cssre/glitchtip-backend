@@ -11,7 +11,7 @@ from glitchtip.utils import get_random_string
 from issues.models import EventType, Issue
 from projects.models import Project
 
-from .issue_generator import TITLE_CHOICES, CULPRITS, generate_tag
+from .issue_generator import TITLE_CHOICES, CULPRITS, generate_tag, SDKS, EXCEPTIONS
 
 
 class Command(MakeSampleCommand):
@@ -84,8 +84,13 @@ class Command(MakeSampleCommand):
         events = []
         for issue in issues:
             for _ in range(issue.count):
+                data = issue.metadata.copy()
+                data["sdk"] = random.choice(SDKS)
+                data["culprit"] = issue.culprit
+                data["exception"] = random.choice(EXCEPTIONS)
+                tags = generate_tag() or {}
                 events.append(
-                    Event(issue=issue, level=issue.level, data=issue.metadata)
+                    Event(issue=issue, level=issue.level, data=data, tags=tags)
                 )
             if len(events) > 10000:
                 Event.objects.bulk_create(events)

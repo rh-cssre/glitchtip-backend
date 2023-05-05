@@ -26,6 +26,55 @@ SDKS = [
     },
     {"name": "sentry.php.laravel", "version": "2.9.0"},
 ]
+EXCEPTIONS = [
+    {
+        "values": [
+            {
+                "type": "Error",
+                "value": "A Generic Error 9371d7",
+                "stacktrace": {
+                    "frames": [
+                        {
+                            "colno": 27,
+                            "filename": "http://localhost:4201/polyfills.js",
+                            "function": "globalZoneAwareCallback",
+                            "in_app": True,
+                            "lineno": 4864,
+                        },
+                    ]
+                },
+            }
+        ]
+    },
+    {
+        "values": [
+            {
+                "type": "System.DivideByZeroException",
+                "value": "Attempted to divide by zero.",
+                "module": "System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=1111111111111111",
+                "thread_id": 1,
+                "stacktrace": {
+                    "frames": [
+                        {
+                            "function": "Invoke",
+                            "module": "Microsoft.AspNetCore.Diagnostics.DeveloperExceptionPageMiddleware",
+                            "in_app": False,
+                            "package": "Microsoft.AspNetCore.Diagnostics, Version=3.1.3.0, Culture=neutral, PublicKeyToken=111111",
+                            "instruction_offset": 130,
+                        },
+                        {
+                            "function": "InvokeHandlerMethodAsync",
+                            "module": "Microsoft.AspNetCore.Mvc.RazorPages.Infrastructure.PageActionInvoker",
+                            "in_app": False,
+                            "package": "Microsoft.AspNetCore.Mvc.RazorPages, Version=3.1.3.0, Culture=neutral, PublicKeyToken=111111",
+                            "instruction_offset": 202,
+                        },
+                    ]
+                },
+            }
+        ]
+    },
+]
 BROWSER_TAGS = [
     {
         "device": "Desktop",

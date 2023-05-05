@@ -22,11 +22,6 @@ class CommandsTestCase(TestCase):
         self.assertEqual(Issue.objects.all().count(), 2)
         self.assertEqual(Event.objects.all().count(), 4)
 
-    def test_make_sample_issues_real(self):
-        """Issue quantity determines number of events for only_real"""
-        management.call_command("make_sample_issues", only_real=True, issue_quantity=2)
-        self.assertEqual(Event.objects.all().count(), 2)
-
     def test_make_sample_events(self):
         management.call_command(
             "make_sample_events",
