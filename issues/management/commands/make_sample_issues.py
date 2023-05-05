@@ -1,8 +1,8 @@
 import random
 
+from django.contrib.postgres.search import SearchVector
 from model_bakery import baker
 
-from django.contrib.postgres.search import SearchVector
 from events.models import Event
 from events.test_data import bulk_event_data, event_generator
 from events.views import EventStoreAPIView
@@ -11,7 +11,7 @@ from glitchtip.utils import get_random_string
 from issues.models import EventType, Issue
 from projects.models import Project
 
-from .issue_generator import TITLE_CHOICES, CULPRITS, generate_tag, SDKS, EXCEPTIONS
+from .issue_generator import CULPRITS, EXCEPTIONS, SDKS, TITLE_CHOICES, generate_tag
 
 
 class Command(MakeSampleCommand):

@@ -1,6 +1,5 @@
 import random
 
-
 from glitchtip.test_utils.test_data import ENVIRONMENTS, RELEASES
 from issues.models import EventType, Issue
 
