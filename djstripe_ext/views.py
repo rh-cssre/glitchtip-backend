@@ -85,17 +85,13 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
                 }
             )
         organization = subscription.customer.subscriber
-        cache_key = "org_event_count" + str(organization.pk)
-        data = cache.get(cache_key)
-        if data is None:
-            org = Organization.objects.with_event_counts().get(pk=organization.pk)
-            data = {
-                "eventCount": org.issue_event_count,
-                "transactionEventCount": org.transaction_count,
-                "uptimeCheckEventCount": org.uptime_check_event_count,
-                "fileSizeMB": org.file_size,
-            }
-            cache.set(cache_key, data, 600)
+        org = Organization.objects.with_event_counts().get(pk=organization.pk)
+        data = {
+            "eventCount": org.issue_event_count,
+            "transactionEventCount": org.transaction_count,
+            "uptimeCheckEventCount": org.uptime_check_event_count,
+            "fileSizeMB": org.file_size,
+        }
         return Response(data)
 
 

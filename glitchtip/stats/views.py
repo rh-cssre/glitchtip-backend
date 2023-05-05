@@ -11,13 +11,11 @@ from projects.models import Project
 from .serializers import StatsV2Serializer
 
 EVENT_TIME_SERIES_SQL = """
-SELECT gs.ts, count(event.created)
+SELECT gs.ts, sum(event_stat.count)
 FROM generate_series(%s, %s, %s::interval) gs (ts)
-LEFT JOIN events_event event
-ON event.created >= gs.ts AND event.created < gs.ts +  interval '1 hour'
-LEFT JOIN issues_issue issue
-ON event.issue_id = issue.id or event is null
-WHERE issue.project_id = ANY(%s)
+LEFT JOIN projects_eventprojecthourlystatistic event_stat
+ON event_stat.date >= gs.ts AND event_stat.date < gs.ts +  interval '1 hour'
+WHERE event_stat.project_id = ANY(%s) or event_stat is null
 GROUP BY gs.ts ORDER BY gs.ts;
 """
 
