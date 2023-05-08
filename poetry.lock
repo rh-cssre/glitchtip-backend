@@ -1005,13 +1005,13 @@ graph = ["objgraph (>=1.7.2)"]
 
 [[package]]
 name = "dj-rest-auth"
-version = "3.0.0"
+version = "4.0.0"
 description = "Authentication and Registration in Django Rest Framework"
 category = "main"
 optional = false
 python-versions = ">=3.5"
 files = [
-    {file = "dj-rest-auth-3.0.0.tar.gz", hash = "sha256:ee792c6b380dac20ecacb79769681cc30896f56ddf8212d370f7c220a5c6a0cf"},
+    {file = "dj-rest-auth-4.0.0.tar.gz", hash = "sha256:75f5cba821500ffd81574beb6e164b428d19141fda94252a6423396292cd53c3"},
 ]
 
 [package.dependencies]
@@ -4678,4 +4678,4 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "f58e8e5065ca963b713e884b8e65efedf698fa44790ceffece4b7fa1d14b38f9"
+content-hash = "a40483f02c281e64792baaad967aa9e5239a818d2856010090b5f0cecf6070c7"
