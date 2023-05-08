@@ -6,7 +6,7 @@ from organizations_ext.serializers.base_serializers import (
 from teams.serializers import RelatedTeamSerializer
 
 from ..models import ProjectKey
-from .base_serializers import ProjectReferenceWithMemberSerializer
+from .base_serializers import ProjectReferenceSerializer
 
 
 class ProjectKeySerializer(serializers.ModelSerializer):
@@ -28,7 +28,7 @@ class ProjectKeySerializer(serializers.ModelSerializer):
         }
 
 
-class ProjectSerializer(ProjectReferenceWithMemberSerializer):
+class BaseProjectSerializer(ProjectReferenceSerializer):
     avatar = serializers.SerializerMethodField()
     color = serializers.SerializerMethodField()
     dateCreated = serializers.DateTimeField(source="created", read_only=True)
@@ -38,14 +38,13 @@ class ProjectSerializer(ProjectReferenceWithMemberSerializer):
     id = serializers.CharField(read_only=True)
     isBookmarked = serializers.SerializerMethodField()
     isInternal = serializers.SerializerMethodField()
+    isMember = serializers.SerializerMethodField()
     isPublic = serializers.SerializerMethodField()
-    organization = OrganizationReferenceSerializer(read_only=True)
-    teams = RelatedTeamSerializer(source="team_set", read_only=True, many=True)
     scrubIPAddresses = serializers.BooleanField(
         source="scrub_ip_addresses", required=False
     )
 
-    class Meta(ProjectReferenceWithMemberSerializer.Meta):
+    class Meta(ProjectReferenceSerializer.Meta):
         fields = (
             "avatar",
             "color",
@@ -58,8 +57,6 @@ class ProjectSerializer(ProjectReferenceWithMemberSerializer):
             "isMember",
             "isPublic",
             "name",
-            "organization",
-            "teams",
             "scrubIPAddresses",
             "slug",
             "dateCreated",
@@ -85,8 +82,39 @@ class ProjectSerializer(ProjectReferenceWithMemberSerializer):
     def get_isInternal(self, obj):
         return False
 
+    def get_isMember(self, obj):
+        user_id = self.context["request"].user.id
+        teams = obj.team_set.all()
+        # This is actually more performant than:
+        # return obj.team_set.filter(members=user).exists()
+        for team in teams:
+            if user_id in team.members.all().values_list("user_id", flat=True):
+                return True
+        return False
+
     def get_isPublic(self, obj):
         return False
+
+
+class ProjectSerializer(BaseProjectSerializer):
+    organization = OrganizationReferenceSerializer(read_only=True)
+
+    class Meta(BaseProjectSerializer.Meta):
+        fields = BaseProjectSerializer.Meta.fields + ("organization",)
+
+
+class ProjectDetailSerializer(ProjectSerializer):
+    teams = RelatedTeamSerializer(source="team_set", read_only=True, many=True)
+
+    class Meta(ProjectSerializer.Meta):
+        fields = ProjectSerializer.Meta.fields + ("teams",)
+
+
+class OrganizationProjectSerializer(BaseProjectSerializer):
+    teams = RelatedTeamSerializer(source="team_set", read_only=True, many=True)
+
+    class Meta(BaseProjectSerializer.Meta):
+        fields = BaseProjectSerializer.Meta.fields + ("teams",)
 
 
 class ProjectWithKeysSerializer(ProjectSerializer):

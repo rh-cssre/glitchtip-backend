@@ -6,13 +6,13 @@ from glitchtip.routers import BulkSimpleRouter
 from glitchtip.uptime.views import MonitorCheckViewSet, MonitorViewSet
 from issues.views import IssueViewSet
 from performance.views import SpanViewSet, TransactionGroupViewSet, TransactionViewSet
+from projects.views import OrganizationProjectsViewSet
 from releases.views import ReleaseFileViewSet, ReleaseViewSet
 from teams.views import NestedTeamViewSet
 
 from .views import (
     AcceptInviteView,
     OrganizationMemberViewSet,
-    OrganizationProjectsViewSet,
     OrganizationUserViewSet,
     OrganizationViewSet,
 )

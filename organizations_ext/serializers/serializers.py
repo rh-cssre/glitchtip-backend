@@ -1,7 +1,7 @@
 from rest_framework import serializers, status
 from rest_framework.exceptions import APIException, PermissionDenied
 
-from projects.serializers.base_serializers import ProjectReferenceWithMemberSerializer
+from projects.serializers.serializers import OrganizationProjectSerializer
 from teams.models import Team
 from teams.serializers import TeamSerializer
 from users.models import User
@@ -17,7 +17,7 @@ class OrganizationSerializer(OrganizationReferenceSerializer):
 
 
 class OrganizationDetailSerializer(OrganizationSerializer):
-    projects = ProjectReferenceWithMemberSerializer(many=True)
+    projects = OrganizationProjectSerializer(many=True)
     teams = TeamSerializer(many=True)
     openMembership = serializers.BooleanField(source="open_membership")
     scrubIPAddresses = serializers.BooleanField(source="scrub_ip_addresses")

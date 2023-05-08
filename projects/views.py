@@ -1,5 +1,5 @@
 from django.shortcuts import get_object_or_404
-from rest_framework import exceptions, status, viewsets
+from rest_framework import exceptions, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter
 from rest_framework.response import Response
@@ -10,18 +10,18 @@ from teams.views import NestedTeamViewSet
 
 from .models import Project, ProjectKey
 from .permissions import ProjectKeyPermission, ProjectPermission
-from .serializers.serializers import ProjectKeySerializer, ProjectSerializer
+from .serializers.serializers import (
+    BaseProjectSerializer,
+    OrganizationProjectSerializer,
+    ProjectDetailSerializer,
+    ProjectKeySerializer,
+    ProjectSerializer,
+)
 
 
-class NestedProjectViewSet(viewsets.ModelViewSet):
-    """
-    Detail view is under /api/0/projects/{organization_slug}/{project_slug}/
-
-    Project keys/DSN's are available at /api/0/projects/{organization_slug}/{project_slug}/keys/
-    """
-
+class BaseProjectViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = BaseProjectSerializer
     queryset = Project.objects.all()
-    serializer_class = ProjectSerializer
     lookup_field = "slug"
     permission_classes = [ProjectPermission]
 
@@ -39,16 +39,62 @@ class NestedProjectViewSet(viewsets.ModelViewSet):
         return obj
 
     def get_queryset(self):
-        if self.request.user.is_authenticated:
-            queryset = self.queryset.filter(organization__users=self.request.user)
-            organization_slug = self.kwargs.get("organization_slug")
-            if organization_slug:
-                queryset = queryset.filter(organization__slug=organization_slug)
-            team_slug = self.kwargs.get("team_slug")
-            if team_slug:
-                queryset = queryset.filter(team__slug=team_slug)
-            return queryset
-        return self.queryset.none()
+        if not self.request.user.is_authenticated:
+            return self.queryset.none()
+        queryset = self.queryset.filter(
+            organization__users=self.request.user
+        ).prefetch_related("team_set")
+        organization_slug = self.kwargs.get("organization_slug")
+        if organization_slug:
+            queryset = queryset.filter(organization__slug=organization_slug)
+        team_slug = self.kwargs.get("team_slug")
+        if team_slug:
+            queryset = queryset.filter(team__slug=team_slug)
+        return queryset
+
+
+class ProjectViewSet(
+    mixins.DestroyModelMixin, mixins.UpdateModelMixin, BaseProjectViewSet
+):
+    """
+    /api/0/projects/
+
+    Includes organization
+    Detail view includes teams
+    """
+
+    serializer_class = ProjectSerializer
+    filter_backends = [OrderingFilter]
+    ordering = ["name"]
+    ordering_fields = ["name"]
+    lookup_field = "pk"
+    lookup_value_regex = r"(?P<organization_slug>[^/.]+)/(?P<project_slug>[-\w]+)"
+
+    def get_serializer_class(self):
+        if self.action in ["retrieve"]:
+            return ProjectDetailSerializer
+        return super().get_serializer_class()
+
+    def get_queryset(self):
+        queryset = super().get_queryset().select_related("organization")
+        if self.action in ["retrieve"]:
+            queryset = queryset.prefetch_related("team_set")
+        return queryset
+
+
+class TeamProjectViewSet(
+    mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    BaseProjectViewSet,
+):
+    """
+    Detail view is under /api/0/projects/{organization_slug}/{project_slug}/
+
+    Project keys/DSN's are available at /api/0/projects/{organization_slug}/{project_slug}/keys/
+    """
+
+    serializer_class = ProjectDetailSerializer
 
     def perform_create(self, serializer):
         team = None
@@ -60,34 +106,46 @@ class NestedProjectViewSet(viewsets.ModelViewSet):
                     organization__users=self.request.user,
                     organization__organization_users__role__gte=OrganizationUserRole.ADMIN,
                 )
-            except Team.DoesNotExist:
-                raise exceptions.ValidationError("Team not found")
+            except Team.DoesNotExist as err:
+                raise exceptions.ValidationError("Team not found") from err
         try:
             organization = Organization.objects.get(
                 slug=self.kwargs.get("organization_slug"),
                 users=self.request.user,
                 organization_users__role__gte=OrganizationUserRole.ADMIN,
             )
-        except Organization.DoesNotExist:
-            raise exceptions.ValidationError("Organization not found")
+        except Organization.DoesNotExist as err:
+            raise exceptions.ValidationError("Organization not found") from err
 
         new_project = serializer.save(organization=organization)
         if new_project and team:
             new_project.team_set.add(team)
 
 
-class ProjectViewSet(NestedProjectViewSet):
-    filter_backends = [OrderingFilter]
-    ordering = ["name"]
-    ordering_fields = ["name"]
-    lookup_field = "pk"
-    lookup_value_regex = r"(?P<organization_slug>[^/.]+)/(?P<project_slug>[-\w]+)"
+class OrganizationProjectsViewSet(BaseProjectViewSet):
+    """
+    /organizations/<org-slug>/projects/
 
-    def create(self, request, *args, **kwargs):
-        raise exceptions.MethodNotAllowed(
-            request.method,
-            "Create project not allowed. Use team-projects view instead.",
-        )
+    Includes teams
+    """
+
+    serializer_class = OrganizationProjectSerializer
+
+    def get_queryset(self, *args, **kwargs):
+        queryset = super().get_queryset(*args, **kwargs)
+        queries = self.request.GET.get("query")
+        # Pretty simplistic filters that don't match how django-filter works
+        # If this needs used more extensively, it should be abstracted more
+        if queries:
+            for query in queries.split():
+                query_part = query.split(":", 1)
+                if len(query_part) == 2:
+                    query_name, query_value = query_part
+                    if query_name == "team":
+                        queryset = queryset.filter(team__slug=query_value)
+                    if query_name == "!team":
+                        queryset = queryset.exclude(team__slug=query_value)
+        return queryset
 
 
 class ProjectKeyViewSet(viewsets.ModelViewSet):

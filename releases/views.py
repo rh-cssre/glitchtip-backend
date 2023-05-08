@@ -17,6 +17,13 @@ from .serializers import (
 
 
 class ReleaseViewSet(viewsets.ModelViewSet):
+    """
+    /organizations/<org-slug>/releases/
+
+    Sentry includes only project name and slug in nested list. This view uses ProjectReferenceSerializer,
+    which also includes id and platform, for consistency.
+    """
+
     queryset = Release.objects.all()
     serializer_class = ReleaseSerializer
     permission_classes = [ReleasePermission]
