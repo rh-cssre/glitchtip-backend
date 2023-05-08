@@ -8,7 +8,7 @@ from api_tokens.models import APIToken
 class BearerTokenAuthentication(TokenAuthentication):
     """
     Customized TokenAuthentication to support the APIToken model
-    and sentry-cli's usage of bearer 
+    and sentry-cli's usage of bearer
     """
 
     keyword = "Bearer"
