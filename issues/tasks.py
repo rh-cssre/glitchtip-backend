@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from celery import shared_task
+from django.db import connection
 from django.conf import settings
 from django.utils.timezone import now
 
@@ -50,3 +51,12 @@ def update_search_index_issue(issue_id: int):
     Usage: update_search_index_issue(args=[issue_id], countdown=10)
     """
     Issue.update_index(issue_id)
+
+
+@shared_task
+def reindex_issues_model():
+    """
+    The GIN index on the issues table grows indefinitely, it needs reindexed regularly
+    """
+    with connection.cursor() as cursor:
+        cursor.execute("REINDEX TABLE CONCURRENTLY issues_issue")
