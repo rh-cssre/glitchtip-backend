@@ -1,8 +1,8 @@
 from datetime import timedelta
 
 from celery import shared_task
-from django.db import connection
 from django.conf import settings
+from django.db import connection
 from django.utils.timezone import now
 
 from events.models import Event
