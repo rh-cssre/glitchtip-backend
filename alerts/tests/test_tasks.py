@@ -185,7 +185,7 @@ class AlertTestCase(GlitchTipTestCase):
             timespan_minutes=1,
             quantity=1,
         )
-        with self.assertNumQueries(5):
+        with self.assertNumQueries(1):
             process_event_alerts()
 
 
