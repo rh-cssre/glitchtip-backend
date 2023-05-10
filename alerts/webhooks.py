@@ -116,7 +116,87 @@ def send_issue_as_webhook(url, issues: List["Issue"], issue_count: int = 1):
     return send_webhook(url, message, attachments, sections)
 
 
+@dataclass
+class DiscordField:
+    name: str
+    value: str
+    inline: bool = False
+
+
+@dataclass
+class DiscordEmbed:
+    title: str
+    description: str
+    color: int
+    url: str
+    fields: List[DiscordField]
+
+
+@dataclass
+class DiscordWebhookPayload:
+    content: str
+    embeds: List[DiscordEmbed]
+
+
+def send_issue_as_discord_webhook(url, issues: List["Issue"], issue_count: int = 1):
+    embeds = []
+
+    for issue in issues:
+        fields = [
+            DiscordField(
+                name="Project",
+                value=issue.project.name,
+                inline=True,
+            )
+        ]
+        environment = issue.tags.get("environment")
+        if environment:
+            fields.append(
+                DiscordField(
+                    name="Environment",
+                    value=environment[0],
+                    inline=True,
+                )
+            )
+        release = issue.tags.get("release")
+        if release:
+            fields.append(
+                DiscordField(
+                    name="Release",
+                    value=release[0],
+                    inline=False,
+                )
+            )
+
+        embeds.append(
+         DiscordEmbed(
+                title=str(issue),
+                description=issue.culprit,
+                color=int(issue.get_hex_color()[1:], 16),
+                url=issue.get_detail_url(),
+                fields=fields,
+            )
+        )
+
+
+    message = "GlitchTip Alert"
+    if issue_count > 1:
+        message += f" ({issue_count} issues)"
+
+    payload = DiscordWebhookPayload(
+        content=message,
+        embeds=embeds
+    )
+
+    return requests.post(url, json=asdict(payload))
+
+
 def send_webhook_notification(notification: "Notification", url: str):
     issue_count = notification.issues.count()
     issues = notification.issues.all()[:3]  # Show no more than three
+
+    if url.startswith("https://discord.com"):
+        send_issue_as_discord_webhook(url, issues, issue_count)
+        return
+
     send_issue_as_webhook(url, issues, issue_count)
