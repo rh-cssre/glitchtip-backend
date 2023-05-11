@@ -8,7 +8,7 @@ class AlertRecipientSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AlertRecipient
-        fields = ("pk", "recipientType", "url")
+        fields = ("pk", "recipientType", "url", "webhook_type")
 
 
 class ProjectAlertSerializer(serializers.ModelSerializer):

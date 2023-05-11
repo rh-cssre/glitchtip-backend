@@ -28,8 +28,16 @@ class AlertRecipient(models.Model):
         EMAIL = "email", _("Email")
         WEBHOOK = "webhook", _("Webhook")
 
+    class WebhookType(models.TextChoices):
+        DISCORD = "discord", _("Discord")
+        SLACK = "slack", _("Slack")
+        MICROSOFT_TEAMS = "microsoft_teams", _("Microsoft Teams")
+        ROCKET_CHAT = "rocket_chat", _("Rocket.Chat")
+        GENERAL = "general_webhook", _("General Webhook") # Backwards Compatibility
+
     alert = models.ForeignKey(ProjectAlert, on_delete=models.CASCADE)
     recipient_type = models.CharField(max_length=16, choices=RecipientType.choices)
+    webhook_type = models.CharField(max_length=255, default=WebhookType.GENERAL, choices=WebhookType.choices)
     url = models.URLField(max_length=2000, blank=True)
 
     class Meta:
@@ -39,13 +47,14 @@ class AlertRecipient(models.Model):
         if self.recipient_type == self.RecipientType.EMAIL:
             send_email_notification(notification)
         elif self.recipient_type == self.RecipientType.WEBHOOK:
-            send_webhook_notification(notification, self.url)
+            send_webhook_notification(notification, self.url, self.webhook_type)
 
 
 class Notification(CreatedModel):
     project_alert = models.ForeignKey(ProjectAlert, on_delete=models.CASCADE)
     is_sent = models.BooleanField(default=False)
     issues = models.ManyToManyField("issues.Issue")
+
 
     def send_notifications(self):
         for recipient in self.project_alert.alertrecipient_set.all():

@@ -6,7 +6,7 @@ import requests
 if TYPE_CHECKING:
     from issues.models import Issue
 
-    from .models import Notification
+    from .models import Notification, AlertRecipient
 
 
 @dataclass
@@ -191,12 +191,15 @@ def send_issue_as_discord_webhook(url, issues: List["Issue"], issue_count: int =
     return requests.post(url, json=asdict(payload))
 
 
-def send_webhook_notification(notification: "Notification", url: str):
+def send_webhook_notification(notification: "Notification", url: str, webhook_type: str):
     issue_count = notification.issues.count()
     issues = notification.issues.all()[:3]  # Show no more than three
 
-    if url.startswith("https://discord.com"):
-        send_issue_as_discord_webhook(url, issues, issue_count)
-        return
+    match webhook_type:
+        case AlertRecipient.WebhookType.DISCORD:
+            send_issue_as_discord_webhook(url, issues, issue_count)
+            return
+        case _:
+            send_issue_as_webhook(url, issues, issue_count)
 
-    send_issue_as_webhook(url, issues, issue_count)
+
