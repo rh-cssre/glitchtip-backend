@@ -6,7 +6,7 @@ import requests
 if TYPE_CHECKING:
     from issues.models import Issue
 
-    from .models import Notification, AlertRecipient
+    from .models import Notification
 
 
 @dataclass
@@ -172,7 +172,7 @@ def send_issue_as_discord_webhook(url, issues: List["Issue"], issue_count: int =
          DiscordEmbed(
                 title=str(issue),
                 description=issue.culprit,
-                color=int(issue.get_hex_color()[1:], 16),
+                color=int(issue.get_hex_color()[1:], 16) if issue.get_hex_color() is not None else None,
                 url=issue.get_detail_url(),
                 fields=fields,
             )
@@ -196,7 +196,7 @@ def send_webhook_notification(notification: "Notification", url: str, webhook_ty
     issues = notification.issues.all()[:3]  # Show no more than three
 
     match webhook_type:
-        case AlertRecipient.WebhookType.DISCORD:
+        case "discord":
             send_issue_as_discord_webhook(url, issues, issue_count)
             return
         case _:

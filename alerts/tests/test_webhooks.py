@@ -8,10 +8,10 @@ from glitchtip import test_utils  # pylint: disable=unused-import
 
 from ..models import AlertRecipient, Notification
 from ..tasks import process_event_alerts
-from ..webhooks import send_issue_as_webhook, send_webhook
+from ..webhooks import send_issue_as_webhook, send_webhook, send_issue_as_discord_webhook
 
 TEST_URL = "https://burkesoftware.rocket.chat/hooks/Y8TttGY7RvN7Qm3gD/rqhHLiRSvYRZ8BhbhhhLYumdMksWnyj3Dqsqt8QKrmbNndXH"
-
+DISCORD_TEST_URL = "https://discord.com/api/webhooks/not_real_id/not_real_token"
 
 class WebhookTestCase(TestCase):
     @mock.patch("requests.post")
@@ -59,4 +59,14 @@ class WebhookTestCase(TestCase):
             ).count(),
             1,
         )
+        mock_post.assert_called_once()
+
+    @mock.patch('requests.post')
+    def test_send_issue_as_discord_webhook(self, mock_post):
+        issue = baker.make("issues.Issue", level=LogLevel.WARNING, short_id=5)
+        issue2 = baker.make("issues.Issue", level=LogLevel.ERROR, short_id=6)
+        issue3 = baker.make("issues.Issue", level=LogLevel.NOTSET)
+
+        send_issue_as_discord_webhook(DISCORD_TEST_URL, [issue, issue2, issue3], 3)
+
         mock_post.assert_called_once()
