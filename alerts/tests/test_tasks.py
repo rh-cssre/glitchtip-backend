@@ -53,6 +53,32 @@ class AlertTestCase(GlitchTipTestCase):
         self.assertEqual(Notification.objects.count(), 1)
         self.assertEqual(len(mail.outbox), 1)
 
+    def test_multiple_alerts(self):
+        baker.make(
+            "alerts.ProjectAlert",
+            project=self.project,
+            timespan_minutes=10,
+            quantity=1,
+        )
+        baker.make(
+            "alerts.ProjectAlert",
+            project=self.project,
+            timespan_minutes=10,
+            quantity=2,
+        )
+
+        issue1 = baker.make("issues.Issue", project=self.project)
+        baker.make("events.Event", issue=issue1)
+
+        process_event_alerts()
+        self.assertEqual(Notification.objects.count(), 1)
+
+        issue2 = baker.make("issues.Issue", project=self.project)
+        baker.make("events.Event", issue=issue2, _quantity=2)
+
+        process_event_alerts()
+        self.assertEqual(Notification.objects.count(), 1)
+
     def test_alert_timing(self):
         baker.make(
             "alerts.ProjectAlert",
