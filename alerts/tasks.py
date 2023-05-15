@@ -39,8 +39,9 @@ def process_event_alerts():
                         F("project__projectalert__timespan_minutes"),
                         function="make_interval",
                         output_field=DurationField(),
-                    )
+                    ),
                 ),
+                distinct=True,
             ),
         )
         .filter(num_events__gte=F("project__projectalert__quantity"))
