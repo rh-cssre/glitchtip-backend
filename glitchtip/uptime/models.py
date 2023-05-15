@@ -2,11 +2,11 @@ import uuid
 from datetime import timedelta
 
 from django.conf import settings
-from django.core.validators import MaxValueValidator
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import OuterRef, Subquery
-
-from glitchtip.base_models import CreatedModel
+from django.utils.timezone import now
 
 from .constants import MonitorCheckReason, MonitorType
 
@@ -34,7 +34,8 @@ class MonitorManager(models.Manager):
         )
 
 
-class Monitor(CreatedModel):
+class Monitor(models.Model):
+    created = models.DateTimeField(auto_now_add=True)
     monitor_type = models.CharField(
         max_length=12, choices=MonitorType.choices, default=MonitorType.PING
     )
@@ -46,7 +47,9 @@ class Monitor(CreatedModel):
     )
     name = models.CharField(max_length=200)
     url = models.URLField(max_length=2000, blank=True)
-    expected_status = models.PositiveSmallIntegerField(default=200)
+    expected_status = models.PositiveSmallIntegerField(
+        default=200, blank=True, null=True
+    )
     expected_body = models.CharField(max_length=2000, blank=True)
     environment = models.ForeignKey(
         "environments.Environment",
@@ -65,10 +68,19 @@ class Monitor(CreatedModel):
     )
     interval = models.DurationField(
         default=timedelta(minutes=1),
-        validators=[MaxValueValidator(timedelta(hours=23, minutes=59, seconds=59))],
+        validators=[MaxValueValidator(timedelta(hours=24))],
+    )
+    timeout = models.PositiveSmallIntegerField(
+        blank=True,
+        null=True,
+        validators=[MaxValueValidator(60), MinValueValidator(1)],
+        help_text="Blank implies default value of 20",
     )
 
     objects = MonitorManager()
+
+    class Meta:
+        indexes = [models.Index(fields=["-created"])]
 
     def __str__(self):
         return self.name
@@ -83,17 +95,27 @@ class Monitor(CreatedModel):
         if self.monitor_type != MonitorType.HEARTBEAT:
             perform_checks.apply_async(args=([self.pk],), countdown=1)
 
+    def clean(self):
+        if self.monitor_type != MonitorType.HEARTBEAT and not self.url:
+            raise ValidationError("Monitor URL is required")
+
     def get_detail_url(self):
         return f"{settings.GLITCHTIP_URL.geturl()}/{self.project.organization.slug}/uptime-monitors/{self.pk}"
 
+    @property
+    def int_timeout(self):
+        """Get timeout as integer (coalesce null as 20)"""
+        return self.timeout or 20
 
-class MonitorCheck(CreatedModel):
+
+class MonitorCheck(models.Model):
     monitor = models.ForeignKey(
         Monitor, on_delete=models.CASCADE, related_name="checks"
     )
     is_up = models.BooleanField()
     start_check = models.DateTimeField(
-        help_text="Time when the start of this check was performed"
+        default=now,
+        help_text="Time when the start of this check was performed",
     )
     reason = models.PositiveSmallIntegerField(
         choices=MonitorCheckReason.choices, default=0, null=True, blank=True
@@ -102,10 +124,8 @@ class MonitorCheck(CreatedModel):
     data = models.JSONField(null=True, blank=True)
 
     class Meta:
-        indexes = [
-            models.Index(fields=["start_check", "monitor"]),
-        ]
-        ordering = ("-created",)
+        indexes = [models.Index(fields=["monitor", "-start_check"])]
+        ordering = ("-start_check",)
 
     def __str__(self):
         return self.up_or_down

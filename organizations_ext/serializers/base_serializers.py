@@ -1,4 +1,5 @@
 from rest_framework import serializers
+
 from ..models import Organization
 
 
@@ -41,4 +42,3 @@ class OrganizationReferenceSerializer(serializers.ModelSerializer):
 
     def get_isAcceptingEvents(self, obj):
         return obj.is_accepting_events
-

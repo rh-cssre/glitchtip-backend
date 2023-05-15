@@ -1,5 +1,6 @@
 from django.conf import settings
 from djstripe.models import Subscription
+
 from glitchtip.email import DetailEmail
 
 
