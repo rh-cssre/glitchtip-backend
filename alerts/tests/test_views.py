@@ -3,6 +3,7 @@ from model_bakery import baker
 
 from glitchtip import test_utils  # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
+from organizations_ext.models import OrganizationUserRole
 
 from ..models import ProjectAlert
 
@@ -58,6 +59,38 @@ class AlertAPITestCase(GlitchTipTestCase):
         project_alert = ProjectAlert.objects.filter(name="foo", uptime=True).first()
         self.assertEqual(project_alert.timespan_minutes, data["timespan_minutes"])
         self.assertEqual(project_alert.project, self.project)
+
+    def test_project_alerts_create_permissions(self):
+        user = baker.make("users.user")
+        org_user = self.organization.add_user(user, OrganizationUserRole.MEMBER)
+        self.client.force_login(user)
+        url = reverse(
+            "project-alerts-list",
+            kwargs={
+                "project_pk": f"{self.organization.slug}/{self.project.slug}",
+            },
+        )
+        data = {
+            "name": "foo",
+            "timespan_minutes": 60,
+            "quantity": 2,
+            "uptime": True,
+            "alertRecipients": [{"recipientType": "email", "url": "example.com"}],
+        }
+        res = self.client.post(url, data)
+        # Member without project team membership cannot create alerts
+        self.assertEqual(res.status_code, 400)
+
+        org_user.role = OrganizationUserRole.ADMIN
+        org_user.save()
+        res = self.client.post(url, data)
+        self.assertEqual(res.status_code, 201)
+
+        org_user.role = OrganizationUserRole.MEMBER
+        org_user.save()
+        res = self.client.get(url)
+        # Members can still view alerts
+        self.assertEqual(len(res.data), 1)
 
     def test_create_with_second_team(self):
         team2 = baker.make("teams.Team", organization=self.organization)

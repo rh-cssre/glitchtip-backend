@@ -1,5 +1,7 @@
+from django.db.models import Q
 from rest_framework import exceptions, viewsets
 
+from organizations_ext.models import OrganizationUserRole
 from projects.models import Project
 
 from .models import ProjectAlert
@@ -17,17 +19,26 @@ class ProjectAlertViewSet(viewsets.ModelViewSet):
             return self.queryset.none()
         return self.queryset.filter(
             project__slug=self.kwargs.get("project_slug"),
-            project__team__members__user=self.request.user,
+            project__organization__users=self.request.user,
             project__organization__slug=self.kwargs.get("organization_slug"),
         )
 
     def perform_create(self, serializer):
         try:
-            project = Project.objects.distinct().get(
-                slug=self.kwargs.get("project_slug"),
-                team__members__user=self.request.user,
-                organization__slug=self.kwargs.get("organization_slug"),
+            project = (
+                Project.objects.distinct()
+                .filter(
+                    Q(
+                        organization__users=self.request.user,
+                        organization__organization_users__role__gte=OrganizationUserRole.ADMIN,
+                    )
+                    | Q(team__members__user=self.request.user)
+                )
+                .get(
+                    slug=self.kwargs.get("project_slug"),
+                    organization__slug=self.kwargs.get("organization_slug"),
+                )
             )
-        except Project.DoesNotExist:
-            raise exceptions.ValidationError("Organization does not exist")
+        except Project.DoesNotExist as err:
+            raise exceptions.ValidationError("Project does not exist") from err
         serializer.save(project=project)
