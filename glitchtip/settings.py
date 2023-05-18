@@ -638,6 +638,8 @@ if KEYCLOAK_URL := env.url("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_URL", None
         ),
         "KEYCLOAK_URL_ALT": alt_url,
     }
+if MICROSOFT_TENANT := env.str("SOCIALACCOUNT_PROVIDERS_microsoft_TENANT", None):
+    SOCIALACCOUNT_PROVIDERS["microsoft"] = {"TENANT": MICROSOFT_TENANT}
 
 # Parse oidc settings as nested dict in array. Example:
 # SOCIALACCOUNT_PROVIDERS_openid_connect_SERVERS_0_id: "g-oidc"
