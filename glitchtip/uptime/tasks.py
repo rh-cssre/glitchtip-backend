@@ -83,7 +83,7 @@ def dispatch_checks():
     the timing percise and allowing for any arbitrary interval (to the second).
     It also has no need to track state of previous checks.
 
-    Check result DB writes are then batched for better performance.
+    The check result DB writes are then batched for better performance.
     """
     now = timezone.now()
     try:
@@ -139,6 +139,7 @@ def perform_checks(monitor_ids: List[int], now=None):
             MonitorCheck(
                 monitor_id=result["id"],
                 is_up=result["is_up"],
+                is_change=result["latest_is_up"] != result["is_up"],
                 start_check=now,
                 reason=result.get("reason", None),
                 response_time=result.get("response_time", None),
