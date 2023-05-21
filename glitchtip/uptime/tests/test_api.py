@@ -2,6 +2,7 @@ from unittest import mock
 
 from django.shortcuts import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from freezegun import freeze_time
 from model_bakery import baker
 
@@ -17,7 +18,8 @@ class UptimeAPITestCase(GlitchTipTestCase):
             kwargs={"organization_slug": self.organization.slug},
         )
 
-    def test_list(self):
+    @mock.patch("glitchtip.uptime.tasks.perform_checks.run")
+    def test_list(self, mocked):
         monitor = baker.make(
             "uptime.Monitor", organization=self.organization, url="http://example.com"
         )
@@ -31,12 +33,13 @@ class UptimeAPITestCase(GlitchTipTestCase):
             "uptime.MonitorCheck",
             monitor=monitor,
             is_up=True,
+            is_change=True,
             start_check="2021-09-19T15:40:31Z",
         )
         res = self.client.get(self.list_url)
         self.assertContains(res, monitor.name)
         self.assertEqual(res.data[0]["isUp"], True)
-        self.assertEqual(res.data[0]["lastChange"], "2021-09-19T15:39:31Z")
+        self.assertEqual(res.data[0]["lastChange"], "2021-09-19T15:40:31Z")
 
     def test_list_aggregation(self):
         """Test up and down event aggregations"""
@@ -116,7 +119,8 @@ class UptimeAPITestCase(GlitchTipTestCase):
         self.assertEqual(res.status_code, 201)
         self.assertTrue(Monitor.objects.filter(expected_status=None).exists())
 
-    def test_monitor_retrieve(self):
+    @mock.patch("glitchtip.uptime.tasks.perform_checks.run")
+    def test_monitor_retrieve(self, mocked):
         """Test monitor details endpoint. Unlike the list view,
         checks here should include response time for the frontend graph"""
         environment = baker.make(
@@ -130,17 +134,20 @@ class UptimeAPITestCase(GlitchTipTestCase):
             environment=environment,
         )
 
+        now = timezone.now()
         baker.make(
             "uptime.MonitorCheck",
             monitor=monitor,
             is_up=False,
+            is_change=True,
             start_check="2021-09-19T15:39:31Z",
         )
         baker.make(
             "uptime.MonitorCheck",
             monitor=monitor,
             is_up=True,
-            start_check="2021-09-19T15:40:31Z",
+            is_change=True,
+            start_check=now,
         )
 
         url = reverse(
@@ -150,7 +157,7 @@ class UptimeAPITestCase(GlitchTipTestCase):
 
         res = self.client.get(url)
         self.assertEqual(res.data["isUp"], True)
-        self.assertEqual(res.data["lastChange"], "2021-09-19T15:39:31Z")
+        self.assertEqual(parse_datetime(res.data["lastChange"]), now)
         self.assertEqual(res.data["environment"], environment.pk)
         self.assertIn("responseTime", res.data["checks"][0])
 
