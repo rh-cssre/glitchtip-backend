@@ -115,7 +115,7 @@ class MonitorCheck(models.Model):
     )
     is_up = models.BooleanField()
     is_change = models.BooleanField(
-        help_text="Indicates change to is_up status for associated monitor"
+        help_text="Indicates change to is_up status for associated monitor",
     )
     start_check = models.DateTimeField(
         default=now,

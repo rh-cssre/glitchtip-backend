@@ -13,15 +13,24 @@ from .constants import MonitorCheckReason, MonitorType
 from .models import MonitorCheck
 
 DEFAULT_TIMEOUT = 20  # Seconds
+PAYLOAD_LIMIT = 2_000_000  # 2mb
+PAYLOAD_SAVE_LIMIT = 500_000  # pseudo 500kb
 
 
 async def process_response(monitor, response):
     if response.status == monitor["expected_status"]:
         if monitor["expected_body"]:
-            if monitor["expected_body"] in await response.text():
+            # Limit size to 2MB
+            body = await response.content.read(PAYLOAD_LIMIT)
+            encoding = response.get_encoding()
+            payload = body.decode(encoding, errors="ignore")
+            if monitor["expected_body"] in payload:
                 monitor["is_up"] = True
             else:
                 monitor["reason"] = MonitorCheckReason.BODY
+                # Save only first 500k chars, to roughly reduce disk usage
+                # Note that a unicode char is not always one byte
+                monitor["data"] = {"payload": payload[:PAYLOAD_SAVE_LIMIT]}
         else:
             monitor["is_up"] = True
     else:

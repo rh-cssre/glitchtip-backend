@@ -143,6 +143,7 @@ def perform_checks(monitor_ids: List[int], now=None):
                 start_check=now,
                 reason=result.get("reason", None),
                 response_time=result.get("response_time", None),
+                data=result.get("data", None),
             )
             for result in results
         ]
