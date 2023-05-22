@@ -14,8 +14,14 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("releases", "0002_auto_20201227_1518"),
-        ("projects", "0001_initial"),
-        ("projects", "0003_projectcounter"),
+        (
+            "projects",
+            "0001_squashed_0009_alter_project_id_alter_projectcounter_id_and_more",
+        ),
+        (
+            "projects",
+            "0001_squashed_0009_alter_project_id_alter_projectcounter_id_and_more",
+        ),
     ]
 
     operations = [
@@ -101,7 +107,9 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
-            options={"unique_together": {("title", "culprit", "project", "type")},},
+            options={
+                "unique_together": {("title", "culprit", "project", "type")},
+            },
         ),
         migrations.CreateModel(
             name="Event",
@@ -134,7 +142,9 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
-            options={"ordering": ["-created"],},
+            options={
+                "ordering": ["-created"],
+            },
         ),
         migrations.AddIndex(
             model_name="issue",
@@ -186,13 +196,18 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.AlterUniqueTogether(
-            name="eventtag", unique_together={("key", "value")},
+            name="eventtag",
+            unique_together={("key", "value")},
         ),
         migrations.AlterField(
-            model_name="event", name="data", field=models.JSONField(),
+            model_name="event",
+            name="data",
+            field=models.JSONField(),
         ),
         migrations.AlterField(
-            model_name="issue", name="metadata", field=models.JSONField(),
+            model_name="issue",
+            name="metadata",
+            field=models.JSONField(),
         ),
         migrations.AlterField(
             model_name="issue",
@@ -211,16 +226,29 @@ class Migration(migrations.Migration):
         ),
         migrations.SeparateDatabaseAndState(
             database_operations=[
-                migrations.AlterModelTable(name="Event", table="events_event",),
                 migrations.AlterModelTable(
-                    name="EventTagKey", table="events_eventtagkey",
+                    name="Event",
+                    table="events_event",
                 ),
-                migrations.AlterModelTable(name="EventTag", table="events_eventtag",),
+                migrations.AlterModelTable(
+                    name="EventTagKey",
+                    table="events_eventtagkey",
+                ),
+                migrations.AlterModelTable(
+                    name="EventTag",
+                    table="events_eventtag",
+                ),
             ],
             state_operations=[
-                migrations.DeleteModel(name="Event",),
-                migrations.DeleteModel(name="EventTagKey",),
-                migrations.DeleteModel(name="EventTag",),
+                migrations.DeleteModel(
+                    name="Event",
+                ),
+                migrations.DeleteModel(
+                    name="EventTagKey",
+                ),
+                migrations.DeleteModel(
+                    name="EventTag",
+                ),
             ],
         ),
         migrations.AlterField(

@@ -1,12 +1,14 @@
 from unittest import mock
+
 from django.test import TestCase
 from model_bakery import baker
-from glitchtip import test_utils  # pylint: disable=unused-import
-from events.models import LogLevel
-from ..tasks import process_event_alerts
-from ..models import AlertRecipient, Notification
-from ..webhooks import send_webhook, send_issue_as_webhook
 
+from events.models import LogLevel
+from glitchtip import test_utils  # pylint: disable=unused-import
+
+from ..models import AlertRecipient, Notification
+from ..tasks import process_event_alerts
+from ..webhooks import send_issue_as_webhook, send_webhook
 
 TEST_URL = "https://burkesoftware.rocket.chat/hooks/Y8TttGY7RvN7Qm3gD/rqhHLiRSvYRZ8BhbhhhLYumdMksWnyj3Dqsqt8QKrmbNndXH"
 
@@ -15,7 +17,8 @@ class WebhookTestCase(TestCase):
     @mock.patch("requests.post")
     def test_send_webhook(self, mock_post):
         send_webhook(
-            TEST_URL, "from unit test",
+            TEST_URL,
+            "from unit test",
         )
         mock_post.assert_called_once()
 
@@ -31,7 +34,10 @@ class WebhookTestCase(TestCase):
     def test_trigger_webhook(self, mock_post):
         project = baker.make("projects.Project")
         alert = baker.make(
-            "alerts.ProjectAlert", project=project, timespan_minutes=1, quantity=2,
+            "alerts.ProjectAlert",
+            project=project,
+            timespan_minutes=1,
+            quantity=2,
         )
         baker.make(
             "alerts.AlertRecipient",

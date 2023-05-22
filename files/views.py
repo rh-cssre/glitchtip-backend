@@ -1,13 +1,16 @@
 """ Port of sentry.api.endpoints.chunk.ChunkUploadEndpoint """
 import logging
-from io import BytesIO
 from gzip import GzipFile
+from io import BytesIO
+
 from django.conf import settings
-from django.urls import reverse
 from django.shortcuts import get_object_or_404
-from rest_framework import views, status
+from django.urls import reverse
+from rest_framework import status, views
 from rest_framework.response import Response
+
 from organizations_ext.models import Organization
+
 from .models import FileBlob
 from .permissions import ChunkUploadPermission
 
