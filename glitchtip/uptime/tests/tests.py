@@ -66,6 +66,33 @@ class UptimeTestCase(GlitchTipTestCase):
         self.assertEqual(mon.checks.count(), 2)
 
     @aioresponses()
+    def test_expected_response(self, mocked):
+        test_url = "https://example.com"
+
+        mocked.get(test_url, status=200, body="Status: OK")
+        monitor = baker.make(
+            Monitor,
+            name=test_url,
+            url=test_url,
+            expected_body="OK",
+            monitor_type=MonitorType.GET,
+        )
+        check = monitor.checks.first()
+        self.assertTrue(check.is_up)
+
+        mocked.get(test_url, status=200, body="Status: Failure")
+        monitor = baker.make(
+            Monitor,
+            name=test_url,
+            url=test_url,
+            expected_body="OK",
+            monitor_type=MonitorType.GET,
+        )
+        check = monitor.checks.first()
+        self.assertFalse(check.is_up)
+        self.assertEqual(check.data["payload"], "Status: Failure")
+
+    @aioresponses()
     @mock.patch("requests.post")
     def test_monitor_notifications(self, mocked, mock_post):
         self.create_user_and_project()

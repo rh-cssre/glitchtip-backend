@@ -21,12 +21,14 @@ class Command(MakeSampleCommand):
         self.add_org_project_arguments(parser)
         parser.add_argument("--monitor-quantity", type=int, default=10)
         parser.add_argument("--checks-quantity-per", type=int, default=100)
+        parser.add_argument("--first-check-down", type=bool, default=False)
 
     def handle(self, *args, **options):
         super().handle(*args, **options)
 
         monitor_quantity = options["monitor_quantity"]
         checks_quantity_per = options["checks_quantity_per"]
+        first_check_down = options["first_check_down"]
 
         monitors = [
             Monitor(
@@ -48,13 +50,15 @@ class Command(MakeSampleCommand):
         start_time = timezone.now() - timezone.timedelta(minutes=checks_quantity_per)
         for time_i in range(checks_quantity_per):
             for monitor in monitors:
-                import ipdb
-
-                ipdb.set_trace()
+                is_first = time_i == 0
+                is_up = True
+                if first_check_down and is_first:
+                    is_up = False
                 checks.append(
                     MonitorCheck(
                         monitor=monitor,
-                        is_up=True,
+                        is_up=is_up,
+                        is_change=is_first,
                         start_check=start_time + timezone.timedelta(minutes=time_i),
                         response_time=timezone.timedelta(
                             milliseconds=randrange(1, 5000)

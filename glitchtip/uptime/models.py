@@ -21,13 +21,14 @@ class MonitorManager(models.Manager):
         """
         return self.annotate(
             latest_is_up=Subquery(
-                MonitorCheck.objects.filter(monitor_id=OuterRef("id"))
+                MonitorCheck.objects.filter(
+                    monitor_id=OuterRef("id"),
+                )
                 .order_by("-start_check")
                 .values("is_up")[:1]
             ),
             last_change=Subquery(
-                MonitorCheck.objects.filter(monitor_id=OuterRef("id"))
-                .exclude(is_up=OuterRef("latest_is_up"))
+                MonitorCheck.objects.filter(monitor_id=OuterRef("id"), is_change=True)
                 .order_by("-start_check")
                 .values("start_check")[:1]
             ),
@@ -113,6 +114,9 @@ class MonitorCheck(models.Model):
         Monitor, on_delete=models.CASCADE, related_name="checks"
     )
     is_up = models.BooleanField()
+    is_change = models.BooleanField(
+        help_text="Indicates change to is_up status for associated monitor",
+    )
     start_check = models.DateTimeField(
         default=now,
         help_text="Time when the start of this check was performed",
@@ -124,7 +128,10 @@ class MonitorCheck(models.Model):
     data = models.JSONField(null=True, blank=True)
 
     class Meta:
-        indexes = [models.Index(fields=["monitor", "-start_check"])]
+        indexes = [
+            models.Index(fields=["monitor", "-start_check"]),
+            models.Index(fields=["monitor", "is_change", "-start_check"]),
+        ]
         ordering = ("-start_check",)
 
     def __str__(self):
