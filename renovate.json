@@ -3,8 +3,7 @@
   "dependencyDashboard": true,
   "rangeStrategy": "update-lockfile",
   "lockFileMaintenance": {
-    "enabled": true,
-    "schedule": "at any time"
+    "enabled": true
   },
   "packageRules": [
     {
