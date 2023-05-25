@@ -2,7 +2,10 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "dependencyDashboard": true,
   "rangeStrategy": "update-lockfile",
-  "lockFileMaintenance": { "enabled": true },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": "at any time"
+  },
   "packageRules": [
     {
       "matchUpdateTypes": ["patch", "pin", "digest"],
