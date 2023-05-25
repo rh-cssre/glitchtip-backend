@@ -170,7 +170,7 @@ def send_monitor_notification(monitor_check_id: int, went_down: bool, last_chang
                 went_down=went_down,
                 last_change=last_change if last_change else None,
             ).send_users_email()
-        elif recipient.recipient_type == AlertRecipient.RecipientType.WEBHOOK:
+        elif recipient.is_webhook:
             send_uptime_as_webhook(
                 recipient.url, monitor_check_id, went_down, last_change
             )

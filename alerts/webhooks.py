@@ -169,37 +169,35 @@ def send_issue_as_discord_webhook(url, issues: List["Issue"], issue_count: int =
             )
 
         embeds.append(
-         DiscordEmbed(
+            DiscordEmbed(
                 title=str(issue),
                 description=issue.culprit,
-                color=int(issue.get_hex_color()[1:], 16) if issue.get_hex_color() is not None else None,
+                color=int(issue.get_hex_color()[1:], 16)
+                if issue.get_hex_color() is not None
+                else None,
                 url=issue.get_detail_url(),
                 fields=fields,
             )
         )
 
-
     message = "GlitchTip Alert"
     if issue_count > 1:
         message += f" ({issue_count} issues)"
 
-    payload = DiscordWebhookPayload(
-        content=message,
-        embeds=embeds
-    )
+    payload = DiscordWebhookPayload(content=message, embeds=embeds)
 
     return requests.post(url, json=asdict(payload))
 
 
-def send_webhook_notification(notification: "Notification", url: str, webhook_type: str):
+def send_webhook_notification(
+    notification: "Notification", url: str, recipient_type: str
+):
     issue_count = notification.issues.count()
     issues = notification.issues.all()[:3]  # Show no more than three
 
-    match webhook_type:
+    match recipient_type:
         case "discord":
             send_issue_as_discord_webhook(url, issues, issue_count)
             return
         case _:
             send_issue_as_webhook(url, issues, issue_count)
-
-

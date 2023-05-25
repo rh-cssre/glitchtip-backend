@@ -26,35 +26,40 @@ class AlertRecipient(models.Model):
 
     class RecipientType(models.TextChoices):
         EMAIL = "email", _("Email")
-        WEBHOOK = "webhook", _("Webhook")
-
-    class WebhookType(models.TextChoices):
         DISCORD = "discord", _("Discord")
-        SLACK = "slack", _("Slack")
+        GENERAL_WEBHOOK = "webhook", _("General Webhook")  # Backwards Compatibility
         MICROSOFT_TEAMS = "microsoft_teams", _("Microsoft Teams")
         ROCKET_CHAT = "rocket_chat", _("Rocket.Chat")
-        GENERAL = "general_webhook", _("General Webhook") # Backwards Compatibility
+        SLACK = "slack", _("Slack")
 
     alert = models.ForeignKey(ProjectAlert, on_delete=models.CASCADE)
     recipient_type = models.CharField(max_length=16, choices=RecipientType.choices)
-    webhook_type = models.CharField(max_length=255, default=WebhookType.GENERAL, choices=WebhookType.choices)
     url = models.URLField(max_length=2000, blank=True)
 
     class Meta:
         unique_together = ("alert", "recipient_type", "url")
 
+    @property
+    def is_webhook(self):
+        return self.recipient_type in (
+            self.RecipientType.DISCORD,
+            self.RecipientType.GENERAL_WEBHOOK,
+            self.RecipientType.ROCKET_CHAT,
+            self.RecipientType.MICROSOFT_TEAMS,
+            self.RecipientType.SLACK,
+        )
+
     def send(self, notification):
         if self.recipient_type == self.RecipientType.EMAIL:
             send_email_notification(notification)
-        elif self.recipient_type == self.RecipientType.WEBHOOK:
-            send_webhook_notification(notification, self.url, self.webhook_type)
+        elif self.is_webhook:
+            send_webhook_notification(notification, self.url, self.recipient_type)
 
 
 class Notification(CreatedModel):
     project_alert = models.ForeignKey(ProjectAlert, on_delete=models.CASCADE)
     is_sent = models.BooleanField(default=False)
     issues = models.ManyToManyField("issues.Issue")
-
 
     def send_notifications(self):
         for recipient in self.project_alert.alertrecipient_set.all():
