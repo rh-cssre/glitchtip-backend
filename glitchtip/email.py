@@ -65,7 +65,7 @@ class GlitchTipEmail(ContextMixin):
         self._send_email(context, to, users)
 
     def send_email(self, email: str):
-        """ Send just one email """
+        """Send just one email"""
         context = self.get_context_data()
         self._send_email(context, [email])
 
@@ -79,7 +79,7 @@ class DetailEmail(SingleObjectMixin, GlitchTipEmail):
         super().send_users_email(users)
 
     def send_email(self, email: str = None):
-        """ Send just one email """
+        """Send just one email"""
         self.object = self.get_object()
         context = self.get_context_data()
         if email is None:
