@@ -4,24 +4,33 @@ from datetime import timedelta
 from ssl import SSLError
 
 import aiohttp
+from aiohttp import ClientTimeout
 from aiohttp.client_exceptions import ClientConnectorError
 from django.conf import settings
+from django.utils import timezone
 
 from .constants import MonitorCheckReason, MonitorType
+from .models import MonitorCheck
 
-DEFAULT_TIMEOUT = 30
-DEFAULT_PING_TIMEOUT = 30
-DEFAULT_AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT)
-PING_AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=DEFAULT_PING_TIMEOUT)
+DEFAULT_TIMEOUT = 20  # Seconds
+PAYLOAD_LIMIT = 2_000_000  # 2mb
+PAYLOAD_SAVE_LIMIT = 500_000  # pseudo 500kb
 
 
 async def process_response(monitor, response):
     if response.status == monitor["expected_status"]:
         if monitor["expected_body"]:
-            if monitor["expected_body"] in await response.text():
+            # Limit size to 2MB
+            body = await response.content.read(PAYLOAD_LIMIT)
+            encoding = response.get_encoding()
+            payload = body.decode(encoding, errors="ignore")
+            if monitor["expected_body"] in payload:
                 monitor["is_up"] = True
             else:
                 monitor["reason"] = MonitorCheckReason.BODY
+                # Save only first 500k chars, to roughly reduce disk usage
+                # Note that a unicode char is not always one byte
+                monitor["data"] = {"payload": payload[:PAYLOAD_SAVE_LIMIT]}
         else:
             monitor["is_up"] = True
     else:
@@ -29,18 +38,27 @@ async def process_response(monitor, response):
 
 
 async def fetch(session, monitor):
-    url = monitor["url"]
     monitor["is_up"] = False
+    if monitor["monitor_type"] == MonitorType.HEARTBEAT:
+        if await MonitorCheck.objects.filter(
+            monitor_id=monitor["id"],
+            start_check__gte=timezone.now() - monitor["interval"],
+        ).aexists():
+            monitor["is_up"] = True
+        return monitor
+
+    url = monitor["url"]
+    timeout = ClientTimeout(total=monitor["timeout"] or DEFAULT_TIMEOUT)
     start = time.monotonic()
     try:
         if monitor["monitor_type"] == MonitorType.PING:
-            async with session.head(url, timeout=PING_AIOHTTP_TIMEOUT):
+            async with session.head(url, timeout=timeout):
                 monitor["is_up"] = True
         elif monitor["monitor_type"] == MonitorType.GET:
-            async with session.get(url, timeout=DEFAULT_AIOHTTP_TIMEOUT) as response:
+            async with session.get(url, timeout=timeout) as response:
                 await process_response(monitor, response)
         elif monitor["monitor_type"] == MonitorType.POST:
-            async with session.post(url, timeout=DEFAULT_AIOHTTP_TIMEOUT) as response:
+            async with session.post(url, timeout=timeout) as response:
                 await process_response(monitor, response)
         monitor["response_time"] = timedelta(seconds=time.monotonic() - start)
     except SSLError:

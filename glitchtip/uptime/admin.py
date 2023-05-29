@@ -70,8 +70,8 @@ class MonitorAdmin(admin.ModelAdmin):
 
 
 class MonitorCheckAdmin(admin.ModelAdmin):
-    list_filter = ["is_up", "reason", "created"]
-    list_display = ["monitor", "is_up", "reason", "created", "response_time"]
+    list_filter = ["is_up", "reason", "start_check"]
+    list_display = ["monitor", "is_up", "reason", "start_check", "response_time"]
 
 
 admin.site.register(Monitor, MonitorAdmin)

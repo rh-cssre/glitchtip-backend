@@ -3,6 +3,7 @@ from model_bakery import baker
 from rest_framework.test import APITestCase
 
 from organizations_ext.models import OrganizationUserRole
+from glitchtip.test_utils import generators  # pylint: disable=unused-import
 
 
 class GlitchTipTestCase(APITestCase):
@@ -22,7 +23,7 @@ class GlitchTipTestCase(APITestCase):
 
 
 class APIPermissionTestCase(APITestCase):
-    """ Base class for testing viewsets with permissions """
+    """Base class for testing viewsets with permissions"""
 
     def create_user_org(self):
         self.user = baker.make("users.user")
@@ -38,21 +39,21 @@ class APIPermissionTestCase(APITestCase):
         self.org_user.save(update_fields=["role"])
 
     def assertGetReqStatusCode(self, url: str, status_code: int, msg=None):
-        """ Make GET request to url and check status code """
+        """Make GET request to url and check status code"""
         res = self.client.get(url)
         self.assertEqual(res.status_code, status_code, msg)
 
     def assertPostReqStatusCode(self, url: str, data, status_code: int, msg=None):
-        """ Make POST request to url and check status code """
+        """Make POST request to url and check status code"""
         res = self.client.post(url, data)
         self.assertEqual(res.status_code, status_code, msg)
 
     def assertPutReqStatusCode(self, url: str, data, status_code: int, msg=None):
-        """ Make PUT request to url and check status code """
+        """Make PUT request to url and check status code"""
         res = self.client.put(url, data)
         self.assertEqual(res.status_code, status_code, msg)
 
     def assertDeleteReqStatusCode(self, url: str, status_code: int, msg=None):
-        """ Make DELETE request to url and check status code """
+        """Make DELETE request to url and check status code"""
         res = self.client.delete(url)
         self.assertEqual(res.status_code, status_code, msg)
