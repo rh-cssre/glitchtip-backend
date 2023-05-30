@@ -2,8 +2,8 @@
 from model_bakery import baker
 from rest_framework.test import APITestCase
 
-from organizations_ext.models import OrganizationUserRole
 from glitchtip.test_utils import generators  # pylint: disable=unused-import
+from organizations_ext.models import OrganizationUserRole
 
 
 class GlitchTipTestCase(APITestCase):
