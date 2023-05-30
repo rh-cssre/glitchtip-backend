@@ -131,20 +131,27 @@ class OrganizationSubscriptionAdmin(GlitchTipBaseOrganizationAdmin):
         "file_size",
         "total_events",
         "max_events",
+        "current_period_end",
     ]
 
     def max_events(self, obj):
         return obj.max_events
 
+    def current_period_end(self, obj):
+        return obj.current_period_end
+
     def get_queryset(self, request):
-        qs = self.model.objects.with_event_counts().annotate(
+        qs = Organization.objects.with_event_counts().annotate(
             max_events=Cast(
                 KeyTextTransform(
                     "events",
                     "djstripe_customers__subscriptions__plan__product__metadata",
                 ),
                 output_field=PositiveIntegerField(),
-            )
+            ),
+            current_period_end=F(
+                "djstripe_customers__subscriptions__current_period_end"
+            ),
         )
         # From super
         ordering = self.ordering or ()
