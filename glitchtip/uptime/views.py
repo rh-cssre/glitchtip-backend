@@ -91,6 +91,7 @@ class MonitorCheckViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = MonitorCheck.objects.all()
     serializer_class = MonitorCheckSerializer
     pagination_class = MonitorCheckPagination
+    filterset_fields = ["is_change"]
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
