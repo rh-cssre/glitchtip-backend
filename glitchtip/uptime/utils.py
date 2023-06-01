@@ -28,9 +28,11 @@ async def process_response(monitor, response):
                 monitor["is_up"] = True
             else:
                 monitor["reason"] = MonitorCheckReason.BODY
-                # Save only first 500k chars, to roughly reduce disk usage
-                # Note that a unicode char is not always one byte
-                monitor["data"] = {"payload": payload[:PAYLOAD_SAVE_LIMIT]}
+                if monitor["latest_is_up"] != monitor["is_up"]:
+                    # Save only first 500k chars, to roughly reduce disk usage
+                    # Note that a unicode char is not always one byte
+                    # Only save on changes
+                    monitor["data"] = {"payload": payload[:PAYLOAD_SAVE_LIMIT]}
         else:
             monitor["is_up"] = True
     else:
