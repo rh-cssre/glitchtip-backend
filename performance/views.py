@@ -15,6 +15,8 @@ from .serializers import (
 
 
 class TransactionGroupViewSet(viewsets.ReadOnlyModelViewSet):
+    """Duration is in milliseconds"""
+
     queryset = TransactionGroup.objects.all()
     serializer_class = TransactionGroupSerializer
     filter_backends = [DjangoFilterBackend, OrderingFilter]

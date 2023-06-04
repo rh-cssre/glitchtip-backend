@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class TransactionGroupSerializer(serializers.ModelSerializer):
-    avgDuration = serializers.DurationField(source="avg_duration", read_only=True)
+    avgDuration = serializers.IntegerField(source="avg_duration", read_only=True)
     transactionCount = serializers.IntegerField(
         source="transaction_count", read_only=True
     )
