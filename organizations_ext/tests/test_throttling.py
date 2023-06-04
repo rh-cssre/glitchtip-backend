@@ -4,7 +4,7 @@ from django.utils import timezone
 from freezegun import freeze_time
 from model_bakery import baker
 
-from glitchtip import test_utils  # pylint: disable=unused-import
+from glitchtip.test_utils import generators  # pylint: disable=unused-import
 
 from ..tasks import (
     get_free_tier_organizations_with_event_count,

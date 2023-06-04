@@ -142,7 +142,7 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
             event_id=data["event_id"],
             timestamp=data["timestamp"],
             start_timestamp=data["start_timestamp"],
-            duration=data["timestamp"] - data["start_timestamp"],
+            duration=(data["timestamp"] - data["start_timestamp"]).microseconds / 1000,
             tags={tag[0]: tag[1] for tag in tags},
         )
 
