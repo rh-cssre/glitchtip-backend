@@ -115,7 +115,7 @@ class Monitor(models.Model):
             parsed_url = urlparse(url)
             if not all([parsed_url.hostname, parsed_url.port]):
                 raise ValidationError(
-                    "Invalid Port URL, expected hostedname and port such as example.com:80"
+                    "Invalid Port URL, expected hostname and port such as example.com:80"
                 )
             self.url = f"{parsed_url.hostname}:{parsed_url.port}"
         if self.monitor_type != MonitorType.HEARTBEAT and not self.url:
