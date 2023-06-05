@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('alerts', '0004_auto_20210411_1913'),
+        ("alerts", "0004_auto_20210411_1913"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='alertrecipient',
-            name='url',
+            model_name="alertrecipient",
+            name="url",
             field=models.URLField(blank=True, max_length=2000),
         ),
     ]
