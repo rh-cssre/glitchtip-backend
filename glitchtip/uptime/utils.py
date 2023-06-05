@@ -50,18 +50,24 @@ async def fetch(session, monitor):
         return monitor
 
     url = monitor["url"]
-    timeout = ClientTimeout(total=monitor["timeout"] or DEFAULT_TIMEOUT)
-    start = time.monotonic()
+    timeout = monitor["timeout"] or DEFAULT_TIMEOUT
     try:
-        if monitor["monitor_type"] == MonitorType.PING:
-            async with session.head(url, timeout=timeout):
-                monitor["is_up"] = True
-        elif monitor["monitor_type"] == MonitorType.GET:
-            async with session.get(url, timeout=timeout) as response:
-                await process_response(monitor, response)
-        elif monitor["monitor_type"] == MonitorType.POST:
-            async with session.post(url, timeout=timeout) as response:
-                await process_response(monitor, response)
+        start = time.monotonic()
+        if monitor["monitor_type"] == MonitorType.PORT:
+            fut = asyncio.open_connection(*url.split(":"))
+            await asyncio.wait_for(fut, timeout=timeout)
+            monitor["is_up"] = True
+        else:
+            client_timeout = ClientTimeout(total=monitor["timeout"] or DEFAULT_TIMEOUT)
+            if monitor["monitor_type"] == MonitorType.PING:
+                async with session.head(url, timeout=client_timeout):
+                    monitor["is_up"] = True
+            elif monitor["monitor_type"] == MonitorType.GET:
+                async with session.get(url, timeout=client_timeout) as response:
+                    await process_response(monitor, response)
+            elif monitor["monitor_type"] == MonitorType.POST:
+                async with session.post(url, timeout=client_timeout) as response:
+                    await process_response(monitor, response)
         monitor["response_time"] = timedelta(seconds=time.monotonic() - start)
     except SSLError:
         monitor["reason"] = MonitorCheckReason.SSL
