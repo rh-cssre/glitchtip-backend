@@ -47,7 +47,7 @@ class TransactionGroupAPITestCase(GlitchTipTestCase):
                 group=group,
                 start_timestamp=last_minute,
                 timestamp=last_minute + datetime.timedelta(seconds=5),
-                duration=datetime.timedelta(seconds=5),
+                duration=5000,
             )
         two_minutes_ago = now - datetime.timedelta(minutes=2)
         with freeze_time(two_minutes_ago):
@@ -56,7 +56,7 @@ class TransactionGroupAPITestCase(GlitchTipTestCase):
                 group=group,
                 start_timestamp=two_minutes_ago,
                 timestamp=two_minutes_ago + datetime.timedelta(seconds=1),
-                duration=datetime.timedelta(seconds=1),
+                duration=1000,
             )
 
         yesterday = now - datetime.timedelta(days=1)
@@ -66,7 +66,7 @@ class TransactionGroupAPITestCase(GlitchTipTestCase):
                 group=group,
                 start_timestamp=yesterday,
                 timestamp=yesterday + datetime.timedelta(seconds=1),
-                duration=datetime.timedelta(seconds=1),
+                duration=1000,
             )
 
         with freeze_time(now):
@@ -142,17 +142,17 @@ class TransactionGroupAPITestCase(GlitchTipTestCase):
                 group=group,
                 start_timestamp=last_minute,
                 timestamp=last_minute + datetime.timedelta(seconds=5),
-                duration=datetime.timedelta(seconds=5),
+                duration=5000,
             )
         transaction2 = baker.make(
             "performance.TransactionEvent",
             group=group,
             start_timestamp=now,
             timestamp=now + datetime.timedelta(seconds=1),
-            duration=datetime.timedelta(seconds=1),
+            duration=1000,
         )
         res = self.client.get(self.list_url)
-        self.assertEqual(res.data[0]["avgDuration"], "00:00:03")
+        self.assertEqual(res.data[0]["avgDuration"], 3000)
 
         res = self.client.get(
             self.list_url
@@ -162,7 +162,7 @@ class TransactionGroupAPITestCase(GlitchTipTestCase):
             .isoformat()
             + "Z"
         )
-        self.assertEqual(res.data[0]["avgDuration"], "00:00:01")
+        self.assertEqual(res.data[0]["avgDuration"], 1000)
 
 
 class SpanAPITestCase(GlitchTipTestCase):

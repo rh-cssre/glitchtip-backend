@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class TransactionGroupSerializer(serializers.ModelSerializer):
-    avgDuration = serializers.DurationField(source="avg_duration", read_only=True)
+    avgDuration = serializers.IntegerField(source="avg_duration", read_only=True)
     transactionCount = serializers.IntegerField(
         source="transaction_count", read_only=True
     )
@@ -142,7 +142,7 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
             event_id=data["event_id"],
             timestamp=data["timestamp"],
             start_timestamp=data["start_timestamp"],
-            duration=data["timestamp"] - data["start_timestamp"],
+            duration=(data["timestamp"] - data["start_timestamp"]).microseconds / 1000,
             tags={tag[0]: tag[1] for tag in tags},
         )
 

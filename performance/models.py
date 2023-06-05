@@ -26,7 +26,7 @@ class TransactionEvent(AbstractEvent):
     group = models.ForeignKey(TransactionGroup, on_delete=models.CASCADE)
     trace_id = models.UUIDField(db_index=True)
     start_timestamp = models.DateTimeField()
-    duration = models.DurationField(db_index=True)
+    duration = models.PositiveIntegerField(db_index=True, help_text="Milliseconds")
     tags = HStoreField(default=dict)
 
     class Meta:

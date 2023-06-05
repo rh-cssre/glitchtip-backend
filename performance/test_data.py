@@ -99,6 +99,6 @@ def generate_fake_transaction_event(project, start_timestamp):
         start_timestamp=start_timestamp,
         data={},
         timestamp=timestamp,
-        duration=timestamp - start_timestamp,
+        duration=(timestamp - start_timestamp).microseconds / 1000,
         tags=tags,
     )
