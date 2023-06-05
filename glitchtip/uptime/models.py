@@ -1,6 +1,6 @@
 import uuid
-from urllib.parse import urlparse
 from datetime import timedelta
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -9,7 +9,7 @@ from django.db import models
 from django.db.models import OuterRef, Subquery
 from django.utils.timezone import now
 
-from .constants import MonitorCheckReason, MonitorType, HTTP_MONITOR_TYPES
+from .constants import HTTP_MONITOR_TYPES, MonitorCheckReason, MonitorType
 
 
 class MonitorManager(models.Manager):
