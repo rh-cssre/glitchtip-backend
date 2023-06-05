@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.core.exceptions import SuspiciousOperation, ValidationError
 from django.db.models import Exists, OuterRef
+from django.db.models.expressions import RawSQL
 from django.db.utils import IntegrityError
 from django.http import HttpResponse
 from django.test import RequestFactory
@@ -102,10 +103,24 @@ class BaseEventAPIView(APIView):
     def get_project(self, request, project_id):
         sentry_key = BaseEventAPIView.auth_from_request(request)
         difs_subquery = DebugInformationFile.objects.filter(project_id=OuterRef("pk"))
+        if isinstance(request.data, list) and len(request.data) > 1:
+            data = request.data[2]
+        else:
+            data = request.data
         try:
             project = (
                 Project.objects.filter(id=project_id, projectkey__public_key=sentry_key)
-                .annotate(has_difs=Exists(difs_subquery))
+                .annotate(
+                    has_difs=Exists(difs_subquery),
+                    release_id=RawSQL(
+                        "select releases_release.id from releases_release inner join releases_releaseproject on releases_releaseproject.release_id = releases_release.id and releases_releaseproject.project_id=%s where version=%s limit 1",
+                        [project_id, data.get("release")],
+                    ),
+                    environment_id=RawSQL(
+                        "select environments_environment.id from environments_environment inner join environments_environmentproject on environments_environmentproject.environment_id = environments_environment.id and environments_environmentproject.project_id=%s where environments_environment.name=%s limit 1",
+                        [project_id, data.get("environment")],
+                    ),
+                )
                 .select_related("organization")
                 .only("id", "first_event", "organization__is_accepting_events")
                 .first()
@@ -217,7 +232,9 @@ class EnvelopeAPIView(BaseEventAPIView):
             return self.process_event(event_data, request, project)
         elif message_header.get("type") == "session":
             return Response(
-                {"message": "Session events are not supported at this time."},
+                {
+                    "message": "Attempted to record a session event, which are not supported. This is safe to ignore. You may be able to suppress this message by disabling auto session tracking in your SDK. See https://gitlab.com/glitchtip/glitchtip-backend/-/issues/206"
+                },
                 status=status.HTTP_501_NOT_IMPLEMENTED,
             )
 

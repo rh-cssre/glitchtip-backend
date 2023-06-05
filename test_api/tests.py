@@ -1,7 +1,8 @@
 from django.shortcuts import reverse
 from rest_framework.test import APITestCase
-from users.models import User
+
 from glitchtip.uptime.models import Monitor
+from users.models import User
 
 
 class TestAPITestCase(APITestCase):

@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import Notification, ProjectAlert, AlertRecipient
+
+from .models import AlertRecipient, Notification, ProjectAlert
 
 
 class NotificationAdmin(admin.ModelAdmin):
