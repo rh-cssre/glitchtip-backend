@@ -9,7 +9,6 @@ from django.db import models
 from django.db.models import F, Q
 from django.db.models.expressions import Func
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from django_redis import get_redis_connection
 
 from alerts.models import AlertRecipient
@@ -169,7 +168,7 @@ def send_monitor_notification(monitor_check_id: int, went_down: bool, last_chang
             MonitorEmail(
                 pk=monitor_check_id,
                 went_down=went_down,
-                last_change=parse_datetime(last_change) if last_change else None,
+                last_change=last_change if last_change else None,
             ).send_users_email()
         elif recipient.recipient_type == AlertRecipient.RecipientType.WEBHOOK:
             send_uptime_as_webhook(
