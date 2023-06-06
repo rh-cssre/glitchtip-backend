@@ -36,7 +36,7 @@ class SpanSerializer(serializers.ModelSerializer):
     startTimestamp = serializers.DateTimeField(source="start_timestamp", read_only=True)
     start_timestamp = FlexibleDateTimeField(write_only=True)
     timestamp = FlexibleDateTimeField(write_only=True)
-    description = serializers.CharField()
+    description = serializers.CharField(required=False)
 
     class Meta:
         model = Span
