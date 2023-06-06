@@ -49,7 +49,7 @@ class Span(CreatedModel):
     span_id = models.CharField(max_length=16)
     parent_span_id = models.CharField(max_length=16, null=True, blank=True)
     # same_process_as_parent bool - we don't use this currently
-    op = models.CharField(max_length=255)
+    op = models.CharField(max_length=255, blank=True)
     description = models.CharField(max_length=2000, null=True, blank=True)
     start_timestamp = models.DateTimeField()
     timestamp = models.DateTimeField()
