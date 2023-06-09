@@ -294,3 +294,12 @@ class UptimeTestCase(GlitchTipTestCase):
             baker.make(Monitor, interval=timedelta(seconds=interval), timeout=timeout)
         monitors = Monitor.objects.all()
         result = bucket_monitors(monitors, 1)
+
+    @mock.patch("glitchtip.uptime.utils.asyncio.open_connection")
+    def test_port_monitor(self, mocked):
+        self.create_user_and_project()
+        monitor = baker.make(
+            Monitor, monitor_type=MonitorType.PORT, project=self.project
+        )
+        mocked.assert_called_once()
+        self.assertTrue(monitor.checks.filter(is_up=True).exists())

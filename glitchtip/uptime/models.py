@@ -1,14 +1,15 @@
 import uuid
 from datetime import timedelta
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, URLValidator
 from django.db import models
 from django.db.models import OuterRef, Subquery
 from django.utils.timezone import now
 
-from .constants import MonitorCheckReason, MonitorType
+from .constants import HTTP_MONITOR_TYPES, MonitorCheckReason, MonitorType
 
 
 class MonitorManager(models.Manager):
@@ -35,6 +36,12 @@ class MonitorManager(models.Manager):
         )
 
 
+class OptionalSchemeURLValidator(URLValidator):
+    def __call__(self, value):
+        if "://" in value:
+            super().__call__(value)
+
+
 class Monitor(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     monitor_type = models.CharField(
@@ -47,7 +54,9 @@ class Monitor(models.Model):
         help_text="Used for referencing heartbeat endpoint",
     )
     name = models.CharField(max_length=200)
-    url = models.URLField(max_length=2000, blank=True)
+    url = models.CharField(
+        max_length=2000, blank=True, validators=[OptionalSchemeURLValidator()]
+    )
     expected_status = models.PositiveSmallIntegerField(
         default=200, blank=True, null=True
     )
@@ -97,6 +106,18 @@ class Monitor(models.Model):
             perform_checks.apply_async(args=([self.pk],), countdown=1)
 
     def clean(self):
+        if self.monitor_type in HTTP_MONITOR_TYPES:
+            URLValidator()(self.url)
+        if self.monitor_type == MonitorType.PORT:
+            url = self.url.replace("http://", "//", 1)
+            if not url.startswith("//"):
+                url = "//" + url
+            parsed_url = urlparse(url)
+            if not all([parsed_url.hostname, parsed_url.port]):
+                raise ValidationError(
+                    "Invalid Port URL, expected hostname and port such as example.com:80"
+                )
+            self.url = f"{parsed_url.hostname}:{parsed_url.port}"
         if self.monitor_type != MonitorType.HEARTBEAT and not self.url:
             raise ValidationError("Monitor URL is required")
 
