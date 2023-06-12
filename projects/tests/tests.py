@@ -1,11 +1,13 @@
 from django.conf import settings
 from django.shortcuts import reverse
 from django.utils import timezone
-from rest_framework.test import APITestCase
 from model_bakery import baker
+from rest_framework.test import APITestCase
+
 from glitchtip import test_utils  # pylint: disable=unused-import
 from organizations_ext.models import OrganizationUserRole
-from ..models import ProjectKey, Project
+
+from ..models import Project, ProjectKey
 
 
 class ProjectsAPITestCase(APITestCase):
@@ -15,7 +17,7 @@ class ProjectsAPITestCase(APITestCase):
         self.url = reverse("project-list")
 
     def test_projects_api_create(self):
-        """ This endpoint can't be used to create """
+        """This endpoint can't be used to create"""
         data = {"name": "test"}
         res = self.client.post(self.url, data)
         # Must specify organization and team
@@ -31,9 +33,15 @@ class ProjectsAPITestCase(APITestCase):
     def test_default_ordering(self):
         organization = baker.make("organizations_ext.Organization")
         organization.add_user(self.user, role=OrganizationUserRole.OWNER)
-        projectA = baker.make("projects.Project", organization=organization, name="A Project")
-        projectZ = baker.make("projects.Project", organization=organization, name="Z Project")
-        projectB = baker.make("projects.Project", organization=organization, name="B Project")
+        projectA = baker.make(
+            "projects.Project", organization=organization, name="A Project"
+        )
+        projectZ = baker.make(
+            "projects.Project", organization=organization, name="Z Project"
+        )
+        projectB = baker.make(
+            "projects.Project", organization=organization, name="B Project"
+        )
         res = self.client.get(self.url)
         self.assertEqual(res.data[0]["name"], projectA.name)
         self.assertEqual(res.data[2]["name"], projectZ.name)
@@ -74,7 +82,7 @@ class ProjectsAPITestCase(APITestCase):
         self.assertIn('results="true"', link_header)
 
     def test_project_isolation(self):
-        """ Users should only access projects in their organization """
+        """Users should only access projects in their organization"""
         user1 = self.user
         user2 = baker.make("users.user")
         org1 = baker.make("organizations_ext.Organization")
@@ -102,7 +110,7 @@ class ProjectsAPITestCase(APITestCase):
         self.assertEqual(Project.objects.all().count(), 0)
 
     def test_project_invalid_delete(self):
-        """ Cannot delete projects that are not in the organization the user is an admin of """
+        """Cannot delete projects that are not in the organization the user is an admin of"""
         organization = baker.make("organizations_ext.Organization")
         organization.add_user(self.user, OrganizationUserRole.ADMIN)
         project = baker.make("projects.Project")
