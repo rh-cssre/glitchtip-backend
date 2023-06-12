@@ -93,7 +93,8 @@ class UptimeAPITestCase(GlitchTipTestCase):
         }
         res = self.client.post(self.list_url, data)
         self.assertEqual(res.status_code, 201)
-        self.assertEqual(res.data["url"], "example.com:80")
+        monitor = Monitor.objects.all().first()
+        self.assertEqual(monitor.url, "example.com:80")
 
     def test_create_invalid(self):
         data = {
