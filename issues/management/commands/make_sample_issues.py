@@ -1,63 +1,104 @@
 import random
 
-from django.core.management.base import BaseCommand
+from django.contrib.postgres.search import SearchVector
 from model_bakery import baker
-from model_bakery.random_gen import gen_json, gen_slug
 
-from events.test_data import event_generator
+from events.models import Event
+from events.test_data import bulk_event_data, event_generator
 from events.views import EventStoreAPIView
+from glitchtip.base_commands import MakeSampleCommand
+from glitchtip.utils import get_random_string
+from issues.models import EventType, Issue
 from projects.models import Project
 
-baker.generators.add("organizations.fields.SlugField", gen_slug)
-baker.generators.add("django.db.models.JSONField", gen_json)
+from .issue_generator import CULPRITS, EXCEPTIONS, SDKS, TITLE_CHOICES, generate_tag
 
 
-class Command(BaseCommand):
+class Command(MakeSampleCommand):
     help = "Create sample issues and events for dev and demonstration purposes"
 
     def add_arguments(self, parser):
-        parser.add_argument("quantity", nargs="?", type=int)
+        self.add_org_project_arguments(parser)
+        parser.add_argument("--issue-quantity", type=int, default=100)
         parser.add_argument(
-            "--only-real", action="store_true", help="Only include real sample events",
+            "--events-quantity-per",
+            type=int,
+            help="Defaults to a random amount from 1-100",
         )
         parser.add_argument(
-            "--only-fake",
-            action="store_true",
-            help="Only include faked generated events",
+            "--tag-keys-per-event", type=int, default=0, help="Extra random tag keys"
         )
-
-    def generate_real_event(self, project, unique_issue=False):
-        """ Generate an event based on real sample data """
-        data = event_generator.generate_random_event(unique_issue)
-        serializer = EventStoreAPIView().get_event_serializer_class(data)(
-            data=data, context={"project": project}
+        parser.add_argument(
+            "--tag-values-per-key", type=int, default=1, help="Extra random tag values"
         )
-        serializer.is_valid()
-        serializer.save()
 
     def handle(self, *args, **options):
-        project = Project.objects.first()
-        if not project:
-            project = baker.make("projects.Project")
-        if options["quantity"] is None:
-            options["quantity"] = 1
-        quantity = options["quantity"]
+        super().handle(*args, **options)
+        issue_quantity = options["issue_quantity"]
+        events_quantity_per = options["events_quantity_per"]
 
-        only_real = options["only_real"]
-        only_fake = options["only_fake"]
+        random_tags = {
+            get_random_string(): [
+                get_random_string() for _ in range(options["tag_values_per_key"])
+            ]
+            for _ in range(options["tag_keys_per_event"])
+        }
 
-        if only_real:
-            for _ in range(quantity):
-                self.generate_real_event(project)
-        elif only_fake:
-            baker.make("events.Event", issue__project=project, _quantity=quantity)
-        else:
-            for _ in range(quantity):
-                if random.choice([0, 1]):  # nosec
-                    baker.make("events.Event", issue__project=project)
-                else:
-                    self.generate_real_event(project)
+        def get_events_count():
+            if events_quantity_per:
+                return events_quantity_per
+            return random.randint(1, 100)
 
-        self.stdout.write(
-            self.style.SUCCESS('Successfully created "%s" events' % quantity)
-        )
+        issues = []
+        issue_ids = []
+        for _ in range(issue_quantity):
+            title = random.choice(TITLE_CHOICES) + " " + get_random_string()
+            tags = generate_tag()
+            if tags:
+                tags = {tag[0]: [tag[1]] for tag in tags}
+            else:
+                tags = {}
+            event_count = get_events_count()
+            issues.append(
+                Issue(
+                    title=title,
+                    culprit=random.choice(CULPRITS),
+                    level=EventType.ERROR,
+                    metadata={"title": title},
+                    tags=tags,
+                    project=self.project,
+                    count=event_count,
+                )
+            )
+            if len(issues) > 10000:
+                issues = Issue.objects.bulk_create(issues)
+                issue_ids += [issue.pk for issue in issues]
+                issues = []
+                self.progress_tick()
+        if issues:
+            issues = Issue.objects.bulk_create(issues)
+            issue_ids += [issue.pk for issue in issues]
+        issues = Issue.objects.filter(pk__in=issue_ids)
+        self.progress_tick()
+
+        events = []
+        for issue in issues:
+            for _ in range(issue.count):
+                data = issue.metadata.copy()
+                data["sdk"] = random.choice(SDKS)
+                data["culprit"] = issue.culprit
+                data["exception"] = random.choice(EXCEPTIONS)
+                tags = generate_tag() or {}
+                events.append(
+                    Event(issue=issue, level=issue.level, data=data, tags=tags)
+                )
+            if len(events) > 10000:
+                Event.objects.bulk_create(events)
+                events = []
+                self.progress_tick()
+        if events:
+            Event.objects.bulk_create(events)
+
+        issues.update(search_vector=SearchVector("title"))
+
+        self.success_message('Successfully created "%s" issues' % issue_quantity)
