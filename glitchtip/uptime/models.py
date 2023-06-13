@@ -6,7 +6,11 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import OuterRef, Subquery
+from django.urls import reverse
 from django.utils.timezone import now
+from django_extensions.db.fields import AutoSlugField
+
+from glitchtip.base_models import CreatedModel
 
 from .constants import MonitorCheckReason, MonitorType
 
@@ -142,3 +146,32 @@ class MonitorCheck(models.Model):
         if self.is_up:
             return "Up"
         return "Down"
+
+
+class StatusPage(CreatedModel):
+    """
+    A status page is a collection of monitors that are available to view
+    """
+
+    organization = models.ForeignKey(
+        "organizations_ext.Organization", on_delete=models.CASCADE
+    )
+    name = models.CharField(max_length=200)
+    slug = AutoSlugField(populate_from=["name"], max_length=200)
+    is_public = models.BooleanField(
+        help_text="When true, the status page URL is publicly accessible"
+    )
+    monitors = models.ManyToManyField(Monitor, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "slug"], name="unique_organization_slug"
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+    def get_absolute_url(self):
+        return reverse("status-page-detail", args=[self.organization, self.slug])

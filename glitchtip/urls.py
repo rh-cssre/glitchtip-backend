@@ -86,11 +86,11 @@ urlpatterns += [
     path("api/0/", include("difs.urls")),
     path("api/0/", include("glitchtip.importer.urls")),
     path("api/0/", include("glitchtip.stats.urls")),
-    path("api/0/", include("glitchtip.uptime.urls")),
     path("api/0/", include("glitchtip.wizard.urls")),
     path("api/mfa/", include("django_rest_mfa.urls")),
     path("api/", include("events.urls")),
     path("api/embed/", include("user_reports.urls")),
+    path("", include("glitchtip.uptime.urls")),
     # What an oddball API endpoint
     path(
         "organizations/<slug:org>/issues/<int:issue>/events/<str:event>/json/",

@@ -4,7 +4,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.fields import ChoiceField
 
-from .models import Monitor, MonitorCheck, MonitorType
+from .models import Monitor, MonitorCheck, MonitorType, StatusPage
 
 
 class MonitorCheckRelatedSerializer(serializers.ModelSerializer):
@@ -127,3 +127,12 @@ class MonitorSerializer(serializers.ModelSerializer):
 
 class MonitorDetailSerializer(MonitorSerializer):
     checks = MonitorCheckSerializer(many=True, read_only=True)
+
+
+class StatusPageSerializer(serializers.ModelSerializer):
+    isPublic = serializers.BooleanField(source="is_public")
+
+    class Meta:
+        model = StatusPage
+        fields = ("name", "slug", "isPublic", "monitors")
+        read_only_fields = ("slug",)

@@ -244,6 +244,7 @@ class Organization(SharedBaseModel, OrganizationBase):
             "accept",
             "stripe",
             "admin",
+            "status_page",
             "__debug__",
         ]
         slug = slugify(content)
