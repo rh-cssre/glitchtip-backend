@@ -64,7 +64,7 @@ class UptimeAPITestCase(GlitchTipTestCase):
             res = self.client.get(self.list_url)
         self.assertEqual(len(res.data[0]["checks"]), 60)
 
-    def test_create(self):
+    def test_create_http_monitor(self):
         data = {
             "monitorType": "Ping",
             "name": "Test",
@@ -81,6 +81,20 @@ class UptimeAPITestCase(GlitchTipTestCase):
         self.assertEqual(monitor.timeout, data["timeout"])
         self.assertEqual(monitor.organization, self.organization)
         self.assertEqual(monitor.project, self.project)
+
+    def test_create_port_monitor(self):
+        """Port monitor URLs should be converted to domain:port format, with protocol removed"""
+        data = {
+            "monitorType": "TCP Port",
+            "name": "Test",
+            "url": "http://example.com:80",
+            "expectedStatus": "",
+            "interval": "00:01:00",
+        }
+        res = self.client.post(self.list_url, data)
+        self.assertEqual(res.status_code, 201)
+        monitor = Monitor.objects.all().first()
+        self.assertEqual(monitor.url, "example.com:80")
 
     def test_create_invalid(self):
         data = {
@@ -218,8 +232,12 @@ class UptimeAPITestCase(GlitchTipTestCase):
         user2 = baker.make("users.user")
         org2 = baker.make("organizations_ext.Organization")
         org2.add_user(user2)
-        monitor1 = baker.make("uptime.Monitor", organization=self.organization)
-        monitor2 = baker.make("uptime.Monitor", organization=org2)
+        monitor1 = baker.make(
+            "uptime.Monitor", url="http://example.com", organization=self.organization
+        )
+        monitor2 = baker.make(
+            "uptime.Monitor", url="http://example.com", organization=org2
+        )
 
         res = self.client.get(self.list_url)
         self.assertContains(res, monitor1.name)
