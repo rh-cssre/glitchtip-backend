@@ -98,6 +98,7 @@ class Monitor(models.Model):
     def save(self, *args, **kwargs):
         if self.monitor_type == MonitorType.HEARTBEAT and not self.endpoint_id:
             self.endpoint_id = uuid.uuid4()
+        self.clean()
         super().save(*args, **kwargs)
         # pylint: disable=import-outside-toplevel
         from glitchtip.uptime.tasks import perform_checks

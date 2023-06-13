@@ -291,7 +291,12 @@ class UptimeTestCase(GlitchTipTestCase):
             [3, 50],
         ]
         for interval, timeout in interval_timeouts:
-            baker.make(Monitor, interval=timedelta(seconds=interval), timeout=timeout)
+            baker.make(
+                Monitor,
+                url="http://example.com",
+                interval=timedelta(seconds=interval),
+                timeout=timeout,
+            )
         monitors = Monitor.objects.all()
         result = bucket_monitors(monitors, 1)
 
@@ -299,7 +304,10 @@ class UptimeTestCase(GlitchTipTestCase):
     def test_port_monitor(self, mocked):
         self.create_user_and_project()
         monitor = baker.make(
-            Monitor, monitor_type=MonitorType.PORT, project=self.project
+            Monitor,
+            url="example.com:80",
+            monitor_type=MonitorType.PORT,
+            project=self.project,
         )
         mocked.assert_called_once()
         self.assertTrue(monitor.checks.filter(is_up=True).exists())

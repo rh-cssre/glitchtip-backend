@@ -232,8 +232,12 @@ class UptimeAPITestCase(GlitchTipTestCase):
         user2 = baker.make("users.user")
         org2 = baker.make("organizations_ext.Organization")
         org2.add_user(user2)
-        monitor1 = baker.make("uptime.Monitor", organization=self.organization)
-        monitor2 = baker.make("uptime.Monitor", organization=org2)
+        monitor1 = baker.make(
+            "uptime.Monitor", url="http://example.com", organization=self.organization
+        )
+        monitor2 = baker.make(
+            "uptime.Monitor", url="http://example.com", organization=org2
+        )
 
         res = self.client.get(self.list_url)
         self.assertContains(res, monitor1.name)
