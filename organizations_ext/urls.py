@@ -3,7 +3,11 @@ from rest_framework_nested import routers
 
 from environments.views import EnvironmentViewSet
 from glitchtip.routers import BulkSimpleRouter
-from glitchtip.uptime.views import MonitorCheckViewSet, MonitorViewSet
+from glitchtip.uptime.views import (
+    MonitorCheckViewSet,
+    MonitorViewSet,
+    StatusPageViewSet,
+)
 from issues.views import IssueViewSet
 from performance.views import SpanViewSet, TransactionGroupViewSet, TransactionViewSet
 from projects.views import OrganizationProjectsViewSet
@@ -54,6 +58,9 @@ organizations_router.register(
 )
 organizations_router.register(
     r"monitors", MonitorViewSet, basename="organization-monitors"
+)
+organizations_router.register(
+    r"status-pages", StatusPageViewSet, basename="organization-status-pages"
 )
 
 organizations_monitors_router = routers.NestedSimpleRouter(
