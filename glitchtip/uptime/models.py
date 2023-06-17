@@ -1,6 +1,5 @@
 import uuid
 from datetime import timedelta
-from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -102,7 +101,6 @@ class Monitor(models.Model):
     def save(self, *args, **kwargs):
         if self.monitor_type == MonitorType.HEARTBEAT and not self.endpoint_id:
             self.endpoint_id = uuid.uuid4()
-        self.clean()
         super().save(*args, **kwargs)
         # pylint: disable=import-outside-toplevel
         from glitchtip.uptime.tasks import perform_checks
@@ -113,16 +111,6 @@ class Monitor(models.Model):
     def clean(self):
         if self.monitor_type in HTTP_MONITOR_TYPES:
             URLValidator()(self.url)
-        if self.monitor_type == MonitorType.PORT:
-            url = self.url.replace("http://", "//", 1)
-            if not url.startswith("//"):
-                url = "//" + url
-            parsed_url = urlparse(url)
-            if not all([parsed_url.hostname, parsed_url.port]):
-                raise ValidationError(
-                    "Invalid Port URL, expected hostname and port such as example.com:80"
-                )
-            self.url = f"{parsed_url.hostname}:{parsed_url.port}"
         if self.monitor_type != MonitorType.HEARTBEAT and not self.url:
             raise ValidationError("Monitor URL is required")
 

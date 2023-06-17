@@ -64,7 +64,8 @@ class UptimeAPITestCase(GlitchTipTestCase):
             res = self.client.get(self.list_url)
         self.assertEqual(len(res.data[0]["checks"]), 60)
 
-    def test_create_http_monitor(self):
+    @mock.patch("glitchtip.uptime.tasks.perform_checks.run")
+    def test_create_http_monitor(self, mocked):
         data = {
             "monitorType": "Ping",
             "name": "Test",
@@ -81,8 +82,10 @@ class UptimeAPITestCase(GlitchTipTestCase):
         self.assertEqual(monitor.timeout, data["timeout"])
         self.assertEqual(monitor.organization, self.organization)
         self.assertEqual(monitor.project, self.project)
+        mocked.assert_called_once()
 
-    def test_create_port_monitor(self):
+    @mock.patch("glitchtip.uptime.tasks.perform_checks.run")
+    def test_create_port_monitor(self, mocked):
         """Port monitor URLs should be converted to domain:port format, with protocol removed"""
         data = {
             "monitorType": "TCP Port",
@@ -95,12 +98,25 @@ class UptimeAPITestCase(GlitchTipTestCase):
         self.assertEqual(res.status_code, 201)
         monitor = Monitor.objects.all().first()
         self.assertEqual(monitor.url, "example.com:80")
+        mocked.assert_called_once()
+
+    def test_create_port_monitor_validation(self):
+        """Port monitor URLs should be converted to domain:port format, with protocol removed"""
+        data = {
+            "monitorType": "TCP Port",
+            "name": "Test",
+            "url": "example:80:",
+            "expectedStatus": "",
+            "interval": "00:01:00",
+        }
+        res = self.client.post(self.list_url, data)
+        self.assertEqual(res.status_code, 400)
 
     def test_create_invalid(self):
         data = {
             "monitorType": "Ping",
             "name": "Test",
-            "url": "",
+            "url": "foo:80:",
             "expectedStatus": 200,
             "interval": "00:01:00",
             "project": self.project.pk,

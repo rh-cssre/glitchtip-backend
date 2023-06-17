@@ -1,9 +1,13 @@
+from urllib.parse import urlparse
+
 from django.conf import settings
+from django.core.validators import URLValidator
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.fields import ChoiceField
 
+from .constants import HTTP_MONITOR_TYPES
 from .models import Monitor, MonitorCheck, MonitorType, StatusPage
 
 
@@ -105,24 +109,38 @@ class MonitorSerializer(serializers.ModelSerializer):
             "envName",
         )
 
-    def validate(self, data):
-        if data["url"] == "" and data["monitor_type"] in [
+    def validate(self, attrs):
+        monitor_type = attrs["monitor_type"]
+        if attrs["url"] == "" and monitor_type in HTTP_MONITOR_TYPES + [
+            MonitorType.SSL
+        ]:
+            raise serializers.ValidationError("URL is required for " + monitor_type)
+
+        if monitor_type in HTTP_MONITOR_TYPES:
+            URLValidator()(attrs["url"])
+
+        if attrs.get("expected_status") is None and monitor_type in [
             MonitorType.GET,
-            MonitorType.PING,
             MonitorType.POST,
-            MonitorType.SSL,
         ]:
             raise serializers.ValidationError(
-                "URL is required for " + data["monitor_type"]
+                "Expected status is required for " + attrs["monitor_type"]
             )
-        if data.get("expected_status") is None and data["monitor_type"] in [
-            MonitorType.GET,
-            MonitorType.POST,
-        ]:
-            raise serializers.ValidationError(
-                "Expected status is required for " + data["monitor_type"]
-            )
-        return data
+
+        if attrs["monitor_type"] == MonitorType.PORT:
+            url = attrs["url"].replace("http://", "//", 1)
+            if not url.startswith("//"):
+                url = "//" + url
+            parsed_url = urlparse(url)
+            message = "Invalid Port URL, expected hostname and port"
+            try:
+                if not all([parsed_url.hostname, parsed_url.port]):
+                    raise serializers.ValidationError(message)
+            except ValueError as err:
+                raise serializers.ValidationError(message) from err
+            attrs["url"] = f"{parsed_url.hostname}:{parsed_url.port}"
+
+        return attrs
 
 
 class MonitorDetailSerializer(MonitorSerializer):
