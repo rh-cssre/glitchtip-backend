@@ -38,7 +38,7 @@ django-sql-utils = "^0.6.1"
 django-redis = {extras = ["hiredis"], version = "^5.2.0"}
 uwsgi-chunked = "^0.1.8"
 django-import-export = "^3.0.0"
-flower = "^1.2.0"
+flower = "^2.0.0"
 psycopg = {extras = ["c"], version = "^3.1.8"}
 
 [tool.poetry.group.dev.dependencies]
