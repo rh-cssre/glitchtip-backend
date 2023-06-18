@@ -111,9 +111,9 @@ class MonitorSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         monitor_type = attrs["monitor_type"]
-        if attrs["url"] == "" and monitor_type in HTTP_MONITOR_TYPES + [
-            MonitorType.SSL
-        ]:
+        if attrs["url"] == "" and monitor_type in HTTP_MONITOR_TYPES + (
+            MonitorType.SSL,
+        ):
             raise serializers.ValidationError("URL is required for " + monitor_type)
 
         if monitor_type in HTTP_MONITOR_TYPES:
