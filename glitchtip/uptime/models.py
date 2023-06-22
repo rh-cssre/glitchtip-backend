@@ -184,4 +184,4 @@ class StatusPage(CreatedModel):
         return self.name
 
     def get_absolute_url(self):
-        return reverse("status-page-detail", args=[self.organization, self.slug])
+        return reverse("status-page-detail", args=[self.organization.slug, self.slug])
