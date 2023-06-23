@@ -1,8 +1,8 @@
 from django.db import models
-from django.utils.translation import gettext_lazy as _
 
 from glitchtip.base_models import CreatedModel
 
+from .constants import RecipientType
 from .email import send_email_notification
 from .webhooks import send_webhook_notification
 
@@ -24,14 +24,6 @@ class ProjectAlert(CreatedModel):
 class AlertRecipient(models.Model):
     """An asset that accepts an alert such as email, SMS, webhooks"""
 
-    class RecipientType(models.TextChoices):
-        EMAIL = "email", _("Email")
-        DISCORD = "discord", _("Discord")
-        GENERAL_WEBHOOK = "webhook", _("General Webhook")  # Backwards Compatibility
-        MICROSOFT_TEAMS = "microsoft_teams", _("Microsoft Teams")
-        ROCKET_CHAT = "rocket_chat", _("Rocket.Chat")
-        SLACK = "slack", _("Slack")
-
     alert = models.ForeignKey(ProjectAlert, on_delete=models.CASCADE)
     recipient_type = models.CharField(max_length=16, choices=RecipientType.choices)
     url = models.URLField(max_length=2000, blank=True)
@@ -42,15 +34,12 @@ class AlertRecipient(models.Model):
     @property
     def is_webhook(self):
         return self.recipient_type in (
-            self.RecipientType.DISCORD,
-            self.RecipientType.GENERAL_WEBHOOK,
-            self.RecipientType.ROCKET_CHAT,
-            self.RecipientType.MICROSOFT_TEAMS,
-            self.RecipientType.SLACK,
+            RecipientType.DISCORD,
+            RecipientType.GENERAL_WEBHOOK,
         )
 
     def send(self, notification):
-        if self.recipient_type == self.RecipientType.EMAIL:
+        if self.recipient_type == RecipientType.EMAIL:
             send_email_notification(notification)
         elif self.is_webhook:
             send_webhook_notification(notification, self.url, self.recipient_type)

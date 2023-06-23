@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING, List, Optional
 
 import requests
 
+from .constants import RecipientType
+
 if TYPE_CHECKING:
     from issues.models import Issue
 
@@ -49,14 +51,17 @@ class WebhookPayload:
 def send_webhook(
     url: str,
     message: str,
-    attachments: List[WebhookAttachment] = [],
-    sections: List[MSTeamsSection] = [],
+    attachments: Optional[List[WebhookAttachment]] = None,
+    sections: Optional[List[MSTeamsSection]] = None,
 ):
+    if not attachments:
+        attachments = []
+    if not sections:
+        sections = []
     data = WebhookPayload(
         alias="GlitchTip", text=message, attachments=attachments, sections=sections
     )
-    response = requests.post(url, json=asdict(data))
-    return response
+    return requests.post(url, json=asdict(data), timeout=10)
 
 
 def send_issue_as_webhook(url, issues: List["Issue"], issue_count: int = 1):
@@ -139,7 +144,7 @@ class DiscordWebhookPayload:
 
 
 def send_issue_as_discord_webhook(url, issues: List["Issue"], issue_count: int = 1):
-    embeds = []
+    embeds: List[DiscordEmbed] = []
 
     for issue in issues:
         fields = [
@@ -184,9 +189,12 @@ def send_issue_as_discord_webhook(url, issues: List["Issue"], issue_count: int =
     if issue_count > 1:
         message += f" ({issue_count} issues)"
 
-    payload = DiscordWebhookPayload(content=message, embeds=embeds)
+    return send_discord_webhook(url, message, embeds)
 
-    return requests.post(url, json=asdict(payload))
+
+def send_discord_webhook(url: str, message: str, embeds: List[DiscordEmbed]):
+    payload = DiscordWebhookPayload(content=message, embeds=embeds)
+    return requests.post(url, json=asdict(payload), timeout=10)
 
 
 def send_webhook_notification(
@@ -196,7 +204,7 @@ def send_webhook_notification(
     issues = notification.issues.all()[:3]  # Show no more than three
 
     match recipient_type:
-        case "discord":
+        case RecipientType.DISCORD:
             send_issue_as_discord_webhook(url, issues, issue_count)
             return
         case _:

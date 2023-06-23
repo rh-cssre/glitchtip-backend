@@ -6,12 +6,13 @@ from model_bakery import baker
 from events.models import LogLevel
 from glitchtip import test_utils  # pylint: disable=unused-import
 
-from ..models import AlertRecipient, Notification
+from ..constants import RecipientType
+from ..models import Notification
 from ..tasks import process_event_alerts
 from ..webhooks import (
+    send_issue_as_discord_webhook,
     send_issue_as_webhook,
     send_webhook,
-    send_issue_as_discord_webhook,
 )
 
 TEST_URL = "https://burkesoftware.rocket.chat/hooks/Y8TttGY7RvN7Qm3gD/rqhHLiRSvYRZ8BhbhhhLYumdMksWnyj3Dqsqt8QKrmbNndXH"
@@ -47,7 +48,7 @@ class WebhookTestCase(TestCase):
         baker.make(
             "alerts.AlertRecipient",
             alert=alert,
-            recipient_type=AlertRecipient.RecipientType.GENERAL_WEBHOOK,
+            recipient_type=RecipientType.GENERAL_WEBHOOK,
             url="example.com",
         )
         issue = baker.make("issues.Issue", project=project)
@@ -60,7 +61,7 @@ class WebhookTestCase(TestCase):
         process_event_alerts()
         self.assertEqual(
             Notification.objects.filter(
-                project_alert__alertrecipient__recipient_type=AlertRecipient.RecipientType.GENERAL_WEBHOOK
+                project_alert__alertrecipient__recipient_type=RecipientType.GENERAL_WEBHOOK
             ).count(),
             1,
         )
