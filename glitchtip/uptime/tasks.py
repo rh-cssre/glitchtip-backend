@@ -11,6 +11,7 @@ from django.db.models.expressions import Func
 from django.utils import timezone
 from django_redis import get_redis_connection
 
+from alerts.constants import RecipientType
 from alerts.models import AlertRecipient
 
 from .email import MonitorEmail
@@ -164,16 +165,14 @@ def send_monitor_notification(monitor_check_id: int, went_down: bool, last_chang
         alert__project__monitor__checks=monitor_check_id, alert__uptime=True
     )
     for recipient in recipients:
-        if recipient.recipient_type == AlertRecipient.RecipientType.EMAIL:
+        if recipient.recipient_type == RecipientType.EMAIL:
             MonitorEmail(
                 pk=monitor_check_id,
                 went_down=went_down,
                 last_change=last_change if last_change else None,
             ).send_users_email()
-        elif recipient.recipient_type == AlertRecipient.RecipientType.WEBHOOK:
-            send_uptime_as_webhook(
-                recipient.url, monitor_check_id, went_down, last_change
-            )
+        elif recipient.is_webhook:
+            send_uptime_as_webhook(recipient, monitor_check_id, went_down, last_change)
 
 
 @shared_task

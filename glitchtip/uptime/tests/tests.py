@@ -6,6 +6,7 @@ from aioresponses import aioresponses
 from django.core import mail
 from django.core.cache import cache
 from django.urls import reverse
+from django.utils import timezone
 from freezegun import freeze_time
 from model_bakery import baker
 
@@ -17,6 +18,7 @@ from ..constants import MonitorType
 from ..models import Monitor, MonitorCheck
 from ..tasks import UPTIME_COUNTER_KEY, bucket_monitors, dispatch_checks
 from ..utils import fetch_all
+from ..webhooks import send_uptime_as_webhook
 
 
 class UptimeTestCase(GlitchTipTestCase):
@@ -140,6 +142,22 @@ class UptimeTestCase(GlitchTipTestCase):
             dispatch_checks()
         self.assertEqual(len(mail.outbox), 2)
         self.assertIn("is back up", mail.outbox[1].body)
+
+    @aioresponses()
+    @mock.patch("requests.post")
+    def test_discord_webhook(self, mocked, mocked_post):
+        self.create_user_and_project()
+        test_url = "https://example.com"
+        mocked.get(test_url, status=200)
+        check = baker.make(
+            "uptime.MonitorCheck",
+            monitor__monitor_type=MonitorType.GET,
+            monitor__url=test_url,
+            monitor__project=self.project,
+        )
+        recipient = baker.make("alerts.AlertRecipient", recipient_type="discord")
+        send_uptime_as_webhook(recipient, check.pk, True, timezone.now())
+        mocked_post.assert_called_once()
 
     @aioresponses()
     def test_notification_default_scope(self, mocked):

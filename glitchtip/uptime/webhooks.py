@@ -1,10 +1,12 @@
 from datetime import datetime
-from typing import List
 
+from alerts.constants import RecipientType
+from alerts.models import AlertRecipient
 from alerts.webhooks import (
+    DiscordEmbed,
     MSTeamsSection,
     WebhookAttachment,
-    WebhookPayload,
+    send_discord_webhook,
     send_webhook,
 )
 
@@ -12,7 +14,10 @@ from .models import MonitorCheck
 
 
 def send_uptime_as_webhook(
-    url, monitor_check_id: int, went_down: bool, last_change: datetime
+    recipient: AlertRecipient,
+    monitor_check_id: int,
+    went_down: bool,
+    last_change: datetime,
 ):
     """
     Notification about uptime event via webhook.
@@ -25,8 +30,20 @@ def send_uptime_as_webhook(
         if went_down
         else "The monitored site is back up."
     )
-    attachment = WebhookAttachment(str(monitor.name), monitor.get_detail_url(), message)
-    section = MSTeamsSection(str(monitor.name), message)
+    subject = "GlitchTip Uptime Alert"
 
-    message = "GlitchTip Uptime Alert"
-    return send_webhook(url, message, [attachment], [section])
+    if recipient.recipient_type == RecipientType.GENERAL_WEBHOOK:
+        attachment = WebhookAttachment(
+            str(monitor.name), monitor.get_detail_url(), message
+        )
+        section = MSTeamsSection(str(monitor.name), message)
+        return send_webhook(recipient.url, subject, [attachment], [section])
+    elif recipient.recipient_type == RecipientType.DISCORD:
+        embed = DiscordEmbed(
+            title=monitor,
+            description=message,
+            color=None,
+            fields=[],
+            url=monitor.get_detail_url(),
+        )
+        return send_discord_webhook(recipient.url, subject, [embed])
