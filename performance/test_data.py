@@ -3,6 +3,8 @@ import random
 import string
 import uuid
 
+from glitchtip.test_utils.test_data import ENVIRONMENTS, RELEASES
+
 from .models import TransactionEvent, TransactionGroup
 
 TRANSACTIONS = [
@@ -34,18 +36,6 @@ METHODS = [
     "PUT",
     "DELETE",
 ]
-
-RELEASES = [
-    None,
-    "1.0",
-    "1.1",
-    "1.2",
-    "1.3",
-    "2.0",
-    "2.1",
-]
-
-ENVIRONMENTS = [None, "local", "dev", "staging", "production"]
 
 
 def maybe_random_string():
@@ -109,6 +99,6 @@ def generate_fake_transaction_event(project, start_timestamp):
         start_timestamp=start_timestamp,
         data={},
         timestamp=timestamp,
-        duration=timestamp - start_timestamp,
+        duration=(timestamp - start_timestamp).microseconds / 1000,
         tags=tags,
     )
