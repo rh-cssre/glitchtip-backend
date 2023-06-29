@@ -1044,19 +1044,18 @@ with-social = ["django-allauth (>=0.40.0,<0.55.0)"]
 
 [[package]]
 name = "dj-stripe"
-version = "2.7.3"
+version = "2.8.0"
 description = "Django + Stripe made easy"
 category = "main"
 optional = false
-python-versions = ">=3.7.12,<4.0.0"
+python-versions = ">=3.8.0,<4.0.0"
 files = [
-    {file = "dj_stripe-2.7.3-py3-none-any.whl", hash = "sha256:4709f1c3091fdd565d96152c86136e93e73c5188a2f4847445e79e93ad203429"},
-    {file = "dj_stripe-2.7.3.tar.gz", hash = "sha256:88b584ff2940b0b87ec337df1e7f4974d739a48cdfc81c3b25e4247c541c75ec"},
+    {file = "dj_stripe-2.8.0-py3-none-any.whl", hash = "sha256:d288d244d7a580159529b56b1b9a9141590291a1788af19983f0ea207775d921"},
+    {file = "dj_stripe-2.8.0.tar.gz", hash = "sha256:218b78258d757a43978813d8c295e9a19b593017357a66c2b76ce454be180c8e"},
 ]
 
 [package.dependencies]
 django = ">=3.2"
-jsonfield = ">=3.0"
 stripe = ">=2.48.0,<5.0.0"
 
 [package.extras]
@@ -2637,21 +2636,6 @@ files = [
     {file = "jmespath-1.0.1-py3-none-any.whl", hash = "sha256:02e2e4cc71b5bcab88332eebf907519190dd9e6e82107fa7f83b1003a6252980"},
     {file = "jmespath-1.0.1.tar.gz", hash = "sha256:90261b206d6defd58fdd5e85f478bf633a2901798906be2ad389150c5c60edbe"},
 ]
-
-[[package]]
-name = "jsonfield"
-version = "3.1.0"
-description = "A reusable Django field that allows you to store validated JSON in your model."
-category = "main"
-optional = false
-python-versions = ">=3.6"
-files = [
-    {file = "jsonfield-3.1.0-py3-none-any.whl", hash = "sha256:df857811587f252b97bafba42e02805e70a398a7a47870bc6358a0308dd689ed"},
-    {file = "jsonfield-3.1.0.tar.gz", hash = "sha256:7e4e84597de21eeaeeaaa7cc5da08c61c48a9b64d0c446b2d71255d01812887a"},
-]
-
-[package.dependencies]
-Django = ">=2.2"
 
 [[package]]
 name = "kombu"
@@ -4644,4 +4628,4 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "1f6ca73f7f3ba50cecd7391cff1e0805aab3b20285ed4400bef9a67c324f7e4c"
+content-hash = "80ce30b0a6c9e5879a1d5aa28bb751b03b4acaf5e07a3a03a341d33754257d7a"
