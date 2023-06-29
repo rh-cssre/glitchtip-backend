@@ -22,7 +22,7 @@ sentry-sdk = "^1.0.0"
 django-filter = "^22.1"
 celery = {version = "~5.3.0", extras = ["redis"]}
 django-csp = "^3.6"
-dj-stripe = "~2.7.2"
+dj-stripe = "~2.8.0"
 django-anymail = "^8.1"
 drf-yasg = "1.21.6"
 dj-rest-auth = "^4.0.0"
