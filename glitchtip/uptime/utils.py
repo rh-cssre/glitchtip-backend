@@ -22,8 +22,11 @@ async def process_response(monitor, response):
         if monitor["expected_body"]:
             # Limit size to 2MB
             body = await response.content.read(PAYLOAD_LIMIT)
-            encoding = response.get_encoding()
-            payload = body.decode(encoding, errors="ignore")
+            try:
+                encoding = response.get_encoding()
+                payload = body.decode(encoding, errors="ignore")
+            except RuntimeError:
+                payload = body.decode(errors="ignore")
             if monitor["expected_body"] in payload:
                 monitor["is_up"] = True
             else:
