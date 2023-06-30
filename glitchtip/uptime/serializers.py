@@ -43,7 +43,9 @@ class MonitorSerializer(serializers.ModelSerializer):
     lastChange = serializers.SerializerMethodField()
     monitorType = ChoiceField(choices=MonitorType.choices, source="monitor_type")
     expectedStatus = serializers.IntegerField(source="expected_status", allow_null=True)
-    expectedBody = serializers.CharField(source="expected_body", allow_blank=True)
+    expectedBody = serializers.CharField(
+        source="expected_body", required=False, allow_blank=True
+    )
     heartbeatEndpoint = serializers.SerializerMethodField()
     projectName = serializers.SerializerMethodField()
     envName = serializers.SerializerMethodField()
