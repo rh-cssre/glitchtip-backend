@@ -1044,14 +1044,14 @@ with-social = ["django-allauth (>=0.40.0,<0.55.0)"]
 
 [[package]]
 name = "dj-stripe"
-version = "2.8.0"
+version = "2.8.1"
 description = "Django + Stripe made easy"
 category = "main"
 optional = false
 python-versions = ">=3.8.0,<4.0.0"
 files = [
-    {file = "dj_stripe-2.8.0-py3-none-any.whl", hash = "sha256:d288d244d7a580159529b56b1b9a9141590291a1788af19983f0ea207775d921"},
-    {file = "dj_stripe-2.8.0.tar.gz", hash = "sha256:218b78258d757a43978813d8c295e9a19b593017357a66c2b76ce454be180c8e"},
+    {file = "dj_stripe-2.8.1-py3-none-any.whl", hash = "sha256:607635aacf0bb99b85a0de00ceb2f3bf1087f664477baeb87641b751a6c04724"},
+    {file = "dj_stripe-2.8.1.tar.gz", hash = "sha256:041f73eb9c5fbb0fd952dbd66e5fd2c8339ea34a159c27296aaf9253c8a88c77"},
 ]
 
 [package.dependencies]
