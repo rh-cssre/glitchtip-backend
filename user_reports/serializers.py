@@ -1,5 +1,6 @@
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
+
 from .models import UserReport
 
 # Copy credited to OSS Sentry sentry/web/error_page_embed.py
