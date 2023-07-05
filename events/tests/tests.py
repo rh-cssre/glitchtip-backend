@@ -8,7 +8,7 @@ from model_bakery import baker
 from rest_framework.test import APITestCase
 
 from environments.models import Environment, EnvironmentProject
-from glitchtip import test_utils  # pylint: disable=unused-import
+from glitchtip.test_utils import generators  # pylint: disable=unused-import
 from issues.models import EventStatus, Issue
 from releases.models import Release
 
@@ -111,7 +111,7 @@ class EventStoreTestCase(APITestCase):
     def test_performance(self):
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
-        with self.assertNumQueries(17):
+        with self.assertNumQueries(16):
             res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 

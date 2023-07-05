@@ -29,6 +29,7 @@ from .fields import (
     QueryStringField,
 )
 from .models import Event, LogLevel
+from .utils import generate_hash
 
 
 def replace(data: Union[str, dict, list], match: str, repl: str):
@@ -100,6 +101,7 @@ class SentrySDKEventSerializer(BaseSerializer):
     """Represents events coming from a OSS sentry SDK client"""
 
     breadcrumbs = serializers.JSONField(required=False)
+    fingerprint = serializers.ListField(child=serializers.CharField(), required=False)
     tags = ForgivingHStoreField(required=False)
     event_id = serializers.UUIDField(required=False, default=uuid.uuid4)
     extra = serializers.JSONField(required=False)
@@ -336,6 +338,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
 
         title = eventtype.get_title(metadata)
         culprit = eventtype.get_location(data)
+        issue_hash = generate_hash(title, culprit, self.type, data.get("fingerprint"))
         request = data.get("request")
         breadcrumbs = data.get("breadcrumbs")
         level = None
@@ -359,6 +362,9 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 project.save(update_fields=["first_event"])
             defaults = {
                 "metadata": sanitize_bad_postgres_json(metadata),
+                "title": sanitize_bad_postgres_chars(title),
+                "culprit": sanitize_bad_postgres_chars(culprit),
+                "type": self.type,
             }
             if level:
                 defaults["level"] = level
@@ -366,13 +372,16 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             tags = self.generate_tags(data, tags)
             defaults["tags"] = {tag[0]: [tag[1]] for tag in tags}
 
-            issue, issue_created = Issue.objects.get_or_create(
-                title=sanitize_bad_postgres_chars(title),
-                culprit=sanitize_bad_postgres_chars(culprit),
-                project_id=project.id,
-                type=self.type,
-                defaults=defaults,
-            )
+            issue_created = False
+            try:
+                issue = Issue.objects.get(
+                    project_id=project.id,
+                    issuehash__hash=issue_hash,
+                )
+            except Issue.DoesNotExist:
+                issue = Issue.objects.create(project_id=project.id, **defaults)
+                issue.issuehash_set.create(hash=issue_hash, project=project)
+                issue_created = True
 
             json_data = {
                 "breadcrumbs": breadcrumbs,

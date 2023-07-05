@@ -197,7 +197,7 @@ class IssuesAPITestCase(GlitchTipTestCase):
         events = baker.make("events.Event", issue=issue, _quantity=2)
         res = self.client.get(self.url)
         self.assertEqual(
-            res.data[0]["lastSeen"][:20], events[1].created.isoformat()[:20]
+            res.data[0]["lastSeen"][:19], events[1].created.isoformat()[:19]
         )
 
     def test_issue_delete(self):
