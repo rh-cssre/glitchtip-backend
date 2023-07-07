@@ -109,11 +109,11 @@ class IssueHash(models.Model):
     issue = models.ForeignKey("issues.Issue", on_delete=models.CASCADE)
     # Redundant project allows for unique constraint
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
-    hash = models.UUIDField(db_index=True)
+    value = models.UUIDField(db_index=True)
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["project", "hash"], name="project hash")
+            models.UniqueConstraint(fields=["project", "value"], name="project hash")
         ]
 
 

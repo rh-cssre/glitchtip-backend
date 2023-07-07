@@ -376,11 +376,11 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             try:
                 issue = Issue.objects.get(
                     project_id=project.id,
-                    issuehash__hash=issue_hash,
+                    issuehash__value=issue_hash,
                 )
             except Issue.DoesNotExist:
                 issue = Issue.objects.create(project_id=project.id, **defaults)
-                issue.issuehash_set.create(hash=issue_hash, project=project)
+                issue.issuehash_set.create(value=issue_hash, project=project)
                 issue_created = True
 
             json_data = {
