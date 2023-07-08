@@ -55,10 +55,7 @@ class Issue(CreatedModel):
     last_seen = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
-        unique_together = (
-            ("title", "culprit", "project", "type"),
-            ("project", "short_id"),
-        )
+        unique_together = (("project", "short_id"),)
         indexes = [GinIndex(fields=["search_vector"], name="search_vector_idx")]
 
     def event(self):
@@ -106,6 +103,18 @@ class Issue(CreatedModel):
         """
         with connection.cursor() as cursor:
             cursor.execute("CALL update_issue_index(%s)", [issue_id])
+
+
+class IssueHash(models.Model):
+    issue = models.ForeignKey("issues.Issue", on_delete=models.CASCADE)
+    # Redundant project allows for unique constraint
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
+    value = models.UUIDField(db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["project", "value"], name="project hash")
+        ]
 
 
 class Comment(CreatedModel):
