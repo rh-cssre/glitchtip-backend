@@ -15,6 +15,7 @@ from .serializers import (
     MonitorCheckSerializer,
     MonitorDetailSerializer,
     MonitorSerializer,
+    MonitorUpdateSerializer,
     StatusPageSerializer,
 )
 from .tasks import send_monitor_notification
@@ -44,6 +45,8 @@ class MonitorViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action in ["retrieve"]:
             return MonitorDetailSerializer
+        elif self.action in ["update"]:
+            return MonitorUpdateSerializer
         return super().get_serializer_class()
 
     def get_queryset(self):

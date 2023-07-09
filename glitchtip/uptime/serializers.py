@@ -150,6 +150,13 @@ class MonitorDetailSerializer(MonitorSerializer):
     checks = MonitorCheckSerializer(many=True, read_only=True)
 
 
+class MonitorUpdateSerializer(MonitorSerializer):
+    """Remove checks, which otherwise would be have the limit applied"""
+
+    class Meta(MonitorSerializer.Meta):
+        fields = [field for field in MonitorSerializer.Meta.fields if field != "checks"]
+
+
 class StatusPageSerializer(serializers.ModelSerializer):
     isPublic = serializers.BooleanField(source="is_public")
 
