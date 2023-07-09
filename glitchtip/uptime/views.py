@@ -149,7 +149,9 @@ class StatusPageDetailView(DetailView):
         else:
             queryset = queryset.filter(is_public=True)
 
-        return queryset.filter(organization__slug=self.kwargs.get("organization"))
+        return queryset.filter(
+            organization__slug=self.kwargs.get("organization")
+        ).distinct()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
