@@ -4,15 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ("organizations_ext", "0005_remove_organization_throttling_cycle_anchor"),
+        ("organizations_ext", "0001_squashed_0009_organization_scrub_ip_addresses"),
         ("teams", "0002_team_members_new"),
     ]
 
     operations = [
-        migrations.RemoveField(model_name="team", name="members",),
+        migrations.RemoveField(
+            model_name="team",
+            name="members",
+        ),
         migrations.RenameField(
-            model_name="team", old_name="members_new", new_name="members",
+            model_name="team",
+            old_name="members_new",
+            new_name="members",
         ),
     ]

@@ -11,13 +11,19 @@ from projects.models import Project
 from .serializers import StatsV2Serializer
 
 EVENT_TIME_SERIES_SQL = """
-SELECT gs.ts, count(event.created)
+SELECT gs.ts, sum(event_stat.count)
 FROM generate_series(%s, %s, %s::interval) gs (ts)
-LEFT JOIN events_event event
-ON event.created >= gs.ts AND event.created < gs.ts +  interval '1 hour'
-LEFT JOIN issues_issue issue
-ON event.issue_id = issue.id or event is null
-WHERE issue.project_id IN %s
+LEFT JOIN projects_eventprojecthourlystatistic event_stat
+ON event_stat.date >= gs.ts AND event_stat.date < gs.ts +  interval '1 hour'
+WHERE event_stat.project_id = ANY(%s) or event_stat is null
+GROUP BY gs.ts ORDER BY gs.ts;
+"""
+TRANSACTION_TIME_SERIES_SQL = """
+SELECT gs.ts, sum(transaction_stat.count)
+FROM generate_series(%s, %s, %s::interval) gs (ts)
+LEFT JOIN projects_transactioneventprojecthourlystatistic transaction_stat
+ON transaction_stat.date >= gs.ts AND transaction_stat.date < gs.ts +  interval '1 hour'
+WHERE transaction_stat.project_id = ANY(%s) or transaction_stat is null
 GROUP BY gs.ts ORDER BY gs.ts;
 """
 
@@ -66,14 +72,22 @@ class StatsV2View(views.APIView):
         )
         if serializer.validated_data.get("project"):
             projects = projects.filter(pk__in=serializer.validated_data["project"])
-        project_ids = tuple(projects.values_list("id", flat=True))
+        project_ids = list(projects.values_list("id", flat=True))
         if not project_ids:
             return Response(status=HTTP_404_NOT_FOUND)
 
         if category == "error":
             with connection.cursor() as cursor:
                 cursor.execute(
-                    EVENT_TIME_SERIES_SQL, [start, end, interval, project_ids],
+                    EVENT_TIME_SERIES_SQL,
+                    [start, end, interval, project_ids],
+                )
+                series = cursor.fetchall()
+        elif category == "transaction":
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    TRANSACTION_TIME_SERIES_SQL,
+                    [start, end, interval, project_ids],
                 )
                 series = cursor.fetchall()
         else:
@@ -81,7 +95,11 @@ class StatsV2View(views.APIView):
 
         data = {
             "intervals": [row[0] for row in series],
-            "groups": [{"series": {field: [row[1] for row in series]},}],
+            "groups": [
+                {
+                    "series": {field: [row[1] for row in series]},
+                }
+            ],
         }
 
         return Response(data)
