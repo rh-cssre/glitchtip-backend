@@ -373,15 +373,23 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             defaults["tags"] = {tag[0]: [tag[1]] for tag in tags}
 
             issue_created = False
+            # Similar to get_or_create but with multiple tables
             try:
                 issue = Issue.objects.get(
                     project_id=project.id,
                     issuehash__value=issue_hash,
                 )
             except Issue.DoesNotExist:
-                issue = Issue.objects.create(project_id=project.id, **defaults)
-                issue.issuehash_set.create(value=issue_hash, project=project)
-                issue_created = True
+                with transaction.atomic():
+                    issue = Issue.objects.create(project_id=project.id, **defaults)
+                    try:
+                        issue.issuehash_set.create(value=issue_hash, project=project)
+                        issue_created = True
+                    except IntegrityError:
+                        issue = Issue.objects.get(
+                            project_id=project.id,
+                            issuehash__value=issue_hash,
+                        )
 
             json_data = {
                 "breadcrumbs": breadcrumbs,

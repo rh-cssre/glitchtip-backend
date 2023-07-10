@@ -111,7 +111,7 @@ class EventStoreTestCase(APITestCase):
     def test_performance(self):
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
-        with self.assertNumQueries(16):
+        with self.assertNumQueries(18):
             res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 
