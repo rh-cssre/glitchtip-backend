@@ -23,6 +23,7 @@ from .tasks import send_monitor_notification
 
 class HeartBeatCheckView(CreateAPIView):
     permission_classes = [permissions.AllowAny]
+    authentication_classes = []
     serializer_class = HeartBeatCheckSerializer
 
     def perform_create(self, serializer):
@@ -31,7 +32,12 @@ class HeartBeatCheckView(CreateAPIView):
             organization__slug=self.kwargs.get("organization_slug"),
             endpoint_id=self.kwargs.get("endpoint_id"),
         )
-        monitor_check = serializer.save(monitor=monitor, is_up=True, reason=None)
+        monitor_check = serializer.save(
+            monitor=monitor,
+            is_up=True,
+            reason=None,
+            is_change=monitor.latest_is_up != True,
+        )
         if monitor.latest_is_up is False:
             send_monitor_notification.delay(
                 monitor_check.pk, False, monitor.last_change
