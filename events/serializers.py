@@ -15,6 +15,7 @@ from glitchtip.serializers import FlexibleDateTimeField
 from issues.models import EventType, Issue
 from issues.serializers import BaseBreadcrumbsSerializer
 from issues.tasks import update_search_index_issue
+from observability.metrics import events_counter, issues_counter
 from releases.models import Release
 from sentry.eventtypes.base import DefaultEvent
 from sentry.eventtypes.error import ErrorEvent
@@ -445,6 +446,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             }
             if level:
                 params["level"] = level
+            events_counter.labels(project.slug, project.organization.slug).inc()
             try:
                 event = Event.objects.create(**params)
             except IntegrityError as err:
@@ -457,6 +459,7 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 raise err
 
         if issue_created:  # Do it right now, so that new issues look correct
+            issues_counter.labels(project.slug, project.organization.slug).inc()
             event_data = Event.objects.filter(issue_id=OuterRef("id")).values("data")[
                 :1
             ]

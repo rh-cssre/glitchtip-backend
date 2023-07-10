@@ -122,7 +122,13 @@ class BaseEventAPIView(APIView):
                     ),
                 )
                 .select_related("organization")
-                .only("id", "first_event", "organization__is_accepting_events")
+                .only(
+                    "id",
+                    "first_event",
+                    "slug",
+                    "organization__is_accepting_events",
+                    "organization__slug",
+                )
                 .first()
             )
         except ValidationError as err:

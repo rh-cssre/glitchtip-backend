@@ -6,7 +6,6 @@ from django.db import connection, models
 from events.models import LogLevel
 from glitchtip.base_models import CreatedModel
 from glitchtip.model_utils import FromStringIntegerChoices
-from observability.metrics import issues_counter
 
 from .utils import base32_encode
 
@@ -104,10 +103,6 @@ class Issue(CreatedModel):
         """
         with connection.cursor() as cursor:
             cursor.execute("CALL update_issue_index(%s)", [issue_id])
-
-    def save(self, *args, **kwargs):
-        issues_counter.labels(self.project.slug, self.project.organization.slug).inc()
-        super().save(*args, **kwargs)
 
 
 class IssueHash(models.Model):

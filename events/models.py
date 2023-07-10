@@ -5,7 +5,6 @@ from django.db import models
 
 from glitchtip.base_models import CreatedModel
 from glitchtip.model_utils import FromStringIntegerChoices
-from observability.metrics import events_counter
 from projects.tasks import update_event_project_hourly_statistic
 from user_reports.models import UserReport
 
@@ -86,9 +85,6 @@ class Event(AbstractEvent):
         is_new = self._state.adding
         super().save(*args, **kwargs)
         if is_new:
-            events_counter.labels(
-                self.issue.project.slug, self.issue.project.organization.slug
-            ).inc()
             update_event_project_hourly_statistic(
                 args=[self.issue.project_id, self.created], countdown=60
             )
