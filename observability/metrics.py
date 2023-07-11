@@ -9,5 +9,5 @@ issues_counter = Counter(
 events_counter = Counter(
     "glitchtip_events",
     "Events creation counter per project",
-    ["project", "organization"],
+    ["project", "organization", "issue"],
 )

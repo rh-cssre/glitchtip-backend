@@ -446,7 +446,9 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             }
             if level:
                 params["level"] = level
-            events_counter.labels(project.slug, project.organization.slug).inc()
+            events_counter.labels(
+                project.slug, project.organization.slug, issue.title
+            ).inc()
             try:
                 event = Event.objects.create(**params)
             except IntegrityError as err:

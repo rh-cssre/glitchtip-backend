@@ -584,7 +584,12 @@ class EventMetricTestCase(GlitchTipTestCase):
     def test_metrics(self):
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
-        labels = {
+        event_metric_labels = {
+            "project": self.project.slug,
+            "organization": self.project.organization.slug,
+            "issue": "hi",
+        }
+        issue_metric_labels = {
             "project": self.project.slug,
             "organization": self.project.organization.slug,
         }
@@ -595,12 +600,12 @@ class EventMetricTestCase(GlitchTipTestCase):
         metrics = parse_prometheus_text(metric_res.content.decode("utf-8"))
 
         events_before = get_sample_value(
-            metrics, events_counter._name, events_counter._type, labels
+            metrics, events_counter._name, events_counter._type, event_metric_labels
         )
         # no events yet
         self.assertEqual(events_before, None)
         issues_before = get_sample_value(
-            metrics, issues_counter._name, issues_counter._type, labels
+            metrics, issues_counter._name, issues_counter._type, issue_metric_labels
         )
         # no issues yet
         self.assertEqual(issues_before, None)
@@ -615,11 +620,11 @@ class EventMetricTestCase(GlitchTipTestCase):
 
         metrics = parse_prometheus_text(metric_res.content.decode("utf-8"))
         events_after = get_sample_value(
-            metrics, events_counter._name, events_counter._type, labels
+            metrics, events_counter._name, events_counter._type, event_metric_labels
         )
         self.assertEqual(events_after, 1)
         issues_after = get_sample_value(
-            metrics, issues_counter._name, issues_counter._type, labels
+            metrics, issues_counter._name, issues_counter._type, issue_metric_labels
         )
         self.assertEqual(issues_after, 1)
 
@@ -634,12 +639,12 @@ class EventMetricTestCase(GlitchTipTestCase):
 
         metrics = parse_prometheus_text(metric_res.content.decode("utf-8"))
         events_after = get_sample_value(
-            metrics, events_counter._name, events_counter._type, labels
+            metrics, events_counter._name, events_counter._type, event_metric_labels
         )
         # new event
         self.assertEqual(events_after, 2)
         issues_after = get_sample_value(
-            metrics, issues_counter._name, issues_counter._type, labels
+            metrics, issues_counter._name, issues_counter._type, issue_metric_labels
         )
         # but no new issue
         self.assertEqual(issues_after, 1)
