@@ -1,15 +1,21 @@
 import json
 import random
+from collections.abc import Iterable, Mapping
+from typing import Optional
 from unittest.mock import patch
 
 from django.shortcuts import reverse
 from django.test import override_settings
 from model_bakery import baker
+from prometheus_client import Metric
+from prometheus_client.parser import text_string_to_metric_families
 from rest_framework.test import APITestCase
 
 from environments.models import Environment, EnvironmentProject
 from glitchtip.test_utils import generators  # pylint: disable=unused-import
+from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.models import EventStatus, Issue
+from observability.metrics import events_counter, issues_counter
 from releases.models import Release
 
 from ..models import Event, LogLevel
@@ -541,3 +547,104 @@ class EventStoreTestCase(APITestCase):
             ).count(),
             3,
         )
+
+
+def get_sample_value(
+    metric_families: Iterable[Metric],
+    metric_name: str,
+    metric_type: str,
+    labels: Mapping[str, str],
+) -> Optional[float]:
+    for metric_family in metric_families:
+        if metric_family.name != metric_name or metric_family.type != metric_type:
+            continue
+        for metric in metric_family.samples:
+            if metric[1] != labels:
+                continue
+            return metric.value
+    return None
+
+
+def parse_prometheus_text(text: str) -> list[Metric]:
+    parser = text_string_to_metric_families(text)
+    return list(parser)
+
+
+class EventMetricTestCase(GlitchTipTestCase):
+    def setUp(self):
+        self.create_user_and_project()
+        self.user.is_staff = True
+        self.user.save()
+
+        self.metrics_url = reverse("prometheus-django-metrics")
+        self.projectkey = self.project.projectkey_set.first()
+        self.params = f"?sentry_key={self.projectkey.public_key}"
+        self.events_url = reverse("event_store", args=[self.project.id]) + self.params
+
+    def test_metrics(self):
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        event_metric_labels = {
+            "project": self.project.slug,
+            "organization": self.project.organization.slug,
+            "issue": "hi",
+        }
+        issue_metric_labels = {
+            "project": self.project.slug,
+            "organization": self.project.organization.slug,
+        }
+
+        # get initial metrics
+        metric_res = self.client.get(self.metrics_url)
+        self.assertEqual(metric_res.status_code, 200)
+        metrics = parse_prometheus_text(metric_res.content.decode("utf-8"))
+
+        events_before = get_sample_value(
+            metrics, events_counter._name, events_counter._type, event_metric_labels
+        )
+        # no events yet
+        self.assertEqual(events_before, None)
+        issues_before = get_sample_value(
+            metrics, issues_counter._name, issues_counter._type, issue_metric_labels
+        )
+        # no issues yet
+        self.assertEqual(issues_before, None)
+
+        # send event
+        res = self.client.post(self.events_url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+
+        # get latest metrics
+        metric_res = self.client.get(self.metrics_url)
+        self.assertEqual(metric_res.status_code, 200)
+
+        metrics = parse_prometheus_text(metric_res.content.decode("utf-8"))
+        events_after = get_sample_value(
+            metrics, events_counter._name, events_counter._type, event_metric_labels
+        )
+        self.assertEqual(events_after, 1)
+        issues_after = get_sample_value(
+            metrics, issues_counter._name, issues_counter._type, issue_metric_labels
+        )
+        self.assertEqual(issues_after, 1)
+
+        # Second event should not increase the issue count
+        data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4bb"
+        res = self.client.post(self.events_url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+
+        # get latest metrics
+        metric_res = self.client.get(self.metrics_url)
+        self.assertEqual(metric_res.status_code, 200)
+
+        metrics = parse_prometheus_text(metric_res.content.decode("utf-8"))
+        events_after = get_sample_value(
+            metrics, events_counter._name, events_counter._type, event_metric_labels
+        )
+        # new event
+        self.assertEqual(events_after, 2)
+        issues_after = get_sample_value(
+            metrics, issues_counter._name, issues_counter._type, issue_metric_labels
+        )
+        # but no new issue
+        self.assertEqual(issues_after, 1)
