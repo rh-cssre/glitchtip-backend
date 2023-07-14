@@ -9,6 +9,7 @@ from django.utils.text import slugify
 from django_extensions.db.fields import AutoSlugField
 
 from glitchtip.base_models import CreatedModel
+from observability.metrics import clear_metrics_cache
 
 
 class Project(CreatedModel):
@@ -43,7 +44,12 @@ class Project(CreatedModel):
             first = True
         super().save(*args, **kwargs)
         if first:
+            clear_metrics_cache()
             ProjectKey.objects.create(project=self)
+
+    def delete(self, *args, **kwargs):
+        super().delete(*args, **kwargs)
+        clear_metrics_cache()
 
     @property
     def should_scrub_ip_addresses(self):

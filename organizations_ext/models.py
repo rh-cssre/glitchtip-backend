@@ -15,6 +15,8 @@ from organizations.managers import OrgManager
 from organizations.signals import owner_changed, user_added
 from sql_util.utils import SubqueryCount, SubquerySum
 
+from observability.metrics import clear_metrics_cache
+
 from .fields import OrganizationSlugField
 
 # Defines which scopes belong to which role
@@ -227,6 +229,18 @@ class Organization(SharedBaseModel, OrganizationBase):
     )
 
     objects = OrganizationManager()
+
+    def save(self, *args, **kwargs):
+        new = False
+        if not self.pk:
+            new = True
+        super().save(*args, **kwargs)
+        if new:
+            clear_metrics_cache()
+
+    def delete(self, *args, **kwargs):
+        super().delete(*args, **kwargs)
+        clear_metrics_cache()
 
     def slugify_function(self, content):
         reserved_words = [
