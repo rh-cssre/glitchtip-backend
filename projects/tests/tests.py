@@ -4,7 +4,7 @@ from django.utils import timezone
 from model_bakery import baker
 from rest_framework.test import APITestCase
 
-from glitchtip import test_utils  # pylint: disable=unused-import
+from glitchtip.test_utils import generators  # pylint: disable=unused-import
 from organizations_ext.models import OrganizationUserRole
 
 from ..models import Project, ProjectKey
@@ -141,20 +141,16 @@ class TeamProjectsAPITestCase(APITestCase):
         self.assertContains(res, project.name)
         self.assertNotContains(res, not_my_project.name)
 
-        """
-        If a user is in multiple orgs, that user will have multiple org users.
-        Make sure endpoint doesn't show projects from other orgs
-        """
+        # If a user is in multiple orgs, that user will have multiple org users.
+        # Make sure endpoint doesn't show projects from other orgs
         second_org = baker.make("organizations_ext.Organization")
         second_org.add_user(self.user, OrganizationUserRole.ADMIN)
         project_in_second_org = baker.make("projects.Project", organization=second_org)
         res = self.client.get(self.url)
         self.assertNotContains(res, project_in_second_org.name)
 
-        """
-        Only show projects that are associated with the team in the URL.
-        If a project is on another team in the same org, it should not show
-        """
+        # Only show projects that are associated with the team in the URL.
+        # If a project is on another team in the same org, it should not show
         project_teamless = baker.make(
             "projects.Project", organization=self.organization
         )
@@ -185,14 +181,20 @@ class TeamProjectsAPITestCase(APITestCase):
         # The same slug can exist between multiple organizations
         self.assertEqual(projects[0].slug, org2_project.slug)
 
-    """
-    The frontend UI requires you to assign a new project to a team, so make sure
-    that the new project has a team associated with it
-    """
-
     def test_projects_api_project_has_team(self):
+        """
+        The frontend UI requires you to assign a new project to a team, so make sure
+        that the new project has a team associated with it
+        """
         name = "test project"
         data = {"name": name}
-        res = self.client.post(self.url, data)
+        self.client.post(self.url, data)
         project = Project.objects.first()
         self.assertEqual(project.team_set.all().count(), 1)
+
+    def test_project_reserved_words(self):
+        data = {"name": "new"}
+        res = self.client.post(self.url, data)
+        self.assertContains(res, "new-1", status_code=201)
+        self.client.post(self.url, data)
+        self.assertFalse(Project.objects.filter(slug="new").exists())

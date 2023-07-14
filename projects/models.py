@@ -55,8 +55,12 @@ class Project(CreatedModel):
         Make the slug the project name. Validate uniqueness with both name and org id.
         This works because when it runs on organization_id it returns an empty string.
         """
+        reserved_words = ["new"]
+
         if isinstance(content, str):
-            return slugify(self.name)
+            slug = slugify(self.name)
+            if slug in reserved_words:
+                return slug + "-1"
         return ""
 
 
