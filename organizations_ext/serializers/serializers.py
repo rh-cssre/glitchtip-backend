@@ -109,7 +109,7 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
     def to_representation(self, obj):
-        """Override email for representation to potientially show user's email"""
+        """Override email for representation to potentially show user's email"""
         self.fields["email"] = serializers.SerializerMethodField()
         return super().to_representation(obj)
 

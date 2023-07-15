@@ -98,6 +98,7 @@ urlpatterns += [
         name="event_json",
     ),
     path("api/settings/", SettingsView.as_view(), name="settings"),
+    path("api/test/", include("test_api.urls")),
     path("rest-auth/login/", MFALoginView.as_view()),
     path("rest-auth/", include("dj_rest_auth.urls")),
     path("rest-auth/registration/", include("dj_rest_auth.registration.urls")),
@@ -138,9 +139,6 @@ urlpatterns += [
 
 if settings.BILLING_ENABLED:
     urlpatterns.append(path("stripe/", include("djstripe.urls", namespace="djstripe")))
-
-if settings.ENABLE_TEST_API:
-    urlpatterns.append(path("api/test/", include("test_api.urls")))
 
 if settings.DEBUG_TOOLBAR:
     urlpatterns.append(path("__debug__/", include("debug_toolbar.urls")))

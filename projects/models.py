@@ -63,11 +63,12 @@ class Project(CreatedModel):
         """
         reserved_words = ["new"]
 
+        slug = ""
         if isinstance(content, str):
             slug = slugify(self.name)
             if slug in reserved_words:
-                return slug + "-1"
-        return ""
+                slug += "-1"
+        return slug
 
 
 class ProjectCounter(models.Model):
