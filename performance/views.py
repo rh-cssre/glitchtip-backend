@@ -1,18 +1,22 @@
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.filters import OrderingFilter
-from django_filters.rest_framework import DjangoFilterBackend
+
 from projects.models import Project
-from .models import TransactionEvent, TransactionGroup, Span
+
+from .filters import TransactionGroupFilter
+from .models import Span, TransactionEvent, TransactionGroup
 from .serializers import (
-    TransactionSerializer,
+    SpanSerializer,
     TransactionDetailSerializer,
     TransactionGroupSerializer,
-    SpanSerializer,
+    TransactionSerializer,
 )
-from .filters import TransactionGroupFilter
 
 
 class TransactionGroupViewSet(viewsets.ReadOnlyModelViewSet):
+    """Duration is in milliseconds"""
+
     queryset = TransactionGroup.objects.all()
     serializer_class = TransactionGroupSerializer
     filter_backends = [DjangoFilterBackend, OrderingFilter]

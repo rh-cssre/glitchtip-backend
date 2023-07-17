@@ -6,8 +6,12 @@ class MonitorType(models.TextChoices):
     PING = "Ping"
     GET = "GET"
     POST = "POST"
+    PORT = "TCP Port"
     SSL = "SSL"
     HEARTBEAT = "Heartbeat"
+
+
+HTTP_MONITOR_TYPES = (MonitorType.PING, MonitorType.GET, MonitorType.POST)
 
 
 class MonitorCheckReason(models.IntegerChoices):
