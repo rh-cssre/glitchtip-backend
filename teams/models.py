@@ -1,6 +1,7 @@
 from django.db import models
-from organizations_ext.models import Organization
+
 from glitchtip.base_models import CreatedModel
+from organizations_ext.models import Organization
 
 
 class Team(CreatedModel):
