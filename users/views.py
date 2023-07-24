@@ -1,22 +1,26 @@
-from django.core.exceptions import ObjectDoesNotExist, ValidationError
-from django.shortcuts import get_object_or_404
-from django.http import Http404
-from rest_framework import status, viewsets, mixins, exceptions
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from drf_yasg.utils import swagger_auto_schema
+from allauth.account.models import EmailAddress
 from dj_rest_auth.registration.views import (
     SocialAccountDisconnectView as BaseSocialAccountDisconnectView,
 )
-from allauth.account.models import EmailAddress
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.http import Http404
+from django.shortcuts import get_object_or_404
+from drf_yasg.utils import swagger_auto_schema
+from rest_framework import exceptions, mixins, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
 from organizations_ext.models import Organization
+from projects.models import UserProjectAlert
 from users.utils import is_user_registration_open
-from .models import User, UserProjectAlert
+
+from .models import User
 from .serializers import (
-    UserSerializer,
-    UserNotificationsSerializer,
-    EmailAddressSerializer,
     ConfirmEmailAddressSerializer,
+    CurrentUserSerializer,
+    EmailAddressSerializer,
+    UserNotificationsSerializer,
+    UserSerializer,
 )
 
 
@@ -37,22 +41,41 @@ class UserViewSet(viewsets.ModelViewSet):
         return queryset
 
     def get_object(self):
-        pk = self.kwargs.get("pk")
-        if pk == "me":
+        if self.kwargs.get("pk") == "me":
             return self.request.user
         return super().get_object()
+
+    def get_serializer_class(self):
+        if self.kwargs.get("pk") == "me":
+            return CurrentUserSerializer
+        return super().get_serializer_class()
 
     def perform_create(self, serializer):
         organization_slug = self.kwargs.get("organization_slug")
         try:
-            organization = Organization.objects.get(slug=organization_slug)
-        except Organization.DoesNotExist:
-            raise exceptions.ValidationError("Organization does not exist")
+            Organization.objects.get(slug=organization_slug)
+        except Organization.DoesNotExist as err:
+            raise exceptions.ValidationError("Organization does not exist") from err
         # TODO deal with organization and users who aren't set up yet
         if not is_user_registration_open() and not self.request.user.is_superuser:
             raise exceptions.PermissionDenied("Registration is not open")
         user = serializer.save()
         return user
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.organizations_ext_organizationuser.filter(
+            organizationowner__isnull=False
+        ):
+            return Response(
+                data={
+                    "message": "User is organization owner. Delete organization or transfer ownership first."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["get", "post", "put"])
     def notifications(self, request, pk=None):
@@ -90,10 +113,10 @@ class UserViewSet(viewsets.ModelViewSet):
         data = request.data
         try:
             items = [x for x in data.items()]
-        except AttributeError:
+        except AttributeError as err:
             raise exceptions.ValidationError(
                 "Invalid alert format, expected dictionary"
-            )
+            ) from err
         if len(data) != 1:
             raise exceptions.ValidationError("Invalid alert format, expected one value")
         project_id, alert_status = items[0]
@@ -144,8 +167,8 @@ class EmailAddressViewSet(
                 email=request.data.get("email"), verified=True
             )
             email_address.set_as_primary()
-        except ObjectDoesNotExist:
-            raise Http404
+        except ObjectDoesNotExist as err:
+            raise Http404 from err
         serializer = self.serializer_class(
             instance=email_address, data=request.data, context={"request": request}
         )
@@ -160,8 +183,8 @@ class EmailAddressViewSet(
             email_address = user.emailaddress_set.get(
                 email=request.data.get("email"), primary=False
             )
-        except ObjectDoesNotExist:
-            raise Http404
+        except ObjectDoesNotExist as err:
+            raise Http404 from err
         email_address.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 

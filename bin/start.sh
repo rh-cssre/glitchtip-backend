@@ -19,6 +19,9 @@ case $SERVER_ROLE in
     beat)
         SCRIPT="./bin/run-beat.sh"
         ;;
+    flower)
+        SCRIPT="./bin/run-flower.sh"
+        ;;
     worker_with_beat)
         SCRIPT="./bin/run-celery-with-beat.sh"
         ;;
