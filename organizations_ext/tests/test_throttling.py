@@ -174,3 +174,41 @@ class OrganizationThrottlingTestCase(TestCase):
         set_organization_throttle()
         organization.refresh_from_db()
         self.assertTrue(organization.is_accepting_events)
+
+    def test_canceled_plan(self):
+        # Start with no plan and throttled
+        organization = baker.make(
+            "organizations_ext.Organization", is_accepting_events=False
+        )
+        user = baker.make("users.user")
+        organization.add_user(user)
+        organization.refresh_from_db()
+        self.assertFalse(organization.is_accepting_events)
+
+        # Add old paid plan and active free plan
+        customer = baker.make(
+            "djstripe.Customer", subscriber=organization, livemode=False
+        )
+        free_plan = baker.make("djstripe.Plan", active=True, amount=0)
+        paid_plan = baker.make("djstripe.Plan", active=True, amount=1)
+        baker.make(
+            "djstripe.Subscription",
+            customer=customer,
+            livemode=False,
+            plan=paid_plan,
+            status="canceled",
+            current_period_end="2000-01-31",
+        )
+        baker.make(
+            "djstripe.Subscription",
+            customer=customer,
+            livemode=False,
+            plan=free_plan,
+            status="active",
+            current_period_end="2100-01-31",
+        )
+
+        # Should not be throttled
+        set_organization_throttle()
+        organization.refresh_from_db()
+        self.assertTrue(organization.is_accepting_events)
