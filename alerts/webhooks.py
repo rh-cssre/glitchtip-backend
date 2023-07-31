@@ -203,9 +203,7 @@ def send_webhook_notification(
     issue_count = notification.issues.count()
     issues = notification.issues.all()[:3]  # Show no more than three
 
-    match recipient_type:
-        case RecipientType.DISCORD:
-            send_issue_as_discord_webhook(url, issues, issue_count)
-            return
-        case _:
-            send_issue_as_webhook(url, issues, issue_count)
+    if recipient_type == RecipientType.DISCORD:
+        send_issue_as_discord_webhook(url, issues, issue_count)
+    else:
+        send_issue_as_webhook(url, issues, issue_count)
