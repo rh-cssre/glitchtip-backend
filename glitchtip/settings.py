@@ -22,7 +22,7 @@ from django.conf import global_settings
 from django.core.exceptions import ImproperlyConfigured
 from sentry_sdk.integrations.django import DjangoIntegration
 
-env = environ.Env(
+env = environ.FileAwareEnv(
     ALLOWED_HOSTS=(list, ["*"]),
     DEFAULT_FILE_STORAGE=(str, None),
     AWS_ACCESS_KEY_ID=(str, None),
