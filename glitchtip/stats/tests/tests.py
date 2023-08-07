@@ -21,4 +21,3 @@ class StatsV2APITestCase(GlitchTipTestCase):
             {"category": "error", "start": start, "end": end, "field": "sum(quantity)"},
         )
         self.assertEqual(res.status_code, 200)
-

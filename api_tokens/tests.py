@@ -1,6 +1,7 @@
 from django.urls import reverse
-from rest_framework.test import APITestCase
 from model_bakery import baker
+from rest_framework.test import APITestCase
+
 from glitchtip import test_utils  # pylint: disable=unused-import
 
 
@@ -51,7 +52,7 @@ class APITokenTests(APITestCase):
         self.assertEqual(res.status_code, 404)
 
     def test_token_auth(self):
-        """ Token based auth should not be able to create it's own token """
+        """Token based auth should not be able to create it's own token"""
         organization = baker.make("organizations_ext.Organization")
         organization.add_user(self.user)
         auth_token = baker.make("api_tokens.APIToken", user=self.user)

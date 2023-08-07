@@ -1,4 +1,4 @@
-FROM python:3.11 as build-python
+FROM python:3.10 as build-python
 ARG IS_CI
 ENV PYTHONUNBUFFERED=1 \
   PORT=8080 \
@@ -11,7 +11,7 @@ RUN curl -sSL https://install.python-poetry.org | python3 -
 COPY poetry.lock pyproject.toml /code/
 RUN $POETRY_HOME/bin/poetry install --no-interaction --no-ansi $(test "$IS_CI" = "True" && echo "--no-dev")
 
-FROM python:3.11-slim
+FROM python:3.10-slim
 ARG GLITCHTIP_VERSION=local
 ENV GLITCHTIP_VERSION ${GLITCHTIP_VERSION}
 ENV PYTHONUNBUFFERED=1 \
@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y libxml2 libpq5 && apt-get clean && rm -
 
 WORKDIR /code
 
-COPY --from=build-python /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
+COPY --from=build-python /usr/local/lib/python3.10/site-packages/ /usr/local/lib/python3.10/site-packages/
 COPY --from=build-python /usr/local/bin/ /usr/local/bin/
 
 EXPOSE 8080
