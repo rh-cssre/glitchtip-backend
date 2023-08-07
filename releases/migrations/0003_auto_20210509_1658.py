@@ -5,30 +5,50 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('files', '0004_auto_20210509_1658'),
-        ('releases', '0002_auto_20201227_1518'),
+        ("files", "0004_auto_20210509_1658"),
+        ("releases", "0002_auto_20201227_1518"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='ReleaseFile',
+            name="ReleaseFile",
             fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created', models.DateTimeField(auto_now_add=True, db_index=True)),
-                ('ident', models.CharField(max_length=40)),
-                ('name', models.TextField()),
-                ('file', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='files.file')),
-                ('release', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='releases.release')),
+                (
+                    "id",
+                    models.AutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("created", models.DateTimeField(auto_now_add=True, db_index=True)),
+                ("ident", models.CharField(max_length=40)),
+                ("name", models.TextField()),
+                (
+                    "file",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, to="files.file"
+                    ),
+                ),
+                (
+                    "release",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="releases.release",
+                    ),
+                ),
             ],
             options={
-                'unique_together': {('release', 'file'), ('release', 'ident')},
+                "unique_together": {("release", "file"), ("release", "ident")},
             },
         ),
         migrations.AddField(
-            model_name='release',
-            name='files',
-            field=models.ManyToManyField(through='releases.ReleaseFile', to='files.File'),
+            model_name="release",
+            name="files",
+            field=models.ManyToManyField(
+                through="releases.ReleaseFile", to="files.File"
+            ),
         ),
     ]

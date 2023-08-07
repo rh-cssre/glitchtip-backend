@@ -1,0 +1,9 @@
+<h1>{{ object }}</h1>
+
+<div>
+  {% for monitor in monitors %}
+  <div>{{ monitor }} {{ monitor.latest_is_up }} {{ monitor.last_change }}</div>
+  {% endfor %}
+</div>
+
+Powered By <a href="https://glitchtip.com">GlitchTip</a>

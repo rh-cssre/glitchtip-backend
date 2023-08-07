@@ -5,15 +5,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('api_tokens', '0003_alter_apitoken_created'),
+        ("api_tokens", "0003_alter_apitoken_created"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='apitoken',
-            name='token',
-            field=models.CharField(default=api_tokens.models.generate_token, editable=False, max_length=64, unique=True),
+            model_name="apitoken",
+            name="token",
+            field=models.CharField(
+                default=api_tokens.models.generate_token,
+                editable=False,
+                max_length=64,
+                unique=True,
+            ),
         ),
     ]
