@@ -30,7 +30,7 @@
     font-size: 14px;
     color: #e22a46;
   }
-  .unknown-symbol {
+  .no-status-symbol {
     font-size: 20px;
     color: black;
   }
@@ -68,7 +68,7 @@
         {% elif monitor.latest_is_up == False %}
           <span class="down-symbol">&#10060;</span>
         {% else %}
-          <span class="unknown-symbol">?</span>
+          <span class="no-status-symbol">?</span>
         {% endif %}
       </div>
       <div class="monitor-item-text">
