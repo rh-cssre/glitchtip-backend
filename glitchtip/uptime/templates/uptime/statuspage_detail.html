@@ -12,6 +12,18 @@
   .monitor-item {
     margin-top: 5px;
   }
+  .up-symbol {
+    font-size: 20px;
+    color: green;
+  }
+  .down-symbol {
+    font-size: 15px;
+    color: red;
+  }
+  .unknown-symbol {
+    font-size: 20px;
+    color: black;
+  }
   .glitchtip-branding {
     margin-top: 20px;
   }
@@ -28,8 +40,14 @@
     {% for monitor in monitors %}
     <div class="monitor-item">
       {% if monitor.latest_is_up != none %}
-        <b>{{ monitor }}</b> {{ monitor.latest_is_up|yesno:"Up,Down" }} since {{ monitor.last_change }}
+        {% if monitor.latest_is_up %}
+          <span class="up-symbol">&#10003;</span>
+        {% else %}
+          <span class="down-symbol">&#10060;</span>
+        {% endif %}
+        <b>{{ monitor }}</b> {{ monitor.latest_is_up|yesno:"Running,Down" }} since {{ monitor.last_change }}
       {% else %}
+        <span class="unknown-symbol">?</span>
         <b>{{ monitor }}</b> no status reported
       {% endif %}
     </div>
@@ -43,6 +61,7 @@
         <img
           src="{% get_domain %}{% static 'images/logo.png' %}"
           class="logo"
+          alt="GlitchTip"
           width="150"
           height="37"
         />
