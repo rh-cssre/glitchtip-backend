@@ -1,9 +1,51 @@
-<h1>{{ object }}</h1>
+{% load static settings %}
+<style>
+  .box {
+    margin: auto;
+    width: fit-content;
+    padding: 10px;
 
-<div>
-  {% for monitor in monitors %}
-  <div>{{ monitor }} {{ monitor.latest_is_up }} {{ monitor.last_change }}</div>
-  {% endfor %}
+    font-family:Helvetica,Arial,sans-serif;
+    font-size:16px;
+    font-weight:400
+  }
+  .monitor-item {
+    margin-top: 5px;
+  }
+  .glitchtip-branding {
+    margin-top: 20px;
+  }
+  .logo {
+    margin-top: 5px;
+  }
+</style>
+
+<div class="box">
+  <h1>{{ object }} Status</h1>
+
+  <h3>Monitored Services</h3>
+  <div>
+    {% for monitor in monitors %}
+    <div class="monitor-item">
+      {% if monitor.latest_is_up != none %}
+        <b>{{ monitor }}</b> {{ monitor.latest_is_up|yesno:"Up,Down" }} since {{ monitor.last_change }}
+      {% else %}
+        <b>{{ monitor }}</b> no status reported
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="glitchtip-branding">
+    <div>Powered by</div>
+    <a href="https://glitchtip.com"
+      >
+        <img
+          src="{% get_domain %}{% static 'images/logo.png' %}"
+          class="logo"
+          width="150"
+          height="37"
+        />
+    </a>
+  </div>
 </div>
-
-Powered By <a href="https://glitchtip.com">GlitchTip</a>
