@@ -1,4 +1,4 @@
-{% load static settings %}
+{% load static %}
 <style>
   .content {
     margin: auto;
@@ -95,7 +95,7 @@
       <span class="logo-span">
         <object
         class="logo"
-        data="{% get_domain %}{% static 'images/logo.png' %}"
+        data="{% static 'images/logo.png' %}"
         type="image/png"
         width="150"
         height="37"
