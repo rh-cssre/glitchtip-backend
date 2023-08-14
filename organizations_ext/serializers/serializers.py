@@ -1,13 +1,15 @@
 from rest_framework import serializers, status
 from rest_framework.exceptions import APIException, PermissionDenied
-from projects.serializers.base_serializers import ProjectReferenceWithMemberSerializer
-from users.serializers import UserSerializer
-from teams.serializers import TeamSerializer
+
+from projects.serializers.serializers import OrganizationProjectSerializer
 from teams.models import Team
+from teams.serializers import TeamSerializer
 from users.models import User
+from users.serializers import UserSerializer
 from users.utils import is_user_registration_open
+
+from ..models import ROLES, OrganizationUser, OrganizationUserRole
 from .base_serializers import OrganizationReferenceSerializer
-from ..models import OrganizationUser, OrganizationUserRole, ROLES
 
 
 class OrganizationSerializer(OrganizationReferenceSerializer):
@@ -15,7 +17,7 @@ class OrganizationSerializer(OrganizationReferenceSerializer):
 
 
 class OrganizationDetailSerializer(OrganizationSerializer):
-    projects = ProjectReferenceWithMemberSerializer(many=True)
+    projects = OrganizationProjectSerializer(many=True)
     teams = TeamSerializer(many=True)
     openMembership = serializers.BooleanField(source="open_membership")
     scrubIPAddresses = serializers.BooleanField(source="scrub_ip_addresses")
@@ -41,6 +43,7 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
     teams = serializers.SlugRelatedField(
         many=True, write_only=True, slug_field="slug", queryset=Team.objects.none()
     )
+    isOwner = serializers.SerializerMethodField()
 
     class Meta:
         model = OrganizationUser
@@ -53,6 +56,7 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
             "email",
             "teams",
             "pending",
+            "isOwner",
         )
 
     def __init__(self, *args, request_user=None, **kwargs):
@@ -71,6 +75,11 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
             extra_kwargs["user"] = {"read_only": True}
 
         return extra_kwargs
+
+    def get_isOwner(self, obj):
+        if owner := obj.organization.owner:
+            return owner.organization_user_id == obj.id
+        return False
 
     def create(self, validated_data):
         role = OrganizationUserRole.from_string(validated_data.get("get_role"))
@@ -100,7 +109,7 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
     def to_representation(self, obj):
-        """Override email for representation to potientially show user's email"""
+        """Override email for representation to potentially show user's email"""
         self.fields["email"] = serializers.SerializerMethodField()
         return super().to_representation(obj)
 

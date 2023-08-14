@@ -5,12 +5,14 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ("projects", "0007_auto_20201026_2354"),
-        ("events", "0002_auto_20201229_1643"),
+        (
+            "projects",
+            "0001_squashed_0009_alter_project_id_alter_projectcounter_id_and_more",
+        ),
+        ("events", "0001_squashed_0003_auto_20210116_2110"),
     ]
 
     operations = [
