@@ -2857,18 +2857,21 @@ cffi = ">=1.6.0"
 
 [[package]]
 name = "model-bakery"
-version = "1.13.0"
+version = "1.14.0"
 description = "Smart object creation facility for Django."
 category = "dev"
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.8"
 files = [
-    {file = "model_bakery-1.13.0-py3-none-any.whl", hash = "sha256:0f54a4548722ecee0183d82eabe1adf8f74303e6ce08705cfe228a96ef3bb7d9"},
-    {file = "model_bakery-1.13.0.tar.gz", hash = "sha256:dba7444c9593261b12dcb21f8f9e1ba668fafc70804f15dfd6aa208b9e3f558f"},
+    {file = "model_bakery-1.14.0-py3-none-any.whl", hash = "sha256:758d69b4b37a1623404a72a2d435c8e1daf932f827a068642f9e8196955c25c8"},
+    {file = "model_bakery-1.14.0.tar.gz", hash = "sha256:3c644d5b1fc5f7e8dc9805379de6c9e9105b18e1002269850460302ceef57a45"},
 ]
 
 [package.dependencies]
 django = ">=3.2"
+
+[package.extras]
+test = ["black", "mypy", "pillow", "pytest", "pytest-django", "ruff"]
 
 [[package]]
 name = "msgpack"
