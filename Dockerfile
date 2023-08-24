@@ -1,4 +1,4 @@
-FROM python:3.10 as build-python
+FROM python:3.11 as build-python
 ARG IS_CI
 ENV PYTHONUNBUFFERED=1 \
   PORT=8080 \
@@ -11,7 +11,7 @@ RUN curl -sSL https://install.python-poetry.org | python3 -
 COPY poetry.lock pyproject.toml /code/
 RUN $POETRY_HOME/bin/poetry install --no-interaction --no-ansi $(test "$IS_CI" = "True" && echo "--no-dev")
 
-FROM python:3.10-slim
+FROM python:3.11-slim
 ARG GLITCHTIP_VERSION=local
 ENV GLITCHTIP_VERSION ${GLITCHTIP_VERSION}
 ENV PYTHONUNBUFFERED=1 \
