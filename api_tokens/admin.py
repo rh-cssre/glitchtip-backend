@@ -1,6 +1,8 @@
 from django.contrib import admin
+
 from bitfield import BitField
 from bitfield.forms import BitFieldCheckboxSelectMultiple
+
 from .models import APIToken
 
 
@@ -14,4 +16,3 @@ class APITokenAdmin(admin.ModelAdmin):
 
 
 admin.site.register(APIToken, APITokenAdmin)
-
