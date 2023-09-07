@@ -8,11 +8,11 @@ from django.db.models import Count, Q
 from django.utils.text import slugify
 from django_extensions.db.fields import AutoSlugField
 
-from glitchtip.base_models import CreatedModel
+from glitchtip.base_models import CreatedModel, SoftDeleteModel
 from observability.metrics import clear_metrics_cache
 
 
-class Project(CreatedModel):
+class Project(CreatedModel, SoftDeleteModel):
     """
     Projects are permission based namespaces which generally
     are the top level entry point for all data.
@@ -47,8 +47,8 @@ class Project(CreatedModel):
             clear_metrics_cache()
             ProjectKey.objects.create(project=self)
 
-    def delete(self, *args, **kwargs):
-        super().delete(*args, **kwargs)
+    def force_delete(self, *args, **kwargs):
+        super().force_delete(*args, **kwargs)
         clear_metrics_cache()
 
     @property
@@ -69,6 +69,33 @@ class Project(CreatedModel):
             if slug in reserved_words:
                 slug += "-1"
         return slug
+
+    @classmethod
+    def cleanup_old_projects(cls):
+        """Delete projects that have been soft deleted."""
+        # avoid circular import
+        from events.models import Event
+        from issues.models import Issue
+
+        for project in cls.marked_for_deletion.all():
+            # bulk delete all events
+            events_qs = Event.objects.filter(issue__project=project)
+            events_qs._raw_delete(events_qs.db)
+
+            # bulk delete all issues in batches of 1k
+            issues_qs = project.issue_set.order_by("id")
+            while True:
+                try:
+                    issue_delimiter = issues_qs.values_list("id", flat=True)[
+                        1000:1001
+                    ].get()
+                    issues_qs.filter(id__lte=issue_delimiter).delete()
+                except Issue.DoesNotExist:
+                    break
+
+            issues_qs.delete()
+            # lastly delete the project
+            project.force_delete()
 
 
 class ProjectCounter(models.Model):
