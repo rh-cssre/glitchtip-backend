@@ -9,13 +9,6 @@ from issues.migrations.sql.triggers import UPDATE_ISSUE_TRIGGER
 
 
 class Migration(migrations.Migration):
-
-    replaces = [
-        ("events", "0001_initial"),
-        ("events", "0002_auto_20201229_1643"),
-        ("events", "0003_auto_20210116_2110"),
-    ]
-
     initial = True
 
     dependencies = [
@@ -73,7 +66,9 @@ class Migration(migrations.Migration):
                             models.ManyToManyField(blank=True, to="events.EventTag"),
                         ),
                     ],
-                    options={"ordering": ["-created"],},
+                    options={
+                        "ordering": ["-created"],
+                    },
                 ),
                 migrations.CreateModel(
                     name="EventTagKey",
@@ -111,7 +106,9 @@ class Migration(migrations.Migration):
                             ),
                         ),
                     ],
-                    options={"unique_together": {("key", "value")},},
+                    options={
+                        "unique_together": {("key", "value")},
+                    },
                 ),
             ],
         ),
@@ -129,13 +126,20 @@ class Migration(migrations.Migration):
                 to="issues.issue",
             ),
         ),
-        migrations.RemoveField(model_name="event", name="tags",),
+        migrations.RemoveField(
+            model_name="event",
+            name="tags",
+        ),
         django.contrib.postgres.operations.HStoreExtension(),
         migrations.AddField(
             model_name="event",
             name="tags",
             field=django.contrib.postgres.fields.hstore.HStoreField(default=dict),
         ),
-        migrations.DeleteModel(name="EventTag",),
-        migrations.DeleteModel(name="EventTagKey",),
+        migrations.DeleteModel(
+            name="EventTag",
+        ),
+        migrations.DeleteModel(
+            name="EventTagKey",
+        ),
     ]
