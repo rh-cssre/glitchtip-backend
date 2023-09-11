@@ -4,15 +4,6 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
+    dependencies = []
 
-    dependencies = [
-        ('projects', '0002_auto_20200429_2329'),
-        ('users', '0003_auto_20200417_1830'),
-    ]
-
-    operations = [
-        migrations.RenameModel(
-            old_name='UserProjectAlerts',
-            new_name='UserProjectAlert',
-        ),
-    ]
+    operations = []
