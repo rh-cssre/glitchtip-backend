@@ -474,7 +474,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     "cleanup-old-projects": {
         "task": "projects.tasks.cleanup_old_projects",
-        "schedule": crontab(hour=8),
+        "schedule": crontab(hour=8, minute=0),
     },
 }
 
