@@ -450,7 +450,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     "cleanup-old-events": {
         "task": "issues.tasks.cleanup_old_events",
-        "schedule": crontab(hour=5),
+        "schedule": crontab(hour=5, minute=0),
     },
     "reindex-issues-model": {
         "task": "issues.tasks.reindex_issues_model",
@@ -458,7 +458,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     "cleanup-old-transaction-events": {
         "task": "performance.tasks.cleanup_old_transaction_events",
-        "schedule": crontab(hour=6),
+        "schedule": crontab(hour=6, minute=0),
     },
     "cleanup-old-monitor-checks": {
         "task": "glitchtip.uptime.tasks.cleanup_old_monitor_checks",
@@ -466,7 +466,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     "cleanup-old-files": {
         "task": "files.tasks.cleanup_old_files",
-        "schedule": crontab(hour=7),
+        "schedule": crontab(hour=7, minute=0),
     },
     "uptime-dispatch-checks": {
         "task": "glitchtip.uptime.tasks.dispatch_checks",
