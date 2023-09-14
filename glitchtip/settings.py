@@ -195,7 +195,6 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.microsoft",
     "allauth.socialaccount.providers.nextcloud",
-    "allauth.socialaccount.providers.keycloak",
     "allauth.socialaccount.providers.openid_connect",
     "anymail",
     "corsheaders",
@@ -262,6 +261,7 @@ MIDDLEWARE += [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "sentry.middleware.proxy.DecompressBodyMiddleware",
     "django.middleware.locale.LocaleMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
 ]
 
 if ENABLE_OBSERVABILITY_API:
@@ -618,21 +618,7 @@ if GITEA_URL := env.url("SOCIALACCOUNT_PROVIDERS_gitea_GITEA_URL", None):
     SOCIALACCOUNT_PROVIDERS["gitea"] = {"GITEA_URL": GITEA_URL.geturl()}
 if NEXTCLOUD_URL := env.url("SOCIALACCOUNT_PROVIDERS_nextcloud_SERVER", None):
     SOCIALACCOUNT_PROVIDERS["nextcloud"] = {"SERVER": NEXTCLOUD_URL.geturl()}
-if KEYCLOAK_URL := env.url("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_URL", None):
-    alt_url_env = env.url("SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_URL_ALT", None)
-
-    if alt_url_env:
-        alt_url = alt_url_env.geturl()
-    else:
-        alt_url = None
-
-    SOCIALACCOUNT_PROVIDERS["keycloak"] = {
-        "KEYCLOAK_URL": KEYCLOAK_URL.geturl(),
-        "KEYCLOAK_REALM": env.str(
-            "SOCIALACCOUNT_PROVIDERS_keycloak_KEYCLOAK_REALM", None
-        ),
-        "KEYCLOAK_URL_ALT": alt_url,
-    }
+# Removed keycloak, use oidc https://django-allauth.readthedocs.io/en/latest/socialaccount/providers/keycloak.html
 if MICROSOFT_TENANT := env.str("SOCIALACCOUNT_PROVIDERS_microsoft_TENANT", None):
     SOCIALACCOUNT_PROVIDERS["microsoft"] = {"TENANT": MICROSOFT_TENANT}
 

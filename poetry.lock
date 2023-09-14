@@ -1028,21 +1028,21 @@ graph = ["objgraph (>=1.7.2)"]
 
 [[package]]
 name = "dj-rest-auth"
-version = "4.0.1"
+version = "5.0.0"
 description = "Authentication and Registration in Django Rest Framework"
 category = "main"
 optional = false
-python-versions = ">=3.5"
+python-versions = ">=3.6"
 files = [
-    {file = "dj-rest-auth-4.0.1.tar.gz", hash = "sha256:ec87f934c83b520217399f4793506e36cccccc84e899623510ee9c7289f80573"},
+    {file = "dj-rest-auth-5.0.0.tar.gz", hash = "sha256:11c2d526abf67521f22eb313bcf3107f3a376aca5ea152e8e2014ae0b39caeea"},
 ]
 
 [package.dependencies]
-Django = ">=2.0"
-djangorestframework = ">=3.7.0"
+Django = ">=3.2"
+djangorestframework = ">=3.13.0"
 
 [package.extras]
-with-social = ["django-allauth (>=0.40.0,<0.55.0)"]
+with-social = ["django-allauth (>=0.55.0,<0.56.0)"]
 
 [[package]]
 name = "dj-stripe"
@@ -1088,21 +1088,25 @@ bcrypt = ["bcrypt"]
 
 [[package]]
 name = "django-allauth"
-version = "0.54.0"
+version = "0.56.1"
 description = "Integrated set of Django applications addressing authentication, registration, account management as well as 3rd party (social) account authentication."
 category = "main"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "django-allauth-0.54.0.tar.gz", hash = "sha256:120e265f802b65738899c6cb627b827fde46a4d03067034c633f516c2adf3e3e"},
+    {file = "django-allauth-0.56.1.tar.gz", hash = "sha256:347044c4e268e085ef4b4b26ea5fdc9d40576872d55e630f1736e1c9a7761529"},
 ]
 
 [package.dependencies]
-Django = ">=2.0"
+Django = ">=3.2"
 pyjwt = {version = ">=1.7", extras = ["crypto"]}
 python3-openid = ">=3.0.8"
-requests = "*"
+requests = ">=2.0.0"
 requests-oauthlib = ">=0.3.0"
+
+[package.extras]
+mfa = ["qrcode (>=7.0.0)"]
+saml = ["python3-saml (>=1.15.0,<2.0.0)"]
 
 [[package]]
 name = "django-anymail"
@@ -4648,4 +4652,4 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "13b2c6373107781691af46306a5efb159257af53e20df3e2f5e8f4e37d03bcdf"
+content-hash = "62eec255257b4a854e29ed35a9a4e0236ba4e82a1e8fb4e1cf9ecb7b521e718d"
