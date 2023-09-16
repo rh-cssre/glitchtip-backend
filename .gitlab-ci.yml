@@ -23,7 +23,7 @@ test:
     ENABLE_TEST_API: "true"
     ENABLE_OPEN_USER_REGISTRATION: "true"
   services:
-    - postgres:15
+    - postgres:16
   cache:
     key: ${CI_COMMIT_REF_SLUG}
     paths:
