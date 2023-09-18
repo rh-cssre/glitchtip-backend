@@ -1028,13 +1028,13 @@ graph = ["objgraph (>=1.7.2)"]
 
 [[package]]
 name = "dj-rest-auth"
-version = "5.0.0"
+version = "5.0.1"
 description = "Authentication and Registration in Django Rest Framework"
 category = "main"
 optional = false
 python-versions = ">=3.6"
 files = [
-    {file = "dj-rest-auth-5.0.0.tar.gz", hash = "sha256:11c2d526abf67521f22eb313bcf3107f3a376aca5ea152e8e2014ae0b39caeea"},
+    {file = "dj-rest-auth-5.0.1.tar.gz", hash = "sha256:2f574edd7bcc9a421e6e1d9d47f7b1eb56b71eb797927be135c995ea546dd9b5"},
 ]
 
 [package.dependencies]
