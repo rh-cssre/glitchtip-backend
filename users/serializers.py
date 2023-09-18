@@ -6,7 +6,6 @@ from allauth.account.adapter import get_adapter
 from allauth.account.forms import default_token_generator
 from allauth.account.models import EmailAddress
 from allauth.account.utils import filter_users_by_email
-from allauth.socialaccount import providers
 from allauth.socialaccount.models import SocialApp
 from dj_rest_auth.registration.serializers import (
     RegisterSerializer as BaseRegisterSerializer,
