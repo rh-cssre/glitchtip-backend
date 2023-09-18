@@ -1,18 +1,24 @@
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework_nested import routers
-from issues.views import IssueViewSet
-from teams.views import NestedTeamViewSet
+
 from environments.views import EnvironmentViewSet
-from releases.views import ReleaseViewSet, ReleaseFileViewSet
-from performance.views import TransactionViewSet, TransactionGroupViewSet, SpanViewSet
-from glitchtip.uptime.views import MonitorViewSet, MonitorCheckViewSet
 from glitchtip.routers import BulkSimpleRouter
+from glitchtip.uptime.views import (
+    MonitorCheckViewSet,
+    MonitorViewSet,
+    StatusPageViewSet,
+)
+from issues.views import IssueViewSet
+from performance.views import SpanViewSet, TransactionGroupViewSet, TransactionViewSet
+from projects.views import OrganizationProjectsViewSet
+from releases.views import ReleaseFileViewSet, ReleaseViewSet
+from teams.views import NestedTeamViewSet
+
 from .views import (
-    OrganizationViewSet,
-    OrganizationUserViewSet,
-    OrganizationMemberViewSet,
-    OrganizationProjectsViewSet,
     AcceptInviteView,
+    OrganizationMemberViewSet,
+    OrganizationUserViewSet,
+    OrganizationViewSet,
 )
 
 router = BulkSimpleRouter()
@@ -52,6 +58,9 @@ organizations_router.register(
 )
 organizations_router.register(
     r"monitors", MonitorViewSet, basename="organization-monitors"
+)
+organizations_router.register(
+    r"status-pages", StatusPageViewSet, basename="organization-status-pages"
 )
 
 organizations_monitors_router = routers.NestedSimpleRouter(
