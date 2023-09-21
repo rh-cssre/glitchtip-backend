@@ -88,8 +88,6 @@ class EventEntriesSerializer(serializers.Serializer):
                         "data": {"values": breadcrumbs_serializer.validated_data},
                     }
                 )
-            else:
-                print(breadcrumbs_serializer.errors)
 
         logentry = instance.get("logentry")
         message = instance.get("message")
