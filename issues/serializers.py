@@ -21,7 +21,7 @@ class EventUserSerializer(serializers.Serializer):
 
 
 class BaseBreadcrumbsSerializer(serializers.Serializer):
-    category = serializers.CharField()
+    category = serializers.CharField(required=False)
     level = serializers.CharField(default="info")
     event_id = serializers.CharField(required=False)
     data = serializers.JSONField(required=False)
@@ -88,6 +88,8 @@ class EventEntriesSerializer(serializers.Serializer):
                         "data": {"values": breadcrumbs_serializer.validated_data},
                     }
                 )
+            else:
+                print(breadcrumbs_serializer.errors)
 
         logentry = instance.get("logentry")
         message = instance.get("message")
