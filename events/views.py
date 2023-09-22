@@ -6,7 +6,7 @@ import uuid
 from urllib.parse import urlparse
 
 from django.conf import settings
-from django.core.exceptions import SuspiciousOperation, ValidationError
+from django.core.exceptions import ValidationError
 from django.db.models import Exists, OuterRef
 from django.db.models.expressions import RawSQL
 from django.db.utils import IntegrityError
@@ -65,40 +65,23 @@ class BaseEventAPIView(APIView):
     @classmethod
     def auth_from_request(cls, request):
         # Accept both sentry or glitchtip prefix.
-        # Prefer glitchtip when not using a sentry SDK but support both.
-        result = {
-            k: request.GET[k]
-            for k in request.GET.keys()
-            if k[:7] == "sentry_" or k[:10] == "glitchtip_"
-        }
+        for k in request.GET.keys():
+            if k in ["sentry_key", "glitchtip_key"]:
+                return request.GET[k]
 
-        if request.META.get("HTTP_X_SENTRY_AUTH", "")[:7].lower() == "sentry ":
-            if result:
-                raise SuspiciousOperation(
-                    "Multiple authentication payloads were detected."
-                )
-            result = parse_auth_header(request.META["HTTP_X_SENTRY_AUTH"])
-        elif request.META.get("HTTP_AUTHORIZATION", "")[:7].lower() == "sentry ":
-            if result:
-                raise SuspiciousOperation(
-                    "Multiple authentication payloads were detected."
-                )
-            result = parse_auth_header(request.META["HTTP_AUTHORIZATION"])
+        if auth_header := request.META.get(
+            "HTTP_X_SENTRY_AUTH", request.META.get("HTTP_AUTHORIZATION")
+        ):
+            result = parse_auth_header(auth_header)
+            return result.get("sentry_key", result.get("glitchtip_key"))
 
-        if not result:
-            if (
-                isinstance(request.data, list)
-                and len(request.data)
-                and "dsn" in request.data[0]
-            ):
-                dsn = urlparse(request.data[0]["dsn"])
-                if username := dsn.username:
-                    return username
-            raise exceptions.NotAuthenticated(
-                "Unable to find authentication information"
-            )
-
-        return result.get("sentry_key", result.get("glitchtip_key"))
+        if isinstance(request.data, list):
+            if data_first := next(iter(request.data), None):
+                if isinstance(data_first, dict):
+                    dsn = urlparse(data_first.get("dsn"))
+                    if username := dsn.username:
+                        return username
+        raise exceptions.NotAuthenticated("Unable to find authentication information")
 
     def get_project(self, request, project_id):
         sentry_key = BaseEventAPIView.auth_from_request(request)
