@@ -2,6 +2,7 @@ from unittest import mock
 
 from django.shortcuts import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from freezegun import freeze_time
 from model_bakery import baker
 
@@ -17,7 +18,8 @@ class UptimeAPITestCase(GlitchTipTestCase):
             kwargs={"organization_slug": self.organization.slug},
         )
 
-    def test_list(self):
+    @mock.patch("glitchtip.uptime.tasks.perform_checks.run")
+    def test_list(self, mocked):
         monitor = baker.make(
             "uptime.Monitor", organization=self.organization, url="http://example.com"
         )
@@ -31,12 +33,13 @@ class UptimeAPITestCase(GlitchTipTestCase):
             "uptime.MonitorCheck",
             monitor=monitor,
             is_up=True,
+            is_change=True,
             start_check="2021-09-19T15:40:31Z",
         )
         res = self.client.get(self.list_url)
         self.assertContains(res, monitor.name)
         self.assertEqual(res.data[0]["isUp"], True)
-        self.assertEqual(res.data[0]["lastChange"], "2021-09-19T15:39:31Z")
+        self.assertEqual(res.data[0]["lastChange"], "2021-09-19T15:40:31Z")
 
     def test_list_aggregation(self):
         """Test up and down event aggregations"""
@@ -61,7 +64,8 @@ class UptimeAPITestCase(GlitchTipTestCase):
             res = self.client.get(self.list_url)
         self.assertEqual(len(res.data[0]["checks"]), 60)
 
-    def test_create(self):
+    @mock.patch("glitchtip.uptime.tasks.perform_checks.run")
+    def test_create_http_monitor(self, mocked):
         data = {
             "monitorType": "Ping",
             "name": "Test",
@@ -69,19 +73,50 @@ class UptimeAPITestCase(GlitchTipTestCase):
             "expectedStatus": 200,
             "interval": "00:01:00",
             "project": self.project.pk,
+            "timeout": 25,
         }
         res = self.client.post(self.list_url, data)
         self.assertEqual(res.status_code, 201)
         monitor = Monitor.objects.all().first()
         self.assertEqual(monitor.name, data["name"])
+        self.assertEqual(monitor.timeout, data["timeout"])
         self.assertEqual(monitor.organization, self.organization)
         self.assertEqual(monitor.project, self.project)
+        mocked.assert_called_once()
+
+    @mock.patch("glitchtip.uptime.tasks.perform_checks.run")
+    def test_create_port_monitor(self, mocked):
+        """Port monitor URLs should be converted to domain:port format, with protocol removed"""
+        data = {
+            "monitorType": "TCP Port",
+            "name": "Test",
+            "url": "http://example.com:80",
+            "expectedStatus": "",
+            "interval": "00:01:00",
+        }
+        res = self.client.post(self.list_url, data)
+        self.assertEqual(res.status_code, 201)
+        monitor = Monitor.objects.all().first()
+        self.assertEqual(monitor.url, "example.com:80")
+        mocked.assert_called_once()
+
+    def test_create_port_monitor_validation(self):
+        """Port monitor URLs should be converted to domain:port format, with protocol removed"""
+        data = {
+            "monitorType": "TCP Port",
+            "name": "Test",
+            "url": "example:80:",
+            "expectedStatus": "",
+            "interval": "00:01:00",
+        }
+        res = self.client.post(self.list_url, data)
+        self.assertEqual(res.status_code, 400)
 
     def test_create_invalid(self):
         data = {
             "monitorType": "Ping",
             "name": "Test",
-            "url": "",
+            "url": "foo:80:",
             "expectedStatus": 200,
             "interval": "00:01:00",
             "project": self.project.pk,
@@ -89,7 +124,35 @@ class UptimeAPITestCase(GlitchTipTestCase):
         res = self.client.post(self.list_url, data)
         self.assertEqual(res.status_code, 400)
 
-    def test_monitor_retrieve(self):
+        data = {
+            "monitorType": "Ping",
+            "name": "Test",
+            "url": "https://www.google.com",
+            "expectedStatus": 200,
+            "interval": "00:01:00",
+            "project": self.project.pk,
+            "timeout": 999,
+        }
+        res = self.client.post(self.list_url, data)
+        self.assertEqual(res.status_code, 400)
+
+    def test_create_expected_status(self):
+        data = {
+            "monitorType": "Ping",
+            "name": "Test",
+            "url": "http://example.com",
+            "expectedStatus": None,
+            "interval": "00:01:00",
+            "project": self.project.pk,
+        }
+        res = self.client.post(self.list_url, data, format="json")
+        self.assertEqual(res.status_code, 201)
+        self.assertTrue(Monitor.objects.filter(expected_status=None).exists())
+
+    @mock.patch("glitchtip.uptime.tasks.perform_checks.run")
+    def test_monitor_retrieve(self, mocked):
+        """Test monitor details endpoint. Unlike the list view,
+        checks here should include response time for the frontend graph"""
         environment = baker.make(
             "environments.Environment", organization=self.organization
         )
@@ -101,17 +164,20 @@ class UptimeAPITestCase(GlitchTipTestCase):
             environment=environment,
         )
 
+        now = timezone.now()
         baker.make(
             "uptime.MonitorCheck",
             monitor=monitor,
             is_up=False,
+            is_change=True,
             start_check="2021-09-19T15:39:31Z",
         )
         baker.make(
             "uptime.MonitorCheck",
             monitor=monitor,
             is_up=True,
-            start_check="2021-09-19T15:40:31Z",
+            is_change=True,
+            start_check=now,
         )
 
         url = reverse(
@@ -121,8 +187,9 @@ class UptimeAPITestCase(GlitchTipTestCase):
 
         res = self.client.get(url)
         self.assertEqual(res.data["isUp"], True)
-        self.assertEqual(res.data["lastChange"], "2021-09-19T15:39:31Z")
+        self.assertEqual(parse_datetime(res.data["lastChange"]), now)
         self.assertEqual(res.data["environment"], environment.pk)
+        self.assertIn("responseTime", res.data["checks"][0])
 
     def test_monitor_checks_list(self):
         monitor = baker.make(
@@ -181,8 +248,12 @@ class UptimeAPITestCase(GlitchTipTestCase):
         user2 = baker.make("users.user")
         org2 = baker.make("organizations_ext.Organization")
         org2.add_user(user2)
-        monitor1 = baker.make("uptime.Monitor", organization=self.organization)
-        monitor2 = baker.make("uptime.Monitor", organization=org2)
+        monitor1 = baker.make(
+            "uptime.Monitor", url="http://example.com", organization=self.organization
+        )
+        monitor2 = baker.make(
+            "uptime.Monitor", url="http://example.com", organization=org2
+        )
 
         res = self.client.get(self.list_url)
         self.assertContains(res, monitor1.name)
