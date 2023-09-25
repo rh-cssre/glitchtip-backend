@@ -8,6 +8,7 @@ from glitchtip.test_utils import generators  # pylint: disable=unused-import
 from organizations_ext.models import OrganizationUserRole
 
 from ..models import Project, ProjectKey
+from ..views import ProjectViewSet
 
 
 class ProjectsAPITestCase(APITestCase):
@@ -107,7 +108,7 @@ class ProjectsAPITestCase(APITestCase):
         )
         res = self.client.delete(url)
         self.assertEqual(res.status_code, 204)
-        self.assertEqual(Project.objects.all().count(), 0)
+        self.assertEqual(ProjectViewSet.queryset.count(), 0)
 
     def test_project_invalid_delete(self):
         """Cannot delete projects that are not in the organization the user is an admin of"""
@@ -208,8 +209,10 @@ class ProjectsModelTestCase(APITestCase):
         """This endpoint can't be used to create"""
         project = baker.make("projects.Project", organization=self.org)
         self.assertEqual(Project.objects.count(), 1)
+        self.assertEqual(Project.undeleted_objects.count(), 1)
         project.delete()
-        self.assertEqual(Project.objects.count(), 0)
+        self.assertEqual(Project.objects.count(), 1)
+        self.assertEqual(Project.undeleted_objects.count(), 0)
 
     def test_projects_force_delete(self):
         """This endpoint can't be used to create"""

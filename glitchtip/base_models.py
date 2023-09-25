@@ -23,7 +23,8 @@ class SoftDeleteModel(models.Model):
     """Based on https://tomisin.dev/blog/implementing-soft-delete-in-django-an-intuitive-guide"""
 
     is_deleted = models.BooleanField(default=False)
-    objects = SoftDeleteManager()
+    objects = models.Manager()
+    undeleted_objects = SoftDeleteManager()
     marked_for_deletion = SoftDeleteManager(is_deleted=True)
 
     class Meta:
