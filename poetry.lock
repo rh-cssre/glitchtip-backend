@@ -1986,14 +1986,14 @@ grpc = ["grpcio (>=1.38.0,<2.0dev)"]
 
 [[package]]
 name = "google-cloud-logging"
-version = "3.6.0"
+version = "3.7.0"
 description = "Stackdriver Logging API client library"
 category = "main"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "google-cloud-logging-3.6.0.tar.gz", hash = "sha256:42134223956850ddd64877c88042d31f78658e7b067a5a8e3dd28236b71f3c32"},
-    {file = "google_cloud_logging-3.6.0-py2.py3-none-any.whl", hash = "sha256:6beb843cb88a9bc2f6df94ce69048243ebb360ee06979f5311ea7a0ec09bd097"},
+    {file = "google-cloud-logging-3.7.0.tar.gz", hash = "sha256:d2eae8503f0f6f9484846df8b087a9539cd8d32a35f67f50053cfdb02b98961e"},
+    {file = "google_cloud_logging-3.7.0-py2.py3-none-any.whl", hash = "sha256:76300709fddd123acf7179dbb91556c56d0fc55804861252a5dfadc7bf2d0759"},
 ]
 
 [package.dependencies]
