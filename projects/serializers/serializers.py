@@ -43,6 +43,12 @@ class BaseProjectSerializer(ProjectReferenceSerializer):
     scrubIPAddresses = serializers.BooleanField(
         source="scrub_ip_addresses", required=False
     )
+    eventsChance = serializers.FloatField(
+        source="events_chance",
+        min_value=0,
+        max_value=1,
+        required=False,
+    )  # GlitchTip field, not in Sentry OSS
 
     class Meta(ProjectReferenceSerializer.Meta):
         fields = (
@@ -61,6 +67,7 @@ class BaseProjectSerializer(ProjectReferenceSerializer):
             "slug",
             "dateCreated",
             "platform",
+            "eventsChance",
         )
         read_only_fields = ("slug", "date_added")
 

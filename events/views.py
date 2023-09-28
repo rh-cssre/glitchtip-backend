@@ -109,6 +109,7 @@ class BaseEventAPIView(APIView):
                     "id",
                     "first_event",
                     "slug",
+                    "events_chance",
                     "organization__is_accepting_events",
                     "organization__slug",
                 )
@@ -120,7 +121,10 @@ class BaseEventAPIView(APIView):
             if Project.objects.filter(id=project_id).exists():
                 raise exceptions.AuthenticationFailed({"error": "Invalid api key"})
             raise exceptions.ValidationError("Invalid project_id: %s" % project_id)
-        if not project.organization.is_accepting_events:
+        if (
+            not project.organization.is_accepting_events
+            or not project.is_accepting_events
+        ):
             raise exceptions.Throttled(detail="event rejected due to rate limit")
         return project
 

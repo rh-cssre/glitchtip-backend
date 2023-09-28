@@ -1,8 +1,10 @@
+import random
 from datetime import timedelta
 from urllib.parse import urlparse
 from uuid import uuid4
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Count, Q
 from django.utils.text import slugify
@@ -30,6 +32,11 @@ class Project(CreatedModel):
     scrub_ip_addresses = models.BooleanField(
         default=True,
         help_text="Should project anonymize IP Addresses",
+    )
+    events_chance = models.FloatField(
+        default=1,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="Probability (0 - 1) on how many events are accepted. Used for throttling at project level",
     )
 
     class Meta:
@@ -69,6 +76,11 @@ class Project(CreatedModel):
             if slug in reserved_words:
                 slug += "-1"
         return slug
+
+    @property
+    def is_accepting_events(self):
+        """Is the project in its limits for event creation"""
+        return random.random() < self.events_chance
 
 
 class ProjectCounter(models.Model):
