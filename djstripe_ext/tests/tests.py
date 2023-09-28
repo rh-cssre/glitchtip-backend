@@ -255,6 +255,7 @@ class SubscriptionIntegrationAPITestCase(APITestCase):
 
         subscription = baker.make(
             "djstripe.Subscription",
+            status="active",
             customer=self.customer,
             livemode=False,
         )
