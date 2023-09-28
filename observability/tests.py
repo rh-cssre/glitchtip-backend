@@ -80,7 +80,7 @@ class ObservabilityAPITestCase(APITestCase):
         )
         self.assertEqual(projs_metric, 1)
 
-        # soft-delete project
+        # delete project
         proj.delete()
 
         # test
@@ -91,18 +91,4 @@ class ObservabilityAPITestCase(APITestCase):
             projects_metric._type,
             {"organization": org.slug},
         )
-        # still 1 because soft-deleted
-        self.assertEqual(projs_metric, 1)
-
-        # delete project
-        proj.force_delete()
-        # test
-        metrics = self._get_metrics()
-        projs_metric = get_sample_value(
-            metrics,
-            projects_metric._name,
-            projects_metric._type,
-            {"organization": org.slug},
-        )
-        # still 1 because soft-deleted
         self.assertEqual(projs_metric, 0)

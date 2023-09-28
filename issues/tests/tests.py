@@ -376,15 +376,6 @@ class IssuesAPITestCase(GlitchTipTestCase):
         self.assertContains(res, unresolved_issue.title)
         self.assertNotContains(res, resolved_issue.title)
 
-    def test_issue_list_soft_deleted_project(self):
-        project = baker.make("projects.Project", organization=self.organization)
-        # soft delete this project
-        project.delete()
-        issue = baker.make("issues.Issue", project=project)
-
-        res = self.client.get(self.url)
-        self.assertNotContains(res, issue.title)
-
     def test_issue_serializer_type(self):
         """
         Ensure type field is show in serializer

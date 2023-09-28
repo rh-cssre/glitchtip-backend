@@ -45,7 +45,7 @@ class IssueViewSet(
     - query (string) — querystring for structured search. Example: "is:unresolved" searches for status=unresolved.
     """
 
-    queryset = Issue.objects.exclude(project__is_deleted=True)
+    queryset = Issue.objects.all()
     serializer_class = IssueSerializer
     filterset_class = IssueFilter
     filter_backends = [DjangoFilterBackend, OrderingFilter]

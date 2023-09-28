@@ -199,25 +199,3 @@ class TeamProjectsAPITestCase(APITestCase):
         self.assertContains(res, "new-1", status_code=201)
         self.client.post(self.url, data)
         self.assertFalse(Project.objects.filter(slug="new").exists())
-
-
-class ProjectsModelTestCase(APITestCase):
-    def setUp(self):
-        self.org = baker.make("organizations_ext.Organization")
-
-    def test_projects_soft_delete(self):
-        """This endpoint can't be used to create"""
-        project = baker.make("projects.Project", organization=self.org)
-        self.assertEqual(Project.objects.count(), 1)
-        self.assertEqual(Project.undeleted_objects.count(), 1)
-        project.delete()
-        self.assertEqual(Project.objects.count(), 1)
-        self.assertEqual(Project.undeleted_objects.count(), 0)
-
-    def test_projects_force_delete(self):
-        """This endpoint can't be used to create"""
-        project = baker.make("projects.Project", organization=self.org)
-        project.delete()
-        self.assertEqual(Project.marked_for_deletion.count(), 1)
-        project.force_delete()
-        self.assertEqual(Project.marked_for_deletion.count(), 0)

@@ -10,7 +10,6 @@ from django_extensions.db.fields import AutoSlugField
 
 from glitchtip.base_models import CreatedModel, SoftDeleteModel
 from observability.metrics import clear_metrics_cache
-from projects.tasks import cleanup_old_projects
 
 
 class Project(CreatedModel, SoftDeleteModel):
@@ -50,6 +49,9 @@ class Project(CreatedModel, SoftDeleteModel):
 
     def delete(self, *args, **kwargs):
         """Mark the record as deleted instead of deleting it"""
+        # avoid circular import
+        from projects.tasks import cleanup_old_projects
+
         super().delete(*args, **kwargs)
         cleanup_old_projects.delay()
 
