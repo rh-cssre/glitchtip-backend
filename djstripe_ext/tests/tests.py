@@ -9,7 +9,7 @@ from freezegun import freeze_time
 from model_bakery import baker
 from rest_framework.test import APITestCase
 
-from glitchtip import test_utils  # pylint: disable=unused-import
+from glitchtip.test_utils import generators  # pylint: disable=unused-import
 
 
 class SubscriptionAPITestCase(APITestCase):
@@ -40,16 +40,26 @@ class SubscriptionAPITestCase(APITestCase):
         customer = baker.make("djstripe.Customer", subscriber=self.organization)
         subscription = baker.make(
             "djstripe.Subscription",
+            status="active",
             customer=customer,
             livemode=False,
             created=timezone.make_aware(timezone.datetime(2020, 1, 2)),
         )
-        # Should only get most recent
+        # Should get most recent
         baker.make(
             "djstripe.Subscription",
+            status="active",
             customer=customer,
             livemode=False,
             created=timezone.make_aware(timezone.datetime(2020, 1, 1)),
+        )
+        # should not get canceled subscriptions
+        baker.make(
+            "djstripe.Subscription",
+            status="canceled",
+            customer=customer,
+            livemode=False,
+            created=timezone.make_aware(timezone.datetime(2020, 1, 3)),
         )
         baker.make("djstripe.Subscription")
         url = reverse("subscription-detail", args=[self.organization.slug])
