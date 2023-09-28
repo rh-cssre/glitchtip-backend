@@ -472,10 +472,6 @@ CELERY_BEAT_SCHEDULE = {
         "task": "glitchtip.uptime.tasks.dispatch_checks",
         "schedule": UPTIME_CHECK_INTERVAL,
     },
-    "cleanup-old-projects": {
-        "task": "projects.tasks.cleanup_old_projects",
-        "schedule": crontab(hour=8, minute=0),
-    },
 }
 
 
