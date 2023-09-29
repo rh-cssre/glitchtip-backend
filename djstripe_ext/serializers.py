@@ -1,13 +1,18 @@
 from django.core.exceptions import SuspiciousOperation
-from djstripe.models import Customer, Price, Product, SubscriptionItem
-from rest_framework import serializers
+from djstripe.models import Customer, Price, Product, SubscriptionItem, Subscription
+from rest_framework import serializers, status
 from rest_framework.serializers import ModelSerializer
+from rest_framework.exceptions import APIException
 
 from organizations_ext.models import OrganizationUserRole
 
 from .rest_framework.serializers import (
     SubscriptionSerializer as BaseSubscriptionSerializer,
 )
+
+
+class HTTP409APIException(APIException):
+    status_code = status.HTTP_409_CONFLICT
 
 
 class BaseProductSerializer(ModelSerializer):
@@ -95,6 +100,12 @@ class CreateSubscriptionSerializer(PriceForOrganizationSerializer):
                 "Cannot subscribe to non-free plan without payment"
             )
         customer, _ = Customer.get_or_create(subscriber=organization)
+        if (
+            Subscription.objects.filter(customer__id=customer.id)
+            .exclude(status="canceled")
+            .exists()
+        ):
+            raise HTTP409APIException("Customer already has subscription")
         subscription = customer.subscribe(items=[{"price": price}])
         return {
             "price": price,
