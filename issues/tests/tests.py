@@ -1,6 +1,8 @@
 from timeit import default_timer as timer
 
 from django.shortcuts import reverse
+from django.utils import timezone
+from freezegun import freeze_time
 from model_bakery import baker
 
 from glitchtip.test_utils.test_case import GlitchTipTestCase
@@ -193,12 +195,13 @@ class IssuesAPITestCase(GlitchTipTestCase):
         self.assertEqual(res.status_code, 404)
 
     def test_issue_last_seen(self):
-        issue = baker.make("issues.Issue", project=self.project)
-        events = baker.make("events.Event", issue=issue, _quantity=2)
-        res = self.client.get(self.url)
-        self.assertEqual(
-            res.data[0]["lastSeen"][:19], events[1].created.isoformat()[:19]
-        )
+        with freeze_time(timezone.datetime(2020, 3, 1)):
+            issue = baker.make("issues.Issue", project=self.project)
+            events = baker.make("events.Event", issue=issue, _quantity=2)
+            res = self.client.get(self.url)
+            self.assertEqual(
+                res.data[0]["lastSeen"][:19], events[1].created.isoformat()[:19]
+            )
 
     def test_issue_delete(self):
         issue = baker.make("issues.Issue", project=self.project)
