@@ -1316,18 +1316,18 @@ user-agents = ">=2.2.0,<3.0.0"
 
 [[package]]
 name = "django-sql-utils"
-version = "0.6.1"
+version = "0.7.0"
 description = "Improved API for aggregating using Subquery"
 category = "main"
 optional = false
-python-versions = "*"
+python-versions = ">=3.8"
 files = [
-    {file = "django-sql-utils-0.6.1.tar.gz", hash = "sha256:4690d9e286095e3a027122fb99dc5d4f2285c64b6e35a2f59467567f293b18af"},
-    {file = "django_sql_utils-0.6.1-py3-none-any.whl", hash = "sha256:4d142f35fbc027e030021ab110d1445bd88988eb6a104169d99abff436dc03d5"},
+    {file = "django_sql_utils-0.7.0-py3-none-any.whl", hash = "sha256:fefc40c826896b60fcf33e35b6e30b523fc958955a16006438cd3ba6d795a532"},
+    {file = "django_sql_utils-0.7.0.tar.gz", hash = "sha256:9371ff28eaf326836a7c52887259123cdd3fbffb7b738e42ae1a21258be0feb6"},
 ]
 
 [package.dependencies]
-django = ">=1.11"
+django = ">=3.2"
 sqlparse = "*"
 
 [[package]]
@@ -4661,4 +4661,4 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "a3843fb6215f28568bc3de42ad0202fb773e0c493e6d1cf3ac470994dcca281d"
+content-hash = "68087e3c9be7ad07584db8dae4dd66e2df4b5948dc7f4548868563e1ffcc5c3c"
