@@ -9,7 +9,7 @@ from freezegun import freeze_time
 from model_bakery import baker
 from rest_framework.test import APITestCase
 
-from glitchtip import test_utils  # pylint: disable=unused-import
+from glitchtip.test_utils import generators  # pylint: disable=unused-import
 
 
 class SubscriptionAPITestCase(APITestCase):
@@ -40,16 +40,26 @@ class SubscriptionAPITestCase(APITestCase):
         customer = baker.make("djstripe.Customer", subscriber=self.organization)
         subscription = baker.make(
             "djstripe.Subscription",
+            status="active",
             customer=customer,
             livemode=False,
             created=timezone.make_aware(timezone.datetime(2020, 1, 2)),
         )
-        # Should only get most recent
+        # Should get most recent
         baker.make(
             "djstripe.Subscription",
+            status="active",
             customer=customer,
             livemode=False,
             created=timezone.make_aware(timezone.datetime(2020, 1, 1)),
+        )
+        # should not get canceled subscriptions
+        baker.make(
+            "djstripe.Subscription",
+            status="canceled",
+            customer=customer,
+            livemode=False,
+            created=timezone.make_aware(timezone.datetime(2020, 1, 3)),
         )
         baker.make("djstripe.Subscription")
         url = reverse("subscription-detail", args=[self.organization.slug])
@@ -118,23 +128,27 @@ class SubscriptionAPITestCase(APITestCase):
         res = self.client.get(url)
         self.assertEqual(sum(res.data.values()), 0)
 
-    @patch("djstripe.models.Customer.subscribe")
-    def test_create(self, djstripe_customer_subscribe_mock):
-        customer = baker.make(
-            "djstripe.Customer", subscriber=self.organization, livemode=False
-        )
+    @skipIf(
+        settings.STRIPE_TEST_PUBLIC_KEY == "fake", "requires real Stripe test API key"
+    )
+    def test_create_free(self):
+        """
+        Users should not be able to create a free subscription if they have another non-canceled subscription
+        """
         price = baker.make(
-            "djstripe.Price", unit_amount=0, billing_scheme=BillingScheme.per_unit
+            "djstripe.Price",
+            unit_amount=0,
+            id="price_1KO6e1J4NuO0bv3IEXhpWpzt",
+            billing_scheme=BillingScheme.per_unit,
         )
-        subscription = baker.make(
-            "djstripe.Subscription",
-            customer=customer,
-            livemode=False,
-        )
-        djstripe_customer_subscribe_mock.return_value = subscription
+        baker.make("djstripe.Product", id="prod_L4F8CtH20Oad6S", default_price=price)
         data = {"price": price.id, "organization": self.organization.id}
         res = self.client.post(self.url, data)
         self.assertEqual(res.data["price"], price.id)
+
+        # Second attempt should fail
+        res = self.client.post(self.url, data)
+        self.assertEqual(res.status_code, 409)
 
     def test_create_invalid_org(self):
         """Only owners may create subscriptions"""
@@ -236,24 +250,3 @@ class SubscriptionIntegrationAPITestCase(APITestCase):
         self.client.force_login(self.user)
         self.list_url = reverse("subscription-list")
         self.detail_url = reverse("subscription-detail", args=[self.organization.slug])
-
-    @patch("djstripe.models.Customer.subscribe")
-    def test_new_org_flow(self, djstripe_customer_subscribe_mock):
-        """Test checking if subscription exists and when not, creating a free tier one"""
-        res = self.client.get(self.detail_url)
-        self.assertFalse(res.data["id"])  # No subscription, user should create one
-
-        subscription = baker.make(
-            "djstripe.Subscription",
-            customer=self.customer,
-            livemode=False,
-        )
-        djstripe_customer_subscribe_mock.return_value = subscription
-
-        data = {"price": self.price.id, "organization": self.organization.id}
-        res = self.client.post(self.list_url, data)
-        self.assertContains(res, self.price.id, status_code=201)
-        djstripe_customer_subscribe_mock.assert_called_once()
-
-        res = self.client.get(self.detail_url)
-        self.assertEqual(res.data["id"], subscription.id)

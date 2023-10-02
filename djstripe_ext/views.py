@@ -55,7 +55,11 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         """Get most recent by slug"""
         try:
             subscription = (
-                self.get_queryset().filter(**self.kwargs).order_by("-created").first()
+                self.get_queryset()
+                .filter(**self.kwargs)
+                .exclude(status="canceled")
+                .order_by("-created")
+                .first()
             )
             # Check organization throttle, in case it changed recently
             if subscription:

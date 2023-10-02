@@ -1,6 +1,7 @@
-from rest_framework import serializers, status
-from rest_framework.exceptions import APIException, PermissionDenied
+from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
 
+from glitchtip.exceptions import ConflictException
 from projects.serializers.serializers import OrganizationProjectSerializer
 from teams.models import Team
 from teams.serializers import TeamSerializer
@@ -29,10 +30,6 @@ class OrganizationDetailSerializer(OrganizationSerializer):
             "scrubIPAddresses",
             "teams",
         )
-
-
-class HTTP409APIException(APIException):
-    status_code = status.HTTP_409_CONFLICT
 
 
 class OrganizationUserSerializer(serializers.ModelSerializer):
@@ -92,9 +89,9 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
         ):
             raise PermissionDenied("Only existing users may be invited")
         if organization.organization_users.filter(email=email).exists():
-            raise HTTP409APIException(f"The user {email} is already invited", "email")
+            raise ConflictException(f"The user {email} is already invited", "email")
         if organization.organization_users.filter(user__email=email).exists():
-            raise HTTP409APIException(f"The user {email} is already a member", "email")
+            raise ConflictException(f"The user {email} is already a member", "email")
         org_user = super().create(
             {"role": role, "email": email, "organization": organization}
         )

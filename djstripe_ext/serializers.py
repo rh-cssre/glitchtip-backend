@@ -1,8 +1,9 @@
 from django.core.exceptions import SuspiciousOperation
-from djstripe.models import Customer, Price, Product, SubscriptionItem
+from djstripe.models import Customer, Price, Product, Subscription, SubscriptionItem
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
+from glitchtip.exceptions import ConflictException
 from organizations_ext.models import OrganizationUserRole
 
 from .rest_framework.serializers import (
@@ -95,6 +96,12 @@ class CreateSubscriptionSerializer(PriceForOrganizationSerializer):
                 "Cannot subscribe to non-free plan without payment"
             )
         customer, _ = Customer.get_or_create(subscriber=organization)
+        if (
+            Subscription.objects.filter(customer=customer)
+            .exclude(status="canceled")
+            .exists()
+        ):
+            raise ConflictException("Customer already has subscription")
         subscription = customer.subscribe(items=[{"price": price}])
         return {
             "price": price,
