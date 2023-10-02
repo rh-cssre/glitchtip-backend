@@ -1,9 +1,10 @@
-from allauth.account import app_settings as allauth_settings
+from allauth.account import app_settings as allauth_account_settings
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.account.auth_backends import AuthenticationBackend
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter, get_adapter
 from allauth.socialaccount.helpers import complete_social_login
-from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+from allauth.socialaccount.providers.oauth2.client import OAuth2Client, OAuth2Error
+from allauth.socialaccount.providers.openid_connect.views import OpenIDConnectAdapter
 from dj_rest_auth.registration.serializers import (
     SocialLoginSerializer as BaseSocialLoginSerializer,
 )
@@ -83,7 +84,12 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
         if not adapter_class:
             raise serializers.ValidationError(_("Define adapter_class in view"))
 
-        adapter = adapter_class(request)
+        # The OIDC provider has a dynamic provider id. Fetch it from the request.
+        if adapter_class == OpenIDConnectAdapter:
+            provider = request.resolver_match.captured_kwargs.get("provider")
+            adapter = adapter_class(request, provider)
+        else:
+            adapter = adapter_class(request)
         app = adapter.get_provider().app
 
         access_token = attrs.get("access_token")
@@ -118,7 +124,13 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
                 headers=adapter.headers,
                 basic_auth=adapter.basic_auth,
             )
-            token = client.get_access_token(code)
+            try:
+                token = client.get_access_token(code)
+            except OAuth2Error as ex:
+                raise serializers.ValidationError(
+                    _("Failed to exchange code for access token")
+                ) from ex
+
             access_token = token["access_token"]
             tokens_to_parse = {"access_token": access_token}
 
@@ -134,7 +146,12 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
         social_token.app = app
 
         try:
-            login = self.get_social_login(adapter, app, social_token, token)
+            if adapter.provider_id == "google" and not code:
+                login = self.get_social_login(
+                    adapter, app, social_token, response={"id_token": id_token}
+                )
+            else:
+                login = self.get_social_login(adapter, app, social_token, token)
             ret = complete_social_login(request, login)
         except HTTPError:
             raise serializers.ValidationError(_("Incorrect value"))
@@ -143,7 +160,7 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
             raise serializers.ValidationError(ret.content)
 
         if not login.is_existing:
-            if allauth_settings.UNIQUE_EMAIL:
+            if allauth_account_settings.UNIQUE_EMAIL:
                 account_exists = (
                     get_user_model()
                     .objects.filter(
@@ -161,6 +178,7 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
             else:
                 login.lookup()
                 login.save(request, connect=True)
+                self.post_signup(login, attrs)
 
         attrs["user"] = login.account.user
 

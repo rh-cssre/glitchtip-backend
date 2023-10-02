@@ -7,6 +7,7 @@ from allauth.account.forms import default_token_generator
 from allauth.account.models import EmailAddress
 from allauth.account.utils import filter_users_by_email
 from allauth.socialaccount.models import SocialApp
+from allauth.socialaccount.providers.openid_connect.views import OpenIDConnectAdapter
 from dj_rest_auth.registration.serializers import (
     RegisterSerializer as BaseRegisterSerializer,
 )
@@ -53,6 +54,7 @@ class SocialAccountSerializer(BaseSocialAccountSerializer):
 class SocialAppSerializer(serializers.ModelSerializer):
     authorize_url = serializers.SerializerMethodField()
     scopes = serializers.SerializerMethodField()
+    provider = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialApp
@@ -60,7 +62,11 @@ class SocialAppSerializer(serializers.ModelSerializer):
 
     def get_authorize_url(self, obj):
         request = self.context.get("request")
-        adapter = SOCIAL_ADAPTER_MAP.get(obj.provider, obj.provider_id)(request)
+        adapter_cls = SOCIAL_ADAPTER_MAP.get(obj.provider)
+        if adapter_cls == OpenIDConnectAdapter:
+            adapter = adapter_cls(request, obj.provider_id)
+        else:
+            adapter = adapter_cls(request)
         if adapter:
             return adapter.authorize_url
 
@@ -69,6 +75,9 @@ class SocialAppSerializer(serializers.ModelSerializer):
         if request:
             provider = obj.get_provider(request)
             return provider.get_scope(request)
+
+    def get_provider(self, obj):
+        return obj.provider_id or obj.provider
 
 
 class ConfirmEmailAddressSerializer(serializers.Serializer):
