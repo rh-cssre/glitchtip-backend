@@ -622,26 +622,6 @@ if NEXTCLOUD_URL := env.url("SOCIALACCOUNT_PROVIDERS_nextcloud_SERVER", None):
 if MICROSOFT_TENANT := env.str("SOCIALACCOUNT_PROVIDERS_microsoft_TENANT", None):
     SOCIALACCOUNT_PROVIDERS["microsoft"] = {"TENANT": MICROSOFT_TENANT}
 
-# Parse oidc settings as nested dict in array. Example:
-# SOCIALACCOUNT_PROVIDERS_openid_connect_SERVERS_0_id: "g-oidc"
-# SOCIALACCOUNT_PROVIDERS_openid_connect_SERVERS_0_server_url: "https://accounts.google.com"
-oidc_prefix = "SOCIALACCOUNT_PROVIDERS_openid_connect_SERVERS_"
-oidc_pattern = re.compile(r"{prefix}\w+".format(prefix=oidc_prefix))
-oidc_servers = {}
-for key, value in {
-    key.replace(oidc_prefix, ""): val
-    for key, val in os.environ.items()
-    if oidc_pattern.match(key)
-}.items():
-    number, setting = key.split("_", 1)
-    if number in oidc_servers:
-        oidc_servers[number][setting] = value
-    else:
-        oidc_servers[number] = {setting: value}
-oidc_servers = [x for x in oidc_servers.values()]
-SOCIALACCOUNT_PROVIDERS["openid_connect"] = {"SERVERS": oidc_servers}
-
-
 # Remove in GlitchTip4.0
 if "ENABLE_OPEN_USER_REGISTRATION" in os.environ:
     warnings.warn(
