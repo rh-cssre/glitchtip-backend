@@ -626,8 +626,10 @@ if MICROSOFT_TENANT := env.str("SOCIALACCOUNT_PROVIDERS_microsoft_TENANT", None)
 # in favor of configuration via django admin.
 # In GlitchTip 3.4.0 the server url for a single OIDC app defined via env var
 # will be migrated to its corresponding social app in the db
-OIDC_APP_ID = env.str("SOCIALACCOUNT_PROVIDERS_openid_connect_SERVERS_0_id")
-OIDC_APP_SERVER_URL = env.str("SOCIALACCOUNT_PROVIDERS_openid_connect_SERVERS_0_server_url")
+OIDC_APP_ID = env.str("SOCIALACCOUNT_PROVIDERS_openid_connect_SERVERS_0_id", "")
+OIDC_APP_SERVER_URL = env.str(
+    "SOCIALACCOUNT_PROVIDERS_openid_connect_SERVERS_0_server_url", ""
+)
 
 
 # Remove in GlitchTip4.0
