@@ -30,7 +30,7 @@ class OrganizationThrottlingTestCase(TestCase):
                 livemode=False,
                 plan=plan,
                 status="active",
-                current_period_end="2000-01-31",
+                current_period_end=timezone.make_aware(timezone.datetime(2000, 1, 31)),
             )
             baker.make(
                 "events.Event", issue__project__organization=organization, _quantity=3
@@ -90,7 +90,7 @@ class OrganizationThrottlingTestCase(TestCase):
                 livemode=False,
                 plan=plan,
                 status="active",
-                current_period_end="2000-02-01",
+                current_period_end=timezone.make_aware(timezone.datetime(2000, 2, 1)),
             )
             baker.make("events.Event", issue__project=project, _quantity=3)
             baker.make(
@@ -149,7 +149,7 @@ class OrganizationThrottlingTestCase(TestCase):
             livemode=False,
             plan=plan,
             status="active",
-            current_period_end="2000-01-31",
+            current_period_end=timezone.make_aware(timezone.datetime(2000, 1, 31)),
         )
         set_organization_throttle()
         organization.refresh_from_db()
@@ -169,7 +169,7 @@ class OrganizationThrottlingTestCase(TestCase):
             livemode=False,
             plan=plan,
             status="active",
-            current_period_end="2000-01-31",
+            current_period_end=timezone.make_aware(timezone.datetime(2000, 1, 31)),
         )
         set_organization_throttle()
         organization.refresh_from_db()
@@ -197,7 +197,7 @@ class OrganizationThrottlingTestCase(TestCase):
             livemode=False,
             plan=paid_plan,
             status="canceled",
-            current_period_end="2000-01-31",
+            current_period_end=timezone.make_aware(timezone.datetime(2000, 1, 31)),
         )
         baker.make(
             "djstripe.Subscription",
@@ -205,7 +205,7 @@ class OrganizationThrottlingTestCase(TestCase):
             livemode=False,
             plan=free_plan,
             status="active",
-            current_period_end="2100-01-31",
+            current_period_end=timezone.make_aware(timezone.datetime(2100, 1, 31)),
         )
 
         # Should not be throttled

@@ -34,14 +34,14 @@ django-rest-mfa = "^1.2.2"
 aiohttp = "^3.7.4"
 google-cloud-logging = "^3.0.0"
 django-prometheus = "^2.2.0"
-django-sql-utils = "^0.6.1"
+django-sql-utils = "^0.7.0"
 django-redis = {extras = ["hiredis"], version = "^5.2.0"}
 redis = "~4.6.0"
 
 uwsgi-chunked = "^0.1.8"
 django-import-export = "^3.0.0"
 flower = "^2.0.0"
-psycopg = {extras = ["c"], version = "^3.1.8"}
+psycopg = {extras = ["c"], version = "^3.1.12"}
 coreapi = "^2.3.3"
 
 [tool.poetry.group.dev.dependencies]
