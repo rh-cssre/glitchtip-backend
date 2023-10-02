@@ -6,10 +6,10 @@ from django.db import migrations
 def add_OIDC_settings_from_env(apps, schema_editor):
     SocialApp = apps.get_model("socialaccount", "SocialApp")
     if settings.OIDC_APP_ID and settings.OIDC_APP_SERVER_URL:
-        db_social_app = SocialApp.objects.filter(
-            provider_id=settings.OIDC_APP_ID
-        ).first()
+        db_social_app = SocialApp.objects.filter(provider=settings.OIDC_APP_ID).first()
         if db_social_app and not db_social_app.settings:
+            db_social_app.provider = "openid_connect"
+            db_social_app.provider_id = settings.OIDC_APP_ID
             db_social_app.settings = {"server_url": settings.OIDC_APP_SERVER_URL}
             db_social_app.save()
 
