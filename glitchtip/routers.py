@@ -13,7 +13,12 @@ class BulkSimpleRouter(routers.SimpleRouter):
     routes = routers.SimpleRouter.routes
     routes[0] = Route(
         url=r"^{prefix}{trailing_slash}$",
-        mapping={"get": "list", "post": "create", "put": "bulk_update",},
+        mapping={
+            "get": "list",
+            "post": "create",
+            "put": "bulk_update",
+            "delete": "bulk_delete",
+        },
         name="{basename}-list",
         detail=False,
         initkwargs={"suffix": "List"},
