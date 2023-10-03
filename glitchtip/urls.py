@@ -55,8 +55,6 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path("_health/", health),
-    path("admin/", include("django_rest_mfa.mfa_admin.urls")),
-    path("admin/", admin.site.urls),
     re_path(
         r"^favicon\.ico$",
         RedirectView.as_view(url=settings.STATIC_URL + "favicon.ico", permanent=True),
@@ -69,6 +67,13 @@ urlpatterns = [
     path("api/0/", APIRootView.as_view(), name="api-root-view"),
     path("api/0/", include(router.urls)),
 ]
+
+if "django.contrib.admin" in settings.INSTALLED_APPS:
+    urlpatterns += [
+        path("admin/", include("django_rest_mfa.mfa_admin.urls")),
+        path("admin/", admin.site.urls),
+        path("api/0/", include("glitchtip.importer.urls")),
+    ]
 
 if settings.BILLING_ENABLED:
     urlpatterns += [
@@ -84,7 +89,6 @@ urlpatterns += [
     path("api/0/", include("api_tokens.urls")),
     path("api/0/", include("files.urls")),
     path("api/0/", include("difs.urls")),
-    path("api/0/", include("glitchtip.importer.urls")),
     path("api/0/", include("glitchtip.stats.urls")),
     path("api/0/", include("glitchtip.wizard.urls")),
     path("api/mfa/", include("django_rest_mfa.urls")),

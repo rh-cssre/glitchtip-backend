@@ -43,6 +43,9 @@ django-import-export = "^3.0.0"
 flower = "^2.0.0"
 psycopg = {extras = ["c"], version = "^3.1.12"}
 coreapi = "^2.3.3"
+adrf = "^0.1.2"
+uvicorn = "^0.23.2"
+gunicorn = "^21.2.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.0.0"
@@ -61,6 +64,7 @@ django-sslserver = "^0.22"
 aioresponses = "^0.7.2"
 isort = "^5.9.3"
 requests-mock = "^1.9.3"
+memray = "^1.9.1"
 
 [tool.isort]
 profile = "black"
