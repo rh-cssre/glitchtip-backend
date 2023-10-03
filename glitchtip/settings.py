@@ -10,7 +10,6 @@ https://docs.djangoproject.com/en/dev/ref/settings/
 
 import logging
 import os
-import re
 import sys
 import warnings
 
@@ -174,15 +173,21 @@ DEBUG_TOOLBAR_PANELS = [
 ]
 
 # Application definition
-
-INSTALLED_APPS = [
+# Conditionally load to workaround unnecessary memory usage in celery/beat
+WEB_INSTALLED_APPS = [
     "django_rest_mfa.mfa_admin",
     "django.contrib.admin",
-    "django.contrib.auth",
-    "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_filters",
+    "rest_framework",
+]
+
+
+INSTALLED_APPS = [
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
     "django.contrib.postgres",
     "django_prometheus",
     "allauth",
@@ -198,14 +203,12 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.openid_connect",
     "anymail",
     "corsheaders",
-    "django_filters",
     "django_extensions",
     "django_rest_mfa",
 ]
 if DEBUG_TOOLBAR:
     INSTALLED_APPS.append("debug_toolbar")
 INSTALLED_APPS += [
-    "rest_framework",
     "drf_yasg",
     "dj_rest_auth",
     "dj_rest_auth.registration",
@@ -229,6 +232,11 @@ INSTALLED_APPS += [
     "releases",
     "difs",
 ]
+
+
+IS_CELERY = env.bool("IS_CELERY", False)
+if not IS_CELERY:
+    INSTALLED_APPS = WEB_INSTALLED_APPS + INSTALLED_APPS
 
 # Ensure no one uses runsslserver in production
 if SECRET_KEY == "change_me" and DEBUG is True:
