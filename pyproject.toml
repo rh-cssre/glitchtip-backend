@@ -47,7 +47,7 @@ coreapi = "^2.3.3"
 [tool.poetry.group.dev.dependencies]
 black = "^23.0.0"
 ipdb = "^0.13.2"
-pylint = "^2.4.4"
+pylint = "^3.0.0"
 pylint-django = "^2.0.13"
 locust = "^2.10.1"
 freezegun = "^1.1.0"
