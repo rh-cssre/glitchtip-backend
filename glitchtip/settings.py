@@ -173,6 +173,7 @@ DEBUG_TOOLBAR_PANELS = [
 ]
 
 # Application definition
+# Conditionally load to workaround unnecessary memory usage in celery/beat
 WEB_INSTALLED_APPS = [
     "django_rest_mfa.mfa_admin",
     "django.contrib.admin",
