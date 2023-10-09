@@ -1,11 +1,12 @@
 from django.shortcuts import reverse
-from rest_framework.test import APITestCase
 from model_bakery import baker
+from rest_framework.test import APITestCase
+
 from glitchtip import test_utils  # pylint: disable=unused-import
 
 
 class OrgTeamTestCase(APITestCase):
-    """ Tests nested under /organizations/ """
+    """Tests nested under /organizations/"""
 
     def setUp(self):
         self.user = baker.make("users.user")
@@ -29,7 +30,7 @@ class OrgTeamTestCase(APITestCase):
         self.assertContains(res, data["slug"], status_code=201)
 
     def test_unauthorized_create(self):
-        """ Only admins can create teams for that org """
+        """Only admins can create teams for that org"""
         data = {"slug": "team"}
         organization = baker.make("organizations_ext.Organization")
         url = reverse("organization-teams-list", args=[organization.slug])
@@ -70,7 +71,10 @@ class TeamTestCase(APITestCase):
         team = baker.make("teams.Team", organization=self.organization)
         team.members.add(self.org_user)
         url = reverse(
-            "team-detail", kwargs={"pk": f"{self.organization.slug}/{team.slug}",},
+            "team-detail",
+            kwargs={
+                "pk": f"{self.organization.slug}/{team.slug}",
+            },
         )
         res = self.client.get(url)
         self.assertContains(res, team.slug)
@@ -79,7 +83,10 @@ class TeamTestCase(APITestCase):
     def test_invalid_retrieve(self):
         team = baker.make("teams.Team")
         url = reverse(
-            "team-detail", kwargs={"pk": f"{self.organization.slug}/{team.slug}",},
+            "team-detail",
+            kwargs={
+                "pk": f"{self.organization.slug}/{team.slug}",
+            },
         )
         res = self.client.get(url)
         self.assertEqual(res.status_code, 404)
