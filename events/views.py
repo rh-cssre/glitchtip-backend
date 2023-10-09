@@ -22,6 +22,7 @@ from difs.tasks import difs_run_resolve_stacktrace
 from performance.serializers import TransactionEventSerializer
 from projects.models import Project
 from sentry.utils.auth import parse_auth_header
+from glitchtip.exceptions import ServiceUnavailableException
 
 from .negotiation import IgnoreClientContentNegotiation
 from .parsers import EnvelopeParser
@@ -61,6 +62,16 @@ class BaseEventAPIView(APIView):
     authentication_classes = []
     content_negotiation_class = IgnoreClientContentNegotiation
     http_method_names = ["post"]
+
+    def check_status(self):
+        if settings.MAINTENANCE_EVENT_FREEZE:
+            raise ServiceUnavailableException(
+                {
+                    "message": "Events are not currently being accepted due to maintenance."
+                },
+            )
+        if settings.EVENT_STORE_DEBUG:
+            print(json.dumps(self.request.data))
 
     @classmethod
     def auth_from_request(cls, request):
@@ -154,15 +165,7 @@ class BaseEventAPIView(APIView):
 
 class EventStoreAPIView(BaseEventAPIView):
     def post(self, request, *args, **kwargs):
-        if settings.MAINTENANCE_EVENT_FREEZE:
-            return Response(
-                {
-                    "message": "Events are not currently being accepted due to database maintenance."
-                },
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-        if settings.EVENT_STORE_DEBUG:
-            print(json.dumps(request.data))
+        self.check_status()
         try:
             project = self.get_project(request, kwargs.get("id"))
         except exceptions.AuthenticationFailed as err:
@@ -182,15 +185,7 @@ class EnvelopeAPIView(BaseEventAPIView):
         return TransactionEventSerializer
 
     def post(self, request, *args, **kwargs):
-        if settings.MAINTENANCE_EVENT_FREEZE:
-            return Response(
-                {
-                    "message": "Events are not currently being accepted due to database maintenance."
-                },
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-        if settings.EVENT_STORE_DEBUG:
-            print(json.dumps(request.data))
+        self.check_status()
         project = self.get_project(request, kwargs.get("id"))
 
         data = request.data
