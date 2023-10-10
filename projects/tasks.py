@@ -24,5 +24,5 @@ def update_transaction_event_project_hourly_statistic(project_id: int, start_tim
 
 
 @shared_task
-def cleanup_old_projects():
-    Project.cleanup_old_projects()
+def delete_project(project_id: int):
+    Project.objects.get(id=project_id).force_delete()

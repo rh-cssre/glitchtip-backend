@@ -50,12 +50,35 @@ class Project(CreatedModel, SoftDeleteModel):
     def delete(self, *args, **kwargs):
         """Mark the record as deleted instead of deleting it"""
         # avoid circular import
-        from projects.tasks import cleanup_old_projects
+        from projects.tasks import delete_project
 
         super().delete(*args, **kwargs)
-        cleanup_old_projects.delay()
+        delete_project.delay(self.pk)
 
     def force_delete(self, *args, **kwargs):
+        """Really delete the project and all related data."""
+        # avoid circular import
+        from events.models import Event
+        from issues.models import Issue
+
+        # bulk delete all events
+        events_qs = Event.objects.filter(issue__project=self)
+        events_qs._raw_delete(events_qs.db)
+
+        # bulk delete all issues in batches of 1k
+        issues_qs = self.issue_set.order_by("id")
+        while True:
+            try:
+                issue_delimiter = issues_qs.values_list("id", flat=True)[
+                    1000:1001
+                ].get()
+                issues_qs.filter(id__lte=issue_delimiter).delete()
+            except Issue.DoesNotExist:
+                break
+
+        issues_qs.delete()
+
+        # lastly delete the project itself
         super().force_delete(*args, **kwargs)
         clear_metrics_cache()
 
@@ -77,33 +100,6 @@ class Project(CreatedModel, SoftDeleteModel):
             if slug in reserved_words:
                 slug += "-1"
         return slug
-
-    @classmethod
-    def cleanup_old_projects(cls):
-        """Delete projects that have been soft deleted."""
-        # avoid circular import
-        from events.models import Event
-        from issues.models import Issue
-
-        for project in cls.marked_for_deletion.all():
-            # bulk delete all events
-            events_qs = Event.objects.filter(issue__project=project)
-            events_qs._raw_delete(events_qs.db)
-
-            # bulk delete all issues in batches of 1k
-            issues_qs = project.issue_set.order_by("id")
-            while True:
-                try:
-                    issue_delimiter = issues_qs.values_list("id", flat=True)[
-                        1000:1001
-                    ].get()
-                    issues_qs.filter(id__lte=issue_delimiter).delete()
-                except Issue.DoesNotExist:
-                    break
-
-            issues_qs.delete()
-            # lastly delete the project
-            project.force_delete()
 
 
 class ProjectCounter(models.Model):
