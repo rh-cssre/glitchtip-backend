@@ -217,6 +217,7 @@ INSTALLED_APPS += [
     "glitchtip",
     "alerts",
     "api_tokens",
+    "ninja",
     "environments",
     "files",
     "organizations_ext",
