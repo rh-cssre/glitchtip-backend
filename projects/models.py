@@ -80,6 +80,8 @@ class Project(CreatedModel):
     @property
     def is_accepting_events(self):
         """Is the project in its limits for event creation"""
+        if self.events_chance == 1:
+            return True
         return random.random() < self.events_chance
 
 
