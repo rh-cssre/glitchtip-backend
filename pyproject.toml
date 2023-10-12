@@ -6,7 +6,7 @@ authors = ["David Burke"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
 Django = "~4.2.0"
 djangorestframework = "^3.12.1"
 django-allauth = "~0.57.0"

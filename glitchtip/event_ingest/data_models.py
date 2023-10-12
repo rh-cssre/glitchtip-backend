@@ -1,11 +1,27 @@
-from typing import Optional, List, Union, Any
+from datetime import datetime
+from django.utils.timezone import now
+from typing import Optional, Union, Any, TypedDict
 import uuid
-from ninja import Schema
+from ninja import Schema, Field
 from pydantic import Json
+
+
+class TagKeyValue(TypedDict):
+    key: str
+    value: str
 
 
 class EventIngestSchema(Schema):
     event_id: uuid.UUID
+    timestamp: datetime = Field(default_factory=now)
+    platform: Optional[str]
+    level: Optional[str]
+    logger: Optional[str]
+    transaction: Optional[str]
+    server_name: Optional[str]
+    release: Optional[str]
+    dist: Optional[str]
+    tags: Optional[Union[dict[str, str], list[TagKeyValue]]]
 
 
 class EnvelopeHeaderSchema(Schema):
@@ -20,4 +36,4 @@ class ItemHeaderSchema(Schema):
     length: Optional[int]
 
 
-EnvelopeSchema = List[Union[EnvelopeHeaderSchema, ItemHeaderSchema, EventIngestSchema]]
+EnvelopeSchema = list[Union[EnvelopeHeaderSchema, ItemHeaderSchema, EventIngestSchema]]
