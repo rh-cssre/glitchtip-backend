@@ -33,10 +33,10 @@ class Project(CreatedModel):
         default=True,
         help_text="Should project anonymize IP Addresses",
     )
-    events_chance = models.FloatField(
-        default=1,
-        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
-        help_text="Probability (0 - 1) on how many events are accepted. Used for throttling at project level",
+    event_throttle_rate = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MaxValueValidator(100)],
+        help_text="Probability (in percent) on how many events are throttled. Used for throttling at project level",
     )
 
     class Meta:
@@ -80,9 +80,9 @@ class Project(CreatedModel):
     @property
     def is_accepting_events(self):
         """Is the project in its limits for event creation"""
-        if self.events_chance == 1:
+        if self.event_throttle_rate == 0:
             return True
-        return random.random() < self.events_chance
+        return random.randint(0, 100) > self.event_throttle_rate
 
 
 class ProjectCounter(models.Model):

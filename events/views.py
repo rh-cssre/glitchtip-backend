@@ -109,7 +109,7 @@ class BaseEventAPIView(APIView):
                     "id",
                     "first_event",
                     "slug",
-                    "events_chance",
+                    "event_throttle_rate",
                     "organization__is_accepting_events",
                     "organization__slug",
                 )
