@@ -5,7 +5,6 @@ import string
 import uuid
 from urllib.parse import urlparse
 
-from adrf.views import APIView
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db.models import Exists, OuterRef
@@ -15,6 +14,7 @@ from django.http import HttpResponse
 from django.test import RequestFactory
 from rest_framework import exceptions, permissions, status
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from sentry_sdk import capture_exception, set_context, set_level
 
 from difs.models import DebugInformationFile

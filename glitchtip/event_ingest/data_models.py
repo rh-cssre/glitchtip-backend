@@ -1,7 +1,9 @@
 from datetime import datetime
 from django.utils.timezone import now
-from typing import Optional, Union, Any, TypedDict
+from typing import Optional, Union, Any
 import uuid
+
+from typing_extensions import TypedDict
 from ninja import Schema, Field
 from pydantic import Json
 
@@ -14,14 +16,14 @@ class TagKeyValue(TypedDict):
 class EventIngestSchema(Schema):
     event_id: uuid.UUID
     timestamp: datetime = Field(default_factory=now)
-    platform: Optional[str]
+    platform: Optional[str] = None
     level: Optional[str]
-    logger: Optional[str]
-    transaction: Optional[str]
-    server_name: Optional[str]
-    release: Optional[str]
-    dist: Optional[str]
-    tags: Optional[Union[dict[str, str], list[TagKeyValue]]]
+    logger: Optional[str] = None
+    transaction: Optional[str] = None
+    server_name: Optional[str] = None
+    release: Optional[str] = None
+    dist: Optional[str] = None
+    tags: Optional[Union[dict[str, str], list[TagKeyValue]]] = None
 
 
 class EnvelopeHeaderSchema(Schema):

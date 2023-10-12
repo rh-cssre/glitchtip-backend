@@ -80,7 +80,6 @@ async def event_store(
     check_status()
     project = await get_project(request, project_id, payload)
     res = ingest_event.delay(project.id, payload.dict())
-    print(payload)
     return {"event_id": payload.event_id.hex}
 
 
