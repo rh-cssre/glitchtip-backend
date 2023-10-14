@@ -58,6 +58,7 @@ SECRET_KEY = env.str("SECRET_KEY", "change_me")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
+DEBUG = False
 
 # Enable only for running end to end testing. Debug must be True to use.
 ENABLE_TEST_API = env.bool("ENABLE_TEST_API", False)

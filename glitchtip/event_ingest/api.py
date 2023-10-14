@@ -10,8 +10,9 @@ from sentry.utils.auth import parse_auth_header
 from .data_models import EventIngestSchema, EnvelopeSchema
 from .tasks import ingest_event
 from .parsers import EnvelopeParser
+from .renderers import ORJSONRenderer
 
-api = NinjaAPI(parser=EnvelopeParser())
+api = NinjaAPI(parser=EnvelopeParser(), renderer=ORJSONRenderer())
 
 
 class EventIngestOut(Schema):
