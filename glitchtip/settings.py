@@ -83,6 +83,8 @@ GLITCHTIP_URL = env.url("GLITCHTIP_URL", default_url)
 if GLITCHTIP_URL.scheme not in ["http", "https"]:
     raise ImproperlyConfigured("GLITCHTIP_DOMAIN must start with http or https")
 
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = 4294967295  # TMP REMOVE THIS
 # Limits size (in bytes) of uncompressed event payloads. Mitigates DOS risk.
 GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE = env.int(
     "GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE", global_settings.DATA_UPLOAD_MAX_MEMORY_SIZE
@@ -269,7 +271,7 @@ MIDDLEWARE += [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "sentry.middleware.proxy.DecompressBodyMiddleware",
+    # "sentry.middleware.proxy.DecompressBodyMiddleware",
     "django.middleware.locale.LocaleMiddleware",
     "allauth.account.middleware.AccountMiddleware",
 ]

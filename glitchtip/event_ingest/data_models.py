@@ -1,10 +1,10 @@
+import uuid
 from collections.abc import Callable
 from datetime import datetime
-from django.utils.timezone import now
-from typing import Annotated, Optional, Union, Any, Literal
-import uuid
+from typing import Annotated, Any, Literal, Optional, Union
 
-from ninja import Schema, Field
+from django.utils.timezone import now
+from ninja import Field, Schema
 from pydantic import Json, ValidationError, WrapValidator
 
 
@@ -169,4 +169,5 @@ class ItemHeaderSchema(Schema):
     length: Optional[int]
 
 
+# EnvelopeSchema = list[Any]
 EnvelopeSchema = list[Union[EnvelopeHeaderSchema, ItemHeaderSchema, EventIngestSchema]]

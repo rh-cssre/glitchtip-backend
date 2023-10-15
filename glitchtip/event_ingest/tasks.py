@@ -1,6 +1,7 @@
 import uuid
 
 from celery import shared_task
+
 from .data_models import EventIngestSchema
 
 
