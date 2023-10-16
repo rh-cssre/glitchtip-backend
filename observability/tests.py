@@ -82,6 +82,7 @@ class ObservabilityAPITestCase(APITestCase):
 
         # delete project
         proj.delete()
+
         # test
         metrics = self._get_metrics()
         projs_metric = get_sample_value(

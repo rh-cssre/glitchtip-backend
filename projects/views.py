@@ -21,7 +21,7 @@ from .serializers.serializers import (
 
 class BaseProjectViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = BaseProjectSerializer
-    queryset = Project.objects.all()
+    queryset = Project.undeleted_objects.all()
     lookup_field = "slug"
     permission_classes = [ProjectPermission]
 
