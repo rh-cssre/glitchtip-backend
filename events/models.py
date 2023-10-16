@@ -1,9 +1,12 @@
 import uuid
-from django.db import models
+
 from django.contrib.postgres.fields import HStoreField
-from user_reports.models import UserReport
+from django.db import models
+
 from glitchtip.base_models import CreatedModel
 from glitchtip.model_utils import FromStringIntegerChoices
+from projects.tasks import update_event_project_hourly_statistic
+from user_reports.models import UserReport
 
 
 class AbstractEvent(CreatedModel):
@@ -23,7 +26,7 @@ class AbstractEvent(CreatedModel):
 
     @property
     def event_id_hex(self):
-        """ The public key without dashes """
+        """The public key without dashes"""
         if self.event_id:
             if isinstance(self.event_id, str):
                 return self.event_id
@@ -58,7 +61,9 @@ class Event(AbstractEvent):
     """
 
     issue = models.ForeignKey(
-        "issues.Issue", on_delete=models.CASCADE, help_text="Sentry calls this a group",
+        "issues.Issue",
+        on_delete=models.CASCADE,
+        help_text="Sentry calls this a group",
     )
     level = models.PositiveSmallIntegerField(
         choices=LogLevel.choices, default=LogLevel.ERROR
@@ -75,6 +80,14 @@ class Event(AbstractEvent):
 
     class Meta:
         ordering = ["-created"]
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new:
+            update_event_project_hourly_statistic(
+                args=[self.issue.project_id, self.created], countdown=60
+            )
 
     def event_json(self):
         """
@@ -127,7 +140,10 @@ class Event(AbstractEvent):
             else:
                 line_no = base_line_no + 1 + index
             result.append(
-                [line_no, pre_context_line,]
+                [
+                    line_no,
+                    pre_context_line,
+                ]
             )
         return result
 
@@ -162,7 +178,7 @@ class Event(AbstractEvent):
             return None
 
     def previous(self, *args, **kwargs):
-        """ Get previous object by created date, pass filter kwargs """
+        """Get previous object by created date, pass filter kwargs"""
         try:
             return self.get_previous_by_created(**kwargs)
         except Event.DoesNotExist:

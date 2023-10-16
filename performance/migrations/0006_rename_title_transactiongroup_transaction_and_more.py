@@ -4,24 +4,23 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('projects', '0008_alter_projectkey_created'),
-        ('performance', '0005_alter_span_data'),
+        ("projects", "0008_alter_projectkey_created"),
+        ("performance", "0005_alter_span_data"),
     ]
 
     operations = [
         migrations.RenameField(
-            model_name='transactiongroup',
-            old_name='title',
-            new_name='transaction',
+            model_name="transactiongroup",
+            old_name="title",
+            new_name="transaction",
         ),
         migrations.RemoveField(
-            model_name='transactionevent',
-            name='transaction',
+            model_name="transactionevent",
+            name="transaction",
         ),
         migrations.AlterUniqueTogether(
-            name='transactiongroup',
-            unique_together={('transaction', 'project', 'op', 'method')},
+            name="transactiongroup",
+            unique_together={("transaction", "project", "op", "method")},
         ),
     ]

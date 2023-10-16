@@ -1,6 +1,8 @@
 from timeit import default_timer as timer
 
 from django.shortcuts import reverse
+from django.utils import timezone
+from freezegun import freeze_time
 from model_bakery import baker
 
 from glitchtip.test_utils.test_case import GlitchTipTestCase
@@ -24,7 +26,7 @@ class EventTestCase(GlitchTipTestCase):
         baker.make("events.Event", issue__project=self.project, _quantity=3)
         not_my_event = baker.make("events.Event")
 
-        with self.assertNumQueries(4):
+        with self.assertNumQueries(3):
             res = self.client.get(self.url)
         self.assertContains(res, event.pk.hex)
         self.assertNotContains(res, not_my_event.pk.hex)
@@ -120,6 +122,29 @@ class EventTestCase(GlitchTipTestCase):
         res = self.client.get(url)
         self.assertEqual(res.status_code, 404)
 
+    def test_two_teams_event_detail(self):
+        """
+        Addresses https://gitlab.com/glitchtip/glitchtip-backend/-/issues/215
+        Ensure a user can be in more than one team on the same project
+        """
+        team = baker.make("teams.Team", organization=self.organization)
+        team2 = baker.make("teams.Team", organization=self.organization)
+        team.members.add(self.org_user)
+        team2.members.add(self.org_user)
+        self.project.team_set.add(team)
+        self.project.team_set.add(team2)
+        issue = baker.make("issues.Issue", project=self.project)
+        event = baker.make("events.Event", issue=issue)
+        url = reverse(
+            "issue-events-detail",
+            kwargs={
+                "issue_pk": event.issue.id,
+                "pk": event.event_id_hex,
+            },
+        )
+        res = self.client.get(url)
+        self.assertContains(res, event.event_id_hex)
+
 
 class IssuesAPITestCase(GlitchTipTestCase):
     def setUp(self):
@@ -170,12 +195,13 @@ class IssuesAPITestCase(GlitchTipTestCase):
         self.assertEqual(res.status_code, 404)
 
     def test_issue_last_seen(self):
-        issue = baker.make("issues.Issue", project=self.project)
-        events = baker.make("events.Event", issue=issue, _quantity=2)
-        res = self.client.get(self.url)
-        self.assertEqual(
-            res.data[0]["lastSeen"][:20], events[1].created.isoformat()[:20]
-        )
+        with freeze_time(timezone.datetime(2020, 3, 1)):
+            issue = baker.make("issues.Issue", project=self.project)
+            events = baker.make("events.Event", issue=issue, _quantity=2)
+            res = self.client.get(self.url)
+            self.assertEqual(
+                res.data[0]["lastSeen"][:19], events[1].created.isoformat()[:19]
+            )
 
     def test_issue_delete(self):
         issue = baker.make("issues.Issue", project=self.project)
@@ -210,6 +236,25 @@ class IssuesAPITestCase(GlitchTipTestCase):
         issues = Issue.objects.all()
         self.assertEqual(issues[0].status, status_to_set)
         self.assertEqual(issues[1].status, status_to_set)
+
+    def test_bulk_delete_via_ids(self):
+        """Bulk delete Issues with ids"""
+        issues = baker.make(Issue, project=self.project, _quantity=2)
+        url = f"{self.url}?id={issues[0].id}&id={issues[1].id}"
+        res = self.client.delete(url)
+        issues = Issue.objects.all().count()
+        self.assertEqual(issues, 0)
+
+    def test_bulk_delete_via_search(self):
+        """Bulk delete Issues via search string"""
+        project2 = baker.make("projects.Project", organization=self.organization)
+        project2.team_set.add(self.team)
+        issue1 = baker.make(Issue, project=self.project)
+        issue2 = baker.make(Issue, project=project2)
+        url = f"{self.url}?query=is:unresolved&project={self.project.id}"
+        res = self.client.delete(url)
+        self.assertEqual(Issue.objects.filter(id=issue1.id).exists(), False)
+        self.assertEqual(Issue.objects.filter(id=issue2.id).exists(), True)
 
     def test_bulk_update_query(self):
         """Bulk update only supports Issue status"""
@@ -433,11 +478,19 @@ class IssuesAPITestCase(GlitchTipTestCase):
         )
 
         url = reverse("issue-detail", args=[issue.id])
-        with self.assertNumQueries(7):  # Includes many auth related queries
+        with self.assertNumQueries(6):  # Includes many auth related queries
             start = timer()
             res = self.client.get(url + "tags/")
             end = timer()
         # print(end - start)
+
+    def test_issue_comment_count(self):
+        issue = baker.make("issues.Issue", project=self.project)
+        baker.make("issues.Comment", issue=issue, _quantity=2)
+
+        with self.assertNumQueries(5):
+            res = self.client.get(self.url + f"{issue.pk}/")
+        self.assertEqual(res.data["numComments"], 2)
 
     def test_issue_tag_detail(self):
         issue = baker.make("issues.Issue", project=self.project)
