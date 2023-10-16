@@ -1,6 +1,8 @@
+import json
 import uuid
 from urllib.parse import urlparse
 
+from django.conf import settings
 from django.http import HttpRequest
 from ninja import NinjaAPI, Schema
 from ninja.errors import AuthenticationError, HttpError, ValidationError
@@ -60,9 +62,13 @@ async def event_envelope(
     payload: EnvelopeSchema,
     project_id: int,
 ):
-    check_status()
+    header = payload[0]
+    if not hasattr(header, "event_id"):
+        raise ValidationError([])
 
-    return {"event_id": "aaaaaaaaaaa"}
+    event_id = header.event_id
+
+    return {"event_id": event_id.hex}
 
 
 @api.post("/{project_id}/security/", response=EventIngestOut)

@@ -74,6 +74,7 @@ async def get_project(request: HttpRequest):
 
 
 async def event_auth(request: HttpRequest):
+    print("auth!")
     if settings.MAINTENANCE_EVENT_FREEZE:
         raise HttpError(
             503, "Events are not currently being accepted due to maintenance."

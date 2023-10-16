@@ -133,8 +133,7 @@ class ValueEventBreadcrumb(Schema):
     values: list[EventBreadcrumb]
 
 
-class EventIngestSchema(Schema):
-    event_id: uuid.UUID
+class BaseEventIngestSchema(Schema):
     timestamp: datetime = Field(default_factory=now)
     platform: Optional[str] = None
     level: Optional[str] = "error"
@@ -157,10 +156,19 @@ class EventIngestSchema(Schema):
     breadcrumbs: Optional[Union[list[EventBreadcrumb], ValueEventBreadcrumb]] = None
 
 
+class EnvelopeEventIngestSchema(BaseEventIngestSchema):
+    type: str
+
+
+class EventIngestSchema(BaseEventIngestSchema):
+    event_id: uuid.UUID
+
+
 class EnvelopeHeaderSchema(Schema):
-    event_id: str
-    dsn: Optional[str]
-    sdk: Optional[Any]
+    event_id: uuid.UUID
+    dsn: Optional[str] = None
+    sdk: Optional[Any] = None
+    sent_at: datetime = Field(default_factory=now)
 
 
 class ItemHeaderSchema(Schema):
@@ -169,5 +177,6 @@ class ItemHeaderSchema(Schema):
     length: Optional[int]
 
 
-# EnvelopeSchema = list[Any]
-EnvelopeSchema = list[Union[EnvelopeHeaderSchema, ItemHeaderSchema, EventIngestSchema]]
+EnvelopeSchema = list[
+    Union[EnvelopeHeaderSchema, ItemHeaderSchema, EnvelopeEventIngestSchema]
+]
