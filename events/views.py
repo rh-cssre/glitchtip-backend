@@ -20,7 +20,6 @@ from sentry_sdk import capture_exception, set_context, set_level
 from difs.models import DebugInformationFile
 from difs.tasks import difs_run_resolve_stacktrace
 
-# from glitchtip.exceptions import ServiceUnavailableException
 from performance.serializers import TransactionEventSerializer
 from projects.models import Project
 from sentry.utils.auth import parse_auth_header
@@ -226,45 +225,3 @@ class EnvelopeAPIView(BaseEventAPIView):
             )
 
         return Response(status=status.HTTP_501_NOT_IMPLEMENTED)
-
-
-# # The A prefix is temporary, do not copy it
-# class ABaseEventAPIView(BaseEventAPIView):
-#     async def get_project(self, request, **kwargs):
-#         sentry_key = BaseEventAPIView.auth_from_request(request)
-#         project_id = kwargs.get("id")
-#         return (
-#             await Project.objects.filter(
-#                 id=project_id,
-#                 projectkey__public_key=sentry_key,
-#             )
-#             .select_related("organization")
-#             .only(
-#                 "id",
-#                 "organization__is_accepting_events",
-#             )
-#             .afirst()
-#         )
-
-
-# class AEventStoreAPIView(ABaseEventAPIView):
-#     async def post(self, request, *args, **kwargs):
-#         self.check_status()
-#         data = request.data
-#         if event_id_data := data.pop("event_id", None):
-#             try:
-#                 event_id = uuid.UUID(event_id_data)
-#             except ValueError:
-#                 raise exception.ValidationError("Invalid Event ID")
-#         else:
-#             event_id = uuid.uuid4()
-
-#         project = await self.get_project(request, **kwargs)
-
-#         if not project:
-#             raise exceptions.ValidationError("Invalid DSN")
-#         if not project.organization.is_accepting_events:
-#             raise exceptions.Throttled(detail="event rejected due to rate limit")
-
-#         res = ingest_event.delay(project.id, event_id, data)
-#         return Response({"id": event_id.hex})
