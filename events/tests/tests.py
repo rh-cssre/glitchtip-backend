@@ -136,6 +136,15 @@ class EventStoreTestCase(APITestCase):
         res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 429)
 
+    def test_throttle_project(self):
+        self.project.event_throttle_rate = 100
+        self.project.save()
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        # throttled
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 429)
+
     def test_project_first_event(self):
         with open("events/test_data/py_error.json") as json_file:
             data = json.load(json_file)

@@ -1,8 +1,10 @@
+import random
 from datetime import timedelta
 from urllib.parse import urlparse
 from uuid import uuid4
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Count, Q
 from django.utils.text import slugify
@@ -30,6 +32,11 @@ class Project(CreatedModel, SoftDeleteModel):
     scrub_ip_addresses = models.BooleanField(
         default=True,
         help_text="Should project anonymize IP Addresses",
+    )
+    event_throttle_rate = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MaxValueValidator(100)],
+        help_text="Probability (in percent) on how many events are throttled. Used for throttling at project level",
     )
 
     class Meta:
@@ -100,6 +107,13 @@ class Project(CreatedModel, SoftDeleteModel):
             if slug in reserved_words:
                 slug += "-1"
         return slug
+
+    @property
+    def is_accepting_events(self):
+        """Is the project in its limits for event creation"""
+        if self.event_throttle_rate == 0:
+            return True
+        return random.randint(0, 100) > self.event_throttle_rate
 
 
 class ProjectCounter(models.Model):
