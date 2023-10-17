@@ -48,6 +48,7 @@ boto3 = "1.28.62"
 django-ninja = "1.0b2"
 typing-extensions = "^4.8.0"
 orjson = "^3.9.9"
+celery-batches = "^0.8.1"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.0.0"

@@ -9,7 +9,7 @@ from projects.models import Project
 from sentry.utils.auth import parse_auth_header
 
 from .constants import EVENT_BLOCK_CACHE_KEY
-from .exceptions import ThrottleException
+from glitchtip.api.exceptions import ThrottleException
 
 
 def auth_from_request(request: HttpRequest):
@@ -74,7 +74,6 @@ async def get_project(request: HttpRequest):
 
 
 async def event_auth(request: HttpRequest):
-    print("auth!")
     if settings.MAINTENANCE_EVENT_FREEZE:
         raise HttpError(
             503, "Events are not currently being accepted due to maintenance."

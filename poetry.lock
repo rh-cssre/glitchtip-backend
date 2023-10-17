@@ -579,6 +579,20 @@ zookeeper = ["kazoo (>=1.3.1)"]
 zstd = ["zstandard (==0.21.0)"]
 
 [[package]]
+name = "celery-batches"
+version = "0.8.1"
+description = "Experimental task class that buffers messages and processes them as a list."
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "celery-batches-0.8.1.tar.gz", hash = "sha256:ba616dfbec419b3c744cfc3bb437a0f9fa288cfc00fe00a8e9f306f3325d7777"},
+    {file = "celery_batches-0.8.1-py3-none-any.whl", hash = "sha256:6e61994c5cca5fed56dbd85c60350ee23f0acb5d8c8ff6ab8ca1f0892ae3bd31"},
+]
+
+[package.dependencies]
+celery = ">=5.0,<5.4"
+
+[[package]]
 name = "certifi"
 version = "2023.7.22"
 description = "Python package for providing Mozilla's CA Bundle."
@@ -4680,4 +4694,4 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "9eec640945f80dbd07597c210086619ed0420054fb9825bde0bb4d04f7b81119"
+content-hash = "8cfd5fb6caba1f427837bd1cd8c74a36f4de3a033672033717497cdf89692ca7"

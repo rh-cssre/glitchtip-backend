@@ -23,6 +23,7 @@ from users.views import SocialAccountDisconnectView
 from . import social
 from .views import APIRootView, SettingsView, health
 from .yasg import CustomOpenAPISchemaGenerator
+from .api import api
 
 router = routers.DefaultRouter()
 router.registry.extend(projectsRouter.registry)
@@ -63,7 +64,7 @@ urlpatterns = [
         "robots.txt",
         TemplateView.as_view(template_name="robots.txt", content_type="text/plain"),
     ),
-    path("api/", include("glitchtip.event_ingest.urls")),
+    path("api/", api.urls),
     path("api/", RedirectView.as_view(url="/profile/auth-tokens")),
     path("api/0/", APIRootView.as_view(), name="api-root-view"),
     path("api/0/", include(router.urls)),
@@ -102,7 +103,7 @@ urlpatterns += [
         EventJsonView.as_view(),
         name="event_json",
     ),
-    path("api/settings/", SettingsView.as_view(), name="settings"),
+    # path("api/settings/", SettingsView.as_view(), name="settings"),
     path("api/test/", include("test_api.urls")),
     path("rest-auth/login/", MFALoginView.as_view()),
     path("rest-auth/", include("dj_rest_auth.urls")),
