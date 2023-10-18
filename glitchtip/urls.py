@@ -103,7 +103,7 @@ urlpatterns += [
         EventJsonView.as_view(),
         name="event_json",
     ),
-    # path("api/settings/", SettingsView.as_view(), name="settings"),
+    path("api/old_settings/", SettingsView.as_view(), name="settings"),
     path("api/test/", include("test_api.urls")),
     path("rest-auth/login/", MFALoginView.as_view()),
     path("rest-auth/", include("dj_rest_auth.urls")),

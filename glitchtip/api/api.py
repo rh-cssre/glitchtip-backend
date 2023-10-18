@@ -57,13 +57,12 @@ class SettingsOut(CamelSchema):
     stripe_public_key: Optional[str]
     plausible_url: Optional[str]
     plausible_domain: Optional[str]
-
-    # "chatwootWebsiteToken": settings.CHATWOOT_WEBSITE_TOKEN,
-    # "sentryDSN": settings.SENTRY_FRONTEND_DSN,
-    # "sentryTracesSampleRate": settings.SENTRY_TRACES_SAMPLE_RATE,
-    # "environment": settings.ENVIRONMENT,
-    # "version": settings.GLITCHTIP_VERSION,
-    # "serverTimeZone": settings.TIME_ZONE,
+    chatwoot_website_token: Optional[str]
+    sentryDSN: Optional[str]
+    sentry_traces_sample_rate: Optional[float]
+    environment: Optional[str]
+    version: str
+    server_time_zone: str
 
 
 @api.get("settings/", response=SettingsOut, by_alias=True)
@@ -99,12 +98,10 @@ async def settings_view(request: HttpRequest):
         else None,
         plausible_url=settings.PLAUSIBLE_URL,
         plausible_domain=settings.PLAUSIBLE_DOMAIN,
+        chatwoot_website_token=settings.CHATWOOT_WEBSITE_TOKEN,
+        sentryDSN=settings.SENTRY_FRONTEND_DSN,
+        sentry_traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+        environment=settings.ENVIRONMENT,
+        version=settings.GLITCHTIP_VERSION,
+        server_time_zone=settings.TIME_ZONE,
     )
-
-
-# billing_enabled = settings.BILLING_ENABLED
-# enable_user_registration = is_user_registration_open()
-# enable_organization_creation = settings.ENABLE_ORGANIZATION_CREATION
-# stripe_public_key = None
-# if billing_enabled:
-#     stripe_public_key = djstripe_settings.STRIPE_PUBLIC_KEY
