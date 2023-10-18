@@ -5,7 +5,6 @@ from django.db.models import Prefetch
 from django.http import Http404
 from djstripe.models import Customer, Price, Product, Subscription, SubscriptionItem
 from djstripe.settings import djstripe_settings
-from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status, views, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -130,9 +129,6 @@ class CreateStripeSubscriptionCheckout(views.APIView):
             data=self.request.data, context={"request": self.request}
         )
 
-    @swagger_auto_schema(
-        responses={200: str(stripe.api_resources.checkout.session.Session)}
-    )
     def post(self, request):
         """See https://stripe.com/docs/api/checkout/sessions/create"""
         serializer = self.get_serializer()
@@ -176,9 +172,6 @@ class StripeBillingPortal(views.APIView):
             data=self.request.data, context={"request": self.request}
         )
 
-    @swagger_auto_schema(
-        responses={200: str(stripe.api_resources.billing_portal.Session)}
-    )
     def post(self, request):
         """See https://stripe.com/docs/billing/subscriptions/integrating-self-serve-portal"""
         serializer = self.get_serializer()

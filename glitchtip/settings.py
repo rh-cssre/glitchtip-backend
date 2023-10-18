@@ -211,7 +211,6 @@ INSTALLED_APPS = [
 if DEBUG_TOOLBAR:
     INSTALLED_APPS.append("debug_toolbar")
 INSTALLED_APPS += [
-    "drf_yasg",
     "dj_rest_auth",
     "dj_rest_auth.registration",
     "import_export",
@@ -682,13 +681,6 @@ REST_FRAMEWORK = {
         "glitchtip.authentication.BearerTokenAuthentication",
     ],
     "DEFAULT_THROTTLE_RATES": {"anon": "100/minute"},
-}
-
-DRF_YASG_EXCLUDE_VIEWS = [
-    "users.views.SocialAccountDisconnectView",
-]
-SWAGGER_SETTINGS = {
-    "DEFAULT_AUTO_SCHEMA_CLASS": "glitchtip.yasg.SquadSwaggerAutoSchema",
 }
 
 

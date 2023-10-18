@@ -10,7 +10,6 @@ from users.utils import ais_user_registration_open
 
 from .exceptions import ThrottleException
 from .parsers import EnvelopeParser
-from .renderers import ORJSONRenderer
 from .schema import CamelSchema
 
 try:
@@ -19,7 +18,10 @@ except ImportError:
     pass
 
 
-api = NinjaAPI(parser=EnvelopeParser(), renderer=ORJSONRenderer())
+api = NinjaAPI(
+    parser=EnvelopeParser(),
+    title="GlitchTip API",
+)
 api.add_router("", "glitchtip.event_ingest.api.router")
 
 
@@ -66,7 +68,7 @@ class SettingsOut(CamelSchema):
 
 
 @api.get("settings/", response=SettingsOut, by_alias=True)
-async def settings_view(request: HttpRequest):
+async def get_settings(request: HttpRequest):
     social_apps: list[SocialApp] = []
     async for social_app in SocialApp.objects.order_by("name"):
         provider = social_app.get_provider(request)
@@ -87,21 +89,21 @@ async def settings_view(request: HttpRequest):
 
     billing_enabled = settings.BILLING_ENABLED
 
-    return SettingsOut(
-        social_apps=social_apps,
-        billing_enabled=billing_enabled,
-        i_paid_for_glitchtip=settings.I_PAID_FOR_GLITCHTIP,
-        enable_user_registration=await ais_user_registration_open(),
-        enable_organization_creation=settings.ENABLE_ORGANIZATION_CREATION,
-        stripe_public_key=djstripe_settings.STRIPE_PUBLIC_KEY
+    return {
+        "social_apps": social_apps,
+        "billing_enabled": billing_enabled,
+        "i_paid_for_glitchtip": settings.I_PAID_FOR_GLITCHTIP,
+        "enable_user_registration": await ais_user_registration_open(),
+        "enable_organization_creation": settings.ENABLE_ORGANIZATION_CREATION,
+        "stripe_public_key": djstripe_settings.STRIPE_PUBLIC_KEY
         if billing_enabled
         else None,
-        plausible_url=settings.PLAUSIBLE_URL,
-        plausible_domain=settings.PLAUSIBLE_DOMAIN,
-        chatwoot_website_token=settings.CHATWOOT_WEBSITE_TOKEN,
-        sentryDSN=settings.SENTRY_FRONTEND_DSN,
-        sentry_traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
-        environment=settings.ENVIRONMENT,
-        version=settings.GLITCHTIP_VERSION,
-        server_time_zone=settings.TIME_ZONE,
-    )
+        "plausible_url": settings.PLAUSIBLE_URL,
+        "plausible_domain": settings.PLAUSIBLE_DOMAIN,
+        "chatwoot_website_token": settings.CHATWOOT_WEBSITE_TOKEN,
+        "sentryDSN": settings.SENTRY_FRONTEND_DSN,
+        "sentry_traces_sample_rate": settings.SENTRY_TRACES_SAMPLE_RATE,
+        "environment": settings.ENVIRONMENT,
+        "version": settings.GLITCHTIP_VERSION,
+        "server_time_zone": settings.TIME_ZONE,
+    }

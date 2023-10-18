@@ -1,7 +1,6 @@
 from django.core.exceptions import ObjectDoesNotExist
 from django.http import Http404
 from django.shortcuts import get_object_or_404
-from drf_yasg.utils import swagger_auto_schema
 from organizations.backends import invitation_backend
 from rest_framework import exceptions, permissions, status, views, viewsets
 from rest_framework.decorators import action
@@ -274,7 +273,6 @@ class AcceptInviteView(views.APIView):
         if not InvitationTokenGenerator().check_token(org_user, token):
             raise exceptions.PermissionDenied("Invalid invite token")
 
-    @swagger_auto_schema(responses={200: AcceptInviteSerializer()})
     def get(self, request, org_user_id=None, token=None):
         org_user = get_object_or_404(OrganizationUser, pk=org_user_id)
         self.validate_token(org_user, token)
@@ -283,7 +281,6 @@ class AcceptInviteView(views.APIView):
         )
         return Response(serializer.data)
 
-    @swagger_auto_schema(responses={200: AcceptInviteSerializer()})
     def post(self, request, org_user_id=None, token=None):
         org_user = get_object_or_404(OrganizationUser, pk=org_user_id)
         self.validate_token(org_user, token)

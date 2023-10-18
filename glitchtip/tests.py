@@ -1,14 +1,9 @@
-from django.shortcuts import reverse
+from django.urls import reverse_lazy
 from django.test import TestCase
 
 
-class DocsTestCase(TestCase):
-    def test_redoc(self):
-        url = reverse("schema-redoc")
-        res = self.client.get(url)
-        self.assertEqual(res.status_code, 200)
-
-    def test_openapi(self):
-        url = reverse("schema-redoc") + "?format=openapi"
-        res = self.client.get(url)
+class SettingsTestCase(TestCase):
+    def test_settings(self):
+        with self.assertNumQueries(1):
+            res = self.client.get(reverse_lazy("api-1.0.0:get_settings"))
         self.assertEqual(res.status_code, 200)

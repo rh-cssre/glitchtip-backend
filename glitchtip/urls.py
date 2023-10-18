@@ -5,8 +5,6 @@ from django.urls import include, path, re_path
 from django.views.generic import TemplateView
 from django.views.generic.base import RedirectView
 from django_rest_mfa.rest_auth_helpers.views import MFALoginView
-from drf_yasg import openapi
-from drf_yasg.views import get_schema_view
 from organizations.backends import invitation_backend
 from rest_framework import permissions
 from rest_framework_nested import routers
@@ -21,8 +19,8 @@ from users.urls import router as usersRouter
 from users.views import SocialAccountDisconnectView
 
 from . import social
-from .views import APIRootView, SettingsView, health
-from .yasg import CustomOpenAPISchemaGenerator
+from .views import APIRootView, health
+
 from .api import api
 
 router = routers.DefaultRouter()
@@ -37,21 +35,6 @@ if settings.BILLING_ENABLED:
     from djstripe_ext.urls import router as djstripeRouter
 
     router.registry.extend(djstripeRouter.registry)
-
-
-schema_view = get_schema_view(
-    openapi.Info(
-        title="GlitchTip API",
-        default_version="v1",
-        description="GlitchTip Backend API",
-        terms_of_service="https://glitchtip.com",
-        contact=openapi.Contact(email="info@burkesoftware.com"),
-        license=openapi.License(name="MIT License"),
-    ),
-    public=True,
-    permission_classes=(permissions.AllowAny,),
-    generator_class=CustomOpenAPISchemaGenerator,
-)
 
 
 urlpatterns = [
@@ -103,7 +86,6 @@ urlpatterns += [
         EventJsonView.as_view(),
         name="event_json",
     ),
-    path("api/old_settings/", SettingsView.as_view(), name="settings"),
     path("api/test/", include("test_api.urls")),
     path("rest-auth/login/", MFALoginView.as_view()),
     path("rest-auth/", include("dj_rest_auth.urls")),
@@ -118,7 +100,6 @@ urlpatterns += [
         "rest-auth/<slug:provider>/connect/",
         social.GlitchTipSocialConnectView().as_view(),
     ),
-    path("docs/", schema_view.with_ui("redoc", cache_timeout=0), name="schema-redoc"),
     path("accounts/", include("allauth.urls")),  # Required for allauth
     # These routes belong to the Angular single page app
     re_path(r"^$", TemplateView.as_view(template_name="index.html")),
