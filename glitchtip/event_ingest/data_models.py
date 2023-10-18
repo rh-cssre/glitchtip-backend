@@ -173,7 +173,7 @@ class EnvelopeHeaderSchema(Schema):
 
 class ItemHeaderSchema(Schema):
     content_type: Optional[str]
-    type: str
+    type: Literal["transaction", "event"]
     length: Optional[int]
 
 
