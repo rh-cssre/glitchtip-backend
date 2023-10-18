@@ -40,20 +40,11 @@ redis = "~4.6.0"
 
 uwsgi-chunked = "^0.1.8"
 django-import-export = "^3.0.0"
-
+psycopg = {extras = ["c"], version = "^3.1.12"}
 coreapi = "^2.3.3"
 adrf = "^0.1.2"
 uvicorn = "^0.23.2"
 gunicorn = "^21.2.0"
-
-[tool.poetry.group.psycopg-c.dependencies]
-psycopg = {extras = ["c"], version = "^3.1.12"}
-
-[tool.poetry.group.psycopg-binary]
-optional = true
-
-[tool.poetry.group.psycopg-binary.dependencies]
-psycopg = {extras = ["binary"], version = "^3.1.12"}
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.0.0"
