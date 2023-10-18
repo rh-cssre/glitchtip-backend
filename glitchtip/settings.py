@@ -481,7 +481,8 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": UPTIME_CHECK_INTERVAL,
     },
 }
-
+# Maximum number of issues send in a single alert payload
+MAX_ISSUES_PER_ALERT = env.int("MAX_ISSUES_PER_ALERT", 3)
 
 if os.environ.get("CACHE_URL"):
     CACHES = {
