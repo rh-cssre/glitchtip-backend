@@ -1,18 +1,20 @@
+import random
 from datetime import timedelta
 from urllib.parse import urlparse
 from uuid import uuid4
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Count, Q
 from django.utils.text import slugify
 from django_extensions.db.fields import AutoSlugField
 
-from glitchtip.base_models import CreatedModel
+from glitchtip.base_models import CreatedModel, SoftDeleteModel
 from observability.metrics import clear_metrics_cache
 
 
-class Project(CreatedModel):
+class Project(CreatedModel, SoftDeleteModel):
     """
     Projects are permission based namespaces which generally
     are the top level entry point for all data.
@@ -31,6 +33,11 @@ class Project(CreatedModel):
         default=True,
         help_text="Should project anonymize IP Addresses",
     )
+    event_throttle_rate = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MaxValueValidator(100)],
+        help_text="Probability (in percent) on how many events are throttled. Used for throttling at project level",
+    )
 
     class Meta:
         unique_together = (("organization", "slug"),)
@@ -48,7 +55,38 @@ class Project(CreatedModel):
             ProjectKey.objects.create(project=self)
 
     def delete(self, *args, **kwargs):
+        """Mark the record as deleted instead of deleting it"""
+        # avoid circular import
+        from projects.tasks import delete_project
+
         super().delete(*args, **kwargs)
+        delete_project.delay(self.pk)
+
+    def force_delete(self, *args, **kwargs):
+        """Really delete the project and all related data."""
+        # avoid circular import
+        from events.models import Event
+        from issues.models import Issue
+
+        # bulk delete all events
+        events_qs = Event.objects.filter(issue__project=self)
+        events_qs._raw_delete(events_qs.db)
+
+        # bulk delete all issues in batches of 1k
+        issues_qs = self.issue_set.order_by("id")
+        while True:
+            try:
+                issue_delimiter = issues_qs.values_list("id", flat=True)[
+                    1000:1001
+                ].get()
+                issues_qs.filter(id__lte=issue_delimiter).delete()
+            except Issue.DoesNotExist:
+                break
+
+        issues_qs.delete()
+
+        # lastly delete the project itself
+        super().force_delete(*args, **kwargs)
         clear_metrics_cache()
 
     @property
@@ -69,6 +107,13 @@ class Project(CreatedModel):
             if slug in reserved_words:
                 slug += "-1"
         return slug
+
+    @property
+    def is_accepting_events(self):
+        """Is the project in its limits for event creation"""
+        if self.event_throttle_rate == 0:
+            return True
+        return random.randint(0, 100) > self.event_throttle_rate
 
 
 class ProjectCounter(models.Model):

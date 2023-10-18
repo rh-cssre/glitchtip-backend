@@ -2,6 +2,7 @@ from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, List, Optional
 
 import requests
+from django.conf import settings
 
 from .constants import RecipientType
 
@@ -201,7 +202,7 @@ def send_webhook_notification(
     notification: "Notification", url: str, recipient_type: str
 ):
     issue_count = notification.issues.count()
-    issues = notification.issues.all()[:3]  # Show no more than three
+    issues = notification.issues.all()[: settings.MAX_ISSUES_PER_ALERT]
 
     if recipient_type == RecipientType.DISCORD:
         send_issue_as_discord_webhook(url, issues, issue_count)
