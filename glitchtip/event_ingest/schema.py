@@ -5,7 +5,7 @@ from typing import Annotated, Any, Literal, Optional, Union
 
 from django.utils.timezone import now
 from ninja import Field, Schema
-from pydantic import Json, ValidationError, WrapValidator
+from pydantic import ValidationError, WrapValidator
 
 
 def invalid_to_none(v: Any, handler: Callable[[Any], Any]) -> Any:
@@ -103,7 +103,9 @@ class ValueEventException(Schema):
 
 
 class EventMessage(Schema):
-    formatted: str = Field(max_length=10)  # When None, attempt to generate it
+    formatted: str = Field(
+        max_length=10, default=""
+    )  # When None, attempt to generate it
     message: Optional[str] = None
     params: Optional[list[str]] = None
 
@@ -145,9 +147,9 @@ class BaseEventIngestSchema(Schema):
     tags: Optional[Union[dict[str, str], list[TagKeyValue]]] = None
     environment: Optional[str] = None
     modules: Optional[dict[str, str]] = None
-    extra: Optional[Json] = None
+    extra: Optional[Any] = None
     fingerprint: Optional[list[str]] = None
-    errors: Optional[list[Json]] = None
+    errors: Optional[list[Any]] = None
 
     exception: Optional[Union[list[EventException], ValueEventException]] = None
     message: Optional[EventMessage] = None

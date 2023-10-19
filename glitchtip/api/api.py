@@ -2,9 +2,10 @@ from typing import Optional
 
 from allauth.socialaccount.models import SocialApp
 from allauth.socialaccount.providers.openid_connect.views import OpenIDConnectAdapter
-from django.http import HttpRequest
 from django.conf import settings
-from ninja import NinjaAPI, ModelSchema, Schema
+from django.http import HttpRequest
+from ninja import ModelSchema, NinjaAPI, Schema
+
 from glitchtip.constants import SOCIAL_ADAPTER_MAP
 from users.utils import ais_user_registration_open
 
@@ -18,10 +19,7 @@ except ImportError:
     pass
 
 
-api = NinjaAPI(
-    parser=EnvelopeParser(),
-    title="GlitchTip API",
-)
+api = NinjaAPI(parser=EnvelopeParser(), title="GlitchTip API", urls_namespace="api")
 api.add_router("", "glitchtip.event_ingest.api.router")
 
 

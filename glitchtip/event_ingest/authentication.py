@@ -1,15 +1,15 @@
 from typing import Literal
 
-from django.core.cache import cache
 from django.conf import settings
+from django.core.cache import cache
 from django.http import HttpRequest
 from ninja.errors import AuthenticationError, HttpError, ValidationError
 
+from glitchtip.api.exceptions import ThrottleException
 from projects.models import Project
 from sentry.utils.auth import parse_auth_header
 
 from .constants import EVENT_BLOCK_CACHE_KEY
-from glitchtip.api.exceptions import ThrottleException
 
 
 def auth_from_request(request: HttpRequest):

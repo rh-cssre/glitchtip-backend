@@ -19,7 +19,6 @@ from sentry_sdk import capture_exception, set_context, set_level
 
 from difs.models import DebugInformationFile
 from difs.tasks import difs_run_resolve_stacktrace
-
 from glitchtip.exceptions import ServiceUnavailableException
 from performance.serializers import TransactionEventSerializer
 from projects.models import Project
@@ -33,8 +32,6 @@ from .serializers import (
     StoreDefaultSerializer,
     StoreErrorSerializer,
 )
-
-# from .tasks import ingest_event
 
 logger = logging.getLogger(__name__)
 

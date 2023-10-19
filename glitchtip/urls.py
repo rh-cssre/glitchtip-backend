@@ -19,9 +19,8 @@ from users.urls import router as usersRouter
 from users.views import SocialAccountDisconnectView
 
 from . import social
-from .views import APIRootView, health
-
 from .api import api
+from .views import APIRootView, health
 
 router = routers.DefaultRouter()
 router.registry.extend(projectsRouter.registry)
@@ -47,7 +46,6 @@ urlpatterns = [
         "robots.txt",
         TemplateView.as_view(template_name="robots.txt", content_type="text/plain"),
     ),
-    path("api/", api.urls),
     path("api/", RedirectView.as_view(url="/profile/auth-tokens")),
     path("api/0/", APIRootView.as_view(), name="api-root-view"),
     path("api/0/", include(router.urls)),
@@ -79,6 +77,7 @@ urlpatterns += [
     path("api/mfa/", include("django_rest_mfa.urls")),
     path("api/", include("events.urls")),
     path("api/embed/", include("user_reports.urls")),
+    path("api/", api.urls),
     path("", include("glitchtip.uptime.urls")),
     # What an oddball API endpoint
     path(

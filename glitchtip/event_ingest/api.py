@@ -10,11 +10,11 @@ from ninja.errors import AuthenticationError, HttpError, ValidationError
 from projects.models import Project
 
 from .authentication import event_auth, get_project
-from .data_models import (
+from .schema import (
+    EnvelopeEventIngestSchema,
+    EnvelopeHeaderSchema,
     EnvelopeSchema,
     EventIngestSchema,
-    EnvelopeHeaderSchema,
-    EnvelopeEventIngestSchema,
     ItemHeaderSchema,
 )
 from .tasks import ingest_event, ingest_transaction

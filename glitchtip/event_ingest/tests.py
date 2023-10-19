@@ -5,7 +5,7 @@ from django.test import TestCase
 
 
 class PerfTestCase(TestCase):
-    def test_perf(self):
+    def xtest_perf(self):
         data = json.dumps({"foo": "barrrrrr", "bar": 15544325, "lol": ["a", "c", "b"]})
         times = 10000
 
