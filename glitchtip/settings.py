@@ -82,6 +82,8 @@ GLITCHTIP_URL = env.url("GLITCHTIP_URL", default_url)
 if GLITCHTIP_URL.scheme not in ["http", "https"]:
     raise ImproperlyConfigured("GLITCHTIP_DOMAIN must start with http or https")
 
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = 4294967295  # TMP REMOVE THIS
 # Limits size (in bytes) of uncompressed event payloads. Mitigates DOS risk.
 GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE = env.int(
     "GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE", global_settings.DATA_UPLOAD_MAX_MEMORY_SIZE
@@ -209,7 +211,6 @@ INSTALLED_APPS = [
 if DEBUG_TOOLBAR:
     INSTALLED_APPS.append("debug_toolbar")
 INSTALLED_APPS += [
-    "drf_yasg",
     "dj_rest_auth",
     "dj_rest_auth.registration",
     "import_export",
@@ -217,6 +218,7 @@ INSTALLED_APPS += [
     "glitchtip",
     "alerts",
     "api_tokens",
+    "ninja",
     "environments",
     "files",
     "organizations_ext",
@@ -680,13 +682,6 @@ REST_FRAMEWORK = {
         "glitchtip.authentication.BearerTokenAuthentication",
     ],
     "DEFAULT_THROTTLE_RATES": {"anon": "100/minute"},
-}
-
-DRF_YASG_EXCLUDE_VIEWS = [
-    "users.views.SocialAccountDisconnectView",
-]
-SWAGGER_SETTINGS = {
-    "DEFAULT_AUTO_SCHEMA_CLASS": "glitchtip.yasg.SquadSwaggerAutoSchema",
 }
 
 

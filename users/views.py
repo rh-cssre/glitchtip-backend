@@ -5,7 +5,6 @@ from dj_rest_auth.registration.views import (
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.http import Http404
 from django.shortcuts import get_object_or_404
-from drf_yasg.utils import swagger_auto_schema
 from rest_framework import exceptions, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -149,10 +148,6 @@ class EmailAddressViewSet(
         )
 
     def get_queryset(self):
-        if getattr(self, "swagger_fake_view", False):
-            # queryset just for schema generation metadata
-            return EmailAddress.objects.none()
-
         user = self.get_user(self.kwargs.get("user_pk"))
         queryset = super().get_queryset().filter(user=user)
         return queryset
@@ -188,7 +183,6 @@ class EmailAddressViewSet(
         email_address.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @swagger_auto_schema(responses={204: "No Content"})
     @action(detail=False, methods=["post"])
     def confirm(self, request, user_pk):
         serializer = ConfirmEmailAddressSerializer(data=request.data)
