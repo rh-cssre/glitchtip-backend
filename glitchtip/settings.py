@@ -214,7 +214,7 @@ if DEBUG_TOOLBAR:
 INSTALLED_APPS += [
     "dj_rest_auth",
     "dj_rest_auth.registration",
-    "apps.issue_events",
+    # "apps.issue_events",
     "import_export",
     "storages",
     "glitchtip",
