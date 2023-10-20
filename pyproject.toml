@@ -6,7 +6,7 @@ authors = ["David Burke"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.8"
 Django = "~4.2.0"
 djangorestframework = "^3.12.1"
 django-allauth = "~0.57.0"
@@ -44,9 +44,9 @@ uvicorn = "^0.23.2"
 gunicorn = "^21.2.0"
 boto3 = "1.28.67"
 django-ninja = "1.0b2"
-typing-extensions = "^4.8.0"
 orjson = "^3.9.9"
 celery-batches = "^0.8.1"
+django-postgres-extra = "^2.0.8"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.0.0"
@@ -72,6 +72,11 @@ profile = "black"
 skip = ["env"]
 skip_glob = ["*/migrations/*.py"]
 
+[tool.mypy]
+plugins = ["mypy_django_plugin.main"]
+
+[tool.django-stubs]
+django_settings_module = "glitchtip.settings"
 
 [build-system]
 requires = ["poetry>=0.12"]
