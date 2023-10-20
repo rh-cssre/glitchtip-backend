@@ -191,6 +191,7 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.postgres",
+    "psqlextra",
     "django_prometheus",
     "allauth",
     "allauth.account",
@@ -213,6 +214,7 @@ if DEBUG_TOOLBAR:
 INSTALLED_APPS += [
     "dj_rest_auth",
     "dj_rest_auth.registration",
+    "apps.issue_events",
     "import_export",
     "storages",
     "glitchtip",
@@ -402,7 +404,6 @@ DATABASE_HOST = env.str("DATABASE_HOST", None)
 DATABASE_PASSWORD = env.str("DATABASE_PASSWORD", None)
 if DATABASE_HOST and DATABASE_PASSWORD:
     DATABASES["default"] = {
-        "ENGINE": "django.db.backends.postgresql",
         "NAME": env.str("DATABASE_NAME", "postgres"),
         "USER": env.str("DATABASE_USER", "postgres"),
         "PASSWORD": DATABASE_PASSWORD,
@@ -411,6 +412,8 @@ if DATABASE_HOST and DATABASE_PASSWORD:
         "CONN_MAX_AGE": env.int("DATABASE_CONN_MAX_AGE", 0),
         "CONN_HEALTH_CHECKS": env.bool("DATABASE_CONN_HEALTH_CHECKS", False),
     }
+DATABASES["default"]["ENGINE"] = "psqlextra.backend"
+PSQLEXTRA_PARTITIONING_MANAGER = "glitchtip.partitioning.manager"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
