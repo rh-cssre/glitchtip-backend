@@ -1,8 +1,7 @@
 from dateutil.relativedelta import relativedelta
-
 from psqlextra.partitioning import (
-    PostgresPartitioningManager,
     PostgresCurrentTimePartitioningStrategy,
+    PostgresPartitioningManager,
     PostgresTimePartitionSize,
     partition_by_current_time,
 )
