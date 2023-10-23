@@ -1,4 +1,5 @@
 from django.conf import settings
+
 from organizations_ext.models import Organization
 
 
