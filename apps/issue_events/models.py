@@ -65,9 +65,7 @@ class IssueStats(models.Model):
 
 
 class IssueHash(models.Model):
-    issue = models.ForeignKey(
-        "issues.Issue", on_delete=models.CASCADE, related_name="hashes"
-    )
+    issue = models.ForeignKey(Issue, on_delete=models.CASCADE, related_name="hashes")
     # Redundant project allows for unique constraint
     project = models.ForeignKey(
         "projects.Project", on_delete=models.CASCADE, related_name="+"

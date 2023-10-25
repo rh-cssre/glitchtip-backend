@@ -131,7 +131,7 @@ SENTRY_DSN = env.str("SENTRY_DSN", None)
 # Optionally allow a different DSN for the frontend
 SENTRY_FRONTEND_DSN = env.str("SENTRY_FRONTEND_DSN", SENTRY_DSN)
 # Set traces_sample_rate to 1.0 to capture 100%. Recommended to keep this value low.
-SENTRY_TRACES_SAMPLE_RATE = env.float("SENTRY_TRACES_SAMPLE_RATE", 0.1)
+SENTRY_TRACES_SAMPLE_RATE = env.float("SENTRY_TRACES_SAMPLE_RATE", 0.01)
 
 
 # Ignore whitenoise served static routes
@@ -214,7 +214,8 @@ if DEBUG_TOOLBAR:
 INSTALLED_APPS += [
     "dj_rest_auth",
     "dj_rest_auth.registration",
-    # "apps.issue_events",
+    "apps.issue_events",
+    "apps.event_ingest",
     "import_export",
     "storages",
     "glitchtip",
