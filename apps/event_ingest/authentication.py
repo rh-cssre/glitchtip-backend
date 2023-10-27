@@ -1,4 +1,5 @@
 from typing import Literal
+from uuid import UUID
 
 from django.conf import settings
 from django.core.cache import cache
@@ -44,7 +45,12 @@ async def get_project(request: HttpRequest):
     if not request.resolver_match:
         raise ValidationError([{"message": "Invalid project ID"}])
     project_id: int = request.resolver_match.captured_kwargs.get("project_id")
-    sentry_key = auth_from_request(request)
+    try:
+        sentry_key = UUID(auth_from_request(request))
+    except ValueError as err:
+        raise ValidationError(
+            [{"message": "dsn key badly formed hexadecimal UUID string"}]
+        ) from err
 
     # block cache check should be right before database call
     block_cache_key = EVENT_BLOCK_CACHE_KEY + str(project_id)

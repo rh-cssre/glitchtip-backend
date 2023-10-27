@@ -93,9 +93,11 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         issue_events.append(
             IssueEvent(
                 id=processing_event.event.event_id,
+                created=processing_event.event.received_at,
                 issue_id=processing_event.issue_id,
                 data={},
             )
         )
 
-    IssueEvent.objects.bulk_create(issue_events)
+    # ignore_conflicts because we could have an invalid duplicate event_id
+    IssueEvent.objects.bulk_create(issue_events, ignore_conflicts=True)
