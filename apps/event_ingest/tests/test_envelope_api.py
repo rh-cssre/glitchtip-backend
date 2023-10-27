@@ -2,6 +2,7 @@ import uuid
 
 from django.shortcuts import reverse
 
+from apps.issue_events.models import IssueEvent
 from .utils import EventIngestTestCase
 
 
@@ -18,7 +19,6 @@ class EnvelopeAPITestCase(EventIngestTestCase):
             res = self.client.post(
                 self.url, self.small_event, content_type="application/json"
             )
-            print(res.json())
-        self.assertContains(res, self.small_event["event_id"])
+        self.assertContains(res, self.small_event[0]["event_id"])
         self.assertEqual(self.project.issues.count(), 1)
         self.assertEqual(IssueEvent.objects.count(), 1)

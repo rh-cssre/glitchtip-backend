@@ -8,14 +8,13 @@ from sentry.culprit import generate_culprit
 
 from apps.issue_events.models import IssueEventType, IssueHash, Issue, IssueEvent
 
-from .schema import EventIngestSchema, EventMessage
+from .schema import EventIngestSchema, EventMessage, InterchangeIssueEvent
 from .utils import generate_hash
 
 
 @dataclass
 class ProcessingEvent:
-    project_id: int
-    event: EventIngestSchema
+    event: InterchangeIssueEvent
     issue_hash: str
     issue_id: Optional[int] = None
     issue_created = False
@@ -33,24 +32,25 @@ def transform_message(message: Union[str, EventMessage]) -> str:
     return message.formatted
 
 
-def process_events(project_events: list[tuple[int, EventIngestSchema]]):
+def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
     # Collected/calculated event data while processing
     processing_events: list[ProcessingEvent] = []
     # Collect Q objects for bulk issue hash lookup
     q_objects = Q()
-    for project_id, event in project_events:
-        if event.exception:
-            event_type = IssueEventType.ERROR
+    culprit: str
+    for ingest_event in ingest_events:
+        event = ingest_event.payload
+        if event.type == IssueEventType.ERROR:
             sentry_event = ErrorEvent()
             # metadata = eventtype.get_metadata(data)
             title = "fake title"
             culprit = "fake culprit"
-        elif not event.platform:
-            event_type = IssueEventType.CSP
+        elif event.type == IssueEventType.CSP:
+            pass
         else:
             event_type = IssueEventType.DEFAULT
             title = transform_message(event.message) if event.message else "<untitled>"
-            culprit: str = (
+            culprit = (
                 event.transaction
                 if event.transaction
                 else generate_culprit(event.dict())
@@ -58,17 +58,17 @@ def process_events(project_events: list[tuple[int, EventIngestSchema]]):
         issue_hash = generate_hash(title, culprit, event_type, event.fingerprint)
         processing_events.append(
             ProcessingEvent(
-                project_id=project_id,
-                event=event,
+                event=ingest_event,
                 issue_hash=issue_hash,
             )
         )
-        q_objects |= Q(project_id=project_id, value=issue_hash)
+        q_objects |= Q(project_id=ingest_event.project_id, value=issue_hash)
 
     issue_defaults = {}
     hash_queryset = IssueHash.objects.filter(q_objects)
     issue_events: list[IssueEvent] = []
     for processing_event in processing_events:
+        project_id = processing_event.event.project_id
         for hash_obj in hash_queryset:
             if hash_obj.value.hex == issue_hash and hash_obj.project_id == project_id:
                 processing_event.issue_id = hash_obj.issue_id

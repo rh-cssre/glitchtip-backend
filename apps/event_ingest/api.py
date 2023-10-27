@@ -4,7 +4,8 @@ from urllib.parse import urlparse
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
-from django.http import HttpRequest
+from django.utils.timezone import now
+from django.http import HttpRequest, HttpResponse
 from ninja import Router, Schema
 from ninja.errors import AuthenticationError, HttpError, ValidationError
 
@@ -12,11 +13,16 @@ from projects.models import Project
 
 from .authentication import event_auth, get_project
 from .schema import (
-    EnvelopeEventIngestSchema,
+    BaseEventIngestSchema,
     EnvelopeHeaderSchema,
     EnvelopeSchema,
     EventIngestSchema,
     ItemHeaderSchema,
+    SecuritySchema,
+    IssueEventSchema,
+    CSPIssueEventSchema,
+    ErrorIssueEventSchema,
+    InterchangeIssueEvent,
 )
 from .tasks import ingest_event, ingest_transaction
 
@@ -38,13 +44,25 @@ async def async_call_celery_task(task, *args):
         return task.delay(*args)
 
 
+def get_issue_event_class(event: BaseEventIngestSchema):
+    return ErrorIssueEventSchema if event.exception else IssueEventSchema
+
+
 @router.post("/{project_id}/store/", response=EventIngestOut, auth=event_auth)
 async def event_store(
     request: HttpRequest,
     payload: EventIngestSchema,
     project_id: int,
 ):
-    await async_call_celery_task(ingest_event, project_id, payload.dict())
+    received_at = now()
+    issue_event_class = get_issue_event_class(payload)
+    issue_event = InterchangeIssueEvent(
+        event_id=payload.event_id,
+        project_id=project_id,
+        received_at=received_at,
+        payload=issue_event_class(**payload.dict()),
+    )
+    await async_call_celery_task(ingest_event, issue_event.dict())
     return {"event_id": payload.event_id.hex}
 
 
@@ -54,10 +72,18 @@ async def event_envelope(
     payload: EnvelopeSchema,
     project_id: int,
 ):
+    received_at = now()
     header = payload._header
     for item_header, item in payload._items:
         if item_header.type == "event":
-            ingest_event.delay(project_id, item.dict())
+            issue_event_class = get_issue_event_class(item)
+            issue_event = InterchangeIssueEvent(
+                event_id=header.event_id,
+                project_id=project_id,
+                received_at=received_at,
+                payload=issue_event_class(**item.dict()),
+            )
+            await async_call_celery_task(ingest_event, issue_event.dict())
         elif item_header.type == "transaction":
             pass
             # ingest_transaction.delay(project_id, {})
@@ -65,10 +91,22 @@ async def event_envelope(
     return {"id": header.event_id.hex}
 
 
-@router.post("/{project_id}/security/", response=EventIngestOut, auth=event_auth)
+@router.post("/{project_id}/security/", auth=event_auth)
 async def event_security(
     request: HttpRequest,
-    payload: EventIngestSchema,
+    payload: SecuritySchema,
     project_id: int,
 ):
-    pass
+    received_at = now()
+    report = payload.csp_report
+    humanized_directive = report.effective_directive.replace("-src", "")
+    uri = urlparse(report.blocked_uri).netloc
+    title = f"Blocked '{humanized_directive}' from '{uri}'"
+    event = BaseEventIngestSchema(title=title)
+    issue_event = InterchangeIssueEvent(
+        project_id=project_id,
+        received_at=received_at,
+        payload=CSPIssueEventSchema(**event.dict()),
+    )
+    await async_call_celery_task(ingest_event, issue_event.dict())
+    return HttpResponse(status=201)

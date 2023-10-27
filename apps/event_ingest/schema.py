@@ -11,6 +11,8 @@ from django.utils.timezone import now
 from ninja import Field, Schema
 from pydantic import ValidationError, WrapValidator, RootModel, model_validator
 
+from apps.issue_events.constants import IssueEventType
+
 logger = logging.getLogger(__name__)
 
 
@@ -162,10 +164,6 @@ class BaseEventIngestSchema(Schema):
     breadcrumbs: Optional[Union[list[EventBreadcrumb], ValueEventBreadcrumb]] = None
 
 
-class EnvelopeEventIngestSchema(BaseEventIngestSchema):
-    pass
-
-
 class EventIngestSchema(BaseEventIngestSchema):
     event_id: uuid.UUID
 
@@ -190,7 +188,7 @@ class ItemHeaderSchema(Schema):
 class EnvelopeSchema(RootModel[list[dict[str, Any]]]):
     root: list[dict[str, Any]]
     _header: EnvelopeHeaderSchema
-    _items: list[tuple[ItemHeaderSchema, EnvelopeEventIngestSchema]] = []
+    _items: list[tuple[ItemHeaderSchema, BaseEventIngestSchema]] = []
 
     @model_validator(mode="after")
     def validate_envelope(self) -> "EnvelopeSchema":
@@ -208,10 +206,61 @@ class EnvelopeSchema(RootModel[list[dict[str, Any]]]):
             item_header = ItemHeaderSchema(**item_header_data)
             if item_header.type == "event":
                 try:
-                    item = EnvelopeEventIngestSchema(**data.pop(0))
+                    item = BaseEventIngestSchema(**data.pop(0))
                 except ValidationError as err:
                     logger.warning("Envelope Event item invalid", exc_info=True)
                     raise err
                 self._items.append((item_header, item))
 
         return self
+
+
+class CSPReportSchema(Schema):
+    """
+    https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy-Report-Only#violation_report_syntax
+    """
+
+    blocked_uri: str = Field(alias="blocked-uri")
+    disposition: Literal["enforce", "report"] = Field(alias="disposition")
+    document_uri: str = Field(alias="document-uri")
+    effective_directive: str = Field(alias="effective-directive")
+    original_policy: Optional[str] = Field(alias="original-policy")
+    script_sample: Optional[str] = Field(alias="script-sample", default=None)
+    status_code: Optional[int] = Field(alias="status-code")
+    line_number: Optional[int] = None
+    column_number: Optional[int] = None
+
+
+class SecuritySchema(Schema):
+    csp_report: CSPReportSchema = Field(alias="csp-report")
+
+
+## Normalized Interchange Issue Events
+
+
+class IssueEventSchema(BaseEventIngestSchema):
+    """
+    Event storage and interchange format
+    Used in json view and celery interchange
+    Don't use this for api intake
+    """
+
+    type: Literal[IssueEventType.DEFAULT] = IssueEventType.DEFAULT
+
+
+class ErrorIssueEventSchema(BaseEventIngestSchema):
+    type: Literal[IssueEventType.ERROR] = IssueEventType.ERROR
+
+
+class CSPIssueEventSchema(BaseEventIngestSchema):
+    type: Literal[IssueEventType.CSP] = IssueEventType.CSP
+    csp: Optional[CSPReportSchema]
+
+
+class InterchangeIssueEvent(Schema):
+    """Normalized wrapper around issue event. Event should not contain repeat information."""
+
+    event_id: uuid.UUID = Field(default_factory=uuid.uuid4)
+    project_id: int
+    received_at: datetime
+    payload: Union[IssueEventSchema, CSPIssueEventSchema] = Field(discriminator="type")
