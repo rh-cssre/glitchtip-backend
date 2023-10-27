@@ -1,6 +1,7 @@
 from django.shortcuts import reverse
 
 from .utils import EventIngestTestCase
+from apps.issue_events.models import IssueEvent
 
 
 class SecurityAPITestCase(EventIngestTestCase):

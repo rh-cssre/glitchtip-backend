@@ -102,11 +102,11 @@ async def event_security(
     humanized_directive = report.effective_directive.replace("-src", "")
     uri = urlparse(report.blocked_uri).netloc
     title = f"Blocked '{humanized_directive}' from '{uri}'"
-    event = BaseEventIngestSchema(title=title)
+    event = CSPIssueEventSchema(title=title, csp=payload.csp_report.dict(by_alias=True))
     issue_event = InterchangeIssueEvent(
         project_id=project_id,
         received_at=received_at,
-        payload=CSPIssueEventSchema(**event.dict()),
+        payload=event.dict(by_alias=True),
     )
-    await async_call_celery_task(ingest_event, issue_event.dict())
+    await async_call_celery_task(ingest_event, issue_event.dict(by_alias=True))
     return HttpResponse(status=201)
