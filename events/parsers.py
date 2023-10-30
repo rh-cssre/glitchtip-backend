@@ -1,7 +1,8 @@
 import codecs
+
 from django.conf import settings
-from rest_framework.parsers import JSONParser
 from rest_framework.exceptions import ParseError
+from rest_framework.parsers import JSONParser
 from rest_framework.utils import json
 
 
