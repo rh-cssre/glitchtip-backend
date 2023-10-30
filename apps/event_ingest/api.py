@@ -1,6 +1,5 @@
 import json
 import uuid
-from urllib.parse import urlparse
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
@@ -38,6 +37,10 @@ class EnvelopeIngestOut(Schema):
 
 
 async def async_call_celery_task(task, *args):
+    """
+    Either dispatch the real celery task or run it with sync_to_async
+    This can be used for testing or a celery-less operation.
+    """
     if settings.CELERY_TASK_ALWAYS_EAGER:
         return await sync_to_async(task.delay)(*args)
     else:
@@ -54,6 +57,10 @@ async def event_store(
     payload: EventIngestSchema,
     project_id: int,
 ):
+    """
+    Event store is the original event ingest API from OSS Sentry but is used less often
+    Unlike Envelope, it accepts only one Issue event.
+    """
     received_at = now()
     issue_event_class = get_issue_event_class(payload)
     issue_event = InterchangeIssueEvent(
@@ -72,6 +79,14 @@ async def event_envelope(
     payload: EnvelopeSchema,
     project_id: int,
 ):
+    """
+    Envelopes can contain various types of data.
+    GlitchTip supports issue events and transaction events.
+    Ignore other data types.
+    Do support multiple valid events
+    Make a few io calls as possible. Some language SDKs (PHP) cannot run async code
+    and will block while waiting for GlitchTip to respond.
+    """
     received_at = now()
     header = payload._header
     for item_header, item in payload._items:
@@ -97,12 +112,13 @@ async def event_security(
     payload: SecuritySchema,
     project_id: int,
 ):
+    """
+    Accept Security (and someday other) issue events.
+    Reformats event to make CSP browser format match more standard
+    event format.
+    """
     received_at = now()
-    report = payload.csp_report
-    humanized_directive = report.effective_directive.replace("-src", "")
-    uri = urlparse(report.blocked_uri).netloc
-    title = f"Blocked '{humanized_directive}' from '{uri}'"
-    event = CSPIssueEventSchema(title=title, csp=payload.csp_report.dict(by_alias=True))
+    event = CSPIssueEventSchema(csp=payload.csp_report.dict(by_alias=True))
     issue_event = InterchangeIssueEvent(
         project_id=project_id,
         received_at=received_at,

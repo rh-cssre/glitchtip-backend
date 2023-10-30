@@ -5,10 +5,16 @@ from django.shortcuts import reverse
 from model_bakery import baker
 
 from .utils import EventIngestTestCase
+from apps.issue_events.constants import IssueEventType
 from apps.issue_events.models import IssueEvent
 
 
 class StoreAPITestCase(EventIngestTestCase):
+    """
+    These test specifically test the store API and act more of integration test
+    Use test_process_issue_events.py for testing Event Ingest more specifically
+    """
+
     def setUp(self):
         super().setUp()
         self.url = reverse("api:event_store", args=[self.project.id]) + self.params
@@ -45,4 +51,15 @@ class StoreAPITestCase(EventIngestTestCase):
         params = "?sentry_key=8bea9cde164a4b94b88027a3d03f7698"
         url = reverse("api:event_store", args=[self.project.id]) + params
         res = self.client.post(url, self.event, content_type="application/json")
-        self.assertEqual(res.status_code, 422)
+        self.assertEqual(res.status_code, 401)
+
+    def test_error_event(self):
+        data = self.get_event_json("events/test_data/py_error.json")
+        res = self.client.post(self.url, data, content_type="application/json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(
+            self.project.issues.filter(type=IssueEventType.ERROR).count(), 1
+        )
+        self.assertEqual(
+            IssueEvent.objects.filter(type=IssueEventType.ERROR).count(), 1
+        )

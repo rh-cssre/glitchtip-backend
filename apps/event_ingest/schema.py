@@ -83,7 +83,7 @@ class StackTraceFrame(Schema):
     source_link: Optional[str] = None
     in_app: Optional[bool] = None
     stack_start: Optional[bool] = None
-    vars: Optional[dict[str, str]] = None
+    vars: Optional[dict[str, Union[str, dict, list]]] = None
     instruction_addr: Optional[str] = None
     addr_mode: Optional[str] = None
     symbol_addr: Optional[str] = None
@@ -254,7 +254,7 @@ class ErrorIssueEventSchema(BaseEventIngestSchema):
 
 class CSPIssueEventSchema(BaseEventIngestSchema):
     type: Literal[IssueEventType.CSP] = IssueEventType.CSP
-    csp: Optional[CSPReportSchema]
+    csp: CSPReportSchema
 
 
 class InterchangeIssueEvent(Schema):
@@ -262,5 +262,7 @@ class InterchangeIssueEvent(Schema):
 
     event_id: uuid.UUID = Field(default_factory=uuid.uuid4)
     project_id: int
-    received_at: datetime
-    payload: Union[IssueEventSchema, CSPIssueEventSchema] = Field(discriminator="type")
+    received_at: datetime = Field(default_factory=now)
+    payload: Union[
+        IssueEventSchema, ErrorIssueEventSchema, CSPIssueEventSchema
+    ] = Field(discriminator="type")

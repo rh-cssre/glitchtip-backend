@@ -7,6 +7,11 @@ from .utils import EventIngestTestCase
 
 
 class EnvelopeAPITestCase(EventIngestTestCase):
+    """
+    These test specifically test the envelope API and act more of integration test
+    Use test_process_issue_events.py for testing Event Ingest more specifically
+    """
+
     def setUp(self):
         super().setUp()
         self.url = reverse("api:event_envelope", args=[self.project.id]) + self.params

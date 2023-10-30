@@ -1,5 +1,7 @@
-from typing import Union, Optional
-from dataclasses import dataclass
+from typing import Union, Optional, Any
+from dataclasses import dataclass, field
+from urllib.parse import urlparse
+
 from django.db import transaction
 from django.db.models import Q
 from django.db.utils import IntegrityError
@@ -8,7 +10,12 @@ from sentry.culprit import generate_culprit
 
 from apps.issue_events.models import IssueEventType, IssueHash, Issue, IssueEvent
 
-from .schema import EventIngestSchema, EventMessage, InterchangeIssueEvent
+from .schema import (
+    EventIngestSchema,
+    EventMessage,
+    InterchangeIssueEvent,
+    CSPIssueEventSchema,
+)
 from .utils import generate_hash
 
 
@@ -16,6 +23,7 @@ from .utils import generate_hash
 class ProcessingEvent:
     event: InterchangeIssueEvent
     issue_hash: str
+    event_data: dict[str, Any] = field(default_factory=dict)
     issue_id: Optional[int] = None
     issue_created = False
 
@@ -33,12 +41,23 @@ def transform_message(message: Union[str, EventMessage]) -> str:
 
 
 def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
+    """
+    Accepts a list of events to ingest. Events should:
+    - Few enough to save in a single DB call
+    - Permission is already checked, these events are to write to the DB
+    - Some invalid events are tolerated (ignored), including duplicate event id
+
+    When there is an error in this function, care should be taken as to when to log,
+    error, or ignore. If the SDK sends "weird" data, we want to log that.
+    It's better to save a minimal event than to ignore it.
+    """
     # Collected/calculated event data while processing
     processing_events: list[ProcessingEvent] = []
     # Collect Q objects for bulk issue hash lookup
     q_objects = Q()
     culprit: str
     for ingest_event in ingest_events:
+        event_data: dict[str, Any] = {}
         event = ingest_event.payload
         if event.type == IssueEventType.ERROR:
             sentry_event = ErrorEvent()
@@ -46,7 +65,9 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             title = "fake title"
             culprit = "fake culprit"
         elif event.type == IssueEventType.CSP:
-            title = "fake title"
+            humanized_directive = event.csp.effective_directive.replace("-src", "")
+            uri = urlparse(event.csp.blocked_uri).netloc
+            title = f"Blocked '{humanized_directive}' from '{uri}'"
             culprit = "fake culprit"
         else:
             title = transform_message(event.message) if event.message else "<untitled>"
@@ -60,6 +81,9 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             ProcessingEvent(
                 event=ingest_event,
                 issue_hash=issue_hash,
+                event_data={
+                    "title": title,
+                },
             )
         )
         q_objects |= Q(project_id=ingest_event.project_id, value=issue_hash)
@@ -67,8 +91,12 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
     hash_queryset = IssueHash.objects.filter(q_objects)
     issue_events: list[IssueEvent] = []
     for processing_event in processing_events:
-        issue_defaults = {}
+        event_type = processing_event.event.payload.type
         project_id = processing_event.event.project_id
+        issue_defaults = {
+            "type": event_type,
+            "title": processing_event.event_data["title"],
+        }
         for hash_obj in hash_queryset:
             if hash_obj.value.hex == issue_hash and hash_obj.project_id == project_id:
                 processing_event.issue_id = hash_obj.issue_id
@@ -95,7 +123,8 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 id=processing_event.event.event_id,
                 created=processing_event.event.received_at,
                 issue_id=processing_event.issue_id,
-                data={},
+                type=event_type,
+                data=processing_event.event_data,
             )
         )
 

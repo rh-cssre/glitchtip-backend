@@ -1,10 +1,15 @@
 from django.shortcuts import reverse
 
 from .utils import EventIngestTestCase
-from apps.issue_events.models import IssueEvent
+from apps.issue_events.models import Issue, IssueEvent
 
 
 class SecurityAPITestCase(EventIngestTestCase):
+    """
+    These test specifically test the security API and act more of integration test
+    Use test_process_issue_events.py for testing Event Ingest more specifically
+    """
+
     def setUp(self):
         super().setUp()
         self.url = reverse("api:event_security", args=[self.project.id]) + self.params
@@ -12,7 +17,7 @@ class SecurityAPITestCase(EventIngestTestCase):
             "apps/event_ingest/tests/test_data/csp/mozilla_example.json"
         )
 
-    def test_envelope_api(self):
+    def test_security_api(self):
         with self.assertNumQueries(7):
             res = self.client.post(
                 self.url, self.small_event, content_type="application/json"
@@ -20,3 +25,12 @@ class SecurityAPITestCase(EventIngestTestCase):
         self.assertEqual(res.status_code, 201)
         self.assertEqual(self.project.issues.count(), 1)
         self.assertEqual(IssueEvent.objects.count(), 1)
+
+    def test_csp_event(self):
+        res = self.client.post(
+            self.url, self.small_event, content_type="application/json"
+        )
+        issue = Issue.objects.get()
+        self.assertEqual(issue.title, "Blocked 'style-elem' from 'example.com'")
+        event = IssueEvent.objects.get()
+        self.assertEqual(event.data["csp"]["effective_directive"], "style-src")
