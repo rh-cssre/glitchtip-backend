@@ -8,6 +8,8 @@ from django.db.utils import IntegrityError
 from sentry.eventtypes.error import ErrorEvent
 from sentry.culprit import generate_culprit
 
+from alerts.models import Notification
+from apps.issue_events.constants import EventStatus
 from apps.issue_events.models import IssueEventType, IssueHash, Issue, IssueEvent
 
 from .schema import (
@@ -23,7 +25,8 @@ from .utils import generate_hash
 class ProcessingEvent:
     event: InterchangeIssueEvent
     issue_hash: str
-    event_data: dict[str, Any] = field(default_factory=dict)
+    title: str
+    event_data: dict[str, Any]
     issue_id: Optional[int] = None
     issue_created = False
 
@@ -55,10 +58,11 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
     processing_events: list[ProcessingEvent] = []
     # Collect Q objects for bulk issue hash lookup
     q_objects = Q()
-    culprit: str
     for ingest_event in ingest_events:
         event_data: dict[str, Any] = {}
         event = ingest_event.payload
+        title = ""
+        culprit = ""
         if event.type == IssueEventType.ERROR:
             sentry_event = ErrorEvent()
             # metadata = eventtype.get_metadata(data)
@@ -69,6 +73,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             uri = urlparse(event.csp.blocked_uri).netloc
             title = f"Blocked '{humanized_directive}' from '{uri}'"
             culprit = "fake culprit"
+            event_data["csp"] = event.csp.dict()
         else:
             title = transform_message(event.message) if event.message else "<untitled>"
             culprit = (
@@ -81,25 +86,32 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             ProcessingEvent(
                 event=ingest_event,
                 issue_hash=issue_hash,
-                event_data={
-                    "title": title,
-                },
+                title=title,
+                event_data=event_data,
             )
         )
         q_objects |= Q(project_id=ingest_event.project_id, value=issue_hash)
 
-    hash_queryset = IssueHash.objects.filter(q_objects)
+    hash_queryset = IssueHash.objects.filter(q_objects).values(
+        "value", "project_id", "issue_id", "issue__status"
+    )
     issue_events: list[IssueEvent] = []
+    issues_to_reopen = []
     for processing_event in processing_events:
         event_type = processing_event.event.payload.type
         project_id = processing_event.event.project_id
         issue_defaults = {
             "type": event_type,
-            "title": processing_event.event_data["title"],
+            "title": processing_event.title,
         }
         for hash_obj in hash_queryset:
-            if hash_obj.value.hex == issue_hash and hash_obj.project_id == project_id:
-                processing_event.issue_id = hash_obj.issue_id
+            if (
+                hash_obj["value"].hex == issue_hash
+                and hash_obj["project_id"] == project_id
+            ):
+                processing_event.issue_id = hash_obj["issue_id"]
+                if hash_obj["issue__status"] == EventStatus.RESOLVED:
+                    issues_to_reopen.append(hash_obj["issue_id"])
                 break
 
         if not processing_event.issue_id:
@@ -127,6 +139,12 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 data=processing_event.event_data,
             )
         )
+
+    if issues_to_reopen:
+        Issue.objects.filter(id__in=issues_to_reopen).update(
+            status=EventStatus.UNRESOLVED
+        )
+        Notification.objects.filter(issues__in=issues_to_reopen).delete()
 
     # ignore_conflicts because we could have an invalid duplicate event_id
     IssueEvent.objects.bulk_create(issue_events, ignore_conflicts=True)

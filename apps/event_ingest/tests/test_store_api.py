@@ -18,7 +18,7 @@ class StoreAPITestCase(EventIngestTestCase):
     def setUp(self):
         super().setUp()
         self.url = reverse("api:event_store", args=[self.project.id]) + self.params
-        self.event = self.get_event_json("events/test_data/py_hi_event.json")
+        self.event = self.get_json_data("events/test_data/py_hi_event.json")
 
     def test_store_api(self):
         with self.assertNumQueries(7):
@@ -54,7 +54,7 @@ class StoreAPITestCase(EventIngestTestCase):
         self.assertEqual(res.status_code, 401)
 
     def test_error_event(self):
-        data = self.get_event_json("events/test_data/py_error.json")
+        data = self.get_json_data("events/test_data/py_error.json")
         res = self.client.post(self.url, data, content_type="application/json")
         self.assertEqual(res.status_code, 200)
         self.assertEqual(

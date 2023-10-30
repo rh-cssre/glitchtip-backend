@@ -14,6 +14,6 @@ class EventIngestTestCase(TestCase):
         self.projectkey = self.project.projectkey_set.first()
         self.params = f"?sentry_key={self.projectkey.public_key}"
 
-    def get_event_json(self, filename: str):
+    def get_json_data(self, filename: str):
         with open(filename) as json_file:
             return json.load(json_file)

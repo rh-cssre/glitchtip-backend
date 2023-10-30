@@ -13,7 +13,7 @@ class SecurityAPITestCase(EventIngestTestCase):
     def setUp(self):
         super().setUp()
         self.url = reverse("api:event_security", args=[self.project.id]) + self.params
-        self.small_event = self.get_event_json(
+        self.small_event = self.get_json_data(
             "apps/event_ingest/tests/test_data/csp/mozilla_example.json"
         )
 
@@ -33,4 +33,4 @@ class SecurityAPITestCase(EventIngestTestCase):
         issue = Issue.objects.get()
         self.assertEqual(issue.title, "Blocked 'style-elem' from 'example.com'")
         event = IssueEvent.objects.get()
-        self.assertEqual(event.data["csp"]["effective_directive"], "style-src")
+        self.assertEqual(event.data["csp"]["effective_directive"], "style-src-elem")

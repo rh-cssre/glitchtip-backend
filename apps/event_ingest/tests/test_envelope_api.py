@@ -15,7 +15,7 @@ class EnvelopeAPITestCase(EventIngestTestCase):
     def setUp(self):
         super().setUp()
         self.url = reverse("api:event_envelope", args=[self.project.id]) + self.params
-        self.small_event = self.get_event_json(
+        self.small_event = self.get_json_data(
             "apps/event_ingest/tests/test_data/envelopes/django_message.json"
         )
 
