@@ -11,13 +11,13 @@ def forwards_func(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("alerts", "0002_auto_20210314_2022"),
     ]
 
     operations = [
         migrations.AlterUniqueTogether(
-            name="alertrecipient", unique_together={("alert", "recipient_type", "url")},
+            name="alertrecipient",
+            unique_together={("alert", "recipient_type", "url")},
         ),
     ]
