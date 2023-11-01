@@ -2,8 +2,8 @@ import uuid
 from typing import Optional
 
 from ninja import Router
-from django.http import HttpRequest
 
+from glitchtip.api.authentication import AuthHttpRequest
 from .schema import IssueEventSchema
 from .models import IssueEvent
 
@@ -11,15 +11,21 @@ from .models import IssueEvent
 router = Router()
 
 
+def get_queryset(user_id: str, issue_id: int):
+    return IssueEvent.objects.filter(
+        issue__project__organization__users=user_id, issue_id=issue_id
+    )
+
+
 @router.get(
     "/issues/{int:issue_id}/events/", response=list[IssueEventSchema], by_alias=True
 )
-async def issue_event_list(request: HttpRequest, issue_id: int):
-    user_id = request.session.get("_auth_user_id")
-    qs = IssueEvent.objects.filter(
-        issue__project__organization__users=user_id, issue_id=issue_id
-    )
-    return [obj async for obj in qs]
+async def issue_event_list(request: AuthHttpRequest, issue_id: int):
+    user_id = request.auth
+    if user_id:
+        qs = get_queryset(user_id, issue_id)
+        return [obj async for obj in qs]
+    return []
 
 
 @router.get(
@@ -28,11 +34,15 @@ async def issue_event_list(request: HttpRequest, issue_id: int):
     by_alias=True,
 )
 async def issue_event_retrieve(
-    request: HttpRequest, issue_id: int, event_id: uuid.UUID
+    request: AuthHttpRequest, issue_id: int, event_id: uuid.UUID
 ):
-    return await IssueEvent.objects.afirst()
+    user_id = request.auth
+    if user_id:
+        qs = get_queryset(user_id, issue_id)
+        return await qs.afirst()
+    return None
 
 
 @router.get("/issues/{int:issue_id}/events/latest/")
-async def issue_event_latest(request: HttpRequest, issue_id: int):
+async def issue_event_latest(request: AuthHttpRequest, issue_id: int):
     return ""

@@ -9,6 +9,7 @@ from ninja import ModelSchema, NinjaAPI, Schema
 from glitchtip.constants import SOCIAL_ADAPTER_MAP
 from users.utils import ais_user_registration_open
 
+from .authentication import django_auth
 from .exceptions import ThrottleException
 from .parsers import EnvelopeParser
 from .schema import CamelSchema
@@ -19,7 +20,12 @@ except ImportError:
     pass
 
 
-api = NinjaAPI(parser=EnvelopeParser(), title="GlitchTip API", urls_namespace="api")
+api = NinjaAPI(
+    parser=EnvelopeParser(),
+    title="GlitchTip API",
+    urls_namespace="api",
+    auth=django_auth,
+)
 api.add_router("x", "apps.event_ingest.api.router")
 api.add_router("x0/", "apps.issue_events.api.router")
 
@@ -66,7 +72,7 @@ class SettingsOut(CamelSchema):
     server_time_zone: str
 
 
-@api.get("settings/", response=SettingsOut, by_alias=True)
+@api.get("settings/", response=SettingsOut, by_alias=True, auth=None)
 async def get_settings(request: HttpRequest):
     social_apps: list[SocialApp] = []
     async for social_app in SocialApp.objects.order_by("name"):

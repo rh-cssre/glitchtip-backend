@@ -10,7 +10,7 @@ from ninja.errors import AuthenticationError, HttpError, ValidationError
 
 from projects.models import Project
 
-from .authentication import event_auth, get_project
+from .authentication import event_auth
 from .schema import (
     BaseEventIngestSchema,
     EnvelopeHeaderSchema,
@@ -25,7 +25,7 @@ from .schema import (
 )
 from .tasks import ingest_event, ingest_transaction
 
-router = Router()
+router = Router(auth=event_auth)
 
 
 class EventIngestOut(Schema):
@@ -51,7 +51,7 @@ def get_issue_event_class(event: BaseEventIngestSchema):
     return ErrorIssueEventSchema if event.exception else IssueEventSchema
 
 
-@router.post("/{project_id}/store/", response=EventIngestOut, auth=event_auth)
+@router.post("/{project_id}/store/", response=EventIngestOut)
 async def event_store(
     request: HttpRequest,
     payload: EventIngestSchema,
@@ -73,7 +73,7 @@ async def event_store(
     return {"event_id": payload.event_id.hex}
 
 
-@router.post("/{project_id}/envelope/", response=EnvelopeIngestOut, auth=event_auth)
+@router.post("/{project_id}/envelope/", response=EnvelopeIngestOut)
 async def event_envelope(
     request: HttpRequest,
     payload: EnvelopeSchema,
@@ -106,7 +106,7 @@ async def event_envelope(
     return {"id": header.event_id.hex}
 
 
-@router.post("/{project_id}/security/", auth=event_auth)
+@router.post("/{project_id}/security/")
 async def event_security(
     request: HttpRequest,
     payload: SecuritySchema,

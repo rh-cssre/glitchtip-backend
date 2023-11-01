@@ -19,3 +19,9 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
             res = self.client.get(url)
         self.assertContains(res, event.pk.hex)
         self.assertNotContains(res, not_my_event.pk.hex)
+
+    def test_authentication(self):
+        url = reverse("api:issue_event_list", args=[1])
+        self.client.logout()
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 401)

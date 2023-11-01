@@ -1,9 +1,11 @@
 from django.test import TestCase
-from django.urls import reverse_lazy
+from django.urls import reverse
 
 
 class SettingsTestCase(TestCase):
     def test_settings(self):
-        with self.assertNumQueries(1):
-            res = self.client.get(reverse_lazy("api:get_settings"))
+        url = reverse("api:get_settings")
+        res = self.client.get(url)  # Check that no auth is necessary
         self.assertEqual(res.status_code, 200)
+        with self.assertNumQueries(1):
+            self.client.get(url)
