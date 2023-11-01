@@ -74,7 +74,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             title = f"Blocked '{humanized_directive}' from '{uri}'"
             culprit = "fake culprit"
             event_data["csp"] = event.csp.dict()
-        else:
+        else:  # Default Event Type
             title = transform_message(event.message) if event.message else "<untitled>"
             culprit = (
                 event.transaction
@@ -129,7 +129,6 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 processing_event.issue_id = IssueHash.objects.get(
                     project_id=project_id, value=issue_hash
                 ).issue_id
-
         issue_events.append(
             IssueEvent(
                 id=processing_event.event.event_id,

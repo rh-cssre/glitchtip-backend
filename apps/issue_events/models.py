@@ -83,3 +83,10 @@ class IssueEvent(PostgresPartitionedModel, models.Model):
     class PartitioningMeta:
         method = PostgresPartitioningMethod.RANGE
         key = ["created"]
+
+    def __str__(self):
+        return self.eventID
+
+    @property
+    def eventID(self):
+        return self.id.hex

@@ -20,7 +20,8 @@ except ImportError:
 
 
 api = NinjaAPI(parser=EnvelopeParser(), title="GlitchTip API", urls_namespace="api")
-api.add_router("", "apps.event_ingest.api.router")
+api.add_router("x", "apps.event_ingest.api.router")
+api.add_router("x0/", "apps.issue_events.api.router")
 
 
 @api.exception_handler(ThrottleException)

@@ -780,6 +780,7 @@ elif TESTING:
 CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", False)
 if TESTING:
     CELERY_TASK_ALWAYS_EAGER = True
+    SESSION_ENGINE = "django.contrib.sessions.backends.cache"
     STATICFILES_STORAGE = global_settings.STATICFILES_STORAGE
     # https://github.com/evansd/whitenoise/issues/215
     warnings.filterwarnings(

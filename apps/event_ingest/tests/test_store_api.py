@@ -1,7 +1,7 @@
 import json
 
 from django.test import override_settings
-from django.shortcuts import reverse
+from django.urls import reverse
 from model_bakery import baker
 
 from .utils import EventIngestTestCase

@@ -3,17 +3,30 @@ import json
 from django.test import TestCase
 from model_bakery import baker
 
+from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
+from organizations_ext.models import OrganizationUserRole
 
-class EventIngestTestCase(TestCase):
+
+class EventIngestTestCase(GlitchTipTestCaseMixin, TestCase):
     """
     Base class for event ingest tests with helper functions
     """
 
     def setUp(self):
-        self.project = baker.make("projects.Project")
-        self.projectkey = self.project.projectkey_set.first()
+        self.create_project()
         self.params = f"?sentry_key={self.projectkey.public_key}"
 
     def get_json_data(self, filename: str):
         with open(filename) as json_file:
             return json.load(json_file)
+
+    def create_logged_in_user(self):
+        self.user = baker.make("users.user")
+        self.client.force_login(self.user)
+        self.org_user = self.organization.add_user(
+            self.user, OrganizationUserRole.ADMIN
+        )
+        self.team = baker.make("teams.Team", organization=self.organization)
+        self.team.members.add(self.org_user)
+        self.project = baker.make("projects.Project", organization=self.organization)
+        self.project.team_set.add(self.team)
