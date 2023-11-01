@@ -410,17 +410,17 @@ files = [
 
 [[package]]
 name = "boto3"
-version = "1.28.71"
+version = "1.28.75"
 description = "The AWS SDK for Python"
 optional = false
 python-versions = ">= 3.7"
 files = [
-    {file = "boto3-1.28.71-py3-none-any.whl", hash = "sha256:cf54d6da6d348317da896235e9850c7e550dbc18bd5cb16cce1b035e90d0166f"},
-    {file = "boto3-1.28.71.tar.gz", hash = "sha256:8d1b50127b20b817fdcec3ce6a625c5057b5a722acf1cfa64cf3824ff40b1e75"},
+    {file = "boto3-1.28.75-py3-none-any.whl", hash = "sha256:b959decd588982bc919bfcbebc7916926b05003a0093e7f2845362da4f5dd9fc"},
+    {file = "boto3-1.28.75.tar.gz", hash = "sha256:63d772a784e8e35ee51974eb1c20dff5faa51b007d22c5647783f18966bf4042"},
 ]
 
 [package.dependencies]
-botocore = ">=1.31.71,<1.32.0"
+botocore = ">=1.31.75,<1.32.0"
 jmespath = ">=0.7.1,<2.0.0"
 s3transfer = ">=0.7.0,<0.8.0"
 
@@ -429,13 +429,13 @@ crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
 
 [[package]]
 name = "botocore"
-version = "1.31.73"
+version = "1.31.75"
 description = "Low-level, data-driven core of boto 3."
 optional = false
 python-versions = ">= 3.7"
 files = [
-    {file = "botocore-1.31.73-py3-none-any.whl", hash = "sha256:6e9caaa7205e0c0505f4868a4053e96eaf3f4b6bce0368a46970a8efeeacb492"},
-    {file = "botocore-1.31.73.tar.gz", hash = "sha256:5334c22d5a3f4643931896137c57b2496fef005b039d87d8740e7a28eb31519d"},
+    {file = "botocore-1.31.75-py3-none-any.whl", hash = "sha256:fa078c4aa9a5777b3ede756540e62fec551e13d39cf7abf9a37bb81981496d68"},
+    {file = "botocore-1.31.75.tar.gz", hash = "sha256:d704ea9867b2227de0350bc2a5ca2543349e164ecb5d15edbfacbb05f2056482"},
 ]
 
 [package.dependencies]
@@ -1019,13 +1019,13 @@ postgres = ["psycopg2 (>=2.8.5,<3.0.0)"]
 
 [[package]]
 name = "django"
-version = "4.2.6"
+version = "4.2.7"
 description = "A high-level Python web framework that encourages rapid development and clean, pragmatic design."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "Django-4.2.6-py3-none-any.whl", hash = "sha256:a64d2487cdb00ad7461434320ccc38e60af9c404773a2f95ab0093b4453a3215"},
-    {file = "Django-4.2.6.tar.gz", hash = "sha256:08f41f468b63335aea0d904c5729e0250300f6a1907bf293a65499496cdbc68f"},
+    {file = "Django-4.2.7-py3-none-any.whl", hash = "sha256:e1d37c51ad26186de355cbcec16613ebdabfa9689bbade9c538835205a8abbe9"},
+    {file = "Django-4.2.7.tar.gz", hash = "sha256:8e0f1c2c2786b5c0e39fe1afce24c926040fad47c8ea8ad30aaf1188df29fc41"},
 ]
 
 [package.dependencies]
@@ -1040,12 +1040,12 @@ bcrypt = ["bcrypt"]
 
 [[package]]
 name = "django-allauth"
-version = "0.57.0"
+version = "0.58.1"
 description = "Integrated set of Django applications addressing authentication, registration, account management as well as 3rd party (social) account authentication."
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "django-allauth-0.57.0.tar.gz", hash = "sha256:a095ef0db7de305d9175772c78e765ebd5fceb004ae61c1383d7fc1af0f7c5b1"},
+    {file = "django-allauth-0.58.1.tar.gz", hash = "sha256:485db513f1794f5636ae38a78e9414e8818ce076770b75a6f8a003ab3a32b8fa"},
 ]
 
 [package.dependencies]
@@ -4663,4 +4663,4 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "20f91cadda0d5ea90598f4d5a042cbef9f24080e50cafabfd4df3bca47046676"
+content-hash = "849a1d7ab7c7ffbe3eb131860e59b994cc76ebcf8a2e1aa3f883476271228944"
