@@ -1,6 +1,7 @@
 import uuid
 from typing import Optional
 
+from django.http import Http404
 from ninja import Router
 
 from glitchtip.api.authentication import AuthHttpRequest
@@ -21,11 +22,19 @@ def get_queryset(user_id: str, issue_id: int):
     "/issues/{int:issue_id}/events/", response=list[IssueEventSchema], by_alias=True
 )
 async def issue_event_list(request: AuthHttpRequest, issue_id: int):
-    user_id = request.auth
-    if user_id:
+    if user_id := request.auth:
         qs = get_queryset(user_id, issue_id)
         return [obj async for obj in qs]
     return []
+
+
+@router.get(
+    "/issues/{int:issue_id}/events/latest/", response=IssueEventSchema, by_alias=True
+)
+async def issue_event_latest(request: AuthHttpRequest, issue_id: int):
+    if user_id := request.auth:
+        qs = get_queryset(user_id, issue_id)
+        return await qs.afirst()
 
 
 @router.get(
@@ -36,13 +45,9 @@ async def issue_event_list(request: AuthHttpRequest, issue_id: int):
 async def issue_event_retrieve(
     request: AuthHttpRequest, issue_id: int, event_id: uuid.UUID
 ):
-    user_id = request.auth
-    if user_id:
+    if user_id := request.auth:
         qs = get_queryset(user_id, issue_id)
-        return await qs.afirst()
-    return None
-
-
-@router.get("/issues/{int:issue_id}/events/latest/")
-async def issue_event_latest(request: AuthHttpRequest, issue_id: int):
-    return ""
+        try:
+            return await qs.aget(id=event_id)
+        except IssueEvent.DoesNotExist:
+            raise Http404()
