@@ -457,10 +457,6 @@ if broker_sentinel_password := env.str("CELERY_BROKER_SENTINEL_KWARGS_PASSWORD",
 TASK_DEBOUNCE_DELAY = env.int("TASK_DEBOUNCE_DELAY", 30)
 UPTIME_CHECK_INTERVAL = 10
 CELERY_BEAT_SCHEDULE = {
-    "send-alert-notifications": {
-        "task": "alerts.tasks.process_event_alerts",
-        "schedule": 300,
-    },
     "cleanup-old-events": {
         "task": "issues.tasks.cleanup_old_events",
         "schedule": crontab(hour=5, minute=0),
