@@ -1,10 +1,15 @@
 from typing import Optional
+
 from ninja import ModelSchema, Field
+
+from glitchtip.api.schema import CamelSchema
 from .models import IssueEvent
 
 
-class IssueEventSchema(ModelSchema):
+
+class IssueEventSchema(CamelSchema, ModelSchema):
     id: str = Field(alias="eventID")
+    project_id: int
     # previous_event_id: Optional[str] = Field(alias="previousEventID", default=None)
 
     class Config:
@@ -12,9 +17,12 @@ class IssueEventSchema(ModelSchema):
         model_fields = ["id"]
         populate_by_name = True
 
+    @staticmethod
+    def resolve_project_id(obj):
+        return obj.issue.project_id
+
     # @staticmethod
     # async def resolve_previous_event_id(obj):
-    #     print("start!!!!")
     #     result = await obj.aget_next_by_created()
     #     if result:
     #         str(result)

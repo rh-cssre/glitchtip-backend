@@ -9,6 +9,8 @@ from ninja import ModelSchema, NinjaAPI, Schema
 from glitchtip.constants import SOCIAL_ADAPTER_MAP
 from users.utils import ais_user_registration_open
 
+from apps.event_ingest.api import router as event_ingest_router
+from apps.issue_events.api import router as issue_events_router
 from .authentication import django_auth
 from .exceptions import ThrottleException
 from .parsers import EnvelopeParser
@@ -26,8 +28,8 @@ api = NinjaAPI(
     urls_namespace="api",
     auth=django_auth,
 )
-api.add_router("x", "apps.event_ingest.api.router")
-api.add_router("x0/", "apps.issue_events.api.router")
+api.add_router("x", event_ingest_router)
+api.add_router("x0/", issue_events_router)
 
 
 @api.exception_handler(ThrottleException)

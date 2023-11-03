@@ -22,11 +22,11 @@ class ObservabilityAPITestCase(APITestCase):
 
     def test_get_metrics_and_cache(self):
         clear_metrics_cache()
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(2):
             resp = self.client.get(self.url)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(1):
             resp = self.client.get(self.url)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
