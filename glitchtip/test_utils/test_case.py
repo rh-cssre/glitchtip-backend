@@ -1,5 +1,6 @@
 # pylint: disable=attribute-defined-outside-init,invalid-name
 from typing import Optional
+
 from model_bakery import baker
 from rest_framework.test import APITestCase
 

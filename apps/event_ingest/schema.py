@@ -1,15 +1,15 @@
-import uuid
 import json
+import logging
+import typing
+import uuid
 from collections.abc import Callable
 from datetime import datetime
-import typing
 from typing import Annotated, Any, Literal, Optional, Union
-import logging
 
 from django.conf import settings
 from django.utils.timezone import now
 from ninja import Field, Schema
-from pydantic import ValidationError, WrapValidator, RootModel, model_validator
+from pydantic import RootModel, ValidationError, WrapValidator, model_validator
 
 from apps.issue_events.constants import IssueEventType
 

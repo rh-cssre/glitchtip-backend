@@ -2,12 +2,12 @@ import uuid
 
 from django.urls import reverse
 
-from .utils import EventIngestTestCase
-from ..schema import InterchangeIssueEvent, IssueEventSchema, ErrorIssueEventSchema
-from ..process_event import process_issue_events
 from apps.issue_events.constants import EventStatus
 from apps.issue_events.models import Issue, IssueEvent, IssueHash
 
+from ..process_event import process_issue_events
+from ..schema import ErrorIssueEventSchema, InterchangeIssueEvent, IssueEventSchema
+from .utils import EventIngestTestCase
 
 COMPAT_TEST_DATA_DIR = "events/test_data"
 

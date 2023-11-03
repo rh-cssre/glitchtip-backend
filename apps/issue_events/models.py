@@ -6,7 +6,7 @@ from django.db import models
 from psqlextra.models import PostgresPartitionedModel
 from psqlextra.types import PostgresPartitioningMethod
 
-from .constants import IssueEventType, EventStatus, LogLevel
+from .constants import EventStatus, IssueEventType, LogLevel
 
 
 class Issue(models.Model):
@@ -61,9 +61,7 @@ class IssueHash(models.Model):
 
 class Comment(models.Model):
     created = models.DateTimeField(auto_now_add=True)
-    issue = models.ForeignKey(
-        Issue, on_delete=models.CASCADE, related_name="comments"
-    )
+    issue = models.ForeignKey(Issue, on_delete=models.CASCADE, related_name="comments")
     user = models.ForeignKey(
         "users.User", null=True, on_delete=models.SET_NULL, related_name="+"
     )

@@ -17,6 +17,7 @@ class CamelSchema(Schema):
     - event_number > eventNumber
     - foobar_100 > foobar100
     """
+
     class Config(Schema.Config):
         alias_generator = to_camel
         populate_by_name = True

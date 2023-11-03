@@ -5,9 +5,9 @@ from django.http import Http404
 from ninja import Router
 
 from glitchtip.api.authentication import AuthHttpRequest
-from .schema import IssueEventSchema
-from .models import IssueEvent
 
+from .models import IssueEvent
+from .schema import IssueEventSchema
 
 router = Router()
 

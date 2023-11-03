@@ -1,7 +1,8 @@
 from django.urls import reverse
 
-from .utils import EventIngestTestCase
 from apps.issue_events.models import Issue, IssueEvent
+
+from .utils import EventIngestTestCase
 
 
 class SecurityAPITestCase(EventIngestTestCase):

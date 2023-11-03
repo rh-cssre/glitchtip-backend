@@ -1,22 +1,22 @@
-from typing import Union, Optional, Any
 from dataclasses import dataclass, field
+from typing import Any, Optional, Union
 from urllib.parse import urlparse
 
 from django.db import transaction
 from django.db.models import Q
 from django.db.utils import IntegrityError
-from sentry.eventtypes.error import ErrorEvent
-from sentry.culprit import generate_culprit
 
 from alerts.models import Notification
 from apps.issue_events.constants import EventStatus
-from apps.issue_events.models import IssueEventType, IssueHash, Issue, IssueEvent
+from apps.issue_events.models import Issue, IssueEvent, IssueEventType, IssueHash
+from sentry.culprit import generate_culprit
+from sentry.eventtypes.error import ErrorEvent
 
 from .schema import (
+    CSPIssueEventSchema,
     EventIngestSchema,
     EventMessage,
     InterchangeIssueEvent,
-    CSPIssueEventSchema,
 )
 from .utils import generate_hash
 

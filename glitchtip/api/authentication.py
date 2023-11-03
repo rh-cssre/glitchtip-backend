@@ -1,7 +1,7 @@
 from asgiref.sync import sync_to_async
-from django.http import HttpRequest
-from django.contrib.auth import SESSION_KEY
 from django.conf import settings
+from django.contrib.auth import SESSION_KEY
+from django.http import HttpRequest
 
 
 class AuthHttpRequest(HttpRequest):

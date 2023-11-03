@@ -3,8 +3,8 @@ import uuid
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
-from django.utils.timezone import now
 from django.http import HttpRequest, HttpResponse
+from django.utils.timezone import now
 from ninja import Router, Schema
 from ninja.errors import AuthenticationError, HttpError, ValidationError
 
@@ -13,15 +13,15 @@ from projects.models import Project
 from .authentication import event_auth
 from .schema import (
     BaseEventIngestSchema,
+    CSPIssueEventSchema,
     EnvelopeHeaderSchema,
     EnvelopeSchema,
+    ErrorIssueEventSchema,
     EventIngestSchema,
+    InterchangeIssueEvent,
+    IssueEventSchema,
     ItemHeaderSchema,
     SecuritySchema,
-    IssueEventSchema,
-    CSPIssueEventSchema,
-    ErrorIssueEventSchema,
-    InterchangeIssueEvent,
 )
 from .tasks import ingest_event, ingest_transaction
 

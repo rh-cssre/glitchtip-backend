@@ -1,10 +1,10 @@
 from typing import Optional
 
-from ninja import ModelSchema, Field
+from ninja import Field, ModelSchema
 
 from glitchtip.api.schema import CamelSchema
-from .models import IssueEvent
 
+from .models import IssueEvent
 
 
 class IssueEventSchema(CamelSchema, ModelSchema):

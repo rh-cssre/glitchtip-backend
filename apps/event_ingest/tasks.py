@@ -1,15 +1,15 @@
-import uuid
 import logging
+import uuid
 
-from django.conf import settings
 from celery import shared_task
 from celery_batches import Batches
+from django.conf import settings
 from pydantic_core import ValidationError
 
 from glitchtip.celery import app
 
-from .schema import InterchangeIssueEvent
 from .process_event import process_issue_events
+from .schema import InterchangeIssueEvent
 
 logger = logging.getLogger(__name__)
 
