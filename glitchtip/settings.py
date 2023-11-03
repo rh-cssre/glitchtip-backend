@@ -83,6 +83,10 @@ if GLITCHTIP_URL.scheme not in ["http", "https"]:
     raise ImproperlyConfigured("GLITCHTIP_DOMAIN must start with http or https")
 
 
+# Is running unit test
+TESTING = len(sys.argv) > 1 and sys.argv[1] == "test"
+
+GLITCHTIP_ENABLE_NEW_ISSUES = env.bool("GLITCHTIP_ENABLE_NEW_ISSUES", default=TESTING)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 4294967295  # TMP REMOVE THIS
 # Limits size (in bytes) of uncompressed event payloads. Mitigates DOS risk.
 GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE = env.int(
@@ -214,8 +218,6 @@ if DEBUG_TOOLBAR:
 INSTALLED_APPS += [
     "dj_rest_auth",
     "dj_rest_auth.registration",
-    "apps.issue_events",
-    "apps.event_ingest",
     "import_export",
     "storages",
     "glitchtip",
@@ -237,6 +239,12 @@ INSTALLED_APPS += [
     "releases",
     "difs",
 ]
+
+if GLITCHTIP_ENABLE_NEW_ISSUES:
+    INSTALLED_APPS += [
+        "apps.issue_events",
+        "apps.event_ingest",
+    ]
 
 
 IS_CELERY = env.bool("IS_CELERY", False)
@@ -734,9 +742,6 @@ def organization_request_callback(request):
 # Set to track activity with Plausible
 PLAUSIBLE_URL = env.str("PLAUSIBLE_URL", default=None)
 PLAUSIBLE_DOMAIN = env.str("PLAUSIBLE_DOMAIN", default=None)
-
-# Is running unit test
-TESTING = len(sys.argv) > 1 and sys.argv[1] == "test"
 
 # See https://liberapay.com/GlitchTip/donate - suggested self-host donation is $5/month/user.
 # Support plans available. Email info@burkesoftware.com for more info.

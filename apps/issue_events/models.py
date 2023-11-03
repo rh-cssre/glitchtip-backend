@@ -62,7 +62,7 @@ class IssueHash(models.Model):
 class Comment(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     issue = models.ForeignKey(
-        "issues.Issue", on_delete=models.CASCADE, related_name="comments"
+        Issue, on_delete=models.CASCADE, related_name="comments"
     )
     user = models.ForeignKey(
         "users.User", null=True, on_delete=models.SET_NULL, related_name="+"
