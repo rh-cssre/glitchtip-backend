@@ -1,9 +1,9 @@
 from typing import Optional
 
-from asgiref.sync import sync_to_async
 from allauth.socialaccount.models import SocialApp
-from allauth.socialaccount.providers.openid_connect.views import OpenIDConnectAdapter
 from allauth.socialaccount.providers.microsoft.views import MicrosoftGraphOAuth2Adapter
+from allauth.socialaccount.providers.openid_connect.views import OpenIDConnectAdapter
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.http import HttpRequest
 from ninja import ModelSchema, NinjaAPI, Schema
