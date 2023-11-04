@@ -83,7 +83,9 @@ async def get_settings(request: HttpRequest):
             adapter = None
         if adapter:
             if isinstance(adapter, MicrosoftGraphOAuth2Adapter):
-                social_app.authorize_url = await sync_to_async(adapter._build_tenant_url)("/oauth2/v2.0/authorize")
+                social_app.authorize_url = await sync_to_async(
+                    adapter._build_tenant_url
+                )("/oauth2/v2.0/authorize")
             else:
                 social_app.authorize_url = adapter.authorize_url
 
