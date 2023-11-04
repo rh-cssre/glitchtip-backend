@@ -39,7 +39,6 @@ def process_event_alerts():
             send_notification.delay(notification.pk)
 
 
-
 @shared_task
 def send_notification(notification_id: int):
     notification = Notification.objects.get(pk=notification_id)
