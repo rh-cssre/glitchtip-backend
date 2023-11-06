@@ -1,6 +1,8 @@
 from django.db import models
-from django.utils.translation import gettext_lazy as _
+
 from glitchtip.base_models import CreatedModel
+
+from .constants import RecipientType
 from .email import send_email_notification
 from .webhooks import send_webhook_notification
 
@@ -20,11 +22,7 @@ class ProjectAlert(CreatedModel):
 
 
 class AlertRecipient(models.Model):
-    """ An asset that accepts an alert such as email, SMS, webhooks """
-
-    class RecipientType(models.TextChoices):
-        EMAIL = "email", _("Email")
-        WEBHOOK = "webhook", _("Webhook")
+    """An asset that accepts an alert such as email, SMS, webhooks"""
 
     alert = models.ForeignKey(ProjectAlert, on_delete=models.CASCADE)
     recipient_type = models.CharField(max_length=16, choices=RecipientType.choices)
@@ -33,11 +31,18 @@ class AlertRecipient(models.Model):
     class Meta:
         unique_together = ("alert", "recipient_type", "url")
 
+    @property
+    def is_webhook(self):
+        return self.recipient_type in (
+            RecipientType.DISCORD,
+            RecipientType.GENERAL_WEBHOOK,
+        )
+
     def send(self, notification):
-        if self.recipient_type == self.RecipientType.EMAIL:
+        if self.recipient_type == RecipientType.EMAIL:
             send_email_notification(notification)
-        elif self.recipient_type == self.RecipientType.WEBHOOK:
-            send_webhook_notification(notification, self.url)
+        elif self.is_webhook:
+            send_webhook_notification(notification, self.url, self.recipient_type)
 
 
 class Notification(CreatedModel):
