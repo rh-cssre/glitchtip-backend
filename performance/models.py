@@ -4,6 +4,7 @@ from django.db import models
 
 from events.models import AbstractEvent
 from glitchtip.base_models import CreatedModel
+from projects.tasks import update_transaction_event_project_hourly_statistic
 
 
 class TransactionGroup(CreatedModel):
@@ -25,7 +26,7 @@ class TransactionEvent(AbstractEvent):
     group = models.ForeignKey(TransactionGroup, on_delete=models.CASCADE)
     trace_id = models.UUIDField(db_index=True)
     start_timestamp = models.DateTimeField()
-    duration = models.DurationField(db_index=True)
+    duration = models.PositiveIntegerField(db_index=True, help_text="Milliseconds")
     tags = HStoreField(default=dict)
 
     class Meta:
@@ -34,13 +35,21 @@ class TransactionEvent(AbstractEvent):
     def __str__(self):
         return str(self.trace_id)
 
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new:
+            update_transaction_event_project_hourly_statistic(
+                args=[self.group.project_id, self.created], countdown=60
+            )
+
 
 class Span(CreatedModel):
     transaction = models.ForeignKey(TransactionEvent, on_delete=models.CASCADE)
     span_id = models.CharField(max_length=16)
     parent_span_id = models.CharField(max_length=16, null=True, blank=True)
     # same_process_as_parent bool - we don't use this currently
-    op = models.CharField(max_length=255)
+    op = models.CharField(max_length=255, blank=True)
     description = models.CharField(max_length=2000, null=True, blank=True)
     start_timestamp = models.DateTimeField()
     timestamp = models.DateTimeField()
