@@ -468,7 +468,7 @@ UPTIME_CHECK_INTERVAL = 10
 CELERY_BEAT_SCHEDULE = {
     "send-alert-notifications": {
         "task": "alerts.tasks.process_event_alerts",
-        "schedule": 60,
+        "schedule": 300,
     },
     "cleanup-old-events": {
         "task": "issues.tasks.cleanup_old_events",

@@ -1,7 +1,9 @@
 from typing import Optional
 
 from allauth.socialaccount.models import SocialApp
+from allauth.socialaccount.providers.microsoft.views import MicrosoftGraphOAuth2Adapter
 from allauth.socialaccount.providers.openid_connect.views import OpenIDConnectAdapter
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.http import HttpRequest
 from ninja import ModelSchema, NinjaAPI, Schema
@@ -92,7 +94,12 @@ async def get_settings(request: HttpRequest):
         else:
             adapter = None
         if adapter:
-            social_app.authorize_url = adapter.authorize_url
+            if isinstance(adapter, MicrosoftGraphOAuth2Adapter):
+                social_app.authorize_url = await sync_to_async(
+                    adapter._build_tenant_url
+                )("/oauth2/v2.0/authorize")
+            else:
+                social_app.authorize_url = adapter.authorize_url
 
         social_app.provider = social_app.provider_id or social_app.provider
         social_apps.append(social_app)
