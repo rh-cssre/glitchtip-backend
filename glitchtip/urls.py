@@ -6,7 +6,6 @@ from django.views.generic import TemplateView
 from django.views.generic.base import RedirectView
 from django_rest_mfa.rest_auth_helpers.views import MFALoginView
 from organizations.backends import invitation_backend
-from rest_framework import permissions
 from rest_framework_nested import routers
 
 from api_tokens.urls import router as apiTokensRouter

@@ -6,7 +6,7 @@ from allauth.socialaccount.providers.openid_connect.views import OpenIDConnectAd
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.http import HttpRequest
-from ninja import ModelSchema, NinjaAPI, Schema
+from ninja import ModelSchema, NinjaAPI
 
 from glitchtip.constants import SOCIAL_ADAPTER_MAP
 from users.utils import ais_user_registration_open

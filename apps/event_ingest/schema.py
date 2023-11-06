@@ -1,4 +1,3 @@
-import json
 import logging
 import typing
 import uuid
@@ -6,7 +5,6 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Annotated, Any, Literal, Optional, Union
 
-from django.conf import settings
 from django.utils.timezone import now
 from ninja import Field, Schema
 from pydantic import RootModel, ValidationError, WrapValidator, model_validator
@@ -201,7 +199,7 @@ class EnvelopeSchema(RootModel[list[dict[str, Any]]]):
 
         while len(data) >= 2:
             item_header_data = data.pop(0)
-            if not item_header_data.get("type", None) in SUPPORTED_ITEMS:
+            if item_header_data.get("type", None) not in SUPPORTED_ITEMS:
                 continue
             item_header = ItemHeaderSchema(**item_header_data)
             if item_header.type == "event":

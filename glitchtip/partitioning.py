@@ -3,7 +3,6 @@ from psqlextra.partitioning import (
     PostgresCurrentTimePartitioningStrategy,
     PostgresPartitioningManager,
     PostgresTimePartitionSize,
-    partition_by_current_time,
 )
 from psqlextra.partitioning.config import PostgresPartitioningConfig
 

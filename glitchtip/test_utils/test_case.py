@@ -4,7 +4,6 @@ from typing import Optional
 from model_bakery import baker
 from rest_framework.test import APITestCase
 
-from glitchtip.test_utils import generators  # pylint: disable=unused-import
 from organizations_ext.models import Organization, OrganizationUserRole
 
 

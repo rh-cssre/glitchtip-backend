@@ -1,10 +1,7 @@
 import logging
-import uuid
 
 from celery import shared_task
 from celery_batches import Batches
-from django.conf import settings
-from pydantic_core import ValidationError
 
 from glitchtip.celery import app
 
@@ -17,7 +14,6 @@ FLUSH_EVERY = 100
 FLUSH_INTERVAL = 2
 
 
-from functools import wraps
 
 
 @shared_task(base=Batches, flush_every=FLUSH_EVERY, flush_interval=FLUSH_INTERVAL)

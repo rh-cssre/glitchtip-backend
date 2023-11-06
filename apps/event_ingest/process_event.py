@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional, Union
 from urllib.parse import urlparse
 
@@ -10,11 +10,8 @@ from alerts.models import Notification
 from apps.issue_events.constants import EventStatus
 from apps.issue_events.models import Issue, IssueEvent, IssueEventType, IssueHash
 from sentry.culprit import generate_culprit
-from sentry.eventtypes.error import ErrorEvent
 
 from .schema import (
-    CSPIssueEventSchema,
-    EventIngestSchema,
     EventMessage,
     InterchangeIssueEvent,
 )
@@ -64,7 +61,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         title = ""
         culprit = ""
         if event.type == IssueEventType.ERROR:
-            sentry_event = ErrorEvent()
+            # sentry_event = ErrorEvent()
             # metadata = eventtype.get_metadata(data)
             title = "fake title"
             culprit = "fake culprit"

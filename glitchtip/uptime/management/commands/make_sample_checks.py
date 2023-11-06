@@ -1,14 +1,11 @@
 from random import randrange
 
 from django.utils import timezone
-from freezegun import freeze_time
 from model_bakery import baker
 from model_bakery.random_gen import gen_json, gen_slug
 
 from glitchtip.base_commands import MakeSampleCommand
 from glitchtip.uptime.models import Monitor, MonitorCheck
-from organizations_ext.models import Organization
-from projects.models import Project
 
 baker.generators.add("organizations.fields.SlugField", gen_slug)
 baker.generators.add("django.db.models.JSONField", gen_json)

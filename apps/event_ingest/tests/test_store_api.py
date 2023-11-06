@@ -1,8 +1,6 @@
-import json
 
 from django.test import override_settings
 from django.urls import reverse
-from model_bakery import baker
 
 from apps.issue_events.constants import IssueEventType
 from apps.issue_events.models import IssueEvent

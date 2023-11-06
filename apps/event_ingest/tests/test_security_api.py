@@ -28,9 +28,7 @@ class SecurityAPITestCase(EventIngestTestCase):
         self.assertEqual(IssueEvent.objects.count(), 1)
 
     def test_csp_event(self):
-        res = self.client.post(
-            self.url, self.small_event, content_type="application/json"
-        )
+        self.client.post(self.url, self.small_event, content_type="application/json")
         issue = Issue.objects.get()
         self.assertEqual(issue.title, "Blocked 'style-elem' from 'example.com'")
         event = IssueEvent.objects.get()
