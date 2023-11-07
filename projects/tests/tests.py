@@ -171,6 +171,7 @@ class TeamProjectsAPITestCase(APITestCase):
         name = "test project"
         data = {"name": name}
         res = self.client.post(self.url, data)
+        first_project = Project.objects.get()
         res = self.client.post(self.url, data)
         self.assertContains(res, name, status_code=201)
         projects = Project.objects.all()
@@ -180,7 +181,7 @@ class TeamProjectsAPITestCase(APITestCase):
         org2 = baker.make("organizations_ext.Organization")
         org2_project = Project.objects.create(name=name, organization=org2)
         # The same slug can exist between multiple organizations
-        self.assertEqual(projects[0].slug, org2_project.slug)
+        self.assertEqual(first_project.slug, org2_project.slug)
 
     def test_projects_api_project_has_team(self):
         """
