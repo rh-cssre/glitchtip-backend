@@ -63,10 +63,11 @@ requests-mock = "^1.9.3"
 memray = "^1.9.1"
 ruff = "^0.1.4"
 
-[tool.isort]
-profile = "black"
-skip = ["env"]
-skip_glob = ["*/migrations/*.py"]
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.ruff.lint.per-file-ignores]
+"*/migrations/*.py" = ["I"]
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main"]

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import IssueEvent, Issue
+from .models import Issue, IssueEvent
 
 
 @admin.register(IssueEvent)

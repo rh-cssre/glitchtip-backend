@@ -1,4 +1,5 @@
 from typing import Optional
+
 from ninja import Field, ModelSchema
 
 from glitchtip.api.schema import CamelSchema

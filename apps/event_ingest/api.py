@@ -5,7 +5,6 @@ from django.http import HttpRequest, HttpResponse
 from django.utils.timezone import now
 from ninja import Router, Schema
 
-
 from .authentication import event_auth
 from .schema import (
     BaseEventIngestSchema,
@@ -78,7 +77,7 @@ async def event_envelope(
     GlitchTip supports issue events and transaction events.
     Ignore other data types.
     Do support multiple valid events
-    Make a few io calls as possible. Some language SDKs (PHP) cannot run async code
+    Make as few io calls as possible. Some language SDKs (PHP) cannot run async code
     and will block while waiting for GlitchTip to respond.
     """
     received_at = now()
