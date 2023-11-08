@@ -12,10 +12,19 @@ class IssueEventSchema(CamelSchema, ModelSchema):
     project_id: int = Field(validation_alias="issue.project_id")
     group_id: int = Field(validation_alias="issue_id")
     dist: Optional[str] = None
+    message: Optional[str] = Field(validation_alias="data.message", default=None)
+    culprit: Optional[str] = Field(validation_alias="data.culprit", default=None)
+    title: Optional[str] = Field(validation_alias="data.title", default=None)
+    platform: Optional[str] = Field(validation_alias="data.platform", default=None)
+    type: str = Field(validation_alias="get_type_display")
+    metadata: dict[str, str] = Field(
+        validation_alias="data.metadata", default_factory=dict
+    )
+    tags: list[dict[str, Optional[str]]] = []
 
     class Config:
         model = IssueEvent
-        model_fields = ["id"]
+        model_fields = ["id", "type", "date_created", "date_received"]
         populate_by_name = True
 
 

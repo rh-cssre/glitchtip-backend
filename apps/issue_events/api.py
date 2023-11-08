@@ -28,7 +28,7 @@ def get_queryset(
         qs = qs.filter(issue__project__organization__slug=organization_slug)
     if project_slug:
         qs = qs.filter(issue__project__slug=project_slug)
-    return qs.select_related("issue").order_by("-created")
+    return qs.select_related("issue").order_by("-date_received")
 
 
 @router.get(
@@ -46,12 +46,12 @@ async def issue_event_list(request: AuthHttpRequest, issue_id: int):
 async def issue_event_latest(request: AuthHttpRequest, issue_id: int):
     qs = get_queryset(request, issue_id)
     qs = qs.annotate(
-        previous=Window(expression=Lag("id"), order_by="created"),
+        previous=Window(expression=Lag("id"), order_by="date_received"),
     )
     obj = await qs.afirst()
-    obj.next = None  # We know the next after "latest" must be None
     if not obj:
         raise Http404()
+    obj.next = None  # We know the next after "latest" must be None
     return obj
 
 
@@ -65,8 +65,12 @@ async def issue_event_retrieve(
 ):
     qs = get_queryset(request, issue_id)
     qs = qs.annotate(
-        previous=Subquery(qs.filter(created__lt=OuterRef("created")).values("id")[:1]),
-        next=Subquery(qs.filter(created__gt=OuterRef("created")).values("id")[:1]),
+        previous=Subquery(
+            qs.filter(date_received__lt=OuterRef("date_received")).values("id")[:1]
+        ),
+        next=Subquery(
+            qs.filter(date_received__gt=OuterRef("date_received")).values("id")[:1]
+        ),
     )
     try:
         return await qs.filter(id=event_id).aget()
@@ -107,8 +111,12 @@ async def project_issue_event_retrieve(
         request, organization_slug=organization_slug, project_slug=project_slug
     )
     qs = qs.annotate(
-        previous=Subquery(qs.filter(created__lt=OuterRef("created")).values("id")[:1]),
-        next=Subquery(qs.filter(created__gt=OuterRef("created")).values("id")[:1]),
+        previous=Subquery(
+            qs.filter(date_received__lt=OuterRef("date_received")).values("id")[:1]
+        ),
+        next=Subquery(
+            qs.filter(date_received__gt=OuterRef("date_received")).values("id")[:1]
+        ),
     )
     try:
         return await qs.aget(id=event_id)

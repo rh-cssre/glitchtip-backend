@@ -75,12 +75,17 @@ class IssueEvent(PostgresPartitionedModel, models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     issue = models.ForeignKey(Issue, on_delete=models.CASCADE)
     type = models.PositiveSmallIntegerField(default=0, choices=IssueEventType.choices)
-    created = models.DateTimeField(auto_now_add=True)
+    date_created = models.DateTimeField(
+        auto_now_add=True, help_text="Time at which event happened"
+    )
+    date_received = models.DateTimeField(
+        auto_now_add=True, help_text="Time at which GlitchTip accepted event"
+    )
     data = models.JSONField()
 
     class PartitioningMeta:
         method = PostgresPartitioningMethod.RANGE
-        key = ["created"]
+        key = ["date_received"]
 
     def __str__(self):
         return self.eventID

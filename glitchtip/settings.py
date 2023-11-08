@@ -38,10 +38,6 @@ env = environ.FileAwareEnv(
     DEBUG=(bool, False),
     DEBUG_TOOLBAR=(bool, False),
     STATIC_URL=(str, "/"),
-    STATICFILES_STORAGE=(
-        str,
-        "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    ),
     ENABLE_OBSERVABILITY_API=(bool, False),
 )
 path = environ.Path()
@@ -176,6 +172,8 @@ DEBUG_TOOLBAR_PANELS = [
     "debug_toolbar.panels.headers.HeadersPanel",
     "debug_toolbar.panels.request.RequestPanel",
     "debug_toolbar.panels.sql.SQLPanel",
+    # "debug_toolbar.panels.history.HistoryPanel",
+    # "debug_toolbar.panels.profiling.ProfilingPanel",
 ]
 
 # Application definition
@@ -600,7 +598,15 @@ STATICFILES_DIRS = [
     "dist",
 ]
 STATIC_ROOT = path("static/")
-STATICFILES_STORAGE = env("STATICFILES_STORAGE")
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": env.str(
+            "STATICFILES_STORAGE",
+            "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        )
+    }
+}
+
 EMAIL_BACKEND = env.str(
     "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
 )
@@ -786,7 +792,7 @@ CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", False)
 if TESTING:
     CELERY_TASK_ALWAYS_EAGER = True
     SESSION_ENGINE = "django.contrib.sessions.backends.cache"
-    STATICFILES_STORAGE = global_settings.STATICFILES_STORAGE
+    STORAGES = global_settings.STORAGES
     # https://github.com/evansd/whitenoise/issues/215
     warnings.filterwarnings(
         "ignore", message="No directory at", module="whitenoise.base"

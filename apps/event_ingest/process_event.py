@@ -129,7 +129,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         issue_events.append(
             IssueEvent(
                 id=processing_event.event.event_id,
-                created=processing_event.event.received_at,
+                date_received=processing_event.event.received_at,
                 issue_id=processing_event.issue_id,
                 type=event_type,
                 data=processing_event.event_data,
