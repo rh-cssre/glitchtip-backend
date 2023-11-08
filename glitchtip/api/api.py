@@ -33,8 +33,8 @@ if settings.GLITCHTIP_ENABLE_NEW_ISSUES:
     from apps.event_ingest.api import router as event_ingest_router
     from apps.issue_events.api import router as issue_events_router
 
-    api.add_router("x", event_ingest_router)
-    api.add_router("x0/", issue_events_router)
+    api.add_router("v2", event_ingest_router)
+    api.add_router("v2", issue_events_router)
 
 
 @api.exception_handler(ThrottleException)

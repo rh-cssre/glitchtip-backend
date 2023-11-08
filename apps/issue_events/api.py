@@ -1,13 +1,15 @@
 import uuid
 from typing import Optional
 
+from django.db.models import OuterRef, Subquery, Window
+from django.db.models.functions import Lag
 from django.http import Http404
 from ninja import Router
 
 from glitchtip.api.authentication import AuthHttpRequest
 
 from .models import IssueEvent
-from .schema import IssueEventSchema
+from .schema import IssueEventDetailSchema, IssueEventSchema
 
 router = Router()
 
@@ -26,7 +28,7 @@ def get_queryset(
         qs = qs.filter(issue__project__organization__slug=organization_slug)
     if project_slug:
         qs = qs.filter(issue__project__slug=project_slug)
-    return qs.select_related("issue")
+    return qs.select_related("issue").order_by("-created")
 
 
 @router.get(
@@ -37,26 +39,38 @@ async def issue_event_list(request: AuthHttpRequest, issue_id: int):
 
 
 @router.get(
-    "/issues/{int:issue_id}/events/latest/", response=IssueEventSchema, by_alias=True
+    "/issues/{int:issue_id}/events/latest/",
+    response=IssueEventDetailSchema,
+    by_alias=True,
 )
 async def issue_event_latest(request: AuthHttpRequest, issue_id: int):
-    obj = await get_queryset(request, issue_id).afirst()
-    if not obj:
+    qs = get_queryset(request, issue_id)
+    qs = qs.annotate(
+        previous=Window(expression=Lag("id"), order_by="created"),
+    )
+    try:
+        obj = await qs.aget()
+    except IssueEvent.DoesNotExist:
         raise Http404()
+    obj.next = None  # We know the next after "latest" must be None
     return obj
 
 
 @router.get(
     "/issues/{int:issue_id}/events/{event_id}/",
-    response=IssueEventSchema,
+    response=IssueEventDetailSchema,
     by_alias=True,
 )
 async def issue_event_retrieve(
     request: AuthHttpRequest, issue_id: int, event_id: uuid.UUID
 ):
     qs = get_queryset(request, issue_id)
+    qs = qs.annotate(
+        previous=Subquery(qs.filter(created__lt=OuterRef("created")).values("id")[:1]),
+        next=Subquery(qs.filter(created__gt=OuterRef("created")).values("id")[:1]),
+    )
     try:
-        return await qs.aget(id=event_id)
+        return await qs.filter(id=event_id).aget()
     except IssueEvent.DoesNotExist:
         raise Http404()
 
@@ -71,7 +85,6 @@ async def project_issue_event_list(
     organization_slug: str,
     project_slug: str,
 ):
-    print("dep")
     return [
         obj
         async for obj in get_queryset(
@@ -82,7 +95,7 @@ async def project_issue_event_list(
 
 @router.get(
     "/projects/{slug:organization_slug}/{slug:project_slug}/events/{event_id}/",
-    response=IssueEventSchema,
+    response=IssueEventDetailSchema,
     by_alias=True,
 )
 async def project_issue_event_retrieve(
@@ -93,6 +106,10 @@ async def project_issue_event_retrieve(
 ):
     qs = get_queryset(
         request, organization_slug=organization_slug, project_slug=project_slug
+    )
+    qs = qs.annotate(
+        previous=Subquery(qs.filter(created__lt=OuterRef("created")).values("id")[:1]),
+        next=Subquery(qs.filter(created__gt=OuterRef("created")).values("id")[:1]),
     )
     try:
         return await qs.aget(id=event_id)
