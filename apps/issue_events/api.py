@@ -48,11 +48,10 @@ async def issue_event_latest(request: AuthHttpRequest, issue_id: int):
     qs = qs.annotate(
         previous=Window(expression=Lag("id"), order_by="created"),
     )
-    try:
-        obj = await qs.aget()
-    except IssueEvent.DoesNotExist:
-        raise Http404()
+    obj = await qs.afirst()
     obj.next = None  # We know the next after "latest" must be None
+    if not obj:
+        raise Http404()
     return obj
 
 
