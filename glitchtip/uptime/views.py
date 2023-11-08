@@ -36,7 +36,7 @@ class HeartBeatCheckView(CreateAPIView):
             monitor=monitor,
             is_up=True,
             reason=None,
-            is_change=monitor.latest_is_up != True,
+            is_change=monitor.latest_is_up is not True,
         )
         if monitor.latest_is_up is False:
             send_monitor_notification.delay(

@@ -1,4 +1,5 @@
 from typing import Literal
+from uuid import UUID
 
 from django.conf import settings
 from django.core.cache import cache
@@ -13,7 +14,11 @@ from .constants import EVENT_BLOCK_CACHE_KEY
 
 
 def auth_from_request(request: HttpRequest):
-    # Accept both sentry or glitchtip prefix.
+    """
+    Get DSN (sentry_key) from request header
+    Accept both sentry or glitchtip prefix
+    Do not read request body when possible. This may result in uncompression which is slow.
+    """
     for k in request.GET.keys():
         if k in ["sentry_key", "glitchtip_key"]:
             return request.GET[k]
@@ -29,7 +34,7 @@ def auth_from_request(request: HttpRequest):
 
 # One letter codes to save cache memory and map to various event rejection type exceptions
 REJECTION_MAP: dict[Literal["v", "t"], Exception] = {
-    "v": ValidationError([{"message": "Invalid DSN"}]),
+    "v": AuthenticationError([{"message": "Invalid DSN"}]),
     "t": ThrottleException(),
 }
 REJECTION_WAIT = 30
@@ -44,7 +49,12 @@ async def get_project(request: HttpRequest):
     if not request.resolver_match:
         raise ValidationError([{"message": "Invalid project ID"}])
     project_id: int = request.resolver_match.captured_kwargs.get("project_id")
-    sentry_key = auth_from_request(request)
+    try:
+        sentry_key = UUID(auth_from_request(request))
+    except ValueError as err:
+        raise ValidationError(
+            [{"message": "dsn key badly formed hexadecimal UUID string"}]
+        ) from err
 
     # block cache check should be right before database call
     block_cache_key = EVENT_BLOCK_CACHE_KEY + str(project_id)
@@ -74,6 +84,11 @@ async def get_project(request: HttpRequest):
 
 
 async def event_auth(request: HttpRequest):
+    """
+    Event Ingest authentication means validating the DSN (sentry_key).
+    Throttling is also handled here.
+    It does not include user authentication.
+    """
     if settings.MAINTENANCE_EVENT_FREEZE:
         raise HttpError(
             503, "Events are not currently being accepted due to maintenance."

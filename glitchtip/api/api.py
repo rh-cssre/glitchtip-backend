@@ -6,11 +6,12 @@ from allauth.socialaccount.providers.openid_connect.views import OpenIDConnectAd
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.http import HttpRequest
-from ninja import ModelSchema, NinjaAPI, Schema
+from ninja import ModelSchema, NinjaAPI
 
 from glitchtip.constants import SOCIAL_ADAPTER_MAP
 from users.utils import ais_user_registration_open
 
+from .authentication import django_auth
 from .exceptions import ThrottleException
 from .parsers import EnvelopeParser
 from .schema import CamelSchema
@@ -20,9 +21,20 @@ try:
 except ImportError:
     pass
 
+api = NinjaAPI(
+    parser=EnvelopeParser(),
+    title="GlitchTip API",
+    urls_namespace="api",
+    auth=django_auth,
+)
 
-api = NinjaAPI(parser=EnvelopeParser(), title="GlitchTip API", urls_namespace="api")
-api.add_router("", "glitchtip.event_ingest.api.router")
+
+if settings.GLITCHTIP_ENABLE_NEW_ISSUES:
+    from apps.event_ingest.api import router as event_ingest_router
+    from apps.issue_events.api import router as issue_events_router
+
+    api.add_router("v2", event_ingest_router)
+    api.add_router("v2", issue_events_router)
 
 
 @api.exception_handler(ThrottleException)
@@ -67,7 +79,7 @@ class SettingsOut(CamelSchema):
     server_time_zone: str
 
 
-@api.get("settings/", response=SettingsOut, by_alias=True)
+@api.get("settings/", response=SettingsOut, by_alias=True, auth=None)
 async def get_settings(request: HttpRequest):
     social_apps: list[SocialApp] = []
     async for social_app in SocialApp.objects.order_by("name"):

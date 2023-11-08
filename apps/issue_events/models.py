@@ -6,28 +6,7 @@ from django.db import models
 from psqlextra.models import PostgresPartitionedModel
 from psqlextra.types import PostgresPartitioningMethod
 
-from glitchtip.model_utils import FromStringIntegerChoices
-
-
-class IssueEventType(models.IntegerChoices):
-    DEFAULT = 0, "default"
-    ERROR = 1, "error"
-    CSP = 2, "csp"
-
-
-class EventStatus(FromStringIntegerChoices):
-    UNRESOLVED = 0, "unresolved"
-    RESOLVED = 1, "resolved"
-    IGNORED = 2, "ignored"
-
-
-class LogLevel(FromStringIntegerChoices):
-    NOTSET = 0, "sample"
-    DEBUG = 1, "debug"
-    INFO = 2, "info"
-    WARNING = 3, "warning"
-    ERROR = 4, "error"
-    FATAL = 5, "fatal"
+from .constants import EventStatus, IssueEventType, LogLevel
 
 
 class Issue(models.Model):
@@ -65,9 +44,7 @@ class IssueStats(models.Model):
 
 
 class IssueHash(models.Model):
-    issue = models.ForeignKey(
-        "issues.Issue", on_delete=models.CASCADE, related_name="hashes"
-    )
+    issue = models.ForeignKey(Issue, on_delete=models.CASCADE, related_name="hashes")
     # Redundant project allows for unique constraint
     project = models.ForeignKey(
         "projects.Project", on_delete=models.CASCADE, related_name="+"
@@ -84,9 +61,7 @@ class IssueHash(models.Model):
 
 class Comment(models.Model):
     created = models.DateTimeField(auto_now_add=True)
-    issue = models.ForeignKey(
-        "issues.Issue", on_delete=models.CASCADE, related_name="comments"
-    )
+    issue = models.ForeignKey(Issue, on_delete=models.CASCADE, related_name="comments")
     user = models.ForeignKey(
         "users.User", null=True, on_delete=models.SET_NULL, related_name="+"
     )
@@ -100,9 +75,21 @@ class IssueEvent(PostgresPartitionedModel, models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     issue = models.ForeignKey(Issue, on_delete=models.CASCADE)
     type = models.PositiveSmallIntegerField(default=0, choices=IssueEventType.choices)
-    created = models.DateTimeField(auto_now_add=True)
+    date_created = models.DateTimeField(
+        auto_now_add=True, help_text="Time at which event happened"
+    )
+    date_received = models.DateTimeField(
+        auto_now_add=True, help_text="Time at which GlitchTip accepted event"
+    )
     data = models.JSONField()
 
     class PartitioningMeta:
         method = PostgresPartitioningMethod.RANGE
-        key = ["created"]
+        key = ["date_received"]
+
+    def __str__(self):
+        return self.eventID
+
+    @property
+    def eventID(self):
+        return self.id.hex

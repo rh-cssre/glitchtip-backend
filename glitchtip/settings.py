@@ -38,10 +38,6 @@ env = environ.FileAwareEnv(
     DEBUG=(bool, False),
     DEBUG_TOOLBAR=(bool, False),
     STATIC_URL=(str, "/"),
-    STATICFILES_STORAGE=(
-        str,
-        "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    ),
     ENABLE_OBSERVABILITY_API=(bool, False),
 )
 path = environ.Path()
@@ -83,6 +79,10 @@ if GLITCHTIP_URL.scheme not in ["http", "https"]:
     raise ImproperlyConfigured("GLITCHTIP_DOMAIN must start with http or https")
 
 
+# Is running unit test
+TESTING = len(sys.argv) > 1 and sys.argv[1] == "test"
+
+GLITCHTIP_ENABLE_NEW_ISSUES = env.bool("GLITCHTIP_ENABLE_NEW_ISSUES", default=TESTING)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 4294967295  # TMP REMOVE THIS
 # Limits size (in bytes) of uncompressed event payloads. Mitigates DOS risk.
 GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE = env.int(
@@ -131,7 +131,7 @@ SENTRY_DSN = env.str("SENTRY_DSN", None)
 # Optionally allow a different DSN for the frontend
 SENTRY_FRONTEND_DSN = env.str("SENTRY_FRONTEND_DSN", SENTRY_DSN)
 # Set traces_sample_rate to 1.0 to capture 100%. Recommended to keep this value low.
-SENTRY_TRACES_SAMPLE_RATE = env.float("SENTRY_TRACES_SAMPLE_RATE", 0.1)
+SENTRY_TRACES_SAMPLE_RATE = env.float("SENTRY_TRACES_SAMPLE_RATE", 0.01)
 
 
 # Ignore whitenoise served static routes
@@ -172,6 +172,8 @@ DEBUG_TOOLBAR_PANELS = [
     "debug_toolbar.panels.headers.HeadersPanel",
     "debug_toolbar.panels.request.RequestPanel",
     "debug_toolbar.panels.sql.SQLPanel",
+    # "debug_toolbar.panels.history.HistoryPanel",
+    # "debug_toolbar.panels.profiling.ProfilingPanel",
 ]
 
 # Application definition
@@ -214,7 +216,6 @@ if DEBUG_TOOLBAR:
 INSTALLED_APPS += [
     "dj_rest_auth",
     "dj_rest_auth.registration",
-    # "apps.issue_events",
     "import_export",
     "storages",
     "glitchtip",
@@ -236,6 +237,12 @@ INSTALLED_APPS += [
     "releases",
     "difs",
 ]
+
+if GLITCHTIP_ENABLE_NEW_ISSUES:
+    INSTALLED_APPS += [
+        "apps.issue_events",
+        "apps.event_ingest",
+    ]
 
 
 IS_CELERY = env.bool("IS_CELERY", False)
@@ -591,7 +598,15 @@ STATICFILES_DIRS = [
     "dist",
 ]
 STATIC_ROOT = path("static/")
-STATICFILES_STORAGE = env("STATICFILES_STORAGE")
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": env.str(
+            "STATICFILES_STORAGE",
+            "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        )
+    }
+}
+
 EMAIL_BACKEND = env.str(
     "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
 )
@@ -734,9 +749,6 @@ def organization_request_callback(request):
 PLAUSIBLE_URL = env.str("PLAUSIBLE_URL", default=None)
 PLAUSIBLE_DOMAIN = env.str("PLAUSIBLE_DOMAIN", default=None)
 
-# Is running unit test
-TESTING = len(sys.argv) > 1 and sys.argv[1] == "test"
-
 # See https://liberapay.com/GlitchTip/donate - suggested self-host donation is $5/month/user.
 # Support plans available. Email info@burkesoftware.com for more info.
 I_PAID_FOR_GLITCHTIP = env.bool("I_PAID_FOR_GLITCHTIP", False)
@@ -779,7 +791,8 @@ elif TESTING:
 CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", False)
 if TESTING:
     CELERY_TASK_ALWAYS_EAGER = True
-    STATICFILES_STORAGE = global_settings.STATICFILES_STORAGE
+    SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+    STORAGES = global_settings.STORAGES
     # https://github.com/evansd/whitenoise/issues/215
     warnings.filterwarnings(
         "ignore", message="No directory at", module="whitenoise.base"

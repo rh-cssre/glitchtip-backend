@@ -10,7 +10,7 @@ class PerfTestCase(TestCase):
         times = 10000
 
         url = "/api/echo/"
-        res = self.client.post(url, data, content_type="application/json")
+        self.client.post(url, data, content_type="application/json")
         print("ninja")
         start = timer()
         for _ in range(times):
@@ -20,7 +20,7 @@ class PerfTestCase(TestCase):
 
         print("view")
         url = "/api/echo_view/"
-        res = self.client.post(url, data, content_type="application/json")
+        self.client.post(url, data, content_type="application/json")
         start = timer()
         for _ in range(times):
             self.client.post(url, data, content_type="application/json")
@@ -29,7 +29,7 @@ class PerfTestCase(TestCase):
 
         print("DRF view")
         url = "/api/echo_class/"
-        res = self.client.post(url, data, content_type="application/json")
+        self.client.post(url, data, content_type="application/json")
         start = timer()
         for _ in range(times):
             self.client.post(url, data, content_type="application/json")

@@ -75,7 +75,7 @@ class OrganizationsAPITestCase(APITestCase):
 
     def test_organizations_create(self):
         data = {"name": "test"}
-        with self.assertNumQueries(7):
+        with self.assertNumQueries(6):
             res = self.client.post(self.url, data)
         self.assertContains(res, data["name"], status_code=201)
         self.assertEqual(
@@ -93,7 +93,7 @@ class OrganizationsAPITestCase(APITestCase):
         self.user.save()
 
         with self.settings(ENABLE_ORGANIZATION_CREATION=False):
-            with self.assertNumQueries(8):
+            with self.assertNumQueries(7):
                 res = self.client.post(self.url, data)
         self.assertEqual(res.status_code, 201)
 

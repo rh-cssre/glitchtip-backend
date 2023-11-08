@@ -1,17 +1,32 @@
 # pylint: disable=attribute-defined-outside-init,invalid-name
+from typing import Optional
+
 from model_bakery import baker
 from rest_framework.test import APITestCase
 
-from glitchtip.test_utils import generators  # pylint: disable=unused-import
-from organizations_ext.models import OrganizationUserRole
+from organizations_ext.models import Organization, OrganizationUserRole
 
 
-class GlitchTipTestCase(APITestCase):
-    def create_user_and_project(self):
-        self.user = baker.make("users.user")
-        self.organization = baker.make(
-            "organizations_ext.Organization", scrub_ip_addresses=False
+class GlitchTipTestCaseMixin:
+    organization: Optional[Organization] = None
+
+    def create_project(self):
+        """Create project, dsn, and organization"""
+        self.project = baker.make(
+            "projects.Project", organization__scrub_ip_addresses=False
         )
+        self.projectkey = self.project.projectkey_set.first()
+        self.organization = self.project.organization
+
+    def create_logged_in_user(self):
+        """
+        Create user and joins them to organization with a team
+        If organization does not exist, create it
+        """
+        if not self.organization:
+            self.create_project()
+        self.user = baker.make("users.user")
+        self.client.force_login(self.user)
         self.org_user = self.organization.add_user(
             self.user, OrganizationUserRole.ADMIN
         )
@@ -19,7 +34,11 @@ class GlitchTipTestCase(APITestCase):
         self.team.members.add(self.org_user)
         self.project = baker.make("projects.Project", organization=self.organization)
         self.project.team_set.add(self.team)
-        self.client.force_login(self.user)
+
+
+class GlitchTipTestCase(GlitchTipTestCaseMixin, APITestCase):
+    def create_user_and_project(self):
+        self.create_logged_in_user()
 
 
 class APIPermissionTestCase(APITestCase):

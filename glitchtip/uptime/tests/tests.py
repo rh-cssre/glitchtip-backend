@@ -316,7 +316,7 @@ class UptimeTestCase(GlitchTipTestCase):
                 timeout=timeout,
             )
         monitors = Monitor.objects.all()
-        result = bucket_monitors(monitors, 1)
+        bucket_monitors(monitors, 1)
 
     @mock.patch("glitchtip.uptime.utils.asyncio.open_connection")
     def test_port_monitor(self, mocked):
