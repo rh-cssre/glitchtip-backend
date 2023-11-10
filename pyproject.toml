@@ -23,7 +23,7 @@ django-filter = "^22.1"
 celery = {version = "~5.3.0", extras = ["redis"]}
 django-csp = "^3.6"
 dj-stripe = "~2.8.0"
-django-anymail = "^8.1"
+django-anymail = "^10.2"
 dj-rest-auth = "~5.0.0"
 user-agents = "^2.1"
 django-ipware = "^5.0.0"
@@ -35,7 +35,6 @@ google-cloud-logging = "^3.0.0"
 django-prometheus = "^2.2.0"
 django-sql-utils = "^0.7.0"
 django-redis = {extras = ["hiredis"], version = "^5.2.0"}
-redis = "~4.6.0"
 
 uwsgi-chunked = "^0.1.8"
 django-import-export = "^3.0.0"
