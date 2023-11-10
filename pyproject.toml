@@ -42,7 +42,7 @@ django-import-export = "^3.0.0"
 psycopg = {extras = ["c"], version = "^3.1.12"}
 uvicorn = "^0.24.0"
 gunicorn = "^21.2.0"
-boto3 = "1.28.82"
+boto3 = "1.28.83"
 django-ninja = "1.0rc0"
 orjson = "^3.9.9"
 celery-batches = "^0.8.1"
