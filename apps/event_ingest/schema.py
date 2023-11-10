@@ -7,7 +7,13 @@ from typing import Annotated, Any, Literal, Optional, Union
 
 from django.utils.timezone import now
 from ninja import Field, Schema
-from pydantic import RootModel, ValidationError, WrapValidator, model_validator
+from pydantic import (
+    AliasChoices,
+    RootModel,
+    ValidationError,
+    WrapValidator,
+    model_validator,
+)
 
 from apps.issue_events.constants import IssueEventType
 
@@ -144,7 +150,9 @@ class BaseEventIngestSchema(Schema):
     platform: Optional[str] = None
     level: Optional[str] = "error"
     logger: Optional[str] = None
-    transaction: Optional[str] = Field(default=None)
+    transaction: Optional[str] = Field(
+        validation_alias=AliasChoices("transaction", "culprit"), default=None
+    )
     server_name: Optional[str] = None
     release: Optional[str] = None
     dist: Optional[str] = None

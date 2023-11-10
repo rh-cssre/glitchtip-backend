@@ -3,7 +3,9 @@ from typing import Optional
 from ninja import Field, ModelSchema
 
 from glitchtip.api.schema import CamelSchema
+from sentry.interfaces.stacktrace import get_context
 
+from .constants import IssueEventType
 from .models import IssueEvent
 
 
@@ -22,11 +24,74 @@ class IssueEventSchema(CamelSchema, ModelSchema):
         validation_alias="data.metadata", default_factory=dict
     )
     tags: list[dict[str, Optional[str]]] = []
+    entries: list = []
 
     class Config:
         model = IssueEvent
         model_fields = ["id", "type", "date_created", "date_received"]
         populate_by_name = True
+
+    @staticmethod
+    def resolve_entries(obj: IssueEvent):
+        entries = []
+        data = obj.data
+        exception = data.get("exception")
+        # Some, but not all, keys are made more JS camel case like
+        if exception and exception.get("values"):
+            # https://gitlab.com/glitchtip/sentry-open-source/sentry/-/blob/master/src/sentry/interfaces/stacktrace.py#L487
+            # if any frame is "in_app" set this to True
+            exception["hasSystemFrames"] = False
+            for value in exception["values"]:
+                if (
+                    value.get("stacktrace", None) is not None
+                    and "frames" in value["stacktrace"]
+                ):
+                    for frame in value["stacktrace"]["frames"]:
+                        if frame.get("in_app") is True:
+                            exception["hasSystemFrames"] = True
+                        if "in_app" in frame:
+                            frame["inApp"] = frame.pop("in_app")
+                        if "abs_path" in frame:
+                            frame["absPath"] = frame.pop("abs_path")
+                        if "colno" in frame:
+                            frame["colNo"] = frame.pop("colno")
+                        if "lineno" in frame:
+                            frame["lineNo"] = frame.pop("lineno")
+                            pre_context = frame.pop("pre_context", None)
+                            post_context = frame.pop("post_context", None)
+                            frame["context"] = get_context(
+                                frame["lineNo"],
+                                frame.get("context_line"),
+                                pre_context,
+                                post_context,
+                            )
+
+            entries.append({"type": "exception", "data": exception})
+
+        # if breadcrumbs := data.get("breadcrumbs"):
+        # breadcrumbs_serializer = BreadcrumbsSerializer(
+        #     data=breadcrumbs.get("values"), many=True
+        # )
+        # if breadcrumbs_serializer.is_valid():
+        #     entries.append(
+        #         {
+        #             "type": "breadcrumbs",
+        #             "data": {"values": breadcrumbs_serializer.validated_data},
+        #         }
+        #     )
+
+        if logentry := data.get("logentry"):
+            entries.append({"type": "message", "data": logentry})
+        elif message := data.get("message"):
+            entries.append({"type": "message", "data": {"formatted": message}})
+
+        if request := data.get("request"):
+            request["inferredContentType"] = request.pop("inferred_content_type", None)
+            entries.append({"type": "request", "data": request})
+
+        if csp := data.get("csp"):
+            entries.append({"type": IssueEventType.CSP.label, "data": csp})
+        return entries
 
 
 class IssueEventDetailSchema(IssueEventSchema):

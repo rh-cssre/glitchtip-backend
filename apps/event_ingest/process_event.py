@@ -61,6 +61,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         event = ingest_event.payload
         title = ""
         culprit = ""
+        metadata: dict[str, Any] = {}
         if event.type == IssueEventType.ERROR:
             sentry_event = ErrorEvent()
             metadata = sentry_event.get_metadata(event.dict())
@@ -81,6 +82,9 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             )
         issue_hash = generate_hash(title, culprit, event.type, event.fingerprint)
         event_data["culprit"] = culprit
+        event_data["metadata"] = metadata
+        if exception := event.exception:
+            event_data["exception"] = exception.dict()
         processing_events.append(
             ProcessingEvent(
                 event=ingest_event,
@@ -128,6 +132,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 processing_event.issue_id = IssueHash.objects.get(
                     project_id=project_id, value=issue_hash
                 ).issue_id
+        processing_event.event_data["title"] = processing_event.title
         issue_events.append(
             IssueEvent(
                 id=processing_event.event.event_id,

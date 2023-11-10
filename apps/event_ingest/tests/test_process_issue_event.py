@@ -133,39 +133,37 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
 
         url = self.get_project_events_detail(event.id.hex)
         res = self.client.get(url)
+        res_data = res.json()
         self.assertEqual(res.status_code, 200)
-        self.assertCompareData(res.json(), sentry_data, ["culprit"])
-        # self.assertCompareData(
-        #     res.json(), sentry_data, ["culprit", "title", "metadata"]
-        # )
-        # res_frames = res.data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"]
-        # frames = sentry_data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"]
+        self.assertCompareData(res_data, sentry_data, ["culprit", "title", "metadata"])
+        res_frames = res_data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"]
+        frames = sentry_data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"]
 
-        # for i in range(6):
-        #     # absPath don't always match - needs fixed
-        #     self.assertCompareData(res_frames[i], frames[i], ["absPath"])
-        # for res_frame, frame in zip(res_frames, frames):
-        #     self.assertCompareData(
-        #         res_frame,
-        #         frame,
-        #         ["lineNo", "function", "filename", "module", "context"],
-        #     )
-        #     if frame.get("vars"):
-        #         self.assertCompareData(
-        #             res_frame["vars"], frame["vars"], ["exc", "request"]
-        #         )
-        #         if frame["vars"].get("get_response"):
-        #             # Memory address is different, truncate it
-        #             self.assertEqual(
-        #                 res_frame["vars"]["get_response"][:-16],
-        #                 frame["vars"]["get_response"][:-16],
-        #             )
+        for i in range(6):
+            # absPath don't always match - needs fixed
+            self.assertCompareData(res_frames[i], frames[i], ["absPath"])
+        for res_frame, frame in zip(res_frames, frames):
+            self.assertCompareData(
+                res_frame,
+                frame,
+                ["lineNo", "function", "filename", "module", "context"],
+            )
+            if frame.get("vars"):
+                self.assertCompareData(
+                    res_frame["vars"], frame["vars"], ["exc", "request"]
+                )
+                if frame["vars"].get("get_response"):
+                    # Memory address is different, truncate it
+                    self.assertEqual(
+                        res_frame["vars"]["get_response"][:-16],
+                        frame["vars"]["get_response"][:-16],
+                    )
 
-        # self.assertCompareData(
-        #     res.data["entries"][0]["data"],
-        #     sentry_data["entries"][0]["data"],
-        #     ["env", "headers", "url", "method", "inferredContentType"],
-        # )
+        self.assertCompareData(
+            res_data["entries"][0]["data"],
+            sentry_data["entries"][0]["data"],
+            ["env", "headers", "url", "method", "inferredContentType"],
+        )
 
         # url = reverse("issue-detail", kwargs={"pk": event.issue.pk})
         # res = self.client.get(url)
