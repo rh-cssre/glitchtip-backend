@@ -567,8 +567,17 @@ USE_I18N = True
 
 USE_TZ = True
 
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": env.str(
+            "STATICFILES_STORAGE",
+            "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        )
+    }
+}
+
 if env("DEFAULT_FILE_STORAGE"):
-    DEFAULT_FILE_STORAGE = env("DEFAULT_FILE_STORAGE")
+    STORAGES["default"] = {"BACKEND": env("DEFAULT_FILE_STORAGE")}
 
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
@@ -588,7 +597,7 @@ if AWS_S3_ENDPOINT_URL:
     MEDIA_URL = env.str(
         "MEDIA_URL", "https://%s/%s/" % (AWS_S3_ENDPOINT_URL, AWS_LOCATION)
     )
-    DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+    STORAGES["default"] = {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage"}
 else:
     MEDIA_URL = "media/"
 MEDIA_ROOT = env.str("MEDIA_ROOT", "")
@@ -598,14 +607,6 @@ STATICFILES_DIRS = [
     "dist",
 ]
 STATIC_ROOT = path("static/")
-STORAGES = {
-    "staticfiles": {
-        "BACKEND": env.str(
-            "STATICFILES_STORAGE",
-            "whitenoise.storage.CompressedManifestStaticFilesStorage",
-        )
-    }
-}
 
 EMAIL_BACKEND = env.str(
     "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"

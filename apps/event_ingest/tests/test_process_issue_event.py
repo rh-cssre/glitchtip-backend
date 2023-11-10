@@ -134,7 +134,10 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
         url = self.get_project_events_detail(event.id.hex)
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
-        # self.assertCompareData(res.json(), sentry_data, ["culprit", "title", "metadata"])
+        self.assertCompareData(res.json(), sentry_data, ["culprit"])
+        # self.assertCompareData(
+        #     res.json(), sentry_data, ["culprit", "title", "metadata"]
+        # )
         # res_frames = res.data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"]
         # frames = sentry_data["entries"][0]["data"]["values"][0]["stacktrace"]["frames"]
 

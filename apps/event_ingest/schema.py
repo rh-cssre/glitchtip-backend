@@ -144,7 +144,7 @@ class BaseEventIngestSchema(Schema):
     platform: Optional[str] = None
     level: Optional[str] = "error"
     logger: Optional[str] = None
-    transaction: Optional[str] = Field(alias="culprit", default=None)
+    transaction: Optional[str] = Field(default=None)
     server_name: Optional[str] = None
     release: Optional[str] = None
     dist: Optional[str] = None

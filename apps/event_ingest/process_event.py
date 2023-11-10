@@ -10,6 +10,7 @@ from alerts.models import Notification
 from apps.issue_events.constants import EventStatus
 from apps.issue_events.models import Issue, IssueEvent, IssueEventType, IssueHash
 from sentry.culprit import generate_culprit
+from sentry.eventtypes.error import ErrorEvent
 
 from .schema import (
     EventMessage,
@@ -61,10 +62,10 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         title = ""
         culprit = ""
         if event.type == IssueEventType.ERROR:
-            # sentry_event = ErrorEvent()
-            # metadata = eventtype.get_metadata(data)
-            title = "fake title"
-            culprit = "fake culprit"
+            sentry_event = ErrorEvent()
+            metadata = sentry_event.get_metadata(event.dict())
+            title = sentry_event.get_title(metadata)
+            culprit = sentry_event.get_location(event.dict())
         elif event.type == IssueEventType.CSP:
             humanized_directive = event.csp.effective_directive.replace("-src", "")
             uri = urlparse(event.csp.blocked_uri).netloc
@@ -79,6 +80,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 else generate_culprit(event.dict())
             )
         issue_hash = generate_hash(title, culprit, event.type, event.fingerprint)
+        event_data["culprit"] = culprit
         processing_events.append(
             ProcessingEvent(
                 event=ingest_event,
