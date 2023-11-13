@@ -16,7 +16,7 @@ class TransactionEventSerializerTestCase(GlitchTipTestCase):
         data = {
             "tags": {"http.status_code": "200"},
             "timestamp": "2020-12-29T17:51:08.468108Z",
-            "start_timestamp": "2020-12-29T17:51:08.458023Z",
+            "start_timestamp": "2020-12-29T17:51:05.458023Z",
             "contexts": {
                 "trace": {
                     "trace_id": "581eb3bc1f4740eea53717cb7f7450f6",
@@ -39,6 +39,7 @@ class TransactionEventSerializerTestCase(GlitchTipTestCase):
         transaction = serializer.save()
         self.assertEqual(len(transaction.group.tags["http.status_code"]), 2)
         self.assertEqual(len(transaction.group.tags["new"]), 1)
+        self.assertEqual(transaction.duration, 3010.085)
 
 
 class SpanSerializerTestCase(GlitchTipTestCase):
