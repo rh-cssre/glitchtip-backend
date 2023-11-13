@@ -1,5 +1,6 @@
 from django.shortcuts import reverse
 from model_bakery import baker
+
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 
 
@@ -30,7 +31,7 @@ class IssuesUserReportTestCase(GlitchTipTestCase):
 
     def test_issues_list_user_report_count(self):
         url = reverse("issue-detail", kwargs={"pk": self.event.issue.pk})
-        with self.assertNumQueries(6):
+        with self.assertNumQueries(4):
             res = self.client.get(url)
         self.assertEqual(res.data["userReportCount"], 1)
 
