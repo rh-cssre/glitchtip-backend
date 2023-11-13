@@ -1,5 +1,6 @@
 import logging
 
+from django.conf import settings
 from rest_framework import serializers
 
 from events.serializers import SentrySDKEventSerializer
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class TransactionGroupSerializer(serializers.ModelSerializer):
-    avgDuration = serializers.DurationField(source="avg_duration", read_only=True)
+    avgDuration = serializers.IntegerField(source="avg_duration", read_only=True)
     transactionCount = serializers.IntegerField(
         source="transaction_count", read_only=True
     )
@@ -35,7 +36,7 @@ class SpanSerializer(serializers.ModelSerializer):
     startTimestamp = serializers.DateTimeField(source="start_timestamp", read_only=True)
     start_timestamp = FlexibleDateTimeField(write_only=True)
     timestamp = FlexibleDateTimeField(write_only=True)
-    description = serializers.CharField()
+    description = serializers.CharField(required=False)
 
     class Meta:
         model = Span
@@ -92,19 +93,23 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
         trace_id = contexts["trace"]["trace_id"]
 
         tags = []
-        if environment := data.get("environment"):
-            environment = self.get_environment(data["environment"], project)
-            tags.append(("environment", environment.name))
-        if release := data.get("release"):
-            release = self.get_release(release, project)
-            tags.append(("release", release.version))
+        release = self.set_release(data.get("release"), project)
+        if project.release_id:
+            tags.append(("release", release))
+        environment = self.set_environment(data.get("environment"), project)
+        if project.environment_id:
+            tags.append(("environment", environment))
+
+        if data.get("tags"):
+            tags += [(k, v) for k, v in data["tags"].items()]
+
         defaults = {}
         defaults["tags"] = {tag[0]: [tag[1]] for tag in tags}
 
         group, group_created = TransactionGroup.objects.get_or_create(
             project=self.context.get("project"),
             transaction=data["transaction"],
-            op=contexts["trace"]["op"],
+            op=contexts["trace"].get("op", ""),
             method=data.get("request", {}).get("method"),
             defaults=defaults,
         )
@@ -114,7 +119,11 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
         if not group_created:
             for tag in tags:
                 if tag[0] not in group.tags:
-                    group.tags[tag[0]] = tag[1]
+                    new_tag_value = tag[1]
+                    # Coerce to List[str]
+                    if isinstance(new_tag_value, str):
+                        new_tag_value = [new_tag_value]
+                    group.tags[tag[0]] = new_tag_value
                     update_group = True
                 elif tag[1] not in group.tags[tag[0]]:
                     group.tags[tag[0]].append(tag[1])
@@ -133,7 +142,7 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
             event_id=data["event_id"],
             timestamp=data["timestamp"],
             start_timestamp=data["start_timestamp"],
-            duration=data["timestamp"] - data["start_timestamp"],
+            duration=(data["timestamp"] - data["start_timestamp"]).microseconds / 1000,
             tags={tag[0]: tag[1] for tag in tags},
         )
 
@@ -144,21 +153,22 @@ class TransactionEventSerializer(SentrySDKEventSerializer):
                 "timestamp": data["timestamp"],
             }
         )
-        is_valid = first_span.is_valid()
-        if is_valid:
-            spans = data.get("spans", []) + [first_span.validated_data]
-        else:
-            spans = data.get("spans")
-        if spans:
-            Span.objects.bulk_create(
-                [
-                    Span(
-                        transaction=transaction,
-                        **span,
-                    )
-                    for span in spans
-                ]
-            )
+        if settings.ENABLE_PERFORMANCE_SPANS:
+            is_valid = first_span.is_valid()
+            if is_valid:
+                spans = data.get("spans", []) + [first_span.validated_data]
+            else:
+                spans = data.get("spans")
+            if spans:
+                Span.objects.bulk_create(
+                    [
+                        Span(
+                            transaction=transaction,
+                            **span,
+                        )
+                        for span in spans
+                    ]
+                )
 
         return transaction
 

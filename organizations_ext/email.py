@@ -1,5 +1,7 @@
 from django.conf import settings
+
 from glitchtip.email import DetailEmail
+
 from .models import Organization, OrganizationUser
 
 
