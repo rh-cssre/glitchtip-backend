@@ -14,6 +14,8 @@ Please open an issue to discuss any larger feature or new Python dependency befo
 
 GlitchTip has an API only Django backend. The frontend is built in Angular and runs as a single page application, fully isolated from our backend. You could build your own frontend if you wanted to. We attempt to be API compatible with Sentry. GlitchTip users can use Sentry client SDK's to send their events to GlitchTip without any modification.
 
+[This diagram](https://docs.google.com/drawings/d/1e2eKmEY21W1KaJsoC797j5ZedpDSsghGuYWV6CEuILY) shows how the backend handles events from ingestion to REST API endpoints.
+
 Backend code has high test coverage and all features and bug fixes require a unit test.
 
 ## Coding style and philosophy
