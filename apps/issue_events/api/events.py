@@ -4,14 +4,12 @@ from typing import Optional
 from django.db.models import OuterRef, Subquery, Window
 from django.db.models.functions import Lag
 from django.http import Http404
-from ninja import Router
 
 from glitchtip.api.authentication import AuthHttpRequest
 
-from .models import IssueEvent
-from .schema import IssueEventDetailSchema, IssueEventSchema
-
-router = Router()
+from ..models import IssueEvent
+from ..schema import IssueEventDetailSchema, IssueEventSchema, IssueEventJsonSchema
+from . import router
 
 
 def get_queryset(
@@ -34,7 +32,7 @@ def get_queryset(
 @router.get(
     "/issues/{int:issue_id}/events/", response=list[IssueEventSchema], by_alias=True
 )
-async def issue_event_list(request: AuthHttpRequest, issue_id: int):
+async def list_issue_event(request: AuthHttpRequest, issue_id: int):
     return [obj async for obj in get_queryset(request, issue_id=issue_id)]
 
 
@@ -43,7 +41,7 @@ async def issue_event_list(request: AuthHttpRequest, issue_id: int):
     response=IssueEventDetailSchema,
     by_alias=True,
 )
-async def issue_event_latest(request: AuthHttpRequest, issue_id: int):
+async def get_latest_issue_event(request: AuthHttpRequest, issue_id: int):
     qs = get_queryset(request, issue_id)
     qs = qs.annotate(
         previous=Window(expression=Lag("id"), order_by="date_received"),
@@ -60,9 +58,7 @@ async def issue_event_latest(request: AuthHttpRequest, issue_id: int):
     response=IssueEventDetailSchema,
     by_alias=True,
 )
-async def issue_event_retrieve(
-    request: AuthHttpRequest, issue_id: int, event_id: uuid.UUID
-):
+async def get_issue_event(request: AuthHttpRequest, issue_id: int, event_id: uuid.UUID):
     qs = get_queryset(request, issue_id)
     qs = qs.annotate(
         previous=Subquery(
@@ -83,7 +79,7 @@ async def issue_event_retrieve(
     response=list[IssueEventSchema],
     by_alias=True,
 )
-async def project_issue_event_list(
+async def list_project_issue_event(
     request: AuthHttpRequest,
     organization_slug: str,
     project_slug: str,
@@ -101,7 +97,7 @@ async def project_issue_event_list(
     response=IssueEventDetailSchema,
     by_alias=True,
 )
-async def project_issue_event_retrieve(
+async def get_project_issue_event(
     request: AuthHttpRequest,
     organization_slug: str,
     project_slug: str,
@@ -118,6 +114,21 @@ async def project_issue_event_retrieve(
             qs.filter(date_received__gt=OuterRef("date_received")).values("id")[:1]
         ),
     )
+    try:
+        return await qs.aget(id=event_id)
+    except IssueEvent.DoesNotExist:
+        raise Http404()
+
+
+@router.get(
+    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/events/{event_id}/json/",
+    response=IssueEventJsonSchema,
+    by_alias=True,
+)
+async def get_event_json(
+    request: AuthHttpRequest, organization_slug: str, issue_id: int, event_id: uuid.UUID
+):
+    qs = get_queryset(request, organization_slug=organization_slug, issue_id=issue_id)
     try:
         return await qs.aget(id=event_id)
     except IssueEvent.DoesNotExist:

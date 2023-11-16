@@ -6,7 +6,11 @@ from apps.issue_events.constants import EventStatus
 from apps.issue_events.models import Issue, IssueEvent, IssueHash
 
 from ..process_event import process_issue_events
-from ..schema import ErrorIssueEventSchema, InterchangeIssueEvent, IssueEventSchema
+from ..schema import (
+    ErrorIssueEventSchema,
+    InterchangeIssueEvent,
+    IssueEventSchema,
+)
 from .utils import EventIngestTestCase
 
 COMPAT_TEST_DATA_DIR = "events/test_data"
@@ -74,6 +78,18 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
         )
         return event, sentry_json, api_sentry_event
 
+    def get_event_json(self, event: IssueEvent):
+        return self.client.get(
+            reverse(
+                "api:get_event_json",
+                kwargs={
+                    "organization_slug": self.organization.slug,
+                    "issue_id": event.issue_id,
+                    "event_id": event.id,
+                },
+            )
+        ).json()
+
     # Upgrade functions handle intentional differences between GlitchTip and Sentry OSS
     def upgrade_title(self, value: str):
         """Sentry OSS uses ... while GlitchTip uses unicode …"""
@@ -90,6 +106,10 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
         for field in fields:
             field_value1 = data1.get(field)
             field_value2 = data2.get(field)
+            if field == "datetime":
+                # Check that it's close enough
+                field_value1 = field_value1[:23]
+                field_value2 = field_value2[:23]
             if field == "title" and isinstance(field_value1, str):
                 field_value1 = self.upgrade_title(field_value1)
                 if field_value2:
@@ -110,7 +130,7 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
 
     def get_project_events_detail(self, event_id: str):
         return reverse(
-            "api:project_issue_event_retrieve",
+            "api:get_project_issue_event",
             kwargs={
                 "organization_slug": self.project.organization.slug,
                 "project_slug": self.project.slug,
@@ -118,18 +138,20 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
             },
         )
 
+    def submit_event(self, event_data: dict) -> IssueEvent:
+        event = InterchangeIssueEvent(
+            event_id=event_data["event_id"],
+            project_id=self.project.id,
+            payload=ErrorIssueEventSchema(**event_data),
+        )
+        process_issue_events([event])
+        return IssueEvent.objects.get(pk=event.event_id)
+
     def test_template_error(self):
         sdk_error, sentry_json, sentry_data = self.get_json_test_data(
             "django_template_error"
         )
-        event = InterchangeIssueEvent(
-            event_id=sdk_error["event_id"],
-            project_id=self.project.id,
-            payload=ErrorIssueEventSchema(**sdk_error),
-        )
-        process_issue_events([event])
-
-        event = IssueEvent.objects.get(pk=event.event_id)
+        event = self.submit_event(sdk_error)
 
         url = self.get_project_events_detail(event.id.hex)
         res = self.client.get(url)
@@ -165,9 +187,32 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
             ["env", "headers", "url", "method", "inferredContentType"],
         )
 
-        # url = reverse("issue-detail", kwargs={"pk": event.issue.pk})
-        # res = self.client.get(url)
-        # self.assertEqual(res.status_code, 200)
+        url = reverse("api:get_issue", kwargs={"issue_id": event.issue.pk})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        res_data = res.json()
 
-        # data = self.get_json_data("events/test_data/django_template_error_issue.json")
-        # self.assertCompareData(res.data, data, ["title", "metadata"])
+        data = self.get_json_data("events/test_data/django_template_error_issue.json")
+        self.assertCompareData(res_data, data, ["title", "metadata"])
+
+    def test_js_sdk_with_unix_timestamp(self):
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+            "js_event_with_unix_timestamp"
+        )
+        event = self.submit_event(sdk_error)
+        self.assertNotEqual(event.date_created, sdk_error["timestamp"])
+        self.assertEqual(event.date_created.year, 2020)
+
+        event_json = self.get_event_json(event)
+        self.assertCompareData(event_json, sentry_json, ["datetime"])
+        # self.assertCompareData(event_json, sentry_json, ["datetime", "breadcrumbs"])
+
+        # url = self.get_project_events_detail(event.pk)
+        # res = self.client.get(url)
+        # res_data = res.json()
+        # self.assertCompareData(res_data, sentry_data, ["datetime"])
+        # self.assertEqual(res_data["entries"][1].get("type"), "breadcrumbs")
+        # self.assertEqual(
+        #     res_data["entries"][1],
+        #     self.upgrade_data(sentry_data["entries"][1]),
+        # )

@@ -137,7 +137,7 @@ class EventBreadcrumb(Schema):
     category: Optional[str] = None
     message: Optional[str] = None
     data: Optional[dict[str, Any]] = None
-    level: Optional[Level] = None
+    level: Annotated[Optional[Level], WrapValidator(invalid_to_none)] = None
     timestamp: Optional[datetime] = None
 
 

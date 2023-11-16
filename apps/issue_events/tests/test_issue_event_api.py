@@ -13,7 +13,7 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         event = baker.make("issue_events.IssueEvent", issue__project=self.project)
         baker.make("issue_events.IssueEvent", issue__project=self.project, _quantity=3)
         not_my_event = baker.make("issue_events.IssueEvent")
-        url = reverse("api:issue_event_list", args=[event.issue_id])
+        url = reverse("api:list_issue_event", args=[event.issue_id])
 
         with self.assertNumQueries(1):
             res = self.client.get(url)
@@ -23,25 +23,25 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
     def test_retrieve(self):
         event = baker.make("issue_events.IssueEvent", issue__project=self.project)
         url = reverse(
-            "api:issue_event_retrieve",
+            "api:get_issue_event",
             kwargs={"issue_id": event.issue_id, "event_id": "a" * 32},
         )
         res = self.client.get(url)
         self.assertEqual(res.status_code, 404)
 
         url = reverse(
-            "api:issue_event_retrieve",
+            "api:get_issue_event",
             kwargs={"issue_id": event.issue_id, "event_id": event.id},
         )
         res = self.client.get(url)
         self.assertContains(res, event.pk.hex)
 
-        url = reverse("api:issue_event_latest", kwargs={"issue_id": event.issue_id})
+        url = reverse("api:get_latest_issue_event", kwargs={"issue_id": event.issue_id})
         res = self.client.get(url)
         self.assertContains(res, event.pk.hex)
 
     def test_authentication(self):
-        url = reverse("api:issue_event_list", args=[1])
+        url = reverse("api:list_issue_event", args=[1])
         self.client.logout()
         res = self.client.get(url)
         self.assertEqual(res.status_code, 401)

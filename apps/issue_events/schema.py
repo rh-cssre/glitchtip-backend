@@ -1,12 +1,20 @@
-from typing import Optional
+from datetime import datetime
+from typing import Any, Optional
 
-from ninja import Field, ModelSchema
+from ninja import Field, ModelSchema, Schema
 
 from glitchtip.api.schema import CamelSchema
 from sentry.interfaces.stacktrace import get_context
 
 from .constants import IssueEventType
-from .models import IssueEvent
+from .models import Issue, IssueEvent
+
+
+class IssueSchema(CamelSchema, ModelSchema):
+    class Config:
+        model = Issue
+        model_fields = ["id", "title", "metadata"]
+        populate_by_name = True
 
 
 class IssueEventSchema(CamelSchema, ModelSchema):
@@ -108,3 +116,20 @@ class IssueEventDetailSchema(IssueEventSchema):
     def resolve_next_event_id(obj):
         if event_id := obj.next:
             return event_id.hex
+
+
+class IssueEventJsonSchema(Schema):
+    """
+    Represents a more raw view of the event, built with open source (legacy) Sentry compatibility
+    """
+
+    event_id: str = Field(validation_alias="id.hex")
+    timestamp: float = Field()
+    date_created: datetime = Field(serialization_alias="datetime")
+    breadcrumbs: Optional[Any] = Field(
+        validation_alias="data.breadcrumbs", default=None
+    )
+
+    @staticmethod
+    def resolve_timestamp(obj):
+        return obj.date_received.timestamp()

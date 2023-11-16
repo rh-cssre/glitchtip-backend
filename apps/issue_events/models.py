@@ -16,6 +16,7 @@ class Issue(models.Model):
     level = models.PositiveSmallIntegerField(
         choices=LogLevel.choices, default=LogLevel.ERROR
     )
+    metadata = models.JSONField()
     project = models.ForeignKey(
         "projects.Project", on_delete=models.CASCADE, related_name="issues"
     )
@@ -75,11 +76,9 @@ class IssueEvent(PostgresPartitionedModel, models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     issue = models.ForeignKey(Issue, on_delete=models.CASCADE)
     type = models.PositiveSmallIntegerField(default=0, choices=IssueEventType.choices)
-    date_created = models.DateTimeField(
-        auto_now_add=True, help_text="Time at which event happened"
-    )
+    date_created = models.DateTimeField(help_text="Time at which event happened")
     date_received = models.DateTimeField(
-        auto_now_add=True, help_text="Time at which GlitchTip accepted event"
+        help_text="Time at which GlitchTip accepted event"
     )
     data = models.JSONField()
 

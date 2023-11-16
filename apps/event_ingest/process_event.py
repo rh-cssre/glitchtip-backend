@@ -24,6 +24,7 @@ class ProcessingEvent:
     event: InterchangeIssueEvent
     issue_hash: str
     title: str
+    metadata: dict[str, Any]
     event_data: dict[str, Any]
     issue_id: Optional[int] = None
     issue_created = False
@@ -83,6 +84,10 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         issue_hash = generate_hash(title, culprit, event.type, event.fingerprint)
         event_data["culprit"] = culprit
         event_data["metadata"] = metadata
+        # if breadcrumbs := event.breadcrumbs:
+        #     event_data["breadcrumbs"] = [
+        #         breadcrumb.dict() for breadcrumb in breadcrumbs
+        #     ]
         if exception := event.exception:
             event_data["exception"] = exception.dict()
         processing_events.append(
@@ -90,6 +95,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 event=ingest_event,
                 issue_hash=issue_hash,
                 title=title,
+                metadata=metadata,
                 event_data=event_data,
             )
         )
@@ -106,6 +112,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         issue_defaults = {
             "type": event_type,
             "title": processing_event.title,
+            "metadata": processing_event.metadata,
         }
         for hash_obj in hash_queryset:
             if (
@@ -136,6 +143,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         issue_events.append(
             IssueEvent(
                 id=processing_event.event.event_id,
+                date_created=processing_event.event.payload.timestamp,
                 date_received=processing_event.event.received_at,
                 issue_id=processing_event.issue_id,
                 type=event_type,
