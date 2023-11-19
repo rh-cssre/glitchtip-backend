@@ -268,7 +268,7 @@ class InterchangeIssueEvent(Schema):
 
     event_id: uuid.UUID = Field(default_factory=uuid.uuid4)
     project_id: int
-    received_at: datetime = Field(default_factory=now)
+    received: datetime = Field(default_factory=now)
     payload: Union[
         IssueEventSchema, ErrorIssueEventSchema, CSPIssueEventSchema
     ] = Field(discriminator="type")

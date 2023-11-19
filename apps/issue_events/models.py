@@ -6,6 +6,8 @@ from django.db import models
 from psqlextra.models import PostgresPartitionedModel
 from psqlextra.types import PostgresPartitioningMethod
 
+from sentry.constants import MAX_CULPRIT_LENGTH
+
 from .constants import EventStatus, IssueEventType, LogLevel
 
 
@@ -76,15 +78,19 @@ class IssueEvent(PostgresPartitionedModel, models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     issue = models.ForeignKey(Issue, on_delete=models.CASCADE)
     type = models.PositiveSmallIntegerField(default=0, choices=IssueEventType.choices)
-    date_created = models.DateTimeField(help_text="Time at which event happened")
-    date_received = models.DateTimeField(
-        help_text="Time at which GlitchTip accepted event"
+    timestamp = models.DateTimeField(help_text="Time at which event happened")
+    received = models.DateTimeField(help_text="Time at which GlitchTip accepted event")
+    title = models.CharField(max_length=255)
+    transaction = models.CharField(max_length=MAX_CULPRIT_LENGTH)
+    level = models.PositiveSmallIntegerField(
+        choices=LogLevel.choices, default=LogLevel.ERROR
     )
+    message = models.CharField(max_length=1000)
     data = models.JSONField()
 
     class PartitioningMeta:
         method = PostgresPartitioningMethod.RANGE
-        key = ["date_received"]
+        key = ["received"]
 
     def __str__(self):
         return self.eventID

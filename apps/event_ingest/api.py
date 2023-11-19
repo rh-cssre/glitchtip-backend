@@ -1,8 +1,6 @@
-
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse
-from django.utils.timezone import now
 from ninja import Router, Schema
 
 from .authentication import event_auth
@@ -54,12 +52,10 @@ async def event_store(
     Event store is the original event ingest API from OSS Sentry but is used less often
     Unlike Envelope, it accepts only one Issue event.
     """
-    received_at = now()
     issue_event_class = get_issue_event_class(payload)
     issue_event = InterchangeIssueEvent(
         event_id=payload.event_id,
         project_id=project_id,
-        received_at=received_at,
         payload=issue_event_class(**payload.dict()),
     )
     await async_call_celery_task(ingest_event, issue_event.dict())
@@ -80,7 +76,6 @@ async def event_envelope(
     Make as few io calls as possible. Some language SDKs (PHP) cannot run async code
     and will block while waiting for GlitchTip to respond.
     """
-    received_at = now()
     header = payload._header
     for item_header, item in payload._items:
         if item_header.type == "event":
@@ -88,7 +83,6 @@ async def event_envelope(
             issue_event = InterchangeIssueEvent(
                 event_id=header.event_id,
                 project_id=project_id,
-                received_at=received_at,
                 payload=issue_event_class(**item.dict()),
             )
             await async_call_celery_task(ingest_event, issue_event.dict())
@@ -110,11 +104,9 @@ async def event_security(
     Reformats event to make CSP browser format match more standard
     event format.
     """
-    received_at = now()
     event = CSPIssueEventSchema(csp=payload.csp_report.dict(by_alias=True))
     issue_event = InterchangeIssueEvent(
         project_id=project_id,
-        received_at=received_at,
         payload=event.dict(by_alias=True),
     )
     await async_call_celery_task(ingest_event, issue_event.dict(by_alias=True))

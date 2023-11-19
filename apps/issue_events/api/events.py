@@ -8,7 +8,7 @@ from django.http import Http404
 from glitchtip.api.authentication import AuthHttpRequest
 
 from ..models import IssueEvent
-from ..schema import IssueEventDetailSchema, IssueEventSchema, IssueEventJsonSchema
+from ..schema import IssueEventDetailSchema, IssueEventJsonSchema, IssueEventSchema
 from . import router
 
 
@@ -26,7 +26,7 @@ def get_queryset(
         qs = qs.filter(issue__project__organization__slug=organization_slug)
     if project_slug:
         qs = qs.filter(issue__project__slug=project_slug)
-    return qs.select_related("issue").order_by("-date_received")
+    return qs.select_related("issue").order_by("-received")
 
 
 @router.get(
@@ -44,7 +44,7 @@ async def list_issue_event(request: AuthHttpRequest, issue_id: int):
 async def get_latest_issue_event(request: AuthHttpRequest, issue_id: int):
     qs = get_queryset(request, issue_id)
     qs = qs.annotate(
-        previous=Window(expression=Lag("id"), order_by="date_received"),
+        previous=Window(expression=Lag("id"), order_by="received"),
     )
     obj = await qs.afirst()
     if not obj:
@@ -62,11 +62,9 @@ async def get_issue_event(request: AuthHttpRequest, issue_id: int, event_id: uui
     qs = get_queryset(request, issue_id)
     qs = qs.annotate(
         previous=Subquery(
-            qs.filter(date_received__lt=OuterRef("date_received")).values("id")[:1]
+            qs.filter(received__lt=OuterRef("received")).values("id")[:1]
         ),
-        next=Subquery(
-            qs.filter(date_received__gt=OuterRef("date_received")).values("id")[:1]
-        ),
+        next=Subquery(qs.filter(received__gt=OuterRef("received")).values("id")[:1]),
     )
     try:
         return await qs.filter(id=event_id).aget()
@@ -108,11 +106,9 @@ async def get_project_issue_event(
     )
     qs = qs.annotate(
         previous=Subquery(
-            qs.filter(date_received__lt=OuterRef("date_received")).values("id")[:1]
+            qs.filter(received__lt=OuterRef("received")).values("id")[:1]
         ),
-        next=Subquery(
-            qs.filter(date_received__gt=OuterRef("date_received")).values("id")[:1]
-        ),
+        next=Subquery(qs.filter(received__gt=OuterRef("received")).values("id")[:1]),
     )
     try:
         return await qs.aget(id=event_id)

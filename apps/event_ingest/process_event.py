@@ -9,12 +9,15 @@ from django.db.utils import IntegrityError
 from alerts.models import Notification
 from apps.issue_events.constants import EventStatus
 from apps.issue_events.models import Issue, IssueEvent, IssueEventType, IssueHash
+
+# from apps.issue_events.schema import CSPIssueEventDataSchema, IssueEventDataSchema
 from sentry.culprit import generate_culprit
 from sentry.eventtypes.error import ErrorEvent
 
 from .schema import (
     EventMessage,
     InterchangeIssueEvent,
+    ValueEventException,
 )
 from .utils import generate_hash
 
@@ -24,6 +27,7 @@ class ProcessingEvent:
     event: InterchangeIssueEvent
     issue_hash: str
     title: str
+    transaction: str
     metadata: dict[str, Any]
     event_data: dict[str, Any]
     issue_id: Optional[int] = None
@@ -63,10 +67,20 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         title = ""
         culprit = ""
         metadata: dict[str, Any] = {}
-        if event.type == IssueEventType.ERROR:
+        if event.type in [IssueEventType.ERROR, IssueEventType.DEFAULT]:
             sentry_event = ErrorEvent()
             metadata = sentry_event.get_metadata(event.dict())
-            title = sentry_event.get_title(metadata)
+            if event.type == IssueEventType.ERROR:
+                title = sentry_event.get_title(metadata)
+            else:
+                title = (
+                    transform_message(event.message) if event.message else "<untitled>"
+                )
+                culprit = (
+                    event.transaction
+                    if event.transaction
+                    else generate_culprit(event.dict())
+                )
             culprit = sentry_event.get_location(event.dict())
         elif event.type == IssueEventType.CSP:
             humanized_directive = event.csp.effective_directive.replace("-src", "")
@@ -74,27 +88,24 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             title = f"Blocked '{humanized_directive}' from '{uri}'"
             culprit = "fake culprit"
             event_data["csp"] = event.csp.dict()
-        else:  # Default Event Type
-            title = transform_message(event.message) if event.message else "<untitled>"
-            culprit = (
-                event.transaction
-                if event.transaction
-                else generate_culprit(event.dict())
-            )
+
         issue_hash = generate_hash(title, culprit, event.type, event.fingerprint)
-        event_data["culprit"] = culprit
         event_data["metadata"] = metadata
         # if breadcrumbs := event.breadcrumbs:
         #     event_data["breadcrumbs"] = [
         #         breadcrumb.dict() for breadcrumb in breadcrumbs
         #     ]
         if exception := event.exception:
-            event_data["exception"] = exception.dict()
+            if isinstance(exception, ValueEventException):
+                event_data["exception"] = exception.dict()["values"]
+            else:
+                event_data["exception"] = exception
         processing_events.append(
             ProcessingEvent(
                 event=ingest_event,
                 issue_hash=issue_hash,
                 title=title,
+                transaction=culprit,
                 metadata=metadata,
                 event_data=event_data,
             )
@@ -139,14 +150,16 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 processing_event.issue_id = IssueHash.objects.get(
                     project_id=project_id, value=issue_hash
                 ).issue_id
-        processing_event.event_data["title"] = processing_event.title
         issue_events.append(
             IssueEvent(
                 id=processing_event.event.event_id,
-                date_created=processing_event.event.payload.timestamp,
-                date_received=processing_event.event.received_at,
                 issue_id=processing_event.issue_id,
                 type=event_type,
+                timestamp=processing_event.event.payload.timestamp,
+                received=processing_event.event.received,
+                title=processing_event.title,
+                transaction=processing_event.transaction,
+                message="",
                 data=processing_event.event_data,
             )
         )

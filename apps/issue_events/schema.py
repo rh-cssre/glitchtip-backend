@@ -3,6 +3,7 @@ from typing import Any, Optional
 
 from ninja import Field, ModelSchema, Schema
 
+from apps.event_ingest.schema import CSPReportSchema, EventBreadcrumb, EventException
 from glitchtip.api.schema import CamelSchema
 from sentry.interfaces.stacktrace import get_context
 
@@ -22,10 +23,10 @@ class IssueEventSchema(CamelSchema, ModelSchema):
     event_id: str
     project_id: int = Field(validation_alias="issue.project_id")
     group_id: int = Field(validation_alias="issue_id")
+    date_created: datetime = Field(validation_alias="timestamp")
+    date_received: datetime = Field(validation_alias="received")
     dist: Optional[str] = None
-    message: Optional[str] = Field(validation_alias="data.message", default=None)
-    culprit: Optional[str] = Field(validation_alias="data.culprit", default=None)
-    title: Optional[str] = Field(validation_alias="data.title", default=None)
+    culprit: Optional[str] = Field(validation_alias="transaction", default=None)
     platform: Optional[str] = Field(validation_alias="data.platform", default=None)
     type: str = Field(validation_alias="get_type_display")
     metadata: dict[str, str] = Field(
@@ -36,19 +37,17 @@ class IssueEventSchema(CamelSchema, ModelSchema):
 
     class Config:
         model = IssueEvent
-        model_fields = ["id", "type", "date_created", "date_received"]
+        model_fields = ["id", "type", "title", "message"]
         populate_by_name = True
 
     @staticmethod
     def resolve_entries(obj: IssueEvent):
         entries = []
         data = obj.data
-        exception = data.get("exception")
-        # Some, but not all, keys are made more JS camel case like
-        if exception and exception.get("values"):
+        if exception := data.get("exception"):
+            exception = {"values": exception, "hasSystemFrames": False}
             # https://gitlab.com/glitchtip/sentry-open-source/sentry/-/blob/master/src/sentry/interfaces/stacktrace.py#L487
             # if any frame is "in_app" set this to True
-            exception["hasSystemFrames"] = False
             for value in exception["values"]:
                 if (
                     value.get("stacktrace", None) is not None
@@ -125,11 +124,23 @@ class IssueEventJsonSchema(Schema):
 
     event_id: str = Field(validation_alias="id.hex")
     timestamp: float = Field()
-    date_created: datetime = Field(serialization_alias="datetime")
+    date_created: datetime = Field(validation_alias="timestamp")
     breadcrumbs: Optional[Any] = Field(
         validation_alias="data.breadcrumbs", default=None
     )
 
     @staticmethod
     def resolve_timestamp(obj):
-        return obj.date_received.timestamp()
+        return obj.timestamp.timestamp()
+
+
+class IssueEventDataSchema(Schema):
+    """IssueEvent model data json schema"""
+
+    metadata: Optional[dict[str, Any]] = None
+    breadcrumbs: Optional[list[EventBreadcrumb]] = None
+    exception: Optional[list[EventException]] = None
+
+
+class CSPIssueEventDataSchema(IssueEventDataSchema):
+    csp: CSPReportSchema
