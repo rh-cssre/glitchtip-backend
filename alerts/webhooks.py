@@ -224,6 +224,38 @@ class GoogleChatCard:
         ]
         return self
 
+    def construct_issue_card(self, title: str, issue: "Issue"):
+        self.header = dict(title=title, subtitle=issue.project.name)
+        section_header = "<font color='{}'>{}</font>".format(
+            issue.get_hex_color(), str(issue)
+        )
+        widgets = []
+        widgets.append(dict(decoratedText=dict(topLabel="Culprit", text=issue.culprit)))
+        environment = issue.tags.get("environment")
+        if environment:
+            widgets.append(
+                dict(decoratedText=dict(topLabel="Environment", text=environment[0]))
+            )
+        release = issue.tags.get("release")
+        if release:
+            widgets.append(
+                dict(decoratedText=dict(topLabel="Release", text=release[0]))
+            )
+        widgets.append(
+            dict(
+                buttonList=dict(
+                    buttons=[
+                        dict(
+                            text="View Issue {}".format(issue.short_id_display),
+                            onClick=dict(openLink=dict(url=issue.get_detail_url())),
+                        )
+                    ]
+                )
+            )
+        )
+        self.sections = [dict(header=section_header, widgets=widgets)]
+        return self
+
 
 @dataclass
 class GoogleChatWebhookPayload:
@@ -243,6 +275,16 @@ def send_googlechat_webhook(url: str, cards: List[GoogleChatCard]):
     return requests.post(url, json=asdict(payload), timeout=10)
 
 
+def send_issue_as_googlechat_webhook(url, issues: List["Issue"]):
+    cards = []
+    for issue in issues:
+        card = GoogleChatCard().construct_issue_card(
+            title="GlitchTip Alert", issue=issue
+        )
+        cards.append(card)
+    return send_googlechat_webhook(url, cards)
+
+
 def send_webhook_notification(
     notification: "Notification", url: str, recipient_type: str
 ):
@@ -251,5 +293,7 @@ def send_webhook_notification(
 
     if recipient_type == RecipientType.DISCORD:
         send_issue_as_discord_webhook(url, issues, issue_count)
+    elif recipient_type == RecipientType.GOOGLE_CHAT:
+        send_issue_as_googlechat_webhook(url, issues)
     else:
         send_issue_as_webhook(url, issues, issue_count)
