@@ -36,6 +36,7 @@ class AlertRecipient(models.Model):
         return self.recipient_type in (
             RecipientType.DISCORD,
             RecipientType.GENERAL_WEBHOOK,
+            RecipientType.GOOGLE_CHAT,
         )
 
     def send(self, notification):

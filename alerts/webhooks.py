@@ -1,5 +1,5 @@
-from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING, List, Optional
+from dataclasses import asdict, dataclass, field
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 import requests
 from django.conf import settings
@@ -195,6 +195,51 @@ def send_issue_as_discord_webhook(url, issues: List["Issue"], issue_count: int =
 
 def send_discord_webhook(url: str, message: str, embeds: List[DiscordEmbed]):
     payload = DiscordWebhookPayload(content=message, embeds=embeds)
+    return requests.post(url, json=asdict(payload), timeout=10)
+
+
+@dataclass
+class GoogleChatCard:
+    header: Dict = None
+    sections: List[Dict] = None
+
+    def construct_uptime_card(self, title: str, subtitle: str, text: str, url: str):
+        self.header = dict(
+            title=title,
+            subtitle=subtitle,
+        )
+        self.sections = [
+            dict(
+                widgets=[
+                    dict(
+                        decoratedText=dict(
+                            text=text,
+                            button=dict(
+                                text="View", onClick=dict(openLink=dict(url=url))
+                            ),
+                        )
+                    )
+                ]
+            )
+        ]
+        return self
+
+
+@dataclass
+class GoogleChatWebhookPayload:
+    cardsV2: List[Dict[str, GoogleChatCard]] = field(default_factory=list)
+
+    def add_card(self, card):
+        return self.cardsV2.append(dict(cardId="createCardMessage", card=card))
+
+
+def send_googlechat_webhook(url: str, cards: List[GoogleChatCard]):
+    """
+    Send Google Chat compatible message as documented in
+    https://developers.google.com/chat/messages-overview
+    """
+    payload = GoogleChatWebhookPayload()
+    [payload.add_card(card) for card in cards]
     return requests.post(url, json=asdict(payload), timeout=10)
 
 
