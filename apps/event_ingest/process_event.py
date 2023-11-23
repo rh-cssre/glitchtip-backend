@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 from django.db import transaction
 from django.db.models import Q
 from django.db.utils import IntegrityError
+from ninja import Schema
 
 from alerts.models import Notification
 from apps.issue_events.constants import EventStatus
@@ -17,7 +18,6 @@ from sentry.eventtypes.error import ErrorEvent
 from .schema import (
     EventMessage,
     InterchangeIssueEvent,
-    ValueEventException,
 )
 from .utils import generate_hash
 
@@ -44,6 +44,19 @@ def transform_message(message: Union[str, EventMessage]) -> str:
         elif isinstance(params, dict):
             return message.message.format(**params)
     return message.formatted
+
+
+def devalue(obj: Union[Schema, list]) -> Optional[Union[dict, list]]:
+    """
+    Convert Schema like {"values": []} into list or dict without unnecessary 'values'
+    """
+    if isinstance(obj, Schema) and hasattr(obj, "values"):
+        return obj.dict(mode="json", exclude_none=True, exclude_defaults=True)["values"]
+    elif isinstance(obj, list):
+        return [
+            x.dict(mode="json", exclude_none=True, exclude_defaults=True) for x in obj
+        ]
+    return None
 
 
 def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
@@ -91,15 +104,12 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
 
         issue_hash = generate_hash(title, culprit, event.type, event.fingerprint)
         event_data["metadata"] = metadata
-        # if breadcrumbs := event.breadcrumbs:
-        #     event_data["breadcrumbs"] = [
-        #         breadcrumb.dict() for breadcrumb in breadcrumbs
-        #     ]
+        if platform := event.platform:
+            event_data["platform"] = platform
+        if breadcrumbs := event.breadcrumbs:
+            event_data["breadcrumbs"] = devalue(breadcrumbs)
         if exception := event.exception:
-            if isinstance(exception, ValueEventException):
-                event_data["exception"] = exception.dict()["values"]
-            else:
-                event_data["exception"] = exception
+            event_data["exception"] = devalue(exception)
         processing_events.append(
             ProcessingEvent(
                 event=ingest_event,

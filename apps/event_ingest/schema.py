@@ -1,12 +1,12 @@
 import logging
 import typing
 import uuid
-from collections.abc import Callable
 from datetime import datetime
 from typing import Annotated, Any, Literal, Optional, Union
 
 from django.utils.timezone import now
-from ninja import Field, Schema
+from ninja import Field
+from ninja import Schema as BaseSchema
 from pydantic import (
     AliasChoices,
     RootModel,
@@ -17,14 +17,17 @@ from pydantic import (
 
 from apps.issue_events.constants import IssueEventType
 
+from ..common_event_schema import EventBreadcrumb
+from ..common_event_utils import invalid_to_none
+
 logger = logging.getLogger(__name__)
 
 
-def invalid_to_none(v: Any, handler: Callable[[Any], Any]) -> Any:
-    try:
-        return handler(v)
-    except ValidationError:
-        return None
+class Schema(BaseSchema):
+    """Schema configuration for all event ingest schemas"""
+
+    class Config(BaseSchema.Config):
+        coerce_numbers_to_str = True  # Lax is best for ingest
 
 
 class TagKeyValue(Schema):
@@ -127,18 +130,6 @@ class EventTemplate(Schema):
     context_line: str
     pre_context: Optional[list[str]] = None
     post_context: Optional[list[str]] = None
-
-
-Level = Literal["fatal", "error", "warning", "info", "debug"]
-
-
-class EventBreadcrumb(Schema):
-    type: Optional[str] = None
-    category: Optional[str] = None
-    message: Optional[str] = None
-    data: Optional[dict[str, Any]] = None
-    level: Annotated[Optional[Level], WrapValidator(invalid_to_none)] = None
-    timestamp: Optional[datetime] = None
 
 
 class ValueEventBreadcrumb(Schema):

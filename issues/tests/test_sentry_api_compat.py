@@ -179,7 +179,6 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         url = self.get_project_events_detail(event.pk)
         res = self.client.get(url)
         res_data = res.json()
-        self.assertCompareData(res_data, sentry_data, ["datetime"])
         self.assertEqual(res_data["entries"][1].get("type"), "breadcrumbs")
         self.assertEqual(
             res_data["entries"][1],
@@ -187,7 +186,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         )
 
     def test_dotnet_error(self):
-        # Don't mimic this test, use self.get_jest_test_data instead
+        # Don't mimic this test, use self.get_json_test_data instead
         sdk_error = self.get_json_data(
             "events/test_data/incoming_events/dotnet_error.json"
         )

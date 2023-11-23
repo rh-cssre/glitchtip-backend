@@ -1,12 +1,13 @@
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional, Union
 
 from ninja import Field, ModelSchema, Schema
 
-from apps.event_ingest.schema import CSPReportSchema, EventBreadcrumb, EventException
+from apps.event_ingest.schema import CSPReportSchema, EventException
 from glitchtip.api.schema import CamelSchema
 from sentry.interfaces.stacktrace import get_context
 
+from ..common_event_schema import EventBreadcrumb
 from .constants import IssueEventType
 from .models import Issue, IssueEvent
 
@@ -16,6 +17,28 @@ class IssueSchema(CamelSchema, ModelSchema):
         model = Issue
         model_fields = ["id", "title", "metadata"]
         populate_by_name = True
+
+
+class ExceptionEntryData(Schema):
+    values: dict
+    exc_omitted: None = None
+    has_system_frames: bool
+
+
+class ExceptionEntry(Schema):
+    type: Literal["exception"]
+    data: dict
+
+
+class APIEventBreadcrumb(EventBreadcrumb):
+    """Slightly modified Breadcrumb for sentry api compatibility"""
+
+    event_id: None = None
+
+
+class BreadcrumbsEntry(Schema):
+    type: Literal["breadcrumbs"]
+    data: dict[Literal["values"], list[APIEventBreadcrumb]]
 
 
 class IssueEventSchema(CamelSchema, ModelSchema):
@@ -33,7 +56,9 @@ class IssueEventSchema(CamelSchema, ModelSchema):
         validation_alias="data.metadata", default_factory=dict
     )
     tags: list[dict[str, Optional[str]]] = []
-    entries: list = []
+    entries: list[Union[BreadcrumbsEntry, ExceptionEntry]] = Field(
+        discriminator="type", default_factory=list
+    )
 
     class Config:
         model = IssueEvent
@@ -75,17 +100,8 @@ class IssueEventSchema(CamelSchema, ModelSchema):
 
             entries.append({"type": "exception", "data": exception})
 
-        # if breadcrumbs := data.get("breadcrumbs"):
-        # breadcrumbs_serializer = BreadcrumbsSerializer(
-        #     data=breadcrumbs.get("values"), many=True
-        # )
-        # if breadcrumbs_serializer.is_valid():
-        #     entries.append(
-        #         {
-        #             "type": "breadcrumbs",
-        #             "data": {"values": breadcrumbs_serializer.validated_data},
-        #         }
-        #     )
+        if breadcrumbs := data.get("breadcrumbs"):
+            entries.append({"type": "breadcrumbs", "data": {"values": breadcrumbs}})
 
         if logentry := data.get("logentry"):
             entries.append({"type": "message", "data": logentry})
@@ -124,7 +140,9 @@ class IssueEventJsonSchema(Schema):
 
     event_id: str = Field(validation_alias="id.hex")
     timestamp: float = Field()
-    date_created: datetime = Field(validation_alias="timestamp")
+    x_datetime: datetime = Field(
+        validation_alias="timestamp", serialization_alias="datetime"
+    )
     breadcrumbs: Optional[Any] = Field(
         validation_alias="data.breadcrumbs", default=None
     )

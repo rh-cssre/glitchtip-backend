@@ -16,6 +16,10 @@ from .utils import EventIngestTestCase
 COMPAT_TEST_DATA_DIR = "events/test_data"
 
 
+def is_exception(v):
+    return v.get("type") == "exception"
+
+
 class IssueEventIngestTestCase(EventIngestTestCase):
     """
     These tests bypass the API and celery. They test the event ingest logic itself.
@@ -147,6 +151,14 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
         process_issue_events([event])
         return IssueEvent.objects.get(pk=event.event_id)
 
+    def upgrade_data(self, data):
+        """A recursive replace function"""
+        if isinstance(data, dict):
+            return {k: self.upgrade_data(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self.upgrade_data(i) for i in data]
+        return data
+
     def test_template_error(self):
         sdk_error, sentry_json, sentry_data = self.get_json_test_data(
             "django_template_error"
@@ -203,15 +215,41 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
         self.assertNotEqual(event.timestamp, sdk_error["timestamp"])
         self.assertEqual(event.timestamp.year, 2020)
 
-        # event_json = self.get_event_json(event)
-        # self.assertCompareData(event_json, sentry_json, ["datetime", "breadcrumbs"])
+        event_json = self.get_event_json(event)
+        self.assertCompareData(event_json, sentry_json, ["datetime"])
 
-        # url = self.get_project_events_detail(event.pk)
-        # res = self.client.get(url)
-        # res_data = res.json()
-        # self.assertCompareData(res_data, sentry_data, ["datetime"])
-        # self.assertEqual(res_data["entries"][1].get("type"), "breadcrumbs")
-        # self.assertEqual(
-        #     res_data["entries"][1],
-        #     self.upgrade_data(sentry_data["entries"][1]),
-        # )
+        url = self.get_project_events_detail(event.pk)
+        res = self.client.get(url)
+        res_data = res.json()
+        self.assertCompareData(res_data, sentry_data, ["timestamp"])
+        self.assertEqual(res_data["entries"][1].get("type"), "breadcrumbs")
+        self.maxDiff = None
+        self.assertEqual(
+            res_data["entries"][1],
+            self.upgrade_data(sentry_data["entries"][1]),
+        )
+
+    def test_dotnet_error(self):
+        sdk_error = self.get_json_data(
+            "events/test_data/incoming_events/dotnet_error.json"
+        )
+        event = self.submit_event(sdk_error)
+        self.assertEqual(IssueEvent.objects.count(), 1)
+
+        sentry_data = self.get_json_data(
+            "events/test_data/oss_sentry_events/dotnet_error.json"
+        )
+        url = self.get_project_events_detail(event.pk)
+        res = self.client.get(url)
+        res_data = res.json()
+        self.assertCompareData(
+            res_data,
+            sentry_data,
+            ["eventID", "title", "culprit", "platform", "type", "metadata"],
+        )
+        res_exception = next(filter(is_exception, res_data["entries"]), None)
+        sentry_exception = next(filter(is_exception, sentry_data["entries"]), None)
+        self.assertEqual(
+            res_exception["data"].get("hasSystemFrames"),
+            sentry_exception["data"].get("hasSystemFrames"),
+        )
