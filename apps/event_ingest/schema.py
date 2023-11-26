@@ -122,6 +122,20 @@ class EventMessage(Schema):
     message: Optional[str] = None
     params: Optional[Union[list[str], dict[str, str]]] = None
 
+    @model_validator(mode="after")
+    def set_formatted(self) -> "EventMessage":
+        """
+        When the EventMessage formatted string is not set,
+        attempt to set it based on message and params interpolation
+        """
+        if not self.formatted and self.message:
+            params = self.params
+            if isinstance(params, list) and params is not None:
+                self.formatted = self.message % tuple(params)
+            elif isinstance(params, dict):
+                self.formatted = self.message.format(**params)
+        return self
+
 
 class EventTemplate(Schema):
     lineno: int
@@ -140,6 +154,7 @@ class BaseEventIngestSchema(Schema):
     timestamp: datetime = Field(default_factory=now)
     platform: Optional[str] = None
     level: Optional[str] = "error"
+    logentry: Optional[EventMessage] = None
     logger: Optional[str] = None
     transaction: Optional[str] = Field(
         validation_alias=AliasChoices("transaction", "culprit"), default=None
@@ -149,7 +164,7 @@ class BaseEventIngestSchema(Schema):
     dist: Optional[str] = None
     tags: Optional[Union[dict[str, str], list[TagKeyValue]]] = None
     environment: Optional[str] = None
-    modules: Optional[dict[str, str]] = None
+    modules: Optional[dict[str, Optional[str]]] = None
     extra: Optional[Any] = None
     fingerprint: Optional[list[str]] = None
     errors: Optional[list[Any]] = None

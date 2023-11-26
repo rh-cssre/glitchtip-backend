@@ -4,6 +4,7 @@ from typing import Any, Literal, Optional, Union
 from ninja import Field, ModelSchema, Schema
 
 from apps.event_ingest.schema import CSPReportSchema, EventException
+from apps.event_ingest.utils import transform_parameterized_message
 from glitchtip.api.schema import CamelSchema
 from sentry.interfaces.stacktrace import get_context
 
@@ -30,6 +31,11 @@ class ExceptionEntry(Schema):
     data: dict
 
 
+class MessageEntry(Schema):
+    type: Literal["message"]
+    data: dict
+
+
 class APIEventBreadcrumb(EventBreadcrumb):
     """Slightly modified Breadcrumb for sentry api compatibility"""
 
@@ -50,19 +56,21 @@ class IssueEventSchema(CamelSchema, ModelSchema):
     date_received: datetime = Field(validation_alias="received")
     dist: Optional[str] = None
     culprit: Optional[str] = Field(validation_alias="transaction", default=None)
+    packages: Optional[dict[str, Optional[str]]] = Field(
+        validation_alias="data.modules", default=None
+    )
     platform: Optional[str] = Field(validation_alias="data.platform", default=None)
     type: str = Field(validation_alias="get_type_display")
-    metadata: dict[str, str] = Field(
-        validation_alias="data.metadata", default_factory=dict
-    )
+    message: str
+    metadata: dict[str, str] = Field(default_factory=dict)
     tags: list[dict[str, Optional[str]]] = []
-    entries: list[Union[BreadcrumbsEntry, ExceptionEntry]] = Field(
+    entries: list[Union[BreadcrumbsEntry, ExceptionEntry, MessageEntry]] = Field(
         discriminator="type", default_factory=list
     )
 
     class Config:
         model = IssueEvent
-        model_fields = ["id", "type", "title", "message"]
+        model_fields = ["id", "type", "title"]
         populate_by_name = True
 
     @staticmethod

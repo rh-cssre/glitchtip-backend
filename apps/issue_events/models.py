@@ -85,7 +85,6 @@ class IssueEvent(PostgresPartitionedModel, models.Model):
     level = models.PositiveSmallIntegerField(
         choices=LogLevel.choices, default=LogLevel.ERROR
     )
-    message = models.CharField(max_length=1000)
     data = models.JSONField()
 
     class PartitioningMeta:
@@ -98,3 +97,13 @@ class IssueEvent(PostgresPartitionedModel, models.Model):
     @property
     def eventID(self):
         return self.id.hex
+
+    @property
+    def message(self):
+        """Often the title and message are the same. If message isn't stored, assume it's the title"""
+        return self.data.get("message", self.title)
+
+    @property
+    def metadata(self):
+        """Return metadata if exists, else return just the title as metadata"""
+        return self.data.get("metadata", {"title": self.title})

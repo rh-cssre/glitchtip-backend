@@ -16,10 +16,9 @@ from sentry.culprit import generate_culprit
 from sentry.eventtypes.error import ErrorEvent
 
 from .schema import (
-    EventMessage,
     InterchangeIssueEvent,
 )
-from .utils import generate_hash
+from .utils import generate_hash, transform_parameterized_message
 
 
 @dataclass
@@ -32,18 +31,6 @@ class ProcessingEvent:
     event_data: dict[str, Any]
     issue_id: Optional[int] = None
     issue_created = False
-
-
-def transform_message(message: Union[str, EventMessage]) -> str:
-    if isinstance(message, str):
-        return message
-    if not message.formatted and message.message:
-        params = message.params
-        if isinstance(params, list):
-            return message.message % tuple(params)
-        elif isinstance(params, dict):
-            return message.message.format(**params)
-    return message.formatted
 
 
 def devalue(obj: Union[Schema, list]) -> Optional[Union[dict, list]]:
@@ -83,11 +70,14 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         if event.type in [IssueEventType.ERROR, IssueEventType.DEFAULT]:
             sentry_event = ErrorEvent()
             metadata = sentry_event.get_metadata(event.dict())
-            if event.type == IssueEventType.ERROR:
+            if event.type == IssueEventType.ERROR and metadata:
                 title = sentry_event.get_title(metadata)
             else:
+                message = event.message if event.message else event.logentry
                 title = (
-                    transform_message(event.message) if event.message else "<untitled>"
+                    transform_parameterized_message(message)
+                    if message
+                    else "<untitled>"
                 )
                 culprit = (
                     event.transaction
@@ -103,13 +93,32 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             event_data["csp"] = event.csp.dict()
 
         issue_hash = generate_hash(title, culprit, event.type, event.fingerprint)
-        event_data["metadata"] = metadata
+        if metadata:
+            event_data["metadata"] = metadata
         if platform := event.platform:
             event_data["platform"] = platform
+        if modules := event.modules:
+            event_data["modules"] = modules
+
+        # Message is str
+        # Logentry is {"params": etc} Message format
+        if logentry := event.logentry:
+            event_data["logentry"] = logentry.dict(exclude_none=True)
+        elif message := event.message:
+            if isinstance(message, str):
+                event_data["logentry"] = {"formatted": message}
+            else:
+                event_data["logentry"] = message.dict(exclude_none=True)
+        if message := event.message:
+            event_data["message"] = (
+                message if isinstance(message, str) else message.formatted
+            )
+
         if breadcrumbs := event.breadcrumbs:
             event_data["breadcrumbs"] = devalue(breadcrumbs)
         if exception := event.exception:
             event_data["exception"] = devalue(exception)
+
         processing_events.append(
             ProcessingEvent(
                 event=ingest_event,
@@ -169,7 +178,6 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 received=processing_event.event.received,
                 title=processing_event.title,
                 transaction=processing_event.transaction,
-                message="",
                 data=processing_event.event_data,
             )
         )

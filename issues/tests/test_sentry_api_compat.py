@@ -302,7 +302,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
 
     def test_message_event(self):
         """A generic message made with the Sentry SDK. Generally has less data than exceptions."""
-        # Don't mimic this test, use self.get_jest_test_data instead
+        # Don't mimic this test, use self.get_json_test_data instead
         res = self.client.post(self.event_store_url, message, format="json")
         self.assertEqual(res.status_code, 200)
 

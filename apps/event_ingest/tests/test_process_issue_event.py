@@ -142,11 +142,15 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
             },
         )
 
-    def submit_event(self, event_data: dict) -> IssueEvent:
+    def submit_event(self, event_data: dict, event_type="error") -> IssueEvent:
+        event_class = ErrorIssueEventSchema
+
+        if event_type == "default":
+            event_class = IssueEventSchema
         event = InterchangeIssueEvent(
             event_id=event_data["event_id"],
             project_id=self.project.id,
-            payload=ErrorIssueEventSchema(**event_data),
+            payload=event_class(**event_data),
         )
         process_issue_events([event])
         return IssueEvent.objects.get(pk=event.event_id)
@@ -252,4 +256,62 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
         self.assertEqual(
             res_exception["data"].get("hasSystemFrames"),
             sentry_exception["data"].get("hasSystemFrames"),
+        )
+
+    def test_php_message_event(self):
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+            "php_message_event"
+        )
+        event = self.submit_event(sdk_error)
+
+        url = self.get_project_events_detail(event.pk)
+        res = self.client.get(url)
+        res_data = res.json()
+
+        self.assertCompareData(
+            res_data,
+            sentry_data,
+            [
+                "message",
+                "title",
+            ],
+        )
+        self.assertEqual(
+            res_data["entries"][0]["data"]["params"],
+            sentry_data["entries"][0]["data"]["params"],
+        )
+
+    def test_django_message_params(self):
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+            "django_message_params"
+        )
+        event = self.submit_event(sdk_error)
+        url = self.get_project_events_detail(event.pk)
+        res = self.client.get(url)
+        res_data = res.json()
+
+        self.assertCompareData(
+            res_data,
+            sentry_data,
+            [
+                "message",
+                "title",
+            ],
+        )
+        self.assertEqual(res_data["entries"][0], sentry_data["entries"][0])
+
+    def test_message_event(self):
+        """A generic message made with the Sentry SDK. Generally has less data than exceptions."""
+        from events.test_data.django_error_factory import message
+
+        event = self.submit_event(message, event_type="default")
+        url = self.get_project_events_detail(event.pk)
+        res = self.client.get(url)
+        res_data = res.json()
+
+        data = self.get_json_data("events/test_data/django_message_event.json")
+        self.assertCompareData(
+            res_data,
+            data,
+            ["title", "culprit", "type", "metadata", "platform", "packages"],
         )
