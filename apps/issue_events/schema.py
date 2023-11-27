@@ -74,6 +74,10 @@ class IssueEventSchema(CamelSchema, ModelSchema):
         populate_by_name = True
 
     @staticmethod
+    def resolve_tags(obj: IssueEvent):
+        return [{"key": tag[0], "value": tag[1]} for tag in obj.tags.items()]
+
+    @staticmethod
     def resolve_entries(obj: IssueEvent):
         entries = []
         data = obj.data

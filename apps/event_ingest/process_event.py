@@ -29,6 +29,7 @@ class ProcessingEvent:
     transaction: str
     metadata: dict[str, Any]
     event_data: dict[str, Any]
+    event_tags: dict[str, str]
     issue_id: Optional[int] = None
     issue_created = False
 
@@ -127,6 +128,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 transaction=culprit,
                 metadata=metadata,
                 event_data=event_data,
+                event_tags={},
             )
         )
         q_objects |= Q(project_id=ingest_event.project_id, value=issue_hash)
@@ -179,6 +181,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 title=processing_event.title,
                 transaction=processing_event.transaction,
                 data=processing_event.event_data,
+                tags=processing_event.event_tags,
             )
         )
 

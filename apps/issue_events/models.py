@@ -86,6 +86,9 @@ class IssueEvent(PostgresPartitionedModel, models.Model):
         choices=LogLevel.choices, default=LogLevel.ERROR
     )
     data = models.JSONField()
+    # This could be HStore, but jsonb is just as good and removes need for
+    # 'django.contrib.postgres' which makes several unnecessary SQL calls
+    tags = models.JSONField()
 
     class PartitioningMeta:
         method = PostgresPartitioningMethod.RANGE

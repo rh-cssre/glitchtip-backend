@@ -222,8 +222,7 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
         event_json = self.get_event_json(event)
         self.assertCompareData(event_json, sentry_json, ["datetime"])
 
-        url = self.get_project_events_detail(event.pk)
-        res = self.client.get(url)
+        res = self.client.get(self.get_project_events_detail(event.pk))
         res_data = res.json()
         self.assertCompareData(res_data, sentry_data, ["timestamp"])
         self.assertEqual(res_data["entries"][1].get("type"), "breadcrumbs")
@@ -243,8 +242,7 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
         sentry_data = self.get_json_data(
             "events/test_data/oss_sentry_events/dotnet_error.json"
         )
-        url = self.get_project_events_detail(event.pk)
-        res = self.client.get(url)
+        res = self.client.get(self.get_project_events_detail(event.pk))
         res_data = res.json()
         self.assertCompareData(
             res_data,
@@ -264,8 +262,7 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
         )
         event = self.submit_event(sdk_error)
 
-        url = self.get_project_events_detail(event.pk)
-        res = self.client.get(url)
+        res = self.client.get(self.get_project_events_detail(event.pk))
         res_data = res.json()
 
         self.assertCompareData(
@@ -286,8 +283,7 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
             "django_message_params"
         )
         event = self.submit_event(sdk_error)
-        url = self.get_project_events_detail(event.pk)
-        res = self.client.get(url)
+        res = self.client.get(self.get_project_events_detail(event.pk))
         res_data = res.json()
 
         self.assertCompareData(
@@ -305,8 +301,7 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
         from events.test_data.django_error_factory import message
 
         event = self.submit_event(message, event_type="default")
-        url = self.get_project_events_detail(event.pk)
-        res = self.client.get(url)
+        res = self.client.get(self.get_project_events_detail(event.pk))
         res_data = res.json()
 
         data = self.get_json_data("events/test_data/django_message_event.json")
@@ -314,4 +309,46 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
             res_data,
             data,
             ["title", "culprit", "type", "metadata", "platform", "packages"],
+        )
+
+    def test_python_logging(self):
+        """Test Sentry SDK logging integration based event"""
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data("python_logging")
+        event = self.submit_event(sdk_error, event_type="default")
+
+        res = self.client.get(self.get_project_events_detail(event.pk))
+        res_data = res.json()
+
+        self.assertEqual(res.status_code, 200)
+        self.assertCompareData(
+            res_data,
+            sentry_data,
+            [
+                "title",
+                "logentry",
+                "culprit",
+                "type",
+                "metadata",
+                "platform",
+                "packages",
+            ],
+        )
+
+    def test_go_file_not_found(self):
+        # Don't mimic this test, use self.get_jest_test_data instead
+        sdk_error = self.get_json_data(
+            "events/test_data/incoming_events/go_file_not_found.json"
+        )
+        event = self.submit_event(sdk_error)
+
+        sentry_data = self.get_json_data(
+            "events/test_data/oss_sentry_events/go_file_not_found.json"
+        )
+        res = self.client.get(self.get_project_events_detail(event.pk))
+        res_data = res.json()
+        self.assertEqual(res.status_code, 200)
+        self.assertCompareData(
+            res_data,
+            sentry_data,
+            ["title", "culprit", "type", "metadata", "platform"],
         )

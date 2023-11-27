@@ -149,6 +149,7 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("data", models.JSONField()),
+                ("tags", models.JSONField()),
                 (
                     "issue",
                     models.ForeignKey(
