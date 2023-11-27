@@ -6,10 +6,10 @@ web-server
 
 import logging
 import os.path
-import six
+from collections import OrderedDict, namedtuple
 from datetime import timedelta
 
-from collections import OrderedDict, namedtuple
+import six
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 

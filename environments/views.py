@@ -1,7 +1,8 @@
-from rest_framework import viewsets, mixins
+from rest_framework import mixins, viewsets
+
 from .models import Environment, EnvironmentProject
-from .serializers import EnvironmentSerializer, EnvironmentProjectSerializer
 from .permissions import EnvironmentPermission, EnvironmentProjectPermission
+from .serializers import EnvironmentProjectSerializer, EnvironmentSerializer
 
 
 class EnvironmentViewSet(viewsets.ReadOnlyModelViewSet):

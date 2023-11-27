@@ -2,10 +2,11 @@ import shlex
 import uuid
 
 from django.db import connection
+from django.db.models import Count
 from django.db.models.expressions import RawSQL
 from django.http import HttpResponseNotFound
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import mixins, views, viewsets
+from rest_framework import exceptions, mixins, views, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 from rest_framework.filters import OrderingFilter
@@ -14,9 +15,14 @@ from rest_framework.response import Response
 from events.models import Event
 
 from .filters import IssueFilter
-from .models import EventStatus, Issue
+from .models import Comment, EventStatus, Issue
 from .permissions import EventPermission, IssuePermission
-from .serializers import EventDetailSerializer, EventSerializer, IssueSerializer
+from .serializers import (
+    CommentSerializer,
+    EventDetailSerializer,
+    EventSerializer,
+    IssueSerializer,
+)
 
 
 class IssueViewSet(
@@ -116,22 +122,37 @@ class IssueViewSet(
                 )
             )
 
-        qs = (
-            qs.select_related("project")
-            .defer("search_vector")
-            .prefetch_related("userreport_set")
-        )
+        qs = qs.select_related("project").defer("search_vector", "tags")
+        if self.action in ["retrieve"]:
+            qs = qs.annotate(
+                num_comments=Count("comment"), user_report_count=(Count("userreport"))
+            )
 
         return qs
 
     def bulk_update(self, request, *args, **kwargs):
+        """Limited to pagination page count limit"""
         queryset = self.filter_queryset(self.get_queryset())
         ids = request.GET.getlist("id")
         if ids:
             queryset = queryset.filter(id__in=ids)
         status = EventStatus.from_string(request.data.get("status"))
-        queryset.update(status=status)
+        self.queryset.filter(pk__in=queryset[: self.pagination_class.max_hits]).update(
+            status=status
+        )
         return Response({"status": status.label})
+
+    def bulk_delete(self, request, *args, **kwargs):
+        """Limited to pagination page count limit"""
+        queryset = self.filter_queryset(self.get_queryset())
+        ids = request.GET.getlist("id")
+        if len(ids) > 0:
+            queryset = queryset.filter(id__in=ids)
+        count = self.queryset.filter(
+            pk__in=queryset[: self.pagination_class.max_hits]
+        ).delete()
+
+        return Response(status=204)
 
     def serialize_tags(self, rows):
         return [
@@ -156,18 +177,20 @@ class IssueViewSet(
         Filter with query param key=<your key>
         """
         instance = self.get_object()
-        keys = tuple(request.GET.getlist("key"))
+        keys = request.GET.getlist("key")
         with connection.cursor() as cursor:
             if keys:
+                # The limit 2000000 prevents excessive load times
                 query = """
                 SELECT key, value, count(*)
                 FROM (
-                    SELECT (each(tags)).key, (each(tags)).value
+                    SELECT (each(tags)).*
                     FROM events_event
                     WHERE issue_id=%s
+                    LIMIT 2000000
                 )
-                AS stat
-                WHERE key in %s
+                AS stat(key, value)
+                WHERE key = ANY(%s)
                 GROUP BY key, value
                 ORDER BY count DESC, value
                 limit 100;
@@ -177,11 +200,12 @@ class IssueViewSet(
                 query = """
                 SELECT key, value, count(*)
                 FROM (
-                    SELECT (each(tags)).key, (each(tags)).value
+                    SELECT (each(tags)).*
                     FROM events_event
                     WHERE issue_id=%s
+                    LIMIT 2000000
                 )
-                AS stat
+                AS stat(key, value)
                 GROUP BY key, value
                 ORDER BY count DESC, value
                 limit 100;
@@ -236,7 +260,7 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
         qs = (
             super()
             .get_queryset()
-            .filter(issue__project__team__members__user=self.request.user)
+            .filter(issue__project__organization__users=self.request.user)
         )
         if "issue_pk" in self.kwargs:
             qs = qs.filter(issue=self.kwargs["issue_pk"])
@@ -248,7 +272,11 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(
                 issue__project__slug=self.kwargs["project_slug"],
             )
-        qs = qs.prefetch_related("tags__key")
+        qs = (
+            qs.select_related("issue__project__organization")
+            .prefetch_related("tags__key")
+            .defer("issue__tags", "issue__search_vector")
+        )
         return qs
 
     @action(detail=False, methods=["get"])
@@ -273,7 +301,7 @@ class EventJsonView(views.APIView):
                 Event.objects.filter(
                     pk=event,
                     issue__project__organization__slug=org,
-                    issue__project__team__members__user=self.request.user,
+                    issue__project__organization__users=self.request.user,
                 )
                 .distinct()
                 .get()
@@ -281,3 +309,38 @@ class EventJsonView(views.APIView):
         except Event.DoesNotExist:
             return HttpResponseNotFound()
         return Response(event.event_json())
+
+
+class CommentViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    queryset = Comment.objects.all()
+    serializer_class = CommentSerializer
+    permission_classes = [EventPermission]
+
+    def get_queryset(self):
+        if not self.request.user.is_authenticated:
+            return self.queryset.none()
+        queryset = (
+            super()
+            .get_queryset()
+            .filter(issue__project__organization__users=self.request.user)
+        )
+        issue_id = self.kwargs.get("issue_pk")
+        if issue_id:
+            queryset = queryset.filter(issue_id=issue_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        try:
+            issue = Issue.objects.get(
+                id=self.kwargs.get("issue_pk"),
+                project__organization__users=self.request.user,
+            )
+        except Issue.DoesNotExist:
+            raise exceptions.ValidationError("Issue does not exist")
+        serializer.save(issue=issue, user=self.request.user)
