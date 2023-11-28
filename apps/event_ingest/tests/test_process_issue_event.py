@@ -2,7 +2,7 @@ import uuid
 
 from django.urls import reverse
 
-from apps.issue_events.constants import EventStatus
+from apps.issue_events.constants import EventStatus, LogLevel
 from apps.issue_events.models import Issue, IssueEvent, IssueHash
 
 from ..process_event import process_issue_events
@@ -335,7 +335,6 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
         )
 
     def test_go_file_not_found(self):
-        # Don't mimic this test, use self.get_jest_test_data instead
         sdk_error = self.get_json_data(
             "events/test_data/incoming_events/go_file_not_found.json"
         )
@@ -352,3 +351,78 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
             sentry_data,
             ["title", "culprit", "type", "metadata", "platform"],
         )
+
+    def test_very_small_event(self):
+        """
+        Shows a very minimalist event example. Good for seeing what data is null
+        """
+        sdk_error = self.get_json_data(
+            "events/test_data/incoming_events/very_small_event.json"
+        )
+        event = self.submit_event(sdk_error, event_type="default")
+
+        sentry_data = self.get_json_data(
+            "events/test_data/oss_sentry_events/very_small_event.json"
+        )
+        res = self.client.get(self.get_project_events_detail(event.pk))
+        res_data = res.json()
+        self.assertEqual(res.status_code, 200)
+        self.assertCompareData(
+            res_data,
+            sentry_data,
+            ["culprit", "type", "platform", "entries"],
+        )
+
+    def test_python_zero_division(self):
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+            "python_zero_division"
+        )
+        event = self.submit_event(sdk_error)
+        event_json = self.get_event_json(event)
+        self.assertCompareData(
+            event_json,
+            sentry_json,
+            [
+                "event_id",
+                "project",
+                "release",
+                "dist",
+                "platform",
+                "level",
+                "modules",
+                "time_spent",
+                "sdk",
+                "type",
+                "title",
+                "breadcrumbs",
+            ],
+        )
+        # self.assertCompareData(
+        #     event_json["request"],
+        #     sentry_json["request"],
+        #     [
+        #         "url",
+        #         # "headers",
+        #         "method",
+        #         "env",
+        #         "query_string",
+        #         "inferred_content_type",
+        #     ],
+        # )
+        # self.assertEqual(
+        #     event_json["datetime"][:22],
+        #     sentry_json["datetime"][:22],
+        #     "Compare if datetime is almost the same",
+        # )
+
+        # res = self.client.get(self.get_project_events_detail(event.pk))
+        # res_data = res.json()
+        # self.assertEqual(res.status_code, 200)
+        # self.assertCompareData(
+        #     res_data,
+        #     sentry_data,
+        #     ["title", "culprit", "type", "metadata", "platform", "packages"],
+        # )
+        # issue = event.issue
+        # issue.refresh_from_db()
+        # self.assertEqual(issue.level, LogLevel.ERROR)

@@ -150,6 +150,45 @@ class ValueEventBreadcrumb(Schema):
     values: list[EventBreadcrumb]
 
 
+class ClientSDKPackage(Schema):
+    name: Optional[str] = None
+    version: Optional[str] = None
+
+
+class ClientSDKInfo(Schema):
+    integrations: Optional[list[Optional[str]]] = None
+    name: Optional[str]
+    packages: Optional[list[ClientSDKPackage]] = None
+    version: Optional[str]
+
+
+class RequestHeaders(Schema):
+    content_type: Optional[str]
+
+
+class RequestEnv(Schema):
+    remote_addr: Optional[str]
+
+
+class Request(Schema):
+    api_target: Optional[str] = None
+    body_size: Optional[int] = None
+    cookies: Optional[
+        Union[str, list[list[Optional[str]]], dict[str, Optional[str]]]
+    ] = None
+    data: Optional[Union[str, dict, list, Any]] = None
+    env: Optional[dict[str, Any]] = None
+    fragment: Optional[str] = None
+    headers: Optional[Union[list[list[Optional[str]]], dict[str, Optional[str]]]] = None
+    inferred_content_type: Optional[str] = None
+    method: Optional[str] = None
+    protocol: Optional[str] = None
+    query_string: Optional[
+        Union[str, list[list[Optional[str]]], dict[str, Optional[str]]]
+    ] = None
+    url: Optional[str] = None
+
+
 class BaseEventIngestSchema(Schema):
     timestamp: datetime = Field(default_factory=now)
     platform: Optional[str] = None
@@ -174,6 +213,8 @@ class BaseEventIngestSchema(Schema):
     template: Optional[EventTemplate] = None
 
     breadcrumbs: Optional[Union[list[EventBreadcrumb], ValueEventBreadcrumb]] = None
+    sdk: Optional[ClientSDKInfo] = None
+    # request: Optional[Request] = None
 
 
 class EventIngestSchema(BaseEventIngestSchema):
@@ -183,7 +224,7 @@ class EventIngestSchema(BaseEventIngestSchema):
 class EnvelopeHeaderSchema(Schema):
     event_id: uuid.UUID
     dsn: Optional[str] = None
-    sdk: Optional[Any] = None
+    sdk: Optional[ClientSDKInfo] = None
     sent_at: datetime = Field(default_factory=now)
 
 

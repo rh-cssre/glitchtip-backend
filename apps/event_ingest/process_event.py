@@ -100,6 +100,10 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             event_data["platform"] = platform
         if modules := event.modules:
             event_data["modules"] = modules
+        if sdk := event.sdk:
+            event_data["sdk"] = sdk.dict(exclude_none=True)
+        # if request := event.request:
+        #     event_data["request"] = request.dict(exclude_none=True)
 
         # Message is str
         # Logentry is {"params": etc} Message format

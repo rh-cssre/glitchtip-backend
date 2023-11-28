@@ -144,7 +144,7 @@ class IssueEventDetailSchema(IssueEventSchema):
             return event_id.hex
 
 
-class IssueEventJsonSchema(Schema):
+class IssueEventJsonSchema(ModelSchema):
     """
     Represents a more raw view of the event, built with open source (legacy) Sentry compatibility
     """
@@ -157,6 +157,20 @@ class IssueEventJsonSchema(Schema):
     breadcrumbs: Optional[Any] = Field(
         validation_alias="data.breadcrumbs", default=None
     )
+    project: int = Field(validation_alias="issue.project_id")
+    platform: Optional[str] = Field(validation_alias="data.platform", default=None)
+    level: Optional[str] = Field(validation_alias="get_level_display")
+    exception: Optional[Any] = Field(validation_alias="data.exception", default=None)
+    modules: Optional[dict[str, str]] = Field(
+        validation_alias="data.modules", default_factory=dict
+    )
+    sdk: Optional[dict] = Field(validation_alias="data.sdk", default_factory=dict)
+    type: Optional[str] = Field(validation_alias="get_type_display")
+    request: Optional[Any] = Field(validation_alias="data.request", default=None)
+
+    class Config:
+        model = IssueEvent
+        model_fields = ["title", "transaction"]
 
     @staticmethod
     def resolve_timestamp(obj):
