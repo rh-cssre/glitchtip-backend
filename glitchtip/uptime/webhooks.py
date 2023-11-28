@@ -4,9 +4,11 @@ from alerts.constants import RecipientType
 from alerts.models import AlertRecipient
 from alerts.webhooks import (
     DiscordEmbed,
+    GoogleChatCard,
     MSTeamsSection,
     WebhookAttachment,
     send_discord_webhook,
+    send_googlechat_webhook,
     send_webhook,
 )
 
@@ -38,6 +40,14 @@ def send_uptime_as_webhook(
         )
         section = MSTeamsSection(str(monitor.name), message)
         return send_webhook(recipient.url, subject, [attachment], [section])
+    elif recipient.recipient_type == RecipientType.GOOGLE_CHAT:
+        card = GoogleChatCard().construct_uptime_card(
+            title=subject,
+            subtitle=str(monitor.name),
+            text=message,
+            url=monitor.get_detail_url(),
+        )
+        return send_googlechat_webhook(recipient.url, [card])
     elif recipient.recipient_type == RecipientType.DISCORD:
         embed = DiscordEmbed(
             title=monitor,

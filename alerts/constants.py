@@ -6,3 +6,4 @@ class RecipientType(models.TextChoices):
     EMAIL = "email", _("Email")
     GENERAL_WEBHOOK = "webhook", _("General Slack-compatible webhook")
     DISCORD = "discord", _("Discord")
+    GOOGLE_CHAT = "googlechat", _("Google Chat webhook")
