@@ -4,7 +4,6 @@ from typing import Any, Literal, Optional, Union
 from ninja import Field, ModelSchema, Schema
 
 from apps.event_ingest.schema import CSPReportSchema, EventException
-from apps.event_ingest.utils import transform_parameterized_message
 from glitchtip.api.schema import CamelSchema
 from sentry.interfaces.stacktrace import get_context
 
