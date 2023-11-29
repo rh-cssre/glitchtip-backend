@@ -4,7 +4,7 @@ from typing import Any, List, Optional
 from urllib import parse
 
 from django.db.models import QuerySet
-from django.http import HttpRequest
+from django.http import HttpRequest, HttpResponse
 from django.utils.translation import gettext as _
 from ninja import Field, Schema
 from ninja.pagination import PaginationBase
@@ -86,7 +86,7 @@ class CursorPagination(PaginationBase):
 
     items_attribute = "results"
     default_ordering = ("-created",)
-    max_page_size = 100
+    max_page_size = 50
     _offset_cutoff = 100  # limit to protect against possibly malicious queries
 
     def paginate_queryset(
@@ -313,3 +313,43 @@ class CursorPagination(PaginationBase):
         else:
             attr = getattr(instance, field_name)
         return str(attr)
+
+class LinkHeaderPagination(CursorPagination):
+    max_hits = 1000
+
+    class Output(Schema):
+        results: List[Any] = Field(description=_("The page of objects."))
+
+    def paginate_queryset(self, queryset: QuerySet, pagination: CursorPagination.Input, request: HttpRequest, response: HttpResponse, **params) -> dict:
+        paginated_results = super().paginate_queryset(queryset, pagination, request, **params)
+        base_url = request.build_absolute_uri()
+        links = []
+        for url, label in (
+            (paginated_results["previous"], "previous"),
+            (paginated_results["next"], "next"),
+        ):
+            if url is not None:
+                parsed = parse.urlparse(url)
+                cursor = parse.parse_qs(parsed.query).get("cursor", [""])[0]
+                links.append(
+                    '<{}>; rel="{}"; results="true"; cursor="{}"'.format(
+                        url, label, cursor
+                    )
+                )
+            else:
+                links.append(
+                    '<{}>; rel="{}"; results="false"'.format(base_url, label)
+                )
+
+
+        response["Link"] = {", ".join(links)} if links else {}
+        response["X-Max-Hits"] = self.max_hits
+        response["X-Hits"] = paginated_results["count"]
+
+        return {"results": paginated_results["results"]}
+
+    def _items_count(self, queryset: QuerySet) -> int:
+        try:
+            return queryset.order_by()[: self.max_hits].count()  # type: ignore
+        except AttributeError:
+            return len(queryset)
