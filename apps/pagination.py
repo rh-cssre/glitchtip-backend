@@ -98,7 +98,7 @@ class CursorPagination(PaginationBase):
             queryset = queryset.order_by(*self.default_ordering)
 
         order = queryset.query.order_by
-        total_count = queryset.count()
+        total_count = self._items_count(queryset)
 
         base_url = request.build_absolute_uri()
         cursor = pagination.cursor
