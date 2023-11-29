@@ -1,13 +1,18 @@
+import inspect
 from base64 import b64decode, b64encode
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from functools import partial, wraps
+from typing import Any, Callable, List, Optional, Type
 from urllib import parse
 
+from asgiref.sync import sync_to_async
 from django.db.models import QuerySet
 from django.http import HttpRequest, HttpResponse
 from django.utils.translation import gettext as _
 from ninja import Field, Schema
-from ninja.pagination import PaginationBase
+from ninja.constants import NOT_SET
+from ninja.pagination import PaginationBase, make_response_paginated
+from ninja.utils import contribute_operation_args, contribute_operation_callback
 from pydantic import field_validator
 
 
@@ -89,7 +94,7 @@ class CursorPagination(PaginationBase):
     max_page_size = 50
     _offset_cutoff = 100  # limit to protect against possibly malicious queries
 
-    def paginate_queryset(
+    async def paginate_queryset(
         self, queryset: QuerySet, pagination: Input, request: HttpRequest, **params
     ) -> dict:
         limit = _clamp(pagination.limit or self.max_page_size, 0, self.max_page_size)
@@ -98,7 +103,7 @@ class CursorPagination(PaginationBase):
             queryset = queryset.order_by(*self.default_ordering)
 
         order = queryset.query.order_by
-        total_count = self._items_count(queryset)
+        total_count = await self._items_count(queryset)
 
         base_url = request.build_absolute_uri()
         cursor = pagination.cursor
@@ -118,7 +123,11 @@ class CursorPagination(PaginationBase):
         # If we have an offset cursor then offset the entire page by that amount.
         # We also always fetch an extra item in order to determine if there is a
         # page following on from this one.
-        results = list(queryset[cursor.offset : cursor.offset + limit + 1])
+        @sync_to_async
+        def get_results():
+            return list(queryset[cursor.offset : cursor.offset + limit + 1])
+
+        results = await get_results()
         page = list(results[:limit])
 
         # Determine the position of the final item following the page.
@@ -145,33 +154,35 @@ class CursorPagination(PaginationBase):
             previous_position = cursor.position if has_previous else None
 
         return {
-            "results": page,
-            "count": total_count,
-            "next": self.next_link(
-                base_url,
-                page,
-                cursor,
-                order,
-                has_previous,
-                limit,
-                next_position,
-                previous_position,
-            )
-            if has_next
-            else None,
-            "previous": self.previous_link(
-                base_url,
-                page,
-                cursor,
-                order,
-                has_next,
-                limit,
-                next_position,
-                previous_position,
-            )
-            if has_previous
-            else None,
-        }
+                "results": page,
+                "count": total_count,
+                "next": self.next_link(
+                    base_url,
+                    page,
+                    cursor,
+                    order,
+                    has_previous,
+                    limit,
+                    next_position,
+                    previous_position,
+                )
+                if has_next
+                else None,
+                "previous": self.previous_link(
+                    base_url,
+                    page,
+                    cursor,
+                    order,
+                    has_next,
+                    limit,
+                    next_position,
+                    previous_position,
+                )
+                if has_previous
+                else None,
+            }
+
+
 
     def _encode_cursor(self, cursor: Cursor, base_url: str) -> str:
         tokens = {}
@@ -314,14 +325,14 @@ class CursorPagination(PaginationBase):
             attr = getattr(instance, field_name)
         return str(attr)
 
-class LinkHeaderPagination(CursorPagination):
+class AsyncLinkHeaderPagination(CursorPagination):
     max_hits = 1000
 
     class Output(Schema):
         results: List[Any] = Field(description=_("The page of objects."))
 
-    def paginate_queryset(self, queryset: QuerySet, pagination: CursorPagination.Input, request: HttpRequest, response: HttpResponse, **params) -> dict:
-        paginated_results = super().paginate_queryset(queryset, pagination, request, **params)
+    async def paginate_queryset(self, queryset: QuerySet, pagination: CursorPagination.Input, request: HttpRequest, response: HttpResponse, **params) -> dict:
+        paginated_results = await super().paginate_queryset(queryset, pagination, request, **params)
         base_url = request.build_absolute_uri()
         links = []
         for url, label in (
@@ -348,8 +359,60 @@ class LinkHeaderPagination(CursorPagination):
 
         return {"results": paginated_results["results"]}
 
+    @sync_to_async
     def _items_count(self, queryset: QuerySet) -> int:
-        try:
-            return queryset.order_by()[: self.max_hits].count()  # type: ignore
-        except AttributeError:
-            return len(queryset)
+        return queryset.order_by()[: self.max_hits].count()  # type: ignore
+
+def apaginate(func_or_pgn_class: Any = NOT_SET, **paginator_params) -> Callable:
+
+    isfunction = inspect.isfunction(func_or_pgn_class)
+    isnotset = func_or_pgn_class == NOT_SET
+
+    pagination_class: Type[PaginationBase] = AsyncLinkHeaderPagination
+
+    if isfunction:
+        return _inject_pagination(func_or_pgn_class, pagination_class)
+
+    if not isnotset:
+        pagination_class = func_or_pgn_class
+
+    async def wrapper(func: Callable) -> Any:
+        return await _inject_pagination(func, pagination_class, **paginator_params)
+
+    return wrapper
+
+
+def _inject_pagination(
+    func: Callable,
+    paginator_class: Type[PaginationBase],
+    **paginator_params: Any,
+) -> Callable:
+    paginator: PaginationBase = paginator_class(**paginator_params)
+
+    @wraps(func)
+    async def view_with_pagination(request: HttpRequest, **kwargs: Any) -> Any:
+        pagination_params = kwargs.pop("ninja_pagination")
+        if paginator.pass_parameter:
+            kwargs[paginator.pass_parameter] = pagination_params
+
+        items = await func(request, **kwargs)
+
+        result = await paginator.paginate_queryset(items, pagination=pagination_params, request=request, **kwargs)
+        if paginator.Output:
+            result[paginator.items_attribute] = list(result[paginator.items_attribute])
+        return result
+
+    contribute_operation_args(
+        view_with_pagination,
+        "ninja_pagination",
+        paginator.Input,
+        paginator.InputSource,
+    )
+
+    if paginator.Output:
+        contribute_operation_callback(
+            view_with_pagination,
+            partial(make_response_paginated, paginator),
+        )
+
+    return view_with_pagination

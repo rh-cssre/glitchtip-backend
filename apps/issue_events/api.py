@@ -5,9 +5,8 @@ from django.db.models import OuterRef, Subquery, Window
 from django.db.models.functions import Lag
 from django.http import Http404, HttpResponse
 from ninja import Router
-from ninja.pagination import paginate
 
-from apps.pagination import LinkHeaderPagination
+from apps.pagination import apaginate
 from glitchtip.api.authentication import AuthHttpRequest
 
 from .models import IssueEvent
@@ -36,8 +35,8 @@ def get_queryset(
 @router.get(
     "/issues/{int:issue_id}/events/", response=list[IssueEventSchema], by_alias=True
 )
-@paginate(LinkHeaderPagination)
-def issue_event_list(request: AuthHttpRequest, response: HttpResponse, issue_id: int):
+@apaginate
+async def issue_event_list(request: AuthHttpRequest, response: HttpResponse, issue_id: int):
     return get_queryset(request, issue_id=issue_id)
 
 
