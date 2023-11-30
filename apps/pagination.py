@@ -46,7 +46,7 @@ def _replace_query_param(url: str, key: str, val: str) -> str:
     query = parse.urlencode(sorted(query_dict.items()), doseq=True)
     return parse.urlunsplit((scheme, netloc, path, query, fragment))
 
-class CursorPagination(PaginationBase):
+class AsyncCursorPagination(PaginationBase):
     class Input(Schema):
         limit: Optional[int] = Field(
             None, description=_("Number of results to return per page.")
@@ -66,7 +66,7 @@ class CursorPagination(PaginationBase):
                 tokens = parse.parse_qs(querystring, keep_blank_values=True)
 
                 offset = int(tokens.get("o", ["0"])[0])
-                offset = _clamp(offset, 0, CursorPagination._offset_cutoff)
+                offset = _clamp(offset, 0, AsyncCursorPagination._offset_cutoff)
 
                 reverse = tokens.get("r", ["0"])[0]
                 reverse = bool(int(reverse))
@@ -325,13 +325,13 @@ class CursorPagination(PaginationBase):
             attr = getattr(instance, field_name)
         return str(attr)
 
-class AsyncLinkHeaderPagination(CursorPagination):
+class AsyncLinkHeaderPagination(AsyncCursorPagination):
     max_hits = 1000
 
     class Output(Schema):
         results: List[Any] = Field(description=_("The page of objects."))
 
-    async def paginate_queryset(self, queryset: QuerySet, pagination: CursorPagination.Input, request: HttpRequest, response: HttpResponse, **params) -> dict:
+    async def paginate_queryset(self, queryset: QuerySet, pagination: AsyncCursorPagination.Input, request: HttpRequest, response: HttpResponse, **params) -> dict:
         paginated_results = await super().paginate_queryset(queryset, pagination, request, **params)
         base_url = request.build_absolute_uri()
         links = []
@@ -363,8 +363,8 @@ class AsyncLinkHeaderPagination(CursorPagination):
     def _items_count(self, queryset: QuerySet) -> int:
         return queryset.order_by()[: self.max_hits].count()  # type: ignore
 
+# async pagination based on https://github.com/vitalik/django-ninja/issues/547#issuecomment-1331292288
 def apaginate(func_or_pgn_class: Any = NOT_SET, **paginator_params) -> Callable:
-
     isfunction = inspect.isfunction(func_or_pgn_class)
     isnotset = func_or_pgn_class == NOT_SET
 
