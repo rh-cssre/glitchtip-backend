@@ -2,7 +2,7 @@ import uuid
 
 from django.urls import reverse
 
-from apps.issue_events.constants import EventStatus, LogLevel
+from apps.issue_events.constants import EventStatus
 from apps.issue_events.models import Issue, IssueEvent, IssueHash
 
 from ..process_event import process_issue_events
