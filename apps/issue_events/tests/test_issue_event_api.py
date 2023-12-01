@@ -22,12 +22,15 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
 
         self.assertEqual(res.headers.get("X-Hits"), "52")
         self.assertContains(res, last_event.pk.hex)
+        self.assertNotContains(res, first_event.pk.hex)
 
-        pattern = r'(?<=\<).+?(?=\>)'  #See Note at the bottom of the answer
+        pattern = r'(?<=\<).+?(?=\>)'
         links = re.findall(pattern, res.headers.get("Link"))
 
         res = self.client.get(links[1])
+        
         self.assertContains(res, first_event.pk.hex)
+        self.assertNotContains(res, last_event.pk.hex)
 
     def test_retrieve(self):
         event = baker.make("issue_events.IssueEvent", issue__project=self.project)

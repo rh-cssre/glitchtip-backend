@@ -33,7 +33,7 @@ def get_queryset(
 
 
 @router.get(
-    "/issues/{int:issue_id}/events/", response=list[IssueEventSchema], by_alias=True
+    "/issues/{int:issue_id}/events/", response=list[IssueEventSchema]
 )
 @apaginate
 async def issue_event_list(request: AuthHttpRequest, response: HttpResponse, issue_id: int):
