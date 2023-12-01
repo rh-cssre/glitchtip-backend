@@ -3,6 +3,7 @@ import typing
 import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal, Optional, Union
+from urllib.parse import parse_qs
 
 from django.utils.timezone import now
 from ninja import Field
@@ -12,12 +13,13 @@ from pydantic import (
     RootModel,
     ValidationError,
     WrapValidator,
+    field_validator,
     model_validator,
 )
 
 from apps.issue_events.constants import IssueEventType
 
-from ..common_event_schema import EventBreadcrumb
+from ..common_event_schema import BaseRequest, EventBreadcrumb, ListKeyValue
 from ..common_event_utils import invalid_to_none
 
 logger = logging.getLogger(__name__)
@@ -170,23 +172,53 @@ class RequestEnv(Schema):
     remote_addr: Optional[str]
 
 
-class Request(Schema):
-    api_target: Optional[str] = None
-    body_size: Optional[int] = None
-    cookies: Optional[
-        Union[str, list[list[Optional[str]]], dict[str, Optional[str]]]
-    ] = None
-    data: Optional[Union[str, dict, list, Any]] = None
-    env: Optional[dict[str, Any]] = None
-    fragment: Optional[str] = None
-    headers: Optional[Union[list[list[Optional[str]]], dict[str, Optional[str]]]] = None
-    inferred_content_type: Optional[str] = None
-    method: Optional[str] = None
-    protocol: Optional[str] = None
-    query_string: Optional[
-        Union[str, list[list[Optional[str]]], dict[str, Optional[str]]]
-    ] = None
-    url: Optional[str] = None
+QueryString = Union[str, ListKeyValue, dict[str, Optional[str]]]
+"""Raw URL querystring, list, or dict"""
+Headers = Union[list[list[Optional[str]]], dict[str, Optional[str]]]
+"""Header in list or dict format, expected to normalize to list"""
+
+
+class IngestRequest(BaseRequest):
+    headers: Optional[Headers] = None
+    query_string: Optional[QueryString] = None
+
+    @field_validator("headers", mode="before")
+    @classmethod
+    def fix_non_standard_headers(cls, v):
+        """
+        Fix non-documented format used by PHP Sentry Client
+        Convert {"Foo": ["bar"]} into {"Foo: "bar"}
+        """
+        if isinstance(v, dict):
+            return {
+                key: value[0] if isinstance(value, list) else value
+                for key, value in v.items()
+            }
+        return v
+
+    @field_validator("query_string", "headers")
+    @classmethod
+    def prefer_list_key_value(
+        cls, v: Optional[Union[QueryString, Headers]]
+    ) -> Optional[ListKeyValue]:
+        """Store all querystring, header formats in a list format"""
+        result: Optional[ListKeyValue] = None
+        if isinstance(v, str) and v:  # It must be a raw querystring, parse it
+            qs = parse_qs(v)
+            result = [[key, value] for key, values in qs.items() for value in values]
+        elif isinstance(v, dict):  # Convert dict to list
+            result = [[key, value] for key, value in v.items()]
+        elif isinstance(v, list):  # Normalize list (throw out any weird data)
+            result = [item[:2] for item in v if len(item) >= 2]
+
+        if result:
+            # Remove empty and any key called "Cookie" which could be sensitive data
+            entry_to_remove = ["Cookie", ""]
+            return sorted(
+                [entry for entry in result if entry != entry_to_remove],
+                key=lambda x: (x[0], x[1]),
+            )
+        return result
 
 
 class BaseEventIngestSchema(Schema):
@@ -214,7 +246,7 @@ class BaseEventIngestSchema(Schema):
 
     breadcrumbs: Optional[Union[list[EventBreadcrumb], ValueEventBreadcrumb]] = None
     sdk: Optional[ClientSDKInfo] = None
-    # request: Optional[Request] = None
+    request: Optional[IngestRequest] = None
 
 
 class EventIngestSchema(BaseEventIngestSchema):

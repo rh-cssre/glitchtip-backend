@@ -7,7 +7,7 @@ from apps.event_ingest.schema import CSPReportSchema, EventException
 from glitchtip.api.schema import CamelSchema
 from sentry.interfaces.stacktrace import get_context
 
-from ..common_event_schema import EventBreadcrumb
+from ..common_event_schema import BaseRequest, EventBreadcrumb, ListKeyValue
 from .constants import IssueEventType
 from .models import Issue, IssueEvent
 
@@ -46,6 +46,17 @@ class BreadcrumbsEntry(Schema):
     data: dict[Literal["values"], list[APIEventBreadcrumb]]
 
 
+class Request(CamelSchema, BaseRequest):
+    headers: Optional[ListKeyValue] = None
+    query_string: Optional[ListKeyValue] = None
+    inferred_content_type: Optional[str] = None
+
+
+class RequestEntry(Schema):
+    type: Literal["request"]
+    data: Request
+
+
 class IssueEventSchema(CamelSchema, ModelSchema):
     id: str = Field(validation_alias="id.hex")
     event_id: str
@@ -63,9 +74,9 @@ class IssueEventSchema(CamelSchema, ModelSchema):
     message: str
     metadata: dict[str, str] = Field(default_factory=dict)
     tags: list[dict[str, Optional[str]]] = []
-    entries: list[Union[BreadcrumbsEntry, ExceptionEntry, MessageEntry]] = Field(
-        discriminator="type", default_factory=list
-    )
+    entries: list[
+        Union[BreadcrumbsEntry, ExceptionEntry, MessageEntry, RequestEntry]
+    ] = Field(discriminator="type", default_factory=list)
 
     class Config:
         model = IssueEvent
@@ -120,7 +131,6 @@ class IssueEventSchema(CamelSchema, ModelSchema):
             entries.append({"type": "message", "data": {"formatted": message}})
 
         if request := data.get("request"):
-            request["inferredContentType"] = request.pop("inferred_content_type", None)
             entries.append({"type": "request", "data": request})
 
         if csp := data.get("csp"):

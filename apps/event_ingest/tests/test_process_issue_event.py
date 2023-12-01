@@ -397,32 +397,32 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
                 "breadcrumbs",
             ],
         )
-        # self.assertCompareData(
-        #     event_json["request"],
-        #     sentry_json["request"],
-        #     [
-        #         "url",
-        #         # "headers",
-        #         "method",
-        #         "env",
-        #         "query_string",
-        #         "inferred_content_type",
-        #     ],
-        # )
-        # self.assertEqual(
-        #     event_json["datetime"][:22],
-        #     sentry_json["datetime"][:22],
-        #     "Compare if datetime is almost the same",
-        # )
+        self.assertCompareData(
+            event_json["request"],
+            sentry_json["request"],
+            [
+                "url",
+                "headers",
+                "method",
+                "env",
+                "query_string",
+            ],
+        )
+        self.assertEqual(
+            event_json["datetime"][:22],
+            sentry_json["datetime"][:22],
+            "Compare if datetime is almost the same",
+        )
 
-        # res = self.client.get(self.get_project_events_detail(event.pk))
-        # res_data = res.json()
-        # self.assertEqual(res.status_code, 200)
-        # self.assertCompareData(
-        #     res_data,
-        #     sentry_data,
-        #     ["title", "culprit", "type", "metadata", "platform", "packages"],
-        # )
+        res = self.client.get(self.get_project_events_detail(event.pk))
+        res_data = res.json()
+        self.assertEqual(res.status_code, 200)
+        self.assertCompareData(
+            res_data,
+            sentry_data,
+            ["title", "culprit", "type", "metadata", "platform", "packages"],
+        )
+        # Check on request entries "inferred_content_type",
         # issue = event.issue
         # issue.refresh_from_db()
         # self.assertEqual(issue.level, LogLevel.ERROR)
