@@ -1,3 +1,4 @@
+import re
 from timeit import default_timer as timer
 
 from django.shortcuts import reverse
@@ -151,14 +152,36 @@ class IssuesAPITestCase(GlitchTipTestCase):
         self.create_user_and_project()
         self.url = reverse("issue-list")
 
-    def test_issue_list(self):
+    def test_issues_single_page_list(self):
         issue = baker.make("issues.Issue", project=self.project)
         not_my_issue = baker.make("issues.Issue")
 
-        res = self.client.get(self.url)
+        with self.assertNumQueries(2):
+            res = self.client.get(self.url)
         self.assertContains(res, issue.title)
         self.assertNotContains(res, not_my_issue.title)
         self.assertEqual(res.get("X-Hits"), "1")
+
+    def test_issues_multi_page_list(self):
+        first_issue = baker.make("issues.Issue", project=self.project)
+        baker.make("issues.Issue", project=self.project, _quantity=50)
+        last_issue = baker.make("issues.Issue", project=self.project)
+
+        with self.assertNumQueries(3):
+            res = self.client.get(self.url)
+
+        self.assertEqual(res.headers.get("X-Hits"), "52")
+        self.assertEqual(res.data[0]["id"], str(last_issue.id))
+        self.assertNotContains(res, str(first_issue.id))
+
+        pattern = r'(?<=\<).+?(?=\>)'
+        links = re.findall(pattern, res.headers.get("Link"))
+
+        res = self.client.get(links[1])
+
+        self.assertEqual(res.headers.get("X-Hits"), "52")
+        self.assertEqual(res.data[-1]["id"], str(first_issue.id))
+        self.assertNotContains(res, str(last_issue.id))
 
     def test_no_duplicate_issues(self):
         """
