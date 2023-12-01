@@ -26,11 +26,12 @@ class AsyncLinkHeaderPagination(CursorPagination):
         self, queryset: QuerySet, pagination: CursorPagination.Input, request: HttpRequest, response: HttpResponse, **params
     ) -> dict:
         limit = _clamp(pagination.limit or ninja_settings.PAGINATION_PER_PAGE, 0, self.max_page_size)
+
+        full_queryset = queryset
         if not queryset.query.order_by:
             queryset = queryset.order_by(*self.default_ordering)
 
         order = queryset.query.order_by
-        total_count = await self._items_count(queryset)
 
         base_url = request.build_absolute_uri()
         cursor = pagination.cursor
@@ -101,6 +102,12 @@ class AsyncLinkHeaderPagination(CursorPagination):
                     next_position,
                     previous_position,
                 ) if has_next else None
+
+        total_count = 0
+        if has_next or has_previous:
+            total_count = await self._items_count(full_queryset)
+        else:
+            total_count = len(page)
 
         links = []
         for url, label in (

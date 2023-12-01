@@ -11,7 +11,7 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
     def setUp(self):
         super().create_logged_in_user()
 
-    def test_paginated_list(self):
+    def test_multi_page_list(self):
         first_event = baker.make("issue_events.IssueEvent", issue__project=self.project)
         baker.make("issue_events.IssueEvent", issue__project=self.project, issue_id=first_event.issue_id, _quantity=50)
         last_event = baker.make("issue_events.IssueEvent", issue__project=self.project, issue_id=first_event.issue_id)
@@ -28,9 +28,25 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         links = re.findall(pattern, res.headers.get("Link"))
 
         res = self.client.get(links[1])
-        
+
+        self.assertEqual(res.headers.get("X-Hits"), "52")
         self.assertContains(res, first_event.pk.hex)
         self.assertNotContains(res, last_event.pk.hex)
+
+    def test_single_page_list(self):
+        """
+        Single page query should not hit DB for count
+        """
+        first_event = baker.make("issue_events.IssueEvent", issue__project=self.project)
+        last_event = baker.make("issue_events.IssueEvent", issue__project=self.project, issue_id=first_event.issue_id)
+        url = reverse("api:issue_event_list", args=[first_event.issue_id])
+
+        with self.assertNumQueries(1):
+            res = self.client.get(url)
+
+        self.assertEqual(res.headers.get("X-Hits"), "2")
+        self.assertContains(res, last_event.pk.hex)
+        self.assertContains(res, first_event.pk.hex)
 
     def test_retrieve(self):
         event = baker.make("issue_events.IssueEvent", issue__project=self.project)
