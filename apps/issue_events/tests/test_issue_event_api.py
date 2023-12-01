@@ -21,7 +21,7 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
             res = self.client.get(url)
 
         self.assertEqual(res.headers.get("X-Hits"), "52")
-        self.assertContains(res, last_event.pk.hex)
+        self.assertEqual(res.json()[0]["id"], last_event.pk.hex)
         self.assertNotContains(res, first_event.pk.hex)
 
         pattern = r'(?<=\<).+?(?=\>)'
@@ -30,7 +30,7 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         res = self.client.get(links[1])
 
         self.assertEqual(res.headers.get("X-Hits"), "52")
-        self.assertContains(res, first_event.pk.hex)
+        self.assertEqual(res.json()[-1]["id"], first_event.pk.hex)
         self.assertNotContains(res, last_event.pk.hex)
 
     def test_single_page_list(self):

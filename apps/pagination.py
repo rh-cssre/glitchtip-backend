@@ -1,13 +1,11 @@
 import inspect
 from functools import partial, wraps
-from typing import Any, Callable, List, Type
+from typing import Any, Callable, Type
 from urllib import parse
 
 from asgiref.sync import sync_to_async
 from django.db.models import QuerySet
 from django.http import HttpRequest, HttpResponse
-from django.utils.translation import gettext as _
-from ninja import Field, Schema
 from ninja.conf import settings as ninja_settings
 from ninja.constants import NOT_SET
 from ninja.pagination import PaginationBase, make_response_paginated
@@ -19,8 +17,8 @@ from .cursor_pagination import CursorPagination, _clamp, _reverse_order
 class AsyncLinkHeaderPagination(CursorPagination):
     max_hits = 1000
 
-    class Output(Schema):
-        results: List[Any] = Field(description=_("The page of objects."))
+    # Remove Output schema because we only want to return a list of items
+    Output = None
 
     async def paginate_queryset(
         self, queryset: QuerySet, pagination: CursorPagination.Input, request: HttpRequest, response: HttpResponse, **params
@@ -48,9 +46,6 @@ class AsyncLinkHeaderPagination(CursorPagination):
             else:
                 queryset = queryset.filter(**{f"{order_attr}__gt": cursor.position})
 
-        # If we have an offset cursor then offset the entire page by that amount.
-        # We also always fetch an extra item in order to determine if there is a
-        # page following on from this one.
         @sync_to_async
         def get_results():
             return list(queryset[cursor.offset : cursor.offset + limit + 1])
@@ -58,7 +53,6 @@ class AsyncLinkHeaderPagination(CursorPagination):
         results = await get_results()
         page = list(results[:limit])
 
-        # Determine the position of the final item following the page.
         if len(results) > len(page):
             has_following_position = True
             following_position = self._get_position_from_instance(results[-1], order)
@@ -67,8 +61,6 @@ class AsyncLinkHeaderPagination(CursorPagination):
             following_position = None
 
         if cursor.reverse:
-            # If we have a reverse queryset, then the query ordering was in reverse
-            # so we need to reverse the items again before returning them to the user.
             page = list(reversed(page))
 
             has_next = (cursor.position is not None) or (cursor.offset > 0)
@@ -131,7 +123,7 @@ class AsyncLinkHeaderPagination(CursorPagination):
         response["X-Max-Hits"] = self.max_hits
         response["X-Hits"] = total_count
 
-        return {"results": page}
+        return page
 
     @sync_to_async
     def _items_count(self, queryset: QuerySet) -> int:
