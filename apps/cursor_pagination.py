@@ -10,6 +10,8 @@ from ninja import Field, Schema
 from ninja.pagination import PaginationBase
 from pydantic import field_validator
 
+# Code in this file is taken directly from https://github.com/vitalik/django-ninja/pull/836
+# and should be swapped out once that MR is merged.
 
 @dataclass
 class Cursor:
@@ -17,8 +19,10 @@ class Cursor:
     reverse: bool = False
     position: Optional[str] = None
 
+
 def _clamp(val: int, min_: int, max_: int) -> int:
     return max(min_, min(val, max_))
+
 
 def _reverse_order(order: tuple) -> tuple:
     """
@@ -40,6 +44,7 @@ def _replace_query_param(url: str, key: str, val: str) -> str:
     query_dict[key] = [val]
     query = parse.urlencode(sorted(query_dict.items()), doseq=True)
     return parse.urlunsplit((scheme, netloc, path, query, fragment))
+
 
 class CursorPagination(PaginationBase):
     class Input(Schema):
