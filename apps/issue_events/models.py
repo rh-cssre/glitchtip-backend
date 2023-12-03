@@ -110,3 +110,7 @@ class IssueEvent(PostgresPartitionedModel, models.Model):
     def metadata(self):
         """Return metadata if exists, else return just the title as metadata"""
         return self.data.get("metadata", {"title": self.title})
+
+    @property
+    def platform(self):
+        return self.data.get("platform")

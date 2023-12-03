@@ -42,3 +42,11 @@ class BaseRequest(Schema):
     method: Optional[str] = None
     protocol: Optional[str] = None
     url: Optional[str] = None
+
+
+class BaseIssueEvent(Schema):
+    """
+    Base Issue Event for fields present from the SDK data, json event, and api event
+    """
+
+    platform: Optional[str] = None

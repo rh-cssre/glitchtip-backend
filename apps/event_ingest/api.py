@@ -5,7 +5,7 @@ from ninja import Router, Schema
 
 from .authentication import event_auth
 from .schema import (
-    BaseEventIngestSchema,
+    IngestEventIngest,
     CSPIssueEventSchema,
     EnvelopeSchema,
     ErrorIssueEventSchema,
@@ -38,7 +38,7 @@ async def async_call_celery_task(task, *args):
         return task.delay(*args)
 
 
-def get_issue_event_class(event: BaseEventIngestSchema):
+def get_issue_event_class(event: IngestEventIngest):
     return ErrorIssueEventSchema if event.exception else IssueEventSchema
 
 

@@ -19,7 +19,12 @@ from pydantic import (
 
 from apps.issue_events.constants import IssueEventType
 
-from ..common_event_schema import BaseRequest, EventBreadcrumb, ListKeyValue
+from ..common_event_schema import (
+    BaseIssueEvent,
+    BaseRequest,
+    EventBreadcrumb,
+    ListKeyValue,
+)
 from ..common_event_utils import invalid_to_none
 
 logger = logging.getLogger(__name__)
@@ -221,9 +226,8 @@ class IngestRequest(BaseRequest):
         return result
 
 
-class BaseEventIngestSchema(Schema):
+class IngestEventIngest(BaseIssueEvent):
     timestamp: datetime = Field(default_factory=now)
-    platform: Optional[str] = None
     level: Optional[str] = "error"
     logentry: Optional[EventMessage] = None
     logger: Optional[str] = None
@@ -249,7 +253,7 @@ class BaseEventIngestSchema(Schema):
     request: Optional[IngestRequest] = None
 
 
-class EventIngestSchema(BaseEventIngestSchema):
+class EventIngestSchema(IngestEventIngest):
     event_id: uuid.UUID
 
 
@@ -273,7 +277,7 @@ class ItemHeaderSchema(Schema):
 class EnvelopeSchema(RootModel[list[dict[str, Any]]]):
     root: list[dict[str, Any]]
     _header: EnvelopeHeaderSchema
-    _items: list[tuple[ItemHeaderSchema, BaseEventIngestSchema]] = []
+    _items: list[tuple[ItemHeaderSchema, IngestEventIngest]] = []
 
     @model_validator(mode="after")
     def validate_envelope(self) -> "EnvelopeSchema":
@@ -291,7 +295,7 @@ class EnvelopeSchema(RootModel[list[dict[str, Any]]]):
             item_header = ItemHeaderSchema(**item_header_data)
             if item_header.type == "event":
                 try:
-                    item = BaseEventIngestSchema(**data.pop(0))
+                    item = IngestEventIngest(**data.pop(0))
                 except ValidationError as err:
                     logger.warning("Envelope Event item invalid", exc_info=True)
                     raise err
@@ -323,7 +327,7 @@ class SecuritySchema(Schema):
 ## Normalized Interchange Issue Events
 
 
-class IssueEventSchema(BaseEventIngestSchema):
+class IssueEventSchema(IngestEventIngest):
     """
     Event storage and interchange format
     Used in json view and celery interchange
@@ -333,11 +337,11 @@ class IssueEventSchema(BaseEventIngestSchema):
     type: Literal[IssueEventType.DEFAULT] = IssueEventType.DEFAULT
 
 
-class ErrorIssueEventSchema(BaseEventIngestSchema):
+class ErrorIssueEventSchema(IngestEventIngest):
     type: Literal[IssueEventType.ERROR] = IssueEventType.ERROR
 
 
-class CSPIssueEventSchema(BaseEventIngestSchema):
+class CSPIssueEventSchema(IngestEventIngest):
     type: Literal[IssueEventType.CSP] = IssueEventType.CSP
     csp: CSPReportSchema
 

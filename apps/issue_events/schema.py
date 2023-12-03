@@ -2,12 +2,18 @@ from datetime import datetime
 from typing import Any, Literal, Optional, Union
 
 from ninja import Field, ModelSchema, Schema
+from pydantic import computed_field
 
 from apps.event_ingest.schema import CSPReportSchema, EventException
 from glitchtip.api.schema import CamelSchema
 from sentry.interfaces.stacktrace import get_context
 
-from ..common_event_schema import BaseRequest, EventBreadcrumb, ListKeyValue
+from ..common_event_schema import (
+    BaseIssueEvent,
+    BaseRequest,
+    EventBreadcrumb,
+    ListKeyValue,
+)
 from .constants import IssueEventType
 from .models import Issue, IssueEvent
 
@@ -48,8 +54,16 @@ class BreadcrumbsEntry(Schema):
 
 class Request(CamelSchema, BaseRequest):
     headers: Optional[ListKeyValue] = None
-    query_string: Optional[ListKeyValue] = None
-    inferred_content_type: Optional[str] = None
+    query_string: Optional[ListKeyValue] = Field(
+        default=None, serialization_alias="query"
+    )
+
+    @computed_field
+    @property
+    def inferred_content_type(self) -> Optional[str]:
+        return next(
+            (value for key, value in self.headers if key == "Content-Type"), None
+        )
 
 
 class RequestEntry(Schema):
@@ -57,7 +71,7 @@ class RequestEntry(Schema):
     data: Request
 
 
-class IssueEventSchema(CamelSchema, ModelSchema):
+class IssueEventSchema(CamelSchema, ModelSchema, BaseIssueEvent):
     id: str = Field(validation_alias="id.hex")
     event_id: str
     project_id: int = Field(validation_alias="issue.project_id")
@@ -69,7 +83,6 @@ class IssueEventSchema(CamelSchema, ModelSchema):
     packages: Optional[dict[str, Optional[str]]] = Field(
         validation_alias="data.modules", default=None
     )
-    platform: Optional[str] = Field(validation_alias="data.platform", default=None)
     type: str = Field(validation_alias="get_type_display")
     message: str
     metadata: dict[str, str] = Field(default_factory=dict)
@@ -154,7 +167,7 @@ class IssueEventDetailSchema(IssueEventSchema):
             return event_id.hex
 
 
-class IssueEventJsonSchema(ModelSchema):
+class IssueEventJsonSchema(ModelSchema, BaseIssueEvent):
     """
     Represents a more raw view of the event, built with open source (legacy) Sentry compatibility
     """
@@ -168,7 +181,6 @@ class IssueEventJsonSchema(ModelSchema):
         validation_alias="data.breadcrumbs", default=None
     )
     project: int = Field(validation_alias="issue.project_id")
-    platform: Optional[str] = Field(validation_alias="data.platform", default=None)
     level: Optional[str] = Field(validation_alias="get_level_display")
     exception: Optional[Any] = Field(validation_alias="data.exception", default=None)
     modules: Optional[dict[str, str]] = Field(
@@ -177,6 +189,9 @@ class IssueEventJsonSchema(ModelSchema):
     sdk: Optional[dict] = Field(validation_alias="data.sdk", default_factory=dict)
     type: Optional[str] = Field(validation_alias="get_type_display")
     request: Optional[Any] = Field(validation_alias="data.request", default=None)
+    environment: Optional[str] = Field(
+        validation_alias="data.environment", default=None
+    )
 
     class Config:
         model = IssueEvent

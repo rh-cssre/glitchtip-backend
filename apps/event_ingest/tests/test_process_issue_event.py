@@ -2,7 +2,7 @@ import uuid
 
 from django.urls import reverse
 
-from apps.issue_events.constants import EventStatus
+from apps.issue_events.constants import EventStatus, LogLevel
 from apps.issue_events.models import Issue, IssueEvent, IssueHash
 
 from ..process_event import process_issue_events
@@ -422,7 +422,132 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
             sentry_data,
             ["title", "culprit", "type", "metadata", "platform", "packages"],
         )
-        # Check on request entries "inferred_content_type",
-        # issue = event.issue
-        # issue.refresh_from_db()
-        # self.assertEqual(issue.level, LogLevel.ERROR)
+        self.assertCompareData(
+            res_data["entries"][1]["data"],
+            sentry_data["entries"][1]["data"],
+            [
+                "inferredContentType",
+                "env",
+                "headers",
+                "url",
+                "query",
+                "data",
+                "method",
+            ],
+        )
+        issue = event.issue
+        issue.refresh_from_db()
+        self.assertEqual(issue.level, LogLevel.ERROR)
+
+    def test_dotnet_zero_division(self):
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+            "dotnet_divide_zero"
+        )
+        event = self.submit_event(sdk_error)
+        event_json = self.get_event_json(event)
+        res = self.client.get(self.get_project_events_detail(event.pk))
+        res_data = res.json()
+
+        self.assertCompareData(event_json, sentry_json, ["environment"])
+        self.assertCompareData(
+            res_data,
+            sentry_data,
+            [
+                "eventID",
+                "title",
+                "culprit",
+                "platform",
+                "type",
+                "metadata",
+            ],
+        )
+        res_exception = next(filter(is_exception, res_data["entries"]), None)
+        sentry_exception = next(filter(is_exception, sentry_data["entries"]), None)
+        self.assertEqual(
+            res_exception["data"]["values"][0]["stacktrace"]["frames"][4]["context"],
+            sentry_exception["data"]["values"][0]["stacktrace"]["frames"][4]["context"],
+        )
+        # tags = res_data.get("tags")
+        # browser_tag = next(filter(lambda tag: tag["key"] == "browser", tags), None)
+        # self.assertEqual(browser_tag["value"], "Firefox 76.0")
+        # environment_tag = next(
+        #     filter(lambda tag: tag["key"] == "environment", tags), None
+        # )
+        # self.assertEqual(environment_tag["value"], "Development")
+
+        # event_json = event.event_json()
+        # browser_tag = next(
+        #     filter(lambda tag: tag[0] == "browser", event_json.get("tags")), None
+        # )
+        # self.assertEqual(browser_tag[1], "Firefox 76.0")
+
+    # def test_sentry_cli_send_event_no_level(self):
+    #     sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+    #         "sentry_cli_send_event_no_level"
+    #     )
+    #     res = self.client.post(self.event_store_url, sdk_error, format="json")
+    #     event = Event.objects.get(pk=res.data["id"])
+    #     event_json = event.event_json()
+    #     self.assertCompareData(event_json, sentry_json, ["title", "message"])
+    #     self.assertEqual(event_json["project"], event.issue.project_id)
+
+    #     url = self.get_project_events_detail(event.pk)
+    #     res = self.client.get(url)
+    #     self.assertCompareData(
+    #         res.data,
+    #         sentry_data,
+    #         [
+    #             "userReport",
+    #             "title",
+    #             "culprit",
+    #             "type",
+    #             "metadata",
+    #             "message",
+    #             "platform",
+    #             "previousEventID",
+    #         ],
+    #     )
+    #     self.assertEqual(res.data["projectID"], event.issue.project_id)
+
+    # def test_js_error_with_context(self):
+    #     self.project.scrub_ip_addresses = False
+    #     self.project.save()
+    #     sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+    #         "js_error_with_context"
+    #     )
+    #     res = self.client.post(
+    #         self.event_store_url, sdk_error, format="json", REMOTE_ADDR="142.255.29.14"
+    #     )
+    #     event = Event.objects.get(pk=res.data["id"])
+    #     event_json = event.event_json()
+    #     self.assertCompareData(
+    #         event_json, sentry_json, ["title", "message", "extra", "user"]
+    #     )
+
+    #     url = self.get_project_events_detail(event.pk)
+    #     res = self.client.get(url)
+    #     self.assertCompareData(res.json(), sentry_data, ["context", "user"])
+
+    # def test_elixir_stacktrace(self):
+    #     """The elixir SDK does things differently"""
+    #     sdk_error, sentry_json, sentry_data = self.get_json_test_data("elixir_error")
+    #     res = self.client.post(self.event_store_url, sdk_error, format="json")
+    #     event = Event.objects.get(pk=res.data["id"])
+    #     event_json = event.event_json()
+    #     self.assertCompareData(
+    #         event_json["exception"]["values"][0],
+    #         sentry_json["exception"]["values"][0],
+    #         ["type", "values", "exception"],
+    #     )
+
+    # def test_small_js_error(self):
+    #     """A small example to test stacktraces"""
+    #     sdk_error, sentry_json, sentry_data = self.get_json_test_data("small_js_error")
+    #     res = self.client.post(self.event_store_url, sdk_error, format="json")
+    #     event = Event.objects.get(pk=res.data["id"])
+    #     event_json = event.event_json()
+    #     self.assertCompareData(
+    #         event_json["exception"]["values"][0],
+    #         sentry_json["exception"]["values"][0],
+    #         ["type", "values", "exception", "abs_path"],
+    #     )
