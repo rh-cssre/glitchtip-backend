@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import FileBlob, File
+
+from .models import File, FileBlob
 
 
 class FileBlobAdmin(admin.ModelAdmin):
