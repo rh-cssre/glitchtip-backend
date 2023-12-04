@@ -2,5 +2,5 @@ from django.apps import AppConfig
 
 
 class DifsConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'difs'
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "difs"
