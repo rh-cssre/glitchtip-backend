@@ -5,11 +5,11 @@ from ninja import Router, Schema
 
 from .authentication import event_auth
 from .schema import (
-    IngestEventIngest,
     CSPIssueEventSchema,
     EnvelopeSchema,
     ErrorIssueEventSchema,
     EventIngestSchema,
+    IngestEventIngest,
     InterchangeIssueEvent,
     IssueEventSchema,
     SecuritySchema,
