@@ -9,7 +9,7 @@ from .schema import (
     EnvelopeSchema,
     ErrorIssueEventSchema,
     EventIngestSchema,
-    IngestEventIngest,
+    IngestIssueEvent,
     InterchangeIssueEvent,
     IssueEventSchema,
     SecuritySchema,
@@ -38,7 +38,7 @@ async def async_call_celery_task(task, *args):
         return task.delay(*args)
 
 
-def get_issue_event_class(event: IngestEventIngest):
+def get_issue_event_class(event: IngestIssueEvent):
     return ErrorIssueEventSchema if event.exception else IssueEventSchema
 
 

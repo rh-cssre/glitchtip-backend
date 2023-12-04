@@ -226,7 +226,7 @@ class IngestRequest(BaseRequest):
         return result
 
 
-class IngestEventIngest(BaseIssueEvent):
+class IngestIssueEvent(BaseIssueEvent):
     timestamp: datetime = Field(default_factory=now)
     level: Optional[str] = "error"
     logentry: Optional[EventMessage] = None
@@ -253,7 +253,7 @@ class IngestEventIngest(BaseIssueEvent):
     request: Optional[IngestRequest] = None
 
 
-class EventIngestSchema(IngestEventIngest):
+class EventIngestSchema(IngestIssueEvent):
     event_id: uuid.UUID
 
 
@@ -277,7 +277,7 @@ class ItemHeaderSchema(Schema):
 class EnvelopeSchema(RootModel[list[dict[str, Any]]]):
     root: list[dict[str, Any]]
     _header: EnvelopeHeaderSchema
-    _items: list[tuple[ItemHeaderSchema, IngestEventIngest]] = []
+    _items: list[tuple[ItemHeaderSchema, IngestIssueEvent]] = []
 
     @model_validator(mode="after")
     def validate_envelope(self) -> "EnvelopeSchema":
@@ -295,7 +295,7 @@ class EnvelopeSchema(RootModel[list[dict[str, Any]]]):
             item_header = ItemHeaderSchema(**item_header_data)
             if item_header.type == "event":
                 try:
-                    item = IngestEventIngest(**data.pop(0))
+                    item = IngestIssueEvent(**data.pop(0))
                 except ValidationError as err:
                     logger.warning("Envelope Event item invalid", exc_info=True)
                     raise err
@@ -327,7 +327,7 @@ class SecuritySchema(Schema):
 ## Normalized Interchange Issue Events
 
 
-class IssueEventSchema(IngestEventIngest):
+class IssueEventSchema(IngestIssueEvent):
     """
     Event storage and interchange format
     Used in json view and celery interchange
@@ -337,11 +337,11 @@ class IssueEventSchema(IngestEventIngest):
     type: Literal[IssueEventType.DEFAULT] = IssueEventType.DEFAULT
 
 
-class ErrorIssueEventSchema(IngestEventIngest):
+class ErrorIssueEventSchema(IngestIssueEvent):
     type: Literal[IssueEventType.ERROR] = IssueEventType.ERROR
 
 
-class CSPIssueEventSchema(IngestEventIngest):
+class CSPIssueEventSchema(IngestIssueEvent):
     type: Literal[IssueEventType.CSP] = IssueEventType.CSP
     csp: CSPReportSchema
 
