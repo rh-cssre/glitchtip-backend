@@ -71,7 +71,7 @@ class Migration(migrations.Migration):
             options={
                 "abstract": False,
             },
-            bases=(organizations.base.UnicodeMixin, models.Model),
+            bases=(models.Model,),
         ),
         migrations.CreateModel(
             name="OrganizationUser",
@@ -143,7 +143,7 @@ class Migration(migrations.Migration):
                     ("user", "organization"),
                 },
             },
-            bases=(organizations.base.UnicodeMixin, models.Model),
+            bases=(models.Model,),
         ),
         migrations.AddField(
             model_name="organization",
@@ -265,6 +265,6 @@ class Migration(migrations.Migration):
             options={
                 "abstract": False,
             },
-            bases=(organizations.base.UnicodeMixin, models.Model),
+            bases=(models.Model,),
         ),
     ]

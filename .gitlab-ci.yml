@@ -17,7 +17,7 @@ workflow:
     - when: always
 
 test:
-  image: python:3.11
+  image: python:3.12
   variables:
     SECRET_KEY: testing
     ENABLE_TEST_API: "true"
@@ -36,7 +36,7 @@ test:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 
 lint:
-  image: python:3.11
+  image: python:3.12
   script:
     - curl -sSL https://install.python-poetry.org | python3 -
     - $POETRY_HOME/bin/poetry install --no-interaction --no-ansi
