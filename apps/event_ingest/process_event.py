@@ -5,18 +5,20 @@ from urllib.parse import urlparse
 from django.db import transaction
 from django.db.models import Q
 from django.db.utils import IntegrityError
+from ninja import Schema
 
 from alerts.models import Notification
 from apps.issue_events.constants import EventStatus
 from apps.issue_events.models import Issue, IssueEvent, IssueEventType, IssueHash
+
+# from apps.issue_events.schema import CSPIssueEventDataSchema, IssueEventDataSchema
 from sentry.culprit import generate_culprit
 from sentry.eventtypes.error import ErrorEvent
 
 from .schema import (
-    EventMessage,
     InterchangeIssueEvent,
 )
-from .utils import generate_hash
+from .utils import generate_hash, transform_parameterized_message
 
 
 @dataclass
@@ -24,21 +26,25 @@ class ProcessingEvent:
     event: InterchangeIssueEvent
     issue_hash: str
     title: str
+    transaction: str
+    metadata: dict[str, Any]
     event_data: dict[str, Any]
+    event_tags: dict[str, str]
     issue_id: Optional[int] = None
     issue_created = False
 
 
-def transform_message(message: Union[str, EventMessage]) -> str:
-    if isinstance(message, str):
-        return message
-    if not message.formatted and message.message:
-        params = message.params
-        if isinstance(params, list):
-            return message.message % tuple(params)
-        elif isinstance(params, dict):
-            return message.message.format(**params)
-    return message.formatted
+def devalue(obj: Union[Schema, list]) -> Optional[Union[dict, list]]:
+    """
+    Convert Schema like {"values": []} into list or dict without unnecessary 'values'
+    """
+    if isinstance(obj, Schema) and hasattr(obj, "values"):
+        return obj.dict(mode="json", exclude_none=True, exclude_defaults=True)["values"]
+    elif isinstance(obj, list):
+        return [
+            x.dict(mode="json", exclude_none=True, exclude_defaults=True) for x in obj
+        ]
+    return None
 
 
 def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
@@ -61,10 +67,24 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         event = ingest_event.payload
         title = ""
         culprit = ""
-        if event.type == IssueEventType.ERROR:
+        metadata: dict[str, Any] = {}
+        if event.type in [IssueEventType.ERROR, IssueEventType.DEFAULT]:
             sentry_event = ErrorEvent()
             metadata = sentry_event.get_metadata(event.dict())
-            title = sentry_event.get_title(metadata)
+            if event.type == IssueEventType.ERROR and metadata:
+                title = sentry_event.get_title(metadata)
+            else:
+                message = event.message if event.message else event.logentry
+                title = (
+                    transform_parameterized_message(message)
+                    if message
+                    else "<untitled>"
+                )
+                culprit = (
+                    event.transaction
+                    if event.transaction
+                    else generate_culprit(event.dict())
+                )
             culprit = sentry_event.get_location(event.dict())
         elif event.type == IssueEventType.CSP:
             humanized_directive = event.csp.effective_directive.replace("-src", "")
@@ -72,21 +92,49 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             title = f"Blocked '{humanized_directive}' from '{uri}'"
             culprit = "fake culprit"
             event_data["csp"] = event.csp.dict()
-        else:  # Default Event Type
-            title = transform_message(event.message) if event.message else "<untitled>"
-            culprit = (
-                event.transaction
-                if event.transaction
-                else generate_culprit(event.dict())
-            )
+
         issue_hash = generate_hash(title, culprit, event.type, event.fingerprint)
-        event_data["culprit"] = culprit
+        if metadata:
+            event_data["metadata"] = metadata
+        if platform := event.platform:
+            event_data["platform"] = platform
+        if modules := event.modules:
+            event_data["modules"] = modules
+        if sdk := event.sdk:
+            event_data["sdk"] = sdk.dict(exclude_none=True)
+        if request := event.request:
+            event_data["request"] = request.dict(exclude_none=True)
+        if environment := event.environment:
+            event_data["environment"] = environment
+
+        # Message is str
+        # Logentry is {"params": etc} Message format
+        if logentry := event.logentry:
+            event_data["logentry"] = logentry.dict(exclude_none=True)
+        elif message := event.message:
+            if isinstance(message, str):
+                event_data["logentry"] = {"formatted": message}
+            else:
+                event_data["logentry"] = message.dict(exclude_none=True)
+        if message := event.message:
+            event_data["message"] = (
+                message if isinstance(message, str) else message.formatted
+            )
+
+        if breadcrumbs := event.breadcrumbs:
+            event_data["breadcrumbs"] = devalue(breadcrumbs)
+        if exception := event.exception:
+            event_data["exception"] = devalue(exception)
+
         processing_events.append(
             ProcessingEvent(
                 event=ingest_event,
                 issue_hash=issue_hash,
                 title=title,
+                transaction=culprit,
+                metadata=metadata,
                 event_data=event_data,
+                event_tags={},
             )
         )
         q_objects |= Q(project_id=ingest_event.project_id, value=issue_hash)
@@ -102,6 +150,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         issue_defaults = {
             "type": event_type,
             "title": processing_event.title,
+            "metadata": processing_event.metadata,
         }
         for hash_obj in hash_queryset:
             if (
@@ -131,10 +180,14 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         issue_events.append(
             IssueEvent(
                 id=processing_event.event.event_id,
-                date_received=processing_event.event.received_at,
                 issue_id=processing_event.issue_id,
                 type=event_type,
+                timestamp=processing_event.event.payload.timestamp,
+                received=processing_event.event.received,
+                title=processing_event.title,
+                transaction=processing_event.transaction,
                 data=processing_event.event_data,
+                tags=processing_event.event_tags,
             )
         )
 

@@ -14,8 +14,6 @@ FLUSH_EVERY = 100
 FLUSH_INTERVAL = 2
 
 
-
-
 @shared_task(base=Batches, flush_every=FLUSH_EVERY, flush_interval=FLUSH_INTERVAL)
 def ingest_event(requests):
     logger.info(f"Process {len(requests)} ingest_event requests")

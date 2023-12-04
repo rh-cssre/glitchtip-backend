@@ -1,24 +1,40 @@
 import logging
 import typing
 import uuid
-from collections.abc import Callable
 from datetime import datetime
 from typing import Annotated, Any, Literal, Optional, Union
+from urllib.parse import parse_qs
 
 from django.utils.timezone import now
-from ninja import Field, Schema
-from pydantic import RootModel, ValidationError, WrapValidator, model_validator
+from ninja import Field
+from ninja import Schema as BaseSchema
+from pydantic import (
+    AliasChoices,
+    RootModel,
+    ValidationError,
+    WrapValidator,
+    field_validator,
+    model_validator,
+)
 
 from apps.issue_events.constants import IssueEventType
+
+from ..common_event_schema import (
+    BaseIssueEvent,
+    BaseRequest,
+    EventBreadcrumb,
+    ListKeyValue,
+)
+from ..common_event_utils import invalid_to_none
 
 logger = logging.getLogger(__name__)
 
 
-def invalid_to_none(v: Any, handler: Callable[[Any], Any]) -> Any:
-    try:
-        return handler(v)
-    except ValidationError:
-        return None
+class Schema(BaseSchema):
+    """Schema configuration for all event ingest schemas"""
+
+    class Config(BaseSchema.Config):
+        coerce_numbers_to_str = True  # Lax is best for ingest
 
 
 class TagKeyValue(Schema):
@@ -113,6 +129,20 @@ class EventMessage(Schema):
     message: Optional[str] = None
     params: Optional[Union[list[str], dict[str, str]]] = None
 
+    @model_validator(mode="after")
+    def set_formatted(self) -> "EventMessage":
+        """
+        When the EventMessage formatted string is not set,
+        attempt to set it based on message and params interpolation
+        """
+        if not self.formatted and self.message:
+            params = self.params
+            if isinstance(params, list) and params is not None:
+                self.formatted = self.message % tuple(params)
+            elif isinstance(params, dict):
+                self.formatted = self.message.format(**params)
+        return self
+
 
 class EventTemplate(Schema):
     lineno: int
@@ -123,34 +153,93 @@ class EventTemplate(Schema):
     post_context: Optional[list[str]] = None
 
 
-Level = Literal["fatal", "error", "warning", "info", "debug"]
-
-
-class EventBreadcrumb(Schema):
-    type: Optional[str] = None
-    category: Optional[str] = None
-    message: Optional[str] = None
-    data: Optional[dict[str, Any]] = None
-    level: Optional[Level] = None
-    timestamp: Optional[datetime] = None
-
-
 class ValueEventBreadcrumb(Schema):
     values: list[EventBreadcrumb]
 
 
-class BaseEventIngestSchema(Schema):
+class ClientSDKPackage(Schema):
+    name: Optional[str] = None
+    version: Optional[str] = None
+
+
+class ClientSDKInfo(Schema):
+    integrations: Optional[list[Optional[str]]] = None
+    name: Optional[str]
+    packages: Optional[list[ClientSDKPackage]] = None
+    version: Optional[str]
+
+
+class RequestHeaders(Schema):
+    content_type: Optional[str]
+
+
+class RequestEnv(Schema):
+    remote_addr: Optional[str]
+
+
+QueryString = Union[str, ListKeyValue, dict[str, Optional[str]]]
+"""Raw URL querystring, list, or dict"""
+Headers = Union[list[list[Optional[str]]], dict[str, Optional[str]]]
+"""Header in list or dict format, expected to normalize to list"""
+
+
+class IngestRequest(BaseRequest):
+    headers: Optional[Headers] = None
+    query_string: Optional[QueryString] = None
+
+    @field_validator("headers", mode="before")
+    @classmethod
+    def fix_non_standard_headers(cls, v):
+        """
+        Fix non-documented format used by PHP Sentry Client
+        Convert {"Foo": ["bar"]} into {"Foo: "bar"}
+        """
+        if isinstance(v, dict):
+            return {
+                key: value[0] if isinstance(value, list) else value
+                for key, value in v.items()
+            }
+        return v
+
+    @field_validator("query_string", "headers")
+    @classmethod
+    def prefer_list_key_value(
+        cls, v: Optional[Union[QueryString, Headers]]
+    ) -> Optional[ListKeyValue]:
+        """Store all querystring, header formats in a list format"""
+        result: Optional[ListKeyValue] = None
+        if isinstance(v, str) and v:  # It must be a raw querystring, parse it
+            qs = parse_qs(v)
+            result = [[key, value] for key, values in qs.items() for value in values]
+        elif isinstance(v, dict):  # Convert dict to list
+            result = [[key, value] for key, value in v.items()]
+        elif isinstance(v, list):  # Normalize list (throw out any weird data)
+            result = [item[:2] for item in v if len(item) >= 2]
+
+        if result:
+            # Remove empty and any key called "Cookie" which could be sensitive data
+            entry_to_remove = ["Cookie", ""]
+            return sorted(
+                [entry for entry in result if entry != entry_to_remove],
+                key=lambda x: (x[0], x[1]),
+            )
+        return result
+
+
+class IngestIssueEvent(BaseIssueEvent):
     timestamp: datetime = Field(default_factory=now)
-    platform: Optional[str] = None
     level: Optional[str] = "error"
+    logentry: Optional[EventMessage] = None
     logger: Optional[str] = None
-    transaction: Optional[str] = Field(default=None)
+    transaction: Optional[str] = Field(
+        validation_alias=AliasChoices("transaction", "culprit"), default=None
+    )
     server_name: Optional[str] = None
     release: Optional[str] = None
     dist: Optional[str] = None
     tags: Optional[Union[dict[str, str], list[TagKeyValue]]] = None
     environment: Optional[str] = None
-    modules: Optional[dict[str, str]] = None
+    modules: Optional[dict[str, Optional[str]]] = None
     extra: Optional[Any] = None
     fingerprint: Optional[list[str]] = None
     errors: Optional[list[Any]] = None
@@ -160,16 +249,18 @@ class BaseEventIngestSchema(Schema):
     template: Optional[EventTemplate] = None
 
     breadcrumbs: Optional[Union[list[EventBreadcrumb], ValueEventBreadcrumb]] = None
+    sdk: Optional[ClientSDKInfo] = None
+    request: Optional[IngestRequest] = None
 
 
-class EventIngestSchema(BaseEventIngestSchema):
+class EventIngestSchema(IngestIssueEvent):
     event_id: uuid.UUID
 
 
 class EnvelopeHeaderSchema(Schema):
     event_id: uuid.UUID
     dsn: Optional[str] = None
-    sdk: Optional[Any] = None
+    sdk: Optional[ClientSDKInfo] = None
     sent_at: datetime = Field(default_factory=now)
 
 
@@ -186,7 +277,7 @@ class ItemHeaderSchema(Schema):
 class EnvelopeSchema(RootModel[list[dict[str, Any]]]):
     root: list[dict[str, Any]]
     _header: EnvelopeHeaderSchema
-    _items: list[tuple[ItemHeaderSchema, BaseEventIngestSchema]] = []
+    _items: list[tuple[ItemHeaderSchema, IngestIssueEvent]] = []
 
     @model_validator(mode="after")
     def validate_envelope(self) -> "EnvelopeSchema":
@@ -204,7 +295,7 @@ class EnvelopeSchema(RootModel[list[dict[str, Any]]]):
             item_header = ItemHeaderSchema(**item_header_data)
             if item_header.type == "event":
                 try:
-                    item = BaseEventIngestSchema(**data.pop(0))
+                    item = IngestIssueEvent(**data.pop(0))
                 except ValidationError as err:
                     logger.warning("Envelope Event item invalid", exc_info=True)
                     raise err
@@ -236,7 +327,7 @@ class SecuritySchema(Schema):
 ## Normalized Interchange Issue Events
 
 
-class IssueEventSchema(BaseEventIngestSchema):
+class IssueEventSchema(IngestIssueEvent):
     """
     Event storage and interchange format
     Used in json view and celery interchange
@@ -246,11 +337,11 @@ class IssueEventSchema(BaseEventIngestSchema):
     type: Literal[IssueEventType.DEFAULT] = IssueEventType.DEFAULT
 
 
-class ErrorIssueEventSchema(BaseEventIngestSchema):
+class ErrorIssueEventSchema(IngestIssueEvent):
     type: Literal[IssueEventType.ERROR] = IssueEventType.ERROR
 
 
-class CSPIssueEventSchema(BaseEventIngestSchema):
+class CSPIssueEventSchema(IngestIssueEvent):
     type: Literal[IssueEventType.CSP] = IssueEventType.CSP
     csp: CSPReportSchema
 
@@ -260,7 +351,7 @@ class InterchangeIssueEvent(Schema):
 
     event_id: uuid.UUID = Field(default_factory=uuid.uuid4)
     project_id: int
-    received_at: datetime = Field(default_factory=now)
+    received: datetime = Field(default_factory=now)
     payload: Union[
         IssueEventSchema, ErrorIssueEventSchema, CSPIssueEventSchema
     ] = Field(discriminator="type")
