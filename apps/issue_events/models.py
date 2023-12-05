@@ -6,6 +6,8 @@ from django.db import models
 from psqlextra.models import PostgresPartitionedModel
 from psqlextra.types import PostgresPartitioningMethod
 
+from sentry.constants import MAX_CULPRIT_LENGTH
+
 from .constants import EventStatus, IssueEventType, LogLevel
 
 
@@ -16,6 +18,7 @@ class Issue(models.Model):
     level = models.PositiveSmallIntegerField(
         choices=LogLevel.choices, default=LogLevel.ERROR
     )
+    metadata = models.JSONField()
     project = models.ForeignKey(
         "projects.Project", on_delete=models.CASCADE, related_name="issues"
     )
@@ -75,17 +78,21 @@ class IssueEvent(PostgresPartitionedModel, models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     issue = models.ForeignKey(Issue, on_delete=models.CASCADE)
     type = models.PositiveSmallIntegerField(default=0, choices=IssueEventType.choices)
-    date_created = models.DateTimeField(
-        auto_now_add=True, help_text="Time at which event happened"
-    )
-    date_received = models.DateTimeField(
-        auto_now_add=True, help_text="Time at which GlitchTip accepted event"
+    timestamp = models.DateTimeField(help_text="Time at which event happened")
+    received = models.DateTimeField(help_text="Time at which GlitchTip accepted event")
+    title = models.CharField(max_length=255)
+    transaction = models.CharField(max_length=MAX_CULPRIT_LENGTH)
+    level = models.PositiveSmallIntegerField(
+        choices=LogLevel.choices, default=LogLevel.ERROR
     )
     data = models.JSONField()
+    # This could be HStore, but jsonb is just as good and removes need for
+    # 'django.contrib.postgres' which makes several unnecessary SQL calls
+    tags = models.JSONField()
 
     class PartitioningMeta:
         method = PostgresPartitioningMethod.RANGE
-        key = ["date_received"]
+        key = ["received"]
 
     def __str__(self):
         return self.eventID
@@ -93,3 +100,17 @@ class IssueEvent(PostgresPartitionedModel, models.Model):
     @property
     def eventID(self):
         return self.id.hex
+
+    @property
+    def message(self):
+        """Often the title and message are the same. If message isn't stored, assume it's the title"""
+        return self.data.get("message", self.title)
+
+    @property
+    def metadata(self):
+        """Return metadata if exists, else return just the title as metadata"""
+        return self.data.get("metadata", {"title": self.title})
+
+    @property
+    def platform(self):
+        return self.data.get("platform")

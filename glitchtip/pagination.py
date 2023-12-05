@@ -21,7 +21,7 @@ class LinkHeaderPagination(CursorPagination):
     def paginate_queryset(self, queryset, request, view=None):
         try:
             page = super().paginate_queryset(queryset, request, view)
-            if self.has_next:
+            if self.has_next or self.has_previous:
                 self.count = self.get_count(queryset)
             else:
                 self.count = len(page)
