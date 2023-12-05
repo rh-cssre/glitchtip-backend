@@ -142,8 +142,8 @@ def apaginate(func_or_pgn_class: Any = NOT_SET, **paginator_params) -> Callable:
     if not isnotset:
         pagination_class = func_or_pgn_class
 
-    async def wrapper(func: Callable) -> Any:
-        return await _inject_async_pagination(func, pagination_class, **paginator_params)
+    def wrapper(func: Callable) -> Any:
+        return _inject_async_pagination(func, pagination_class, **paginator_params)
 
     return wrapper
 
