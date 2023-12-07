@@ -26,6 +26,8 @@ from ..common_event_schema import (
     ListKeyValue,
 )
 from ..common_event_utils import invalid_to_none
+from ..shared.schema.contexts import Contexts
+from ..shared.schema.user import EventUser
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +37,6 @@ class Schema(BaseSchema):
 
     class Config(BaseSchema.Config):
         coerce_numbers_to_str = True  # Lax is best for ingest
-
-
-class TagKeyValue(Schema):
-    key: str
-    value: str
 
 
 class Signal(Schema):
@@ -179,12 +176,14 @@ class RequestEnv(Schema):
 
 QueryString = Union[str, ListKeyValue, dict[str, Optional[str]]]
 """Raw URL querystring, list, or dict"""
-Headers = Union[list[list[Optional[str]]], dict[str, Optional[str]]]
-"""Header in list or dict format, expected to normalize to list"""
+KeyValueFormat = Union[list[list[Optional[str]]], dict[str, Optional[str]]]
+"""
+key-values in list or dict format. Example {browser: firefox} or [[browser, firefox]]
+"""
 
 
 class IngestRequest(BaseRequest):
-    headers: Optional[Headers] = None
+    headers: Optional[KeyValueFormat] = None
     query_string: Optional[QueryString] = None
 
     @field_validator("headers", mode="before")
@@ -204,7 +203,7 @@ class IngestRequest(BaseRequest):
     @field_validator("query_string", "headers")
     @classmethod
     def prefer_list_key_value(
-        cls, v: Optional[Union[QueryString, Headers]]
+        cls, v: Optional[Union[QueryString, KeyValueFormat]]
     ) -> Optional[ListKeyValue]:
         """Store all querystring, header formats in a list format"""
         result: Optional[ListKeyValue] = None
@@ -237,7 +236,7 @@ class IngestIssueEvent(BaseIssueEvent):
     server_name: Optional[str] = None
     release: Optional[str] = None
     dist: Optional[str] = None
-    tags: Optional[Union[dict[str, str], list[TagKeyValue]]] = None
+    tags: Optional[KeyValueFormat] = None
     environment: Optional[str] = None
     modules: Optional[dict[str, Optional[str]]] = None
     extra: Optional[Any] = None
@@ -251,6 +250,17 @@ class IngestIssueEvent(BaseIssueEvent):
     breadcrumbs: Optional[Union[list[EventBreadcrumb], ValueEventBreadcrumb]] = None
     sdk: Optional[ClientSDKInfo] = None
     request: Optional[IngestRequest] = None
+    contexts: Optional[Contexts] = None
+    user: Optional[EventUser] = None
+
+    @field_validator("tags")
+    @classmethod
+    def prefer_dict(
+        cls, v: Optional[KeyValueFormat]
+    ) -> Optional[dict[str, Optional[str]]]:
+        if isinstance(v, list):
+            return {key: value for key, value in v if key is not None}
+        return v
 
 
 class EventIngestSchema(IngestIssueEvent):

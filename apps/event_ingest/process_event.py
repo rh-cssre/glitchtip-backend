@@ -6,18 +6,16 @@ from django.db import transaction
 from django.db.models import Q
 from django.db.utils import IntegrityError
 from ninja import Schema
+from user_agents import parse
 
 from alerts.models import Notification
 from apps.issue_events.constants import EventStatus
 from apps.issue_events.models import Issue, IssueEvent, IssueEventType, IssueHash
-
-# from apps.issue_events.schema import CSPIssueEventDataSchema, IssueEventDataSchema
 from sentry.culprit import generate_culprit
 from sentry.eventtypes.error import ErrorEvent
 
-from .schema import (
-    InterchangeIssueEvent,
-)
+from ..shared.schema.contexts import BrowserContext, Contexts, DeviceContext, OSContext
+from .schema import IngestIssueEvent, InterchangeIssueEvent
 from .utils import generate_hash, transform_parameterized_message
 
 
@@ -47,6 +45,62 @@ def devalue(obj: Union[Schema, list]) -> Optional[Union[dict, list]]:
     return None
 
 
+def generate_contexts(event: IngestIssueEvent) -> dict[str, Any]:
+    """
+    Add additional contexts if they aren't already set
+    """
+    contexts = event.contexts if event.contexts else {}
+    if request := event.request:
+        if isinstance(request.headers, list):
+            if ua_string := next(
+                (x[1] for x in request.headers if x[0] == "User-Agent"), None
+            ):
+                user_agent = parse(ua_string)
+                if "browser" not in contexts:
+                    contexts["browser"] = BrowserContext(
+                        name=user_agent.browser.family,
+                        version=user_agent.browser.version_string,
+                    )
+                if "os" not in contexts:
+                    contexts["os"] = OSContext(
+                        name=user_agent.os.family, version=user_agent.os.version_string
+                    )
+                if "device" not in contexts:
+                    device = user_agent.device
+                    contexts["device"] = DeviceContext(
+                        family=device.family,
+                        model=device.model,
+                        brand=device.brand,
+                    )
+    return contexts
+
+
+def generate_tags(event: IngestIssueEvent) -> dict[str, str]:
+    """Generate key-value tags based on context and other event data"""
+    tags: dict[str, Optional[str]] = event.tags if isinstance(event.tags, dict) else {}
+    if contexts := event.contexts:
+        if browser := contexts.get("browser"):
+            if isinstance(browser, BrowserContext):
+                tags["browser.name"] = browser.name
+                tags["browser"] = f"{browser.name} {browser.version}"
+        if os := contexts.get("os"):
+            if isinstance(os, OSContext):
+                tags["os.name"] = os.name
+        if device := contexts.get("device"):
+            if isinstance(device, DeviceContext) and device.model:
+                tags["device"] = device.model
+    if user := event.user:
+        if user.id:
+            tags["user.id"] = user.id
+        if user.email:
+            tags["user.email"] = user.email
+        if user.username:
+            tags["user.username"] = user.username
+
+    # Exclude None values
+    return {key: value for key, value in tags.items() if value}
+
+
 def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
     """
     Accepts a list of events to ingest. Events should:
@@ -65,6 +119,8 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
     for ingest_event in ingest_events:
         event_data: dict[str, Any] = {}
         event = ingest_event.payload
+        event.contexts = generate_contexts(event)
+        event_tags = generate_tags(event)
         title = ""
         culprit = ""
         metadata: dict[str, Any] = {}
@@ -134,7 +190,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 transaction=culprit,
                 metadata=metadata,
                 event_data=event_data,
-                event_tags={},
+                event_tags=event_tags,
             )
         )
         q_objects |= Q(project_id=ingest_event.project_id, value=issue_hash)
