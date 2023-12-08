@@ -19,6 +19,20 @@ from .models import Issue, IssueEvent
 
 
 class IssueSchema(CamelSchema, ModelSchema):
+    first_seen: datetime = Field(validation_alias="created")
+    level: str = Field(validation_alias="get_level_display")
+    logger: Optional[str] = None
+    permalink: Optional[str] = "Not implemented"
+    project: int = Field(validation_alias="project_id")
+    share_id: Optional[int] = None
+    short_id: str = Field(validation_alias="short_id_display")
+    stats: Optional[dict[str, str]] = {}
+    status: str = Field(validation_alias="get_status_display")
+    status_details: Optional[dict[str, str]] = {}
+    subscription_details: Optional[str] = None
+    type: str = Field(validation_alias="get_type_display")
+    user_count: Optional[int] = 0
+
     class Config:
         model = Issue
         model_fields = ["id", "title", "metadata"]
