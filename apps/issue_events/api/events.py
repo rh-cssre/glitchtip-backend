@@ -12,7 +12,6 @@ from ..schema import IssueEventDetailSchema, IssueEventJsonSchema, IssueEventSch
 from . import router
 
 
-
 def get_queryset(
     request: AuthHttpRequest,
     issue_id: Optional[int] = None,

@@ -20,6 +20,6 @@ def get_queryset(request: AuthHttpRequest):
 async def get_issue(request: AuthHttpRequest, issue_id: int):
     qs = get_queryset(request)
     try:
-        return await qs.filter(id=issue_id).select_related('project').aget()
+        return await qs.filter(id=issue_id).select_related('project', 'issuestats').aget()
     except Issue.DoesNotExist:
         raise Http404()
