@@ -5,7 +5,7 @@ from ninja import Field, ModelSchema, Schema
 from pydantic import computed_field
 
 from apps.event_ingest.schema import CSPReportSchema, EventException
-from glitchtip.api.schema import CamelSchema
+from glitchtip.api.schema import CamelSchema, to_camel_with_lower_id
 from sentry.interfaces.stacktrace import get_context
 
 from ..common_event_schema import (
@@ -36,6 +36,7 @@ class IssueSchema(CamelSchema, ModelSchema):
     class Config:
         model = Issue
         model_fields = ["id", "title", "metadata"]
+        alias_generator = to_camel_with_lower_id
         populate_by_name = True
 
 

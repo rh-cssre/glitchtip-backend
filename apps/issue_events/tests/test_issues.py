@@ -18,7 +18,7 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
 
         res = self.client.get(url)
         data = res.json()
-        self.assertEqual(data.get("shortID"), f'{self.project.slug.upper()}-{issue.short_id}')
+        self.assertEqual(data.get("shortId"), f'{self.project.slug.upper()}-{issue.short_id}')
 
 
 
