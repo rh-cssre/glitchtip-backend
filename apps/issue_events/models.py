@@ -9,11 +9,13 @@ from psqlextra.types import PostgresPartitioningMethod
 from sentry.constants import MAX_CULPRIT_LENGTH
 
 from .constants import EventStatus, IssueEventType, LogLevel
+from .utils import base32_encode
 
 
 class Issue(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     culprit = models.CharField(max_length=1024, blank=True, null=True)
+    # has_seen = models.BooleanField(default=False)
     is_public = models.BooleanField(default=False)
     level = models.PositiveSmallIntegerField(
         choices=LogLevel.choices, default=LogLevel.ERROR
@@ -33,6 +35,16 @@ class Issue(models.Model):
 
     class Meta:
         unique_together = (("project", "short_id"),)
+
+    @property
+    def short_id_display(self):
+        """
+        Short IDs are per project issue counters. They show as PROJECT_SLUG-ID_BASE32
+        The intention is to be human readable identifiers that can reference an issue.
+        """
+        if self.short_id is not None:
+            return f"{self.project.slug.upper()}-{base32_encode(self.short_id)}"
+        return ""
 
 
 class IssueStats(models.Model):

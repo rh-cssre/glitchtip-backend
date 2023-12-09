@@ -5,7 +5,8 @@ from ninja import Field, ModelSchema, Schema
 from pydantic import computed_field
 
 from apps.event_ingest.schema import CSPReportSchema, EventException
-from glitchtip.api.schema import CamelSchema
+from glitchtip.api.schema import CamelSchema, to_camel_with_lower_id
+from projects.models import Project
 from sentry.interfaces.stacktrace import get_context
 
 from ..common_event_schema import (
@@ -18,11 +19,53 @@ from .constants import IssueEventType
 from .models import Issue, IssueEvent
 
 
+class ProjectReference(CamelSchema, ModelSchema):
+        id: str
+
+        class Config:
+            model = Project
+            model_fields = ["platform", "slug", "name"]
+            populate_by_name = True
+
+        @staticmethod
+        def resolve_id(obj: Project):
+            return str(obj.id)
+
+
 class IssueSchema(CamelSchema, ModelSchema):
+    first_seen: datetime = Field(validation_alias="created")
+    last_seen: Optional[datetime]
+    count: Optional[str]
+    type: str = Field(validation_alias="get_type_display")
+    level: str = Field(validation_alias="get_level_display")
+    status: str = Field(validation_alias="get_status_display")
+    project: ProjectReference = Field(validation_alias="project")
+    short_id: str = Field(validation_alias="short_id_display")
+    stats: Optional[dict[str, str]] = {}
+    share_id: Optional[int] = None
+    logger: Optional[str] = None
+    permalink: Optional[str] = "Not implemented"
+    status_details: Optional[dict[str, str]] = {}
+    subscription_details: Optional[str] = None
+    user_count: Optional[int] = 0
+
     class Config:
         model = Issue
         model_fields = ["id", "title", "metadata"]
+        alias_generator = to_camel_with_lower_id
         populate_by_name = True
+
+    @staticmethod
+    def resolve_last_seen(obj):
+        if hasattr(obj, 'issuestats'):
+            return obj.issuestats.last_seen
+        return None
+
+    @staticmethod
+    def resolve_count(obj):
+        if hasattr(obj, 'issuestats'):
+            return str(obj.issuestats.count)
+        return ""
 
 
 class ExceptionEntryData(Schema):
