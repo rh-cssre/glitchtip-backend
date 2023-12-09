@@ -36,8 +36,7 @@ GlitchTip backend is built with
 Avoid:
 
 - Django Rest Framework, port this code to django-ninja. We value type hinting, performance, and async first approach
-- Inefficient database calls - GlitchTip must work for both small self hosters and 100 million event projects
-  GlitchTip backend is built with. Always assume scale. If you need to edit every user, assume there are 100 million users and the queries much be chunked in batches. Neither one query per user nor one giant query that takes too long to execute.
+- Inefficient database calls - GlitchTip must work for both small self hosters and 100 million event projects. Always assume scale. If you need to edit every user, assume there are 100 million users and the queries much be chunked in batches. Neither one query per user nor one giant query that takes too long to execute.
 
 ## Terms
 
@@ -51,10 +50,12 @@ Avoid:
 
 This section describes the idealized approach to coding GlitchTip. You may notice inconsistencies.
 
-- /glitchtip - Django app configuration and select number of shared code that doesn't fit in any one Django app
+- /glitchtip - Django app configuration and select number of globally shared code such as startup scripts, pagination classes, asgi, settings, etc.
 - /apps - All Django apps go here. These apps follow current best practices.
 - /apps/event_ingest - Accepts new issue and transaction events
+- /apps/issue_events - Issue event API and models
+- /apps/shared - Shared code between apps. For example, a Schema that is shared between issue_events and event_ingest
 
 ### Legacy Sentry SDK Client support
 
-The GlitchTip core team at this time is not interested in legacy sdk client support. Merge requests are accepted and welcome. Open legacy client feature requests along with intention to implement or interest in funding development.
+The GlitchTip core team at this time is not interested in legacy sdk client support. Merge requests are accepted and welcome. Open legacy client feature requests along with the intention to implement or interest in funding development.

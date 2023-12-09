@@ -9,7 +9,7 @@ from glitchtip.api.schema import CamelSchema, to_camel_with_lower_id
 from projects.models import Project
 from sentry.interfaces.stacktrace import get_context
 
-from ..common_event_schema import (
+from ..shared.schema.event import (
     BaseIssueEvent,
     BaseRequest,
     EventBreadcrumb,
@@ -20,16 +20,16 @@ from .models import Issue, IssueEvent
 
 
 class ProjectReference(CamelSchema, ModelSchema):
-        id: str
+    id: str
 
-        class Config:
-            model = Project
-            model_fields = ["platform", "slug", "name"]
-            populate_by_name = True
+    class Config:
+        model = Project
+        model_fields = ["platform", "slug", "name"]
+        populate_by_name = True
 
-        @staticmethod
-        def resolve_id(obj: Project):
-            return str(obj.id)
+    @staticmethod
+    def resolve_id(obj: Project):
+        return str(obj.id)
 
 
 class IssueSchema(CamelSchema, ModelSchema):
@@ -57,13 +57,13 @@ class IssueSchema(CamelSchema, ModelSchema):
 
     @staticmethod
     def resolve_last_seen(obj):
-        if hasattr(obj, 'issuestats'):
+        if hasattr(obj, "issuestats"):
             return obj.issuestats.last_seen
         return None
 
     @staticmethod
     def resolve_count(obj):
-        if hasattr(obj, 'issuestats'):
+        if hasattr(obj, "issuestats"):
             return str(obj.issuestats.count)
         return ""
 

@@ -5,8 +5,8 @@ from django.db.models import OuterRef, Subquery, Window
 from django.db.models.functions import Lag
 from django.http import Http404, HttpResponse
 
-from apps.pagination import apaginate
 from glitchtip.api.authentication import AuthHttpRequest
+from glitchtip.api.pagination import apaginate
 
 from ..models import IssueEvent
 from ..schema import IssueEventDetailSchema, IssueEventJsonSchema, IssueEventSchema
@@ -30,11 +30,11 @@ def get_queryset(
     return qs.select_related("issue").order_by("-received")
 
 
-@router.get(
-    "/issues/{int:issue_id}/events/", response=list[IssueEventSchema]
-)
+@router.get("/issues/{int:issue_id}/events/", response=list[IssueEventSchema])
 @apaginate
-async def list_issue_event(request: AuthHttpRequest, response: HttpResponse, issue_id: int):
+async def list_issue_event(
+    request: AuthHttpRequest, response: HttpResponse, issue_id: int
+):
     return get_queryset(request, issue_id=issue_id)
 
 

@@ -6,7 +6,7 @@ from pydantic import (
     WrapValidator,
 )
 
-from .common_event_utils import invalid_to_none
+from .utils import invalid_to_none
 
 Level = Literal["fatal", "error", "warning", "info", "debug"]
 

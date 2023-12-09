@@ -19,15 +19,15 @@ from pydantic import (
 
 from apps.issue_events.constants import IssueEventType
 
-from ..common_event_schema import (
+from ..shared.schema.contexts import Contexts
+from ..shared.schema.event import (
     BaseIssueEvent,
     BaseRequest,
     EventBreadcrumb,
     ListKeyValue,
 )
-from ..common_event_utils import invalid_to_none
-from ..shared.schema.contexts import Contexts
 from ..shared.schema.user import EventUser
+from ..shared.schema.utils import invalid_to_none
 
 logger = logging.getLogger(__name__)
 
