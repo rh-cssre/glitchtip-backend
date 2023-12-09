@@ -14,7 +14,7 @@ from apps.issue_events.models import Issue, IssueEvent, IssueEventType, IssueHas
 from sentry.culprit import generate_culprit
 from sentry.eventtypes.error import ErrorEvent
 
-from ..shared.schema.contexts import BrowserContext, Contexts, DeviceContext, OSContext
+from ..shared.schema.contexts import BrowserContext, DeviceContext, OSContext
 from .schema import IngestIssueEvent, InterchangeIssueEvent
 from .utils import generate_hash, transform_parameterized_message
 
