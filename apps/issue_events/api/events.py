@@ -3,8 +3,9 @@ from typing import Optional
 
 from django.db.models import OuterRef, Subquery, Window
 from django.db.models.functions import Lag
-from django.http import Http404
+from django.http import Http404, HttpResponse
 
+from apps.pagination import apaginate
 from glitchtip.api.authentication import AuthHttpRequest
 
 from ..models import IssueEvent
@@ -30,10 +31,11 @@ def get_queryset(
 
 
 @router.get(
-    "/issues/{int:issue_id}/events/", response=list[IssueEventSchema], by_alias=True
+    "/issues/{int:issue_id}/events/", response=list[IssueEventSchema]
 )
-async def list_issue_event(request: AuthHttpRequest, issue_id: int):
-    return [obj async for obj in get_queryset(request, issue_id=issue_id)]
+@apaginate
+async def list_issue_event(request: AuthHttpRequest, response: HttpResponse, issue_id: int):
+    return get_queryset(request, issue_id=issue_id)
 
 
 @router.get(
