@@ -8,13 +8,6 @@ def to_camel(string: str) -> str:
         for i, word in enumerate(string.split("_"))
     )
 
-def to_camel_with_lower_id(string: str) -> str:
-    """If a word is exactly id, make it Id"""
-    return "".join(
-        word if i == 0 else "Id" if word == "id" else word.capitalize()
-        for i, word in enumerate(string.split("_"))
-    )
-
 
 class CamelSchema(Schema):
     """
