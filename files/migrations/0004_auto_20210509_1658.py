@@ -4,30 +4,33 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('files', '0003_auto_20210507_1549'),
+        ("files", "0003_auto_20210507_1549"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='fileblob',
-            name='upload',
+            model_name="fileblob",
+            name="upload",
         ),
         migrations.AddField(
-            model_name='fileblob',
-            name='blob',
-            field=models.FileField(default='', upload_to='uploads/file_blobs'),
+            model_name="fileblob",
+            name="blob",
+            field=models.FileField(default="", upload_to="uploads/file_blobs"),
             preserve_default=False,
         ),
         migrations.AlterField(
-            model_name='file',
-            name='id',
-            field=models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID'),
+            model_name="file",
+            name="id",
+            field=models.BigAutoField(
+                auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+            ),
         ),
         migrations.AlterField(
-            model_name='fileblob',
-            name='id',
-            field=models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID'),
+            model_name="fileblob",
+            name="id",
+            field=models.BigAutoField(
+                auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+            ),
         ),
     ]
