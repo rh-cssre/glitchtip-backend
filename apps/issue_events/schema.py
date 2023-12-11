@@ -238,7 +238,7 @@ class IssueEventJsonSchema(ModelSchema, BaseIssueEvent):
 
     class Config:
         model = IssueEvent
-        model_fields = ["title", "transaction"]
+        model_fields = ["title", "transaction", "tags"]
 
     @staticmethod
     def resolve_timestamp(obj):

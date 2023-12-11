@@ -467,29 +467,23 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
             res_exception["data"]["values"][0]["stacktrace"]["frames"][4]["context"],
             sentry_exception["data"]["values"][0]["stacktrace"]["frames"][4]["context"],
         )
-        # tags = res_data.get("tags")
-        # browser_tag = next(filter(lambda tag: tag["key"] == "browser", tags), None)
-        # self.assertEqual(browser_tag["value"], "Firefox 76.0")
-        # environment_tag = next(
-        #     filter(lambda tag: tag["key"] == "environment", tags), None
-        # )
-        # self.assertEqual(environment_tag["value"], "Development")
+        tags = res_data.get("tags")
+        browser_tag = next(filter(lambda tag: tag["key"] == "browser", tags), None)
+        self.assertEqual(browser_tag["value"], "Firefox 76.0")
+        environment_tag = next(
+            filter(lambda tag: tag["key"] == "environment", tags), None
+        )
+        self.assertEqual(environment_tag["value"], "Development")
 
-        # event_json = event.event_json()
-        # browser_tag = next(
-        #     filter(lambda tag: tag[0] == "browser", event_json.get("tags")), None
-        # )
-        # self.assertEqual(browser_tag[1], "Firefox 76.0")
+    def test_sentry_cli_send_event_no_level(self):
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+            "sentry_cli_send_event_no_level"
+        )
+        event = self.submit_event(sdk_error, event_type="default")
+        event_json = self.get_event_json(event)
 
-    # def test_sentry_cli_send_event_no_level(self):
-    #     sdk_error, sentry_json, sentry_data = self.get_json_test_data(
-    #         "sentry_cli_send_event_no_level"
-    #     )
-    #     res = self.client.post(self.event_store_url, sdk_error, format="json")
-    #     event = Event.objects.get(pk=res.data["id"])
-    #     event_json = event.event_json()
-    #     self.assertCompareData(event_json, sentry_json, ["title", "message"])
-    #     self.assertEqual(event_json["project"], event.issue.project_id)
+        # self.assertCompareData(event_json, sentry_json, ["title"])
+        # self.assertEqual(event_json["project"], event.issue.project_id)
 
     #     url = self.get_project_events_detail(event.pk)
     #     res = self.client.get(url)

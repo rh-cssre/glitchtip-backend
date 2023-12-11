@@ -50,6 +50,7 @@ def generate_contexts(event: IngestIssueEvent) -> dict[str, Any]:
     Add additional contexts if they aren't already set
     """
     contexts = event.contexts if event.contexts else {}
+
     if request := event.request:
         if isinstance(request.headers, list):
             if ua_string := next(
@@ -78,6 +79,7 @@ def generate_contexts(event: IngestIssueEvent) -> dict[str, Any]:
 def generate_tags(event: IngestIssueEvent) -> dict[str, str]:
     """Generate key-value tags based on context and other event data"""
     tags: dict[str, Optional[str]] = event.tags if isinstance(event.tags, dict) else {}
+
     if contexts := event.contexts:
         if browser := contexts.get("browser"):
             if isinstance(browser, BrowserContext):
@@ -89,6 +91,7 @@ def generate_tags(event: IngestIssueEvent) -> dict[str, str]:
         if device := contexts.get("device"):
             if isinstance(device, DeviceContext) and device.model:
                 tags["device"] = device.model
+
     if user := event.user:
         if user.id:
             tags["user.id"] = user.id
@@ -96,6 +99,13 @@ def generate_tags(event: IngestIssueEvent) -> dict[str, str]:
             tags["user.email"] = user.email
         if user.username:
             tags["user.username"] = user.username
+
+    if environment := event.environment:
+        tags["environment"] = environment
+    if release := event.release:
+        tags["release"] = release
+    if server_name := event.server_name:
+        tags["server_name"] = server_name
 
     # Exclude None values
     return {key: value for key, value in tags.items() if value}
