@@ -5,7 +5,7 @@ from ninja import Field, ModelSchema, Schema
 from pydantic import computed_field
 
 from apps.event_ingest.schema import CSPReportSchema, EventException
-from glitchtip.api.schema import CamelSchema, to_camel_with_lower_id
+from glitchtip.api.schema import CamelSchema
 from projects.models import Project
 from sentry.interfaces.stacktrace import get_context
 
@@ -31,8 +31,14 @@ class ProjectReference(CamelSchema, ModelSchema):
     def resolve_id(obj: Project):
         return str(obj.id)
 
+# For Sentry compatability
+def to_camel_with_lower_id(string: str) -> str:
+    return "".join(
+        word if i == 0 else "Id" if word == "id" else word.capitalize()
+        for i, word in enumerate(string.split("_"))
+    )
 
-class IssueSchema(CamelSchema, ModelSchema):
+class IssueSchema(ModelSchema):
     first_seen: datetime = Field(validation_alias="created")
     last_seen: Optional[datetime]
     count: Optional[str]
