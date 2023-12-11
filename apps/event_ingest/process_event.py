@@ -13,6 +13,7 @@ from apps.issue_events.constants import EventStatus
 from apps.issue_events.models import Issue, IssueEvent, IssueEventType, IssueHash
 from sentry.culprit import generate_culprit
 from sentry.eventtypes.error import ErrorEvent
+from sentry.utils.strings import truncatechars
 
 from ..shared.schema.contexts import BrowserContext, DeviceContext, OSContext
 from .schema import IngestIssueEvent, InterchangeIssueEvent
@@ -141,7 +142,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 title = sentry_event.get_title(metadata)
             else:
                 message = event.message if event.message else event.logentry
-                title = (
+                title = truncatechars(
                     transform_parameterized_message(message)
                     if message
                     else "<untitled>"
@@ -183,7 +184,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             else:
                 event_data["logentry"] = message.dict(exclude_none=True)
         if message := event.message:
-            event_data["message"] = (
+            event_data["message"] = truncatechars(
                 message if isinstance(message, str) else message.formatted
             )
 

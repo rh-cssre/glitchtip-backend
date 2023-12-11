@@ -482,26 +482,27 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
         event = self.submit_event(sdk_error, event_type="default")
         event_json = self.get_event_json(event)
 
-        # self.assertCompareData(event_json, sentry_json, ["title"])
-        # self.assertEqual(event_json["project"], event.issue.project_id)
+        self.assertCompareData(event_json, sentry_json, ["title"])
+        self.assertEqual(event_json["project"], event.issue.project_id)
 
-    #     url = self.get_project_events_detail(event.pk)
-    #     res = self.client.get(url)
-    #     self.assertCompareData(
-    #         res.data,
-    #         sentry_data,
-    #         [
-    #             "userReport",
-    #             "title",
-    #             "culprit",
-    #             "type",
-    #             "metadata",
-    #             "message",
-    #             "platform",
-    #             "previousEventID",
-    #         ],
-    #     )
-    #     self.assertEqual(res.data["projectID"], event.issue.project_id)
+        res = self.client.get(self.get_project_events_detail(event.pk))
+        res_data = res.json()
+
+        self.assertCompareData(
+            res_data,
+            sentry_data,
+            [
+                # "userReport",
+                "title",
+                "culprit",
+                "type",
+                "metadata",
+                # "message",
+                "platform",
+                "previousEventID",
+            ],
+        )
+        self.assertEqual(res_data["projectID"], event.issue.project_id)
 
     # def test_js_error_with_context(self):
     #     self.project.scrub_ip_addresses = False
