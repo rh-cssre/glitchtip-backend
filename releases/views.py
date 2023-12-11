@@ -1,20 +1,29 @@
-from rest_framework import viewsets, exceptions, mixins
-from rest_framework.response import Response
+from rest_framework import exceptions, mixins, viewsets
 from rest_framework.decorators import action
+from rest_framework.response import Response
+
+from files.tasks import assemble_artifacts_task
 from organizations_ext.models import Organization
 from projects.models import Project
-from files.tasks import assemble_artifacts_task
+
 from .models import Release, ReleaseFile
+from .permissions import ReleaseFilePermission, ReleasePermission
 from .serializers import (
+    AssembleSerializer,
+    ReleaseFileSerializer,
     ReleaseSerializer,
     ReleaseUpdateSerializer,
-    ReleaseFileSerializer,
-    AssembleSerializer,
 )
-from .permissions import ReleasePermission, ReleaseFilePermission
 
 
 class ReleaseViewSet(viewsets.ModelViewSet):
+    """
+    /organizations/<org-slug>/releases/
+
+    Sentry includes only project name and slug in nested list. This view uses ProjectReferenceSerializer,
+    which also includes id and platform, for consistency.
+    """
+
     queryset = Release.objects.all()
     serializer_class = ReleaseSerializer
     permission_classes = [ReleasePermission]
