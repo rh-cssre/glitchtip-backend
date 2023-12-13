@@ -497,7 +497,7 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
                 "culprit",
                 "type",
                 "metadata",
-                # "message",
+                "message",
                 "platform",
                 "previousEventID",
             ],

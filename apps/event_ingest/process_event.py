@@ -139,10 +139,10 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             sentry_event = ErrorEvent()
             metadata = sentry_event.get_metadata(event.dict())
             if event.type == IssueEventType.ERROR and metadata:
-                title = sentry_event.get_title(metadata)
+                full_title = sentry_event.get_title(metadata)
             else:
                 message = event.message if event.message else event.logentry
-                title = truncatechars(
+                full_title = (
                     transform_parameterized_message(message)
                     if message
                     else "<untitled>"
@@ -152,11 +152,12 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                     if event.transaction
                     else generate_culprit(event.dict())
                 )
+            title = truncatechars(full_title)
             culprit = sentry_event.get_location(event.dict())
         elif event.type == IssueEventType.CSP:
             humanized_directive = event.csp.effective_directive.replace("-src", "")
             uri = urlparse(event.csp.blocked_uri).netloc
-            title = f"Blocked '{humanized_directive}' from '{uri}'"
+            full_title = title = f"Blocked '{humanized_directive}' from '{uri}'"
             culprit = "fake culprit"
             event_data["csp"] = event.csp.dict()
 
@@ -184,9 +185,13 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             else:
                 event_data["logentry"] = message.dict(exclude_none=True)
         if message := event.message:
-            event_data["message"] = truncatechars(
+            event_data["message"] = (
                 message if isinstance(message, str) else message.formatted
             )
+        # When blank, the API will default to the title anyway
+        elif title != full_title:
+            # If the title is truncated, store the full title
+            event_data["message"] = full_title
 
         if breadcrumbs := event.breadcrumbs:
             event_data["breadcrumbs"] = devalue(breadcrumbs)
