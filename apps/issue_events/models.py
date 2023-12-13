@@ -11,6 +11,8 @@ from sentry.constants import MAX_CULPRIT_LENGTH
 from .constants import EventStatus, IssueEventType, LogLevel
 from .utils import base32_encode
 
+from glitchtip.base_models import CreatedModel
+
 
 class Issue(models.Model):
     created = models.DateTimeField(auto_now_add=True)
@@ -85,6 +87,16 @@ class Comment(models.Model):
     class Meta:
         ordering = ("-created",)
 
+class UserReport(CreatedModel):
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE, related_name="+")
+    issue = models.ForeignKey(Issue, on_delete=models.CASCADE)
+    event_id = models.UUIDField()
+    name = models.CharField(max_length=128)
+    email = models.EmailField()
+    comments = models.TextField()
+
+    class Meta:
+        unique_together = (("project", "event_id"),)
 
 class IssueEvent(PostgresPartitionedModel, models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

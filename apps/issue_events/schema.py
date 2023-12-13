@@ -16,7 +16,7 @@ from ..shared.schema.event import (
     ListKeyValue,
 )
 from .constants import IssueEventType
-from .models import Issue, IssueEvent
+from .models import Issue, IssueEvent, UserReport
 
 
 class ProjectReference(CamelSchema, ModelSchema):
@@ -47,6 +47,8 @@ class IssueSchema(ModelSchema):
     status: str = Field(validation_alias="get_status_display")
     project: ProjectReference = Field(validation_alias="project")
     short_id: str = Field(validation_alias="short_id_display")
+    num_comments: int
+    user_report_count: int
     stats: Optional[dict[str, str]] = {}
     share_id: Optional[int] = None
     logger: Optional[str] = None
@@ -199,9 +201,25 @@ class IssueEventSchema(CamelSchema, ModelSchema, BaseIssueEvent):
             entries.append({"type": IssueEventType.CSP.label, "data": csp})
         return entries
 
+class UserReportSchema(CamelSchema, ModelSchema):
+    event_id: str = Field(validation_alias="event_id.hex")
+    event: dict[str, str]
+    date_created: datetime = Field(validation_alias="created")
+    user: Optional[str] = None
+
+    class Config:
+        model = UserReport
+        model_fields = ["id", "name", "email", "comments"]
+        populate_by_name = True
+
+    @staticmethod
+    def resolve_event(obj):
+        return {
+            "eventId": obj.event_id.hex,
+        }
 
 class IssueEventDetailSchema(IssueEventSchema):
-    user_report: list = []  # TODO
+    user_report: Optional[UserReportSchema]
     next_event_id: Optional[str] = None
     previous_event_id: Optional[str] = None
 
@@ -261,3 +279,5 @@ class IssueEventDataSchema(Schema):
 
 class CSPIssueEventDataSchema(IssueEventDataSchema):
     csp: CSPReportSchema
+
+

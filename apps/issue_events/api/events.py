@@ -8,7 +8,7 @@ from django.http import Http404, HttpResponse
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.pagination import apaginate
 
-from ..models import IssueEvent
+from ..models import IssueEvent, UserReport
 from ..schema import IssueEventDetailSchema, IssueEventJsonSchema, IssueEventSchema
 from . import router
 
@@ -69,7 +69,10 @@ async def get_issue_event(request: AuthHttpRequest, issue_id: int, event_id: uui
         next=Subquery(qs.filter(received__gt=OuterRef("received")).values("id")[:1]),
     )
     try:
-        return await qs.filter(id=event_id).aget()
+        event = await qs.filter(id=event_id).aget()
+        user_report = await UserReport.objects.filter(event_id=event_id).afirst()
+        event.user_report = user_report
+        return event
     except IssueEvent.DoesNotExist:
         raise Http404()
 
