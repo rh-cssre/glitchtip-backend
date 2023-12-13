@@ -1,4 +1,5 @@
 from typing import List
+
 from django.http import HttpResponse
 
 from glitchtip.api.authentication import AuthHttpRequest

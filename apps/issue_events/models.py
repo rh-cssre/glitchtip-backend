@@ -6,12 +6,11 @@ from django.db import models
 from psqlextra.models import PostgresPartitionedModel
 from psqlextra.types import PostgresPartitioningMethod
 
+from glitchtip.base_models import CreatedModel
 from sentry.constants import MAX_CULPRIT_LENGTH
 
 from .constants import EventStatus, IssueEventType, LogLevel
 from .utils import base32_encode
-
-from glitchtip.base_models import CreatedModel
 
 
 class Issue(models.Model):
