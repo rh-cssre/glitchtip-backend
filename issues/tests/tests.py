@@ -507,13 +507,21 @@ class IssuesAPITestCase(GlitchTipTestCase):
             end = timer()
         # print(end - start)
 
-    def test_issue_comment_count(self):
+    def test_issue_related_counts(self):
         issue = baker.make("issues.Issue", project=self.project)
+        event = baker.make("events.Event", issue=issue)
+        baker.make(
+            "user_reports.UserReport",
+            project=self.project,
+            issue=issue,
+            event_id=event.pk.hex,
+        )
         baker.make("issues.Comment", issue=issue, _quantity=2)
 
         with self.assertNumQueries(4):
             res = self.client.get(self.url + f"{issue.pk}/")
         self.assertEqual(res.data["numComments"], 2)
+        self.assertEqual(res.data["userReportCount"], 1)
 
     def test_issue_tag_detail(self):
         issue = baker.make("issues.Issue", project=self.project)

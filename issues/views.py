@@ -125,7 +125,8 @@ class IssueViewSet(
         qs = qs.select_related("project").defer("search_vector", "tags")
         if self.action in ["retrieve"]:
             qs = qs.annotate(
-                num_comments=Count("comment"), user_report_count=(Count("userreport"))
+                num_comments=Count("comment", distinct=True),
+                user_report_count=(Count("userreport", distinct=True))
             )
 
         return qs
