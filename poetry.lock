@@ -343,40 +343,40 @@ files = [
 
 [[package]]
 name = "boto3"
-version = "1.29.7"
+version = "1.34.0"
 description = "The AWS SDK for Python"
 optional = false
-python-versions = ">= 3.7"
+python-versions = ">= 3.8"
 files = [
-    {file = "boto3-1.29.7-py3-none-any.whl", hash = "sha256:96e9890ebe7cd823b5f4976dd676e112c000c6528c28e20a2f274590589dd18b"},
-    {file = "boto3-1.29.7.tar.gz", hash = "sha256:1eb4c548118b5fc5e018dee956fd33e6fb249cd1f2def85f1bba816aef4d9f3e"},
+    {file = "boto3-1.34.0-py3-none-any.whl", hash = "sha256:8b3c4d4e720c0ad706590c284b8f30c76de3472c1ce1bac610425f99bf6ab53b"},
+    {file = "boto3-1.34.0.tar.gz", hash = "sha256:c9b400529932ed4652304756528ab235c6730aa5d00cb4d9e4848ce460c82c16"},
 ]
 
 [package.dependencies]
-botocore = ">=1.32.7,<1.33.0"
+botocore = ">=1.34.0,<1.35.0"
 jmespath = ">=0.7.1,<2.0.0"
-s3transfer = ">=0.8.0,<0.9.0"
+s3transfer = ">=0.9.0,<0.10.0"
 
 [package.extras]
 crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
 
 [[package]]
 name = "botocore"
-version = "1.32.7"
+version = "1.34.0"
 description = "Low-level, data-driven core of boto 3."
 optional = false
-python-versions = ">= 3.7"
+python-versions = ">= 3.8"
 files = [
-    {file = "botocore-1.32.7-py3-none-any.whl", hash = "sha256:58b33d02cafa23461c8a9d211b30e8cded992380a84de409379fd02811fa3e11"},
-    {file = "botocore-1.32.7.tar.gz", hash = "sha256:c6795c731b04c8e3635588c44cfd1a4462fc5987859195522c96812cf3eceff9"},
+    {file = "botocore-1.34.0-py3-none-any.whl", hash = "sha256:6ec19f6c9f61c3df22fb3e083940ac7946a3d96128db1f370f10aea702bb157f"},
+    {file = "botocore-1.34.0.tar.gz", hash = "sha256:711b406de910585395466ca649bceeea87a04300ddf74d9a2e20727c7f27f2f1"},
 ]
 
 [package.dependencies]
 jmespath = ">=0.7.1,<2.0.0"
 python-dateutil = ">=2.1,<3.0.0"
 urllib3 = [
-    {version = ">=1.25.4,<2.1", markers = "python_version >= \"3.10\""},
     {version = ">=1.25.4,<1.27", markers = "python_version < \"3.10\""},
+    {version = ">=1.25.4,<2.1", markers = "python_version >= \"3.10\""},
 ]
 
 [package.extras]
@@ -1580,8 +1580,8 @@ files = [
 [package.dependencies]
 cffi = {version = ">=1.12.2", markers = "platform_python_implementation == \"CPython\" and sys_platform == \"win32\""}
 greenlet = [
-    {version = ">=3.0rc3", markers = "platform_python_implementation == \"CPython\" and python_version >= \"3.11\""},
     {version = ">=2.0.0", markers = "platform_python_implementation == \"CPython\" and python_version < \"3.11\""},
+    {version = ">=3.0rc3", markers = "platform_python_implementation == \"CPython\" and python_version >= \"3.11\""},
 ]
 "zope.event" = "*"
 "zope.interface" = "*"
@@ -1731,12 +1731,12 @@ files = [
 google-auth = ">=2.14.1,<3.0.dev0"
 googleapis-common-protos = ">=1.56.2,<2.0.dev0"
 grpcio = [
-    {version = ">=1.49.1,<2.0dev", optional = true, markers = "python_version >= \"3.11\" and extra == \"grpc\""},
     {version = ">=1.33.2,<2.0dev", optional = true, markers = "python_version < \"3.11\" and extra == \"grpc\""},
+    {version = ">=1.49.1,<2.0dev", optional = true, markers = "python_version >= \"3.11\" and extra == \"grpc\""},
 ]
 grpcio-status = [
-    {version = ">=1.49.1,<2.0.dev0", optional = true, markers = "python_version >= \"3.11\" and extra == \"grpc\""},
     {version = ">=1.33.2,<2.0.dev0", optional = true, markers = "python_version < \"3.11\" and extra == \"grpc\""},
+    {version = ">=1.49.1,<2.0.dev0", optional = true, markers = "python_version >= \"3.11\" and extra == \"grpc\""},
 ]
 protobuf = ">=3.19.5,<3.20.0 || >3.20.0,<3.20.1 || >3.20.1,<4.21.0 || >4.21.0,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<5.0.0.dev0"
 requests = ">=2.18.0,<3.0.0.dev0"
@@ -1836,8 +1836,8 @@ google-cloud-audit-log = ">=0.1.0,<1.0.0dev"
 google-cloud-core = ">=2.0.0,<3.0.0dev"
 grpc-google-iam-v1 = ">=0.12.4,<1.0.0dev"
 proto-plus = [
-    {version = ">=1.22.2,<2.0.0dev", markers = "python_version >= \"3.11\""},
     {version = ">=1.22.0,<2.0.0dev", markers = "python_version < \"3.11\""},
+    {version = ">=1.22.2,<2.0.0dev", markers = "python_version >= \"3.11\""},
 ]
 protobuf = ">=3.19.5,<3.20.0 || >3.20.0,<3.20.1 || >3.20.1,<4.21.0 || >4.21.0,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<5.0.0dev"
 
@@ -3932,20 +3932,20 @@ files = [
 
 [[package]]
 name = "s3transfer"
-version = "0.8.0"
+version = "0.9.0"
 description = "An Amazon S3 Transfer Manager"
 optional = false
-python-versions = ">= 3.7"
+python-versions = ">= 3.8"
 files = [
-    {file = "s3transfer-0.8.0-py3-none-any.whl", hash = "sha256:baa479dc2e63e5c2ed51611b4d46cdf0295e2070d8d0b86b22f335ee5b954986"},
-    {file = "s3transfer-0.8.0.tar.gz", hash = "sha256:e8d6bd52ffd99841e3a57b34370a54841f12d3aab072af862cdcc50955288002"},
+    {file = "s3transfer-0.9.0-py3-none-any.whl", hash = "sha256:01d4d2c35a016db8cb14f9a4d5e84c1f8c96e7ffc211422555eed45c11fa7eb1"},
+    {file = "s3transfer-0.9.0.tar.gz", hash = "sha256:9e1b186ec8bb5907a1e82b51237091889a9973a2bb799a924bcd9f301ff79d3d"},
 ]
 
 [package.dependencies]
-botocore = ">=1.32.7,<2.0a.0"
+botocore = ">=1.33.2,<2.0a.0"
 
 [package.extras]
-crt = ["botocore[crt] (>=1.32.7,<2.0a.0)"]
+crt = ["botocore[crt] (>=1.33.2,<2.0a.0)"]
 
 [[package]]
 name = "sentry-sdk"
@@ -4589,4 +4589,4 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "2c557f3d490921b672902c5dc492a031f7e2fbabefc8cd52a8fe04cdff1b8082"
+content-hash = "f5bf3a15fd79876e1f645868a7a1a1967dfda9f1705289703a81944ed6194062"
