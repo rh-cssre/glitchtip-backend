@@ -29,10 +29,8 @@ def get_queryset(
         qs = qs.filter(issue__project__slug=project_slug)
     return qs.select_related("issue").order_by("-received")
 
-async def add_user_report(event: IssueEvent):
-    user_report = await UserReport.objects.filter(event_id=event.id.hex).afirst()
-    event.user_report = user_report
-    return event
+async def get_user_report(event_id: uuid.UUID) -> Optional[UserReport]:
+    return await UserReport.objects.filter(event_id=event_id).afirst()
 
 
 @router.get("/issues/{int:issue_id}/events/", response=list[IssueEventSchema])
@@ -53,11 +51,12 @@ async def get_latest_issue_event(request: AuthHttpRequest, issue_id: int):
     qs = qs.annotate(
         previous=Window(expression=Lag("id"), order_by="received"),
     )
-    obj = await qs.afirst()
-    if not obj:
+    event = await qs.afirst()
+    if not event:
         raise Http404()
-    obj.next = None  # We know the next after "latest" must be None
-    return await add_user_report(obj)
+    event.next = None  # We know the next after "latest" must be None
+    event.user_report = await get_user_report(event.id)
+    return event
 
 
 @router.get(
@@ -75,9 +74,10 @@ async def get_issue_event(request: AuthHttpRequest, issue_id: int, event_id: uui
     )
     try:
         event = await qs.filter(id=event_id).aget()
-        return await add_user_report(event)
     except IssueEvent.DoesNotExist:
         raise Http404()
+    event.user_report = await get_user_report(event.id)
+    return event
 
 
 @router.get(
@@ -119,10 +119,11 @@ async def get_project_issue_event(
         next=Subquery(qs.filter(received__gt=OuterRef("received")).values("id")[:1]),
     )
     try:
-        obj = await qs.aget(id=event_id)
-        return await add_user_report(obj)
+        event = await qs.aget(id=event_id)
     except IssueEvent.DoesNotExist:
         raise Http404()
+    event.user_report = await get_user_report(event.id)
+    return event
 
 
 @router.get(
