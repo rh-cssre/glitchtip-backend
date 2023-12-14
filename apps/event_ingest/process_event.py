@@ -197,6 +197,8 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             event_data["breadcrumbs"] = devalue(breadcrumbs)
         if exception := event.exception:
             event_data["exception"] = devalue(exception)
+        if extra := event.extra:
+            event_data["extra"] = extra
 
         processing_events.append(
             ProcessingEvent(

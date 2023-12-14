@@ -492,7 +492,7 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
             res_data,
             sentry_data,
             [
-                # "userReport",
+                "userReport",
                 "title",
                 "culprit",
                 "type",
@@ -504,24 +504,32 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
         )
         self.assertEqual(res_data["projectID"], event.issue.project_id)
 
-    # def test_js_error_with_context(self):
-    #     self.project.scrub_ip_addresses = False
-    #     self.project.save()
-    #     sdk_error, sentry_json, sentry_data = self.get_json_test_data(
-    #         "js_error_with_context"
-    #     )
-    #     res = self.client.post(
-    #         self.event_store_url, sdk_error, format="json", REMOTE_ADDR="142.255.29.14"
-    #     )
-    #     event = Event.objects.get(pk=res.data["id"])
-    #     event_json = event.event_json()
-    #     self.assertCompareData(
-    #         event_json, sentry_json, ["title", "message", "extra", "user"]
-    #     )
+    def test_js_error_with_context(self):
+        self.project.scrub_ip_addresses = False
+        self.project.save()
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+            "js_error_with_context"
+        )
+        event_store_url = (
+            reverse("api:event_store", args=[self.project.id])
+            + "?sentry_key="
+            + self.project.projectkey_set.first().public_key.hex
+        )
+        res = self.client.post(
+            event_store_url,
+            sdk_error,
+            content_type="application/json",
+            REMOTE_ADDR="142.255.29.14",
+        )
+        res_data = res.json()
+        event = IssueEvent.objects.get(pk=res_data["event_id"])
+        event_json = self.get_event_json(event)
+        self.assertCompareData(event_json, sentry_json, ["title", "extra"])
+        # self.assertCompareData(event_json, sentry_json, ["title", "extra", "user"])
 
-    #     url = self.get_project_events_detail(event.pk)
-    #     res = self.client.get(url)
-    #     self.assertCompareData(res.json(), sentry_data, ["context", "user"])
+        # url = self.get_project_events_detail(event.pk)
+        # res = self.client.get(url)
+        # self.assertCompareData(res.json(), sentry_data, ["context", "user"])
 
     # def test_elixir_stacktrace(self):
     #     """The elixir SDK does things differently"""

@@ -31,12 +31,14 @@ class ProjectReference(CamelSchema, ModelSchema):
     def resolve_id(obj: Project):
         return str(obj.id)
 
+
 # For Sentry compatability
 def to_camel_with_lower_id(string: str) -> str:
     return "".join(
         word if i == 0 else "Id" if word == "id" else word.capitalize()
         for i, word in enumerate(string.split("_"))
     )
+
 
 class IssueSchema(ModelSchema):
     first_seen: datetime = Field(validation_alias="created")
@@ -201,6 +203,7 @@ class IssueEventSchema(CamelSchema, ModelSchema, BaseIssueEvent):
             entries.append({"type": IssueEventType.CSP.label, "data": csp})
         return entries
 
+
 class UserReportSchema(CamelSchema, ModelSchema):
     event_id: str = Field(validation_alias="event_id.hex")
     event: dict[str, str]
@@ -217,6 +220,7 @@ class UserReportSchema(CamelSchema, ModelSchema):
         return {
             "eventId": obj.event_id.hex,
         }
+
 
 class IssueEventDetailSchema(IssueEventSchema):
     user_report: Optional[UserReportSchema]
@@ -259,6 +263,7 @@ class IssueEventJsonSchema(ModelSchema, BaseIssueEvent):
     environment: Optional[str] = Field(
         validation_alias="data.environment", default=None
     )
+    extra: Optional[dict[str, Any]] = Field(validation_alias="data.extra", default=None)
 
     class Config:
         model = IssueEvent
@@ -279,5 +284,3 @@ class IssueEventDataSchema(Schema):
 
 class CSPIssueEventDataSchema(IssueEventDataSchema):
     csp: CSPReportSchema
-
-

@@ -239,7 +239,7 @@ class IngestIssueEvent(BaseIssueEvent):
     tags: Optional[KeyValueFormat] = None
     environment: Optional[str] = None
     modules: Optional[dict[str, Optional[str]]] = None
-    extra: Optional[Any] = None
+    extra: Optional[dict[str, Any]] = None
     fingerprint: Optional[list[str]] = None
     errors: Optional[list[Any]] = None
 
