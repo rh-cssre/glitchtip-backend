@@ -1,3 +1,4 @@
+from django.db.models import Count
 from django.http import Http404
 
 from glitchtip.api.authentication import AuthHttpRequest
@@ -19,6 +20,9 @@ def get_queryset(request: AuthHttpRequest):
 )
 async def get_issue(request: AuthHttpRequest, issue_id: int):
     qs = get_queryset(request)
+    qs = qs.annotate(
+                num_comments=Count("comments", distinct=True), user_report_count=Count("userreport", distinct=True)
+            )
     try:
         return await qs.filter(id=issue_id).select_related('project', 'issuestats').aget()
     except Issue.DoesNotExist:
