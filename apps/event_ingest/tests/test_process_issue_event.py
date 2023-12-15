@@ -524,12 +524,15 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
         res_data = res.json()
         event = IssueEvent.objects.get(pk=res_data["event_id"])
         event_json = self.get_event_json(event)
-        self.assertCompareData(event_json, sentry_json, ["title", "extra"])
-        # self.assertCompareData(event_json, sentry_json, ["title", "extra", "user"])
+        self.assertCompareData(event_json, sentry_json, ["title", "extra", "user"])
 
-        # url = self.get_project_events_detail(event.pk)
-        # res = self.client.get(url)
-        # self.assertCompareData(res.json(), sentry_data, ["context", "user"])
+        url = self.get_project_events_detail(event.pk)
+        res = self.client.get(url)
+        res_json = res.json()
+        self.assertCompareData(res_json, sentry_data, ["context"])
+        self.assertCompareData(
+            res_json["user"], sentry_data["user"], ["id", "email", "ip_address"]
+        )
 
     # def test_elixir_stacktrace(self):
     #     """The elixir SDK does things differently"""

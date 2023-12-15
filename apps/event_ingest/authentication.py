@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Optional
 from uuid import UUID
 
 from django.conf import settings
@@ -11,6 +11,12 @@ from projects.models import Project
 from sentry.utils.auth import parse_auth_header
 
 from .constants import EVENT_BLOCK_CACHE_KEY
+
+
+class EventAuthHttpRequest(HttpRequest):
+    """Django HttpRequest that is known to be authenticated by a project DSN"""
+
+    auth: Project
 
 
 def auth_from_request(request: HttpRequest):
@@ -40,7 +46,7 @@ REJECTION_MAP: dict[Literal["v", "t"], Exception] = {
 REJECTION_WAIT = 30
 
 
-async def get_project(request: HttpRequest):
+async def get_project(request: HttpRequest) -> Optional[Project]:
     """
     Return the valid and accepting events project based on a request.
 
@@ -70,7 +76,9 @@ async def get_project(request: HttpRequest):
         .select_related("organization")
         .only(
             "id",
+            "scrub_ip_addresses",
             "organization__is_accepting_events",
+            "organization__scrub_ip_addresses",
         )
         .afirst()
     )
@@ -83,7 +91,7 @@ async def get_project(request: HttpRequest):
     return project
 
 
-async def event_auth(request: HttpRequest):
+async def event_auth(request: HttpRequest) -> Optional[Project]:
     """
     Event Ingest authentication means validating the DSN (sentry_key).
     Throttling is also handled here.

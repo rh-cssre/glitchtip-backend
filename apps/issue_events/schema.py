@@ -9,12 +9,14 @@ from glitchtip.api.schema import CamelSchema
 from projects.models import Project
 from sentry.interfaces.stacktrace import get_context
 
+from ..shared.schema.contexts import Contexts
 from ..shared.schema.event import (
     BaseIssueEvent,
     BaseRequest,
     EventBreadcrumb,
     ListKeyValue,
 )
+from ..shared.schema.user import EventUser
 from .constants import IssueEventType
 from .models import Issue, IssueEvent, UserReport
 
@@ -143,6 +145,11 @@ class IssueEventSchema(CamelSchema, ModelSchema, BaseIssueEvent):
     entries: list[
         Union[BreadcrumbsEntry, ExceptionEntry, MessageEntry, RequestEntry]
     ] = Field(discriminator="type", default_factory=list)
+    contexts: Optional[Contexts] = Field(validation_alias="data.contexts", default=None)
+    context: Optional[dict[str, Any]] = Field(
+        validation_alias="data.extra", default=None
+    )
+    user: Optional[Any] = Field(validation_alias="data.user", default=None)
 
     class Config:
         model = IssueEvent
@@ -264,6 +271,7 @@ class IssueEventJsonSchema(ModelSchema, BaseIssueEvent):
         validation_alias="data.environment", default=None
     )
     extra: Optional[dict[str, Any]] = Field(validation_alias="data.extra", default=None)
+    user: Optional[EventUser] = Field(validation_alias="data.user", default=None)
 
     class Config:
         model = IssueEvent

@@ -1,14 +1,19 @@
+from typing import Optional
+
+from anonymizeip import anonymize_ip
 from asgiref.sync import sync_to_async
 from django.conf import settings
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpResponse
+from ipware import get_client_ip
 from ninja import Router, Schema
 
-from .authentication import event_auth
+from .authentication import EventAuthHttpRequest, event_auth
 from .schema import (
     CSPIssueEventSchema,
     EnvelopeSchema,
     ErrorIssueEventSchema,
     EventIngestSchema,
+    EventUser,
     IngestIssueEvent,
     InterchangeIssueEvent,
     IssueEventSchema,
@@ -42,9 +47,24 @@ def get_issue_event_class(event: IngestIssueEvent):
     return ErrorIssueEventSchema if event.exception else IssueEventSchema
 
 
+def get_ip_address(request: EventAuthHttpRequest) -> Optional[str]:
+    """
+    Get IP address from request. Anonymize it based on project settings.
+    Keep this logic in the api view, we aim to anonymize data before storing
+    on redis/postgres.
+    """
+    project = request.auth
+    client_ip, is_routable = get_client_ip(request)
+    if is_routable:
+        if project.should_scrub_ip_addresses:
+            client_ip = anonymize_ip(client_ip)
+        return client_ip
+    return None
+
+
 @router.post("/{project_id}/store/", response=EventIngestOut)
 async def event_store(
-    request: HttpRequest,
+    request: EventAuthHttpRequest,
     payload: EventIngestSchema,
     project_id: int,
 ):
@@ -52,6 +72,12 @@ async def event_store(
     Event store is the original event ingest API from OSS Sentry but is used less often
     Unlike Envelope, it accepts only one Issue event.
     """
+    if client_ip := get_ip_address(request):
+        if payload.user:
+            payload.user.ip_address = client_ip
+        else:
+            payload.user = EventUser(ip_address=client_ip)
+
     issue_event_class = get_issue_event_class(payload)
     issue_event = InterchangeIssueEvent(
         event_id=payload.event_id,
@@ -64,7 +90,7 @@ async def event_store(
 
 @router.post("/{project_id}/envelope/", response=EnvelopeIngestOut)
 async def event_envelope(
-    request: HttpRequest,
+    request: EventAuthHttpRequest,
     payload: EnvelopeSchema,
     project_id: int,
 ):
@@ -76,9 +102,15 @@ async def event_envelope(
     Make as few io calls as possible. Some language SDKs (PHP) cannot run async code
     and will block while waiting for GlitchTip to respond.
     """
+    client_ip = get_ip_address(request)
+
     header = payload._header
     for item_header, item in payload._items:
         if item_header.type == "event":
+            if item.user:
+                item.user.ip_address = client_ip
+            else:
+                item.user = EventUser(ip_address=client_ip)
             issue_event_class = get_issue_event_class(item)
             issue_event = InterchangeIssueEvent(
                 event_id=header.event_id,
@@ -95,7 +127,7 @@ async def event_envelope(
 
 @router.post("/{project_id}/security/")
 async def event_security(
-    request: HttpRequest,
+    request: EventAuthHttpRequest,
     payload: SecuritySchema,
     project_id: int,
 ):
@@ -105,6 +137,11 @@ async def event_security(
     event format.
     """
     event = CSPIssueEventSchema(csp=payload.csp_report.dict(by_alias=True))
+    if client_ip := get_ip_address(request):
+        if event.user:
+            event.user.ip_address = client_ip
+        else:
+            event.user = EventUser(ip_address=client_ip)
     issue_event = InterchangeIssueEvent(
         project_id=project_id,
         payload=event.dict(by_alias=True),

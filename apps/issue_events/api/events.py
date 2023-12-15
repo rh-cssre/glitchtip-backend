@@ -29,6 +29,7 @@ def get_queryset(
         qs = qs.filter(issue__project__slug=project_slug)
     return qs.select_related("issue").order_by("-received")
 
+
 async def get_user_report(event_id: uuid.UUID) -> Optional[UserReport]:
     return await UserReport.objects.filter(event_id=event_id).afirst()
 
@@ -130,6 +131,7 @@ async def get_project_issue_event(
     "/organizations/{slug:organization_slug}/issues/{int:issue_id}/events/{event_id}/json/",
     response=IssueEventJsonSchema,
     by_alias=True,
+    exclude_none=True,
 )
 async def get_event_json(
     request: AuthHttpRequest, organization_slug: str, issue_id: int, event_id: uuid.UUID

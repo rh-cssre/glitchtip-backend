@@ -19,7 +19,7 @@ from pydantic import (
 
 from apps.issue_events.constants import IssueEventType
 
-from ..shared.schema.contexts import Contexts
+from ..shared.schema.contexts import ContextsSchema
 from ..shared.schema.event import (
     BaseIssueEvent,
     BaseRequest,
@@ -250,7 +250,7 @@ class IngestIssueEvent(BaseIssueEvent):
     breadcrumbs: Optional[Union[list[EventBreadcrumb], ValueEventBreadcrumb]] = None
     sdk: Optional[ClientSDKInfo] = None
     request: Optional[IngestRequest] = None
-    contexts: Optional[Contexts] = None
+    contexts: Optional[ContextsSchema] = None
     user: Optional[EventUser] = None
 
     @field_validator("tags")

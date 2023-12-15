@@ -1,6 +1,7 @@
 from typing import Annotated, Any, Literal, Optional, TypedDict, Union
 
 from ninja import Field, Schema
+from pydantic import RootModel
 
 
 class DeviceContext(Schema):
@@ -178,12 +179,7 @@ ContextsUnion = Union[
 
 Contexts = dict[str, Union[Annotated[ContextsUnion, Field(discriminator="type")], Any]]
 
-# class Contexts(RootModel):
-#     # TODO, add pre validation logic here to assign the type based on the key
-#     root: Union[
-#         Annotated[
-#             ContextsUnion,
-#             Field(discriminator="type"),
-#         ],
-#         Any,
-#     ]
+
+class ContextsSchema(RootModel):
+    # TODO, add pre validation logic here to assign the type based on the key
+    root: Contexts
