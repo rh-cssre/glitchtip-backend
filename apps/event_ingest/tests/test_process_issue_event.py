@@ -534,26 +534,13 @@ class SentryCompatTestCase(IssueEventIngestTestCase):
             res_json["user"], sentry_data["user"], ["id", "email", "ip_address"]
         )
 
-    # def test_elixir_stacktrace(self):
-    #     """The elixir SDK does things differently"""
-    #     sdk_error, sentry_json, sentry_data = self.get_json_test_data("elixir_error")
-    #     res = self.client.post(self.event_store_url, sdk_error, format="json")
-    #     event = Event.objects.get(pk=res.data["id"])
-    #     event_json = event.event_json()
-    #     self.assertCompareData(
-    #         event_json["exception"]["values"][0],
-    #         sentry_json["exception"]["values"][0],
-    #         ["type", "values", "exception"],
-    #     )
-
-    # def test_small_js_error(self):
-    #     """A small example to test stacktraces"""
-    #     sdk_error, sentry_json, sentry_data = self.get_json_test_data("small_js_error")
-    #     res = self.client.post(self.event_store_url, sdk_error, format="json")
-    #     event = Event.objects.get(pk=res.data["id"])
-    #     event_json = event.event_json()
-    #     self.assertCompareData(
-    #         event_json["exception"]["values"][0],
-    #         sentry_json["exception"]["values"][0],
-    #         ["type", "values", "exception", "abs_path"],
-    #     )
+    def test_small_js_error(self):
+        """A small example to test stacktraces"""
+        sdk_error, sentry_json, sentry_data = self.get_json_test_data("small_js_error")
+        event = self.submit_event(sdk_error, event_type="default")
+        event_json = self.get_event_json(event)
+        self.assertCompareData(
+            event_json["exception"][0],
+            sentry_json["exception"]["values"][0],
+            ["type", "values", "exception", "abs_path"],
+        )
