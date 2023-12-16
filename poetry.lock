@@ -343,17 +343,17 @@ files = [
 
 [[package]]
 name = "boto3"
-version = "1.34.0"
+version = "1.34.2"
 description = "The AWS SDK for Python"
 optional = false
 python-versions = ">= 3.8"
 files = [
-    {file = "boto3-1.34.0-py3-none-any.whl", hash = "sha256:8b3c4d4e720c0ad706590c284b8f30c76de3472c1ce1bac610425f99bf6ab53b"},
-    {file = "boto3-1.34.0.tar.gz", hash = "sha256:c9b400529932ed4652304756528ab235c6730aa5d00cb4d9e4848ce460c82c16"},
+    {file = "boto3-1.34.2-py3-none-any.whl", hash = "sha256:aad3f305fe3cd4f2bba545c9580cd460c366af56a8aabb6094528dd32317f8d2"},
+    {file = "boto3-1.34.2.tar.gz", hash = "sha256:970fd9f9f522eb48f3cd5574e927b369279ebf5bcf0f2fae5ed9cc6306e58558"},
 ]
 
 [package.dependencies]
-botocore = ">=1.34.0,<1.35.0"
+botocore = ">=1.34.2,<1.35.0"
 jmespath = ">=0.7.1,<2.0.0"
 s3transfer = ">=0.9.0,<0.10.0"
 
@@ -362,13 +362,13 @@ crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
 
 [[package]]
 name = "botocore"
-version = "1.34.0"
+version = "1.34.2"
 description = "Low-level, data-driven core of boto 3."
 optional = false
 python-versions = ">= 3.8"
 files = [
-    {file = "botocore-1.34.0-py3-none-any.whl", hash = "sha256:6ec19f6c9f61c3df22fb3e083940ac7946a3d96128db1f370f10aea702bb157f"},
-    {file = "botocore-1.34.0.tar.gz", hash = "sha256:711b406de910585395466ca649bceeea87a04300ddf74d9a2e20727c7f27f2f1"},
+    {file = "botocore-1.34.2-py3-none-any.whl", hash = "sha256:655b1ea2a5d7b989a0eb6006c16137f785bc7334f31378115668c4be5d4b00eb"},
+    {file = "botocore-1.34.2.tar.gz", hash = "sha256:8a9f4ad438ba814b9b7a22b24de3004f8aa232e7ae86e0087aea4d7792dc3a2a"},
 ]
 
 [package.dependencies]
@@ -2678,12 +2678,14 @@ files = [
     {file = "memray-1.11.0-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:eedea42d13b3630faa5591e298659f34e6ead06aa867050def12de6cc03e1a97"},
     {file = "memray-1.11.0-cp311-cp311-macosx_10_14_x86_64.whl", hash = "sha256:9fbb2a1a82e24f0f90a9bb4ca7af6174ce91c5f3b3ce58e0b16361e989ea7cc1"},
     {file = "memray-1.11.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:6f46e00d4a10a7fb73b560e57689a68ca3661bf969e228093d20fc1313c42f0b"},
+    {file = "memray-1.11.0-cp311-cp311-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:016a68de76fc800554fcc7dc473e48092d749b3b4302a6babd2e592a5fe8ae5e"},
     {file = "memray-1.11.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7824202d23e3060c7a0380e1a9bb6f131f47ee29c6f30b322e844648ea3aa9da"},
     {file = "memray-1.11.0-cp311-cp311-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:c5b8860e3cc7df4f7f451e043aabe60a3812f99c3e308f0c4c0e7a03d72c1563"},
     {file = "memray-1.11.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3fc83741aedd6daa9c49ecee0a8e0048f278b6eb1ae22bdcf9b4523be7ba7106"},
     {file = "memray-1.11.0-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:39bbf9e74c3933a84c22e047920a0f6e2d491ba943a39f4aa041f1c0422c8403"},
     {file = "memray-1.11.0-cp312-cp312-macosx_10_14_x86_64.whl", hash = "sha256:0ed869e4a82722a4558da749f39d6079f2ef5e767d1399d2d090b04742e2b3f2"},
     {file = "memray-1.11.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:ad1f2bb1223759e6b9755b6139087f6bcbaca1718cfed70c31aba0943542b431"},
+    {file = "memray-1.11.0-cp312-cp312-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:9c577e81f8f7cd1418c7bfae4651d9bb3f16b72200e4b8d9b80c71aeeab64bb8"},
     {file = "memray-1.11.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:1534520c3c3e6b8234fe13c6d36bd74ab855dc19cef6e9d190a2a0b48fd2d83d"},
     {file = "memray-1.11.0-cp312-cp312-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:c3dfb2c20fbbb128489f7b9f5bd2704bae6f77dba11c253cccf8eb8299697fe4"},
     {file = "memray-1.11.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:b8e02e8bbe03826c5e65c2cc28760b1d0bc59f9bee6d6769c01e800b50542f5b"},
@@ -4589,4 +4591,4 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "f5bf3a15fd79876e1f645868a7a1a1967dfda9f1705289703a81944ed6194062"
+content-hash = "25132f1102fd2a84870aa4ceb6d868a8fa42799ca433423cc19fde141a727347"
