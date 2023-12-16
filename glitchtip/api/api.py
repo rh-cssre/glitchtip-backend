@@ -6,7 +6,7 @@ from allauth.socialaccount.providers.openid_connect.views import OpenIDConnectAd
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.http import HttpRequest
-from ninja import ModelSchema, NinjaAPI
+from ninja import Field, ModelSchema, NinjaAPI
 
 from glitchtip.constants import SOCIAL_ADAPTER_MAP
 from users.utils import ais_user_registration_open
@@ -65,7 +65,7 @@ class SocialAppSchema(ModelSchema):
 class SettingsOut(CamelSchema):
     social_apps: list[SocialAppSchema]
     billing_enabled: bool
-    i_paid_for_glitchtip: bool
+    i_paid_for_glitchtip: bool = Field(serialization_alias="iPaidForGlitchTip")
     enable_user_registration: bool
     enable_organization_creation: bool
     stripe_public_key: Optional[str]
