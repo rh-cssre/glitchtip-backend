@@ -98,6 +98,10 @@ async def get_settings(request: HttpRequest):
                 social_app.authorize_url = await sync_to_async(
                     adapter._build_tenant_url
                 )("/oauth2/v2.0/authorize")
+            elif isinstance(adapter, OpenIDConnectAdapter):
+                social_app.authorize_url = await sync_to_async(
+                    lambda: adapter.authorize_url
+                )()
             else:
                 social_app.authorize_url = adapter.authorize_url
 
