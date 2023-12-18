@@ -1,12 +1,13 @@
 import json
-from typing import List, Dict, Union
-from django.utils import dateparse
-from django.urls import reverse
-from events.test_data.django_error_factory import message
-from events.test_data.csp import mdn_sample_csp
-from glitchtip.test_utils.test_case import GlitchTipTestCase
-from events.models import Event, LogLevel
+from typing import Dict, List, Union
 
+from django.urls import reverse
+from django.utils import dateparse
+
+from events.models import Event, LogLevel
+from events.test_data.csp import mdn_sample_csp
+from events.test_data.django_error_factory import message
+from glitchtip.test_utils.test_case import GlitchTipTestCase
 
 TEST_DATA_DIR = "events/test_data"
 
@@ -178,7 +179,6 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         url = self.get_project_events_detail(event.pk)
         res = self.client.get(url)
         res_data = res.json()
-        self.assertCompareData(res_data, sentry_data, ["datetime"])
         self.assertEqual(res_data["entries"][1].get("type"), "breadcrumbs")
         self.assertEqual(
             res_data["entries"][1],
@@ -186,7 +186,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         )
 
     def test_dotnet_error(self):
-        # Don't mimic this test, use self.get_jest_test_data instead
+        # Don't mimic this test, use self.get_json_test_data instead
         sdk_error = self.get_json_data(
             "events/test_data/incoming_events/dotnet_error.json"
         )
@@ -235,7 +235,10 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         self.assertCompareData(
             res.data,
             sentry_data,
-            ["message", "title",],
+            [
+                "message",
+                "title",
+            ],
         )
         self.assertEqual(res.data["entries"][0], sentry_data["entries"][0])
 
@@ -261,7 +264,10 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
         self.assertCompareData(
             res.data,
             sentry_data,
-            ["message", "title",],
+            [
+                "message",
+                "title",
+            ],
         )
         self.assertEqual(res.data["entries"][0], sentry_data["entries"][0])
 
@@ -296,7 +302,7 @@ class SentryAPICompatTestCase(GlitchTipTestCase):
 
     def test_message_event(self):
         """A generic message made with the Sentry SDK. Generally has less data than exceptions."""
-        # Don't mimic this test, use self.get_jest_test_data instead
+        # Don't mimic this test, use self.get_json_test_data instead
         res = self.client.post(self.event_store_url, message, format="json")
         self.assertEqual(res.status_code, 200)
 

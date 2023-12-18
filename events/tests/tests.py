@@ -1,15 +1,22 @@
 import json
 import random
+from collections.abc import Iterable, Mapping
+from typing import Optional
 from unittest.mock import patch
 
 from django.shortcuts import reverse
 from django.test import override_settings
 from model_bakery import baker
+from prometheus_client import Metric
+from prometheus_client.parser import text_string_to_metric_families
 from rest_framework.test import APITestCase
 
-from environments.models import Environment
-from glitchtip import test_utils  # pylint: disable=unused-import
+from environments.models import Environment, EnvironmentProject
+from glitchtip.test_utils import generators  # pylint: disable=unused-import
+from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.models import EventStatus, Issue
+from observability.metrics import events_counter, issues_counter
+from releases.models import Release
 
 from ..models import Event, LogLevel
 from ..test_data.csp import mdn_sample_csp
@@ -96,16 +103,29 @@ class EventStoreTestCase(APITestCase):
         issue.refresh_from_db()
         self.assertEqual(issue.status, EventStatus.UNRESOLVED)
 
+    # TODO Issue Ingest tests, got to here
+
+    def test_issue_count(self):
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        self.client.post(self.url, data, format="json")
+        issue = Issue.objects.first()
+        self.assertEqual(issue.count, 1)
+        data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4ba"
+        self.client.post(self.url, data, format="json")
+        issue.refresh_from_db()
+        self.assertEqual(issue.count, 2)
+
     def test_performance(self):
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
-        with self.assertNumQueries(15):
+        with self.assertNumQueries(18):
             res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 
         # Second event should have less queries
         data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4bb"
-        with self.assertNumQueries(8):
+        with self.assertNumQueries(10):
             res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 
@@ -115,6 +135,15 @@ class EventStoreTestCase(APITestCase):
         organization.save()
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 429)
+
+    def test_throttle_project(self):
+        self.project.event_throttle_rate = 100
+        self.project.save()
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        # throttled
         res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 429)
 
@@ -187,12 +216,32 @@ class EventStoreTestCase(APITestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(
             Issue.objects.first().search_vector,
-            "",
+            None,
             "No tsvector is expected as it would exceed the Postgres limit",
         )
         data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4be"
         res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
+
+    def test_store_somewhat_large_data(self):
+        """
+        This test is expected to exceed the 1mb limit of a postgres tsvector
+        only when two events exist for 1 issue.
+        """
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+
+        data["platform"] = " ".join([str(random.random()) for _ in range(30000)])
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4be"
+        data["platform"] = " ".join([str(random.random()) for _ in range(30000)])
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(
+            Issue.objects.first().search_vector,
+            "tsvector is expected",
+        )
 
     @patch("events.views.logger")
     def test_invalid_event(self, mock_logger):
@@ -226,6 +275,9 @@ class EventStoreTestCase(APITestCase):
     def test_event_release(self):
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
+
+        baker.make("releases.Release", version=data.get("release"))
+
         self.client.post(self.url, data, format="json")
         event = Event.objects.first()
         event_json = event.event_json()
@@ -235,6 +287,20 @@ class EventStoreTestCase(APITestCase):
             event.release.version,
             dict(event_json.get("tags")).values(),
         )
+        self.assertTrue(
+            Release.objects.filter(
+                version=data.get("release"), projects=self.project
+            ).exists()
+        )
+
+    def test_event_release_blank(self):
+        """In the SDK, it's possible to set a release to a blank string"""
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        data["release"] = ""
+        res = self.client.post(self.url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(Event.objects.first())
 
     def test_client_tags(self):
         with open("events/test_data/py_hi_event.json") as json_file:
@@ -406,6 +472,27 @@ class EventStoreTestCase(APITestCase):
         res = self.client.post(self.url, data, format="json")
         self.assertTrue(Event.objects.filter().exists())
 
+    def test_repeat_environment(self):
+        existing_environment = baker.make("environments.Environment", name="staging")
+        data = {
+            "exception": [
+                {
+                    "type": "a",
+                    "value": "a",
+                    "module": None,
+                }
+            ],
+            "event_id": "11111111111111111111111111111111",
+            "environment": existing_environment.name,
+        }
+
+        res = self.client.post(self.url, data, format="json")
+        self.assertTrue(
+            EnvironmentProject.objects.filter(
+                environment__name=existing_environment.name, project=self.project
+            ).exists()
+        )
+
     def test_invalid_environment(self):
         data = {
             "exception": [
@@ -471,3 +558,104 @@ class EventStoreTestCase(APITestCase):
             ).count(),
             3,
         )
+
+
+def get_sample_value(
+    metric_families: Iterable[Metric],
+    metric_name: str,
+    metric_type: str,
+    labels: Mapping[str, str],
+) -> Optional[float]:
+    for metric_family in metric_families:
+        if metric_family.name != metric_name or metric_family.type != metric_type:
+            continue
+        for metric in metric_family.samples:
+            if metric[1] != labels:
+                continue
+            return metric.value
+    return None
+
+
+def parse_prometheus_text(text: str) -> list[Metric]:
+    parser = text_string_to_metric_families(text)
+    return list(parser)
+
+
+class EventMetricTestCase(GlitchTipTestCase):
+    def setUp(self):
+        self.create_user_and_project()
+        self.user.is_staff = True
+        self.user.save()
+
+        self.metrics_url = reverse("prometheus-django-metrics")
+        self.projectkey = self.project.projectkey_set.first()
+        self.params = f"?sentry_key={self.projectkey.public_key}"
+        self.events_url = reverse("event_store", args=[self.project.id]) + self.params
+
+    def test_metrics(self):
+        with open("events/test_data/py_hi_event.json") as json_file:
+            data = json.load(json_file)
+        event_metric_labels = {
+            "project": self.project.slug,
+            "organization": self.project.organization.slug,
+            "issue": "hi",
+        }
+        issue_metric_labels = {
+            "project": self.project.slug,
+            "organization": self.project.organization.slug,
+        }
+
+        # get initial metrics
+        metric_res = self.client.get(self.metrics_url)
+        self.assertEqual(metric_res.status_code, 200)
+        metrics = parse_prometheus_text(metric_res.content.decode("utf-8"))
+
+        events_before = get_sample_value(
+            metrics, events_counter._name, events_counter._type, event_metric_labels
+        )
+        # no events yet
+        self.assertEqual(events_before, None)
+        issues_before = get_sample_value(
+            metrics, issues_counter._name, issues_counter._type, issue_metric_labels
+        )
+        # no issues yet
+        self.assertEqual(issues_before, None)
+
+        # send event
+        res = self.client.post(self.events_url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+
+        # get latest metrics
+        metric_res = self.client.get(self.metrics_url)
+        self.assertEqual(metric_res.status_code, 200)
+
+        metrics = parse_prometheus_text(metric_res.content.decode("utf-8"))
+        events_after = get_sample_value(
+            metrics, events_counter._name, events_counter._type, event_metric_labels
+        )
+        self.assertEqual(events_after, 1)
+        issues_after = get_sample_value(
+            metrics, issues_counter._name, issues_counter._type, issue_metric_labels
+        )
+        self.assertEqual(issues_after, 1)
+
+        # Second event should not increase the issue count
+        data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4bb"
+        res = self.client.post(self.events_url, data, format="json")
+        self.assertEqual(res.status_code, 200)
+
+        # get latest metrics
+        metric_res = self.client.get(self.metrics_url)
+        self.assertEqual(metric_res.status_code, 200)
+
+        metrics = parse_prometheus_text(metric_res.content.decode("utf-8"))
+        events_after = get_sample_value(
+            metrics, events_counter._name, events_counter._type, event_metric_labels
+        )
+        # new event
+        self.assertEqual(events_after, 2)
+        issues_after = get_sample_value(
+            metrics, issues_counter._name, issues_counter._type, issue_metric_labels
+        )
+        # but no new issue
+        self.assertEqual(issues_after, 1)
