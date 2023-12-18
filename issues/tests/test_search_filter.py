@@ -4,8 +4,10 @@ from django.urls import reverse
 from django.utils import timezone
 from freezegun import freeze_time
 from model_bakery import baker
+
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.tasks import update_search_index_all_issues
+
 from ..tasks import update_search_index_all_issues
 
 
@@ -15,7 +17,7 @@ class FilterTestCase(GlitchTipTestCase):
         self.url = reverse("issue-list")
 
     def test_filter_by_date(self):
-        """ A user should be able to filter by start and end datetimes. """
+        """A user should be able to filter by start and end datetimes."""
         with freeze_time(timezone.datetime(1999, 1, 1)):
             event1 = baker.make("events.Event", issue__project=self.project)
         with freeze_time(timezone.datetime(2010, 1, 1)):
@@ -30,7 +32,6 @@ class FilterTestCase(GlitchTipTestCase):
         self.assertNotContains(res, event3.issue.title)
 
     def test_list_relative_datetime_filter(self):
-
         now = timezone.now()
         last_minute = now - datetime.timedelta(minutes=1)
         with freeze_time(last_minute):
@@ -238,3 +239,12 @@ class SearchTestCase(GlitchTipTestCase):
         self.assertContains(res, "matchingEventId")
         self.assertContains(res, event2.event_id.hex)
         self.assertEqual(res.headers.get("X-Sentry-Direct-Hit"), "1")
+
+        event3 = baker.make(
+            "events.Event", issue=event.issue, data={"name": "plum sauce"}
+        )
+        update_search_index_all_issues()
+        res = self.client.get(self.url + '?query=is:unresolved "plum sauce"')
+        self.assertContains(res, event3.issue.title)
+        res = self.client.get(self.url + '?query=is:unresolved "apple sauce"')
+        self.assertContains(res, event.issue.title)
