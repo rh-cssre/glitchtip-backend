@@ -1339,18 +1339,18 @@ pytz = "*"
 
 [[package]]
 name = "drf-nested-routers"
-version = "0.93.4"
+version = "0.93.5"
 description = "Nested resources for the Django Rest Framework"
 optional = false
-python-versions = ">=3.5"
+python-versions = ">=3.8"
 files = [
-    {file = "drf-nested-routers-0.93.4.tar.gz", hash = "sha256:01aa556b8c08608bb74fb34f6ca065a5183f2cda4dc0478192cc17a2581d71b0"},
-    {file = "drf_nested_routers-0.93.4-py2.py3-none-any.whl", hash = "sha256:996b77f3f4dfaf64569e7b8f04e3919945f90f95366838ca5b8bed9dd709d6c5"},
+    {file = "drf-nested-routers-0.93.5.tar.gz", hash = "sha256:1407565abc7bada37c162c7e11bf214ae71625a17fdec6d9a47a17f4a3627d32"},
+    {file = "drf_nested_routers-0.93.5-py2.py3-none-any.whl", hash = "sha256:9a6813554020134a02e62f8c2934b2047717f7da06f8b801752c521e43735c63"},
 ]
 
 [package.dependencies]
-Django = ">=1.11"
-djangorestframework = ">=3.6.0"
+Django = ">=3.2"
+djangorestframework = ">=3.14.0"
 
 [[package]]
 name = "et-xmlfile"
