@@ -463,10 +463,11 @@ if broker_sentinel_password := env.str("CELERY_BROKER_SENTINEL_KWARGS_PASSWORD",
 # Time in seconds to debounce some frequently run tasks
 TASK_DEBOUNCE_DELAY = env.int("TASK_DEBOUNCE_DELAY", 30)
 UPTIME_CHECK_INTERVAL = 10
+ALERT_NOTIFICATION_INTERVAL = env.int("ALERT_NOTIFICATION_INTERVAL", 60)
 CELERY_BEAT_SCHEDULE = {
     "send-alert-notifications": {
         "task": "alerts.tasks.process_event_alerts",
-        "schedule": 300,
+        "schedule": ALERT_NOTIFICATION_INTERVAL,
     },
     "cleanup-old-events": {
         "task": "issues.tasks.cleanup_old_events",
