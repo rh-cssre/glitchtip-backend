@@ -1,5 +1,4 @@
-from unittest import mock
-
+import requests_mock
 from django.test import TestCase
 from django.urls import reverse
 from model_bakery import baker
@@ -14,11 +13,7 @@ class SettingsTestCase(TestCase):
             res = self.client.get(self.url)  # Check that no auth is necessary
         self.assertEqual(res.status_code, 200)
 
-    @mock.patch(
-        "allauth.socialaccount.providers.openid_connect.views.OpenIDConnectAdapter.openid_config",
-        new_callable=lambda: {"authorization_endpoint": ""},
-    )
-    def test_settings_oidc(self, _):
+    def test_settings_oidc(self):
         social_app = baker.make(
             "socialaccount.socialapp",
             provider="openid_connect",
@@ -37,5 +32,10 @@ class SettingsTestCase(TestCase):
                 "socialaccount.socialapp",
                 provider=provider,
             )
-        res = self.client.get(self.url)
+        with requests_mock.Mocker() as m:
+            m.get(
+                "https://example.com/.well-known/openid-configuration",
+                json={"authorization_endpoint": ""},
+            )
+            res = self.client.get(self.url)
         self.assertContains(res, social_app.name)
