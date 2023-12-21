@@ -18,12 +18,24 @@ class SettingsTestCase(TestCase):
         "allauth.socialaccount.providers.openid_connect.views.OpenIDConnectAdapter.openid_config",
         new_callable=lambda: {"authorization_endpoint": ""},
     )
-    def test_settings_oidc(self, mock_get):
-        # TODO not acceptable test
+    def test_settings_oidc(self, _):
         social_app = baker.make(
             "socialaccount.socialapp",
             provider="openid_connect",
+            provider_id="my-openid",
             settings={"server_url": "https://example.com"},
         )
+        for provider in [
+            "gitlab",
+            "microsoft",
+            "github",
+            "google",
+            "nextcloud",
+            "digitalocean",
+        ]:
+            baker.make(
+                "socialaccount.socialapp",
+                provider=provider,
+            )
         res = self.client.get(self.url)
         self.assertContains(res, social_app.name)
