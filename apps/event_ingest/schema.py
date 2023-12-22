@@ -10,6 +10,7 @@ from ninja import Field
 from ninja import Schema as BaseSchema
 from pydantic import (
     AliasChoices,
+    BeforeValidator,
     RootModel,
     ValidationError,
     WrapValidator,
@@ -19,7 +20,7 @@ from pydantic import (
 
 from apps.issue_events.constants import IssueEventType
 
-from ..shared.schema.contexts import Contexts
+from ..shared.schema.contexts import ContextsSchema
 from ..shared.schema.event import (
     BaseIssueEvent,
     BaseRequest,
@@ -30,6 +31,14 @@ from ..shared.schema.user import EventUser
 from ..shared.schema.utils import invalid_to_none
 
 logger = logging.getLogger(__name__)
+
+
+CoercedStr = Annotated[
+    str, BeforeValidator(lambda v: str(v) if isinstance(v, bool) else v)
+]
+"""
+Coerced Str that will coerce bool to str when found
+"""
 
 
 class Schema(BaseSchema):
@@ -176,7 +185,7 @@ class RequestEnv(Schema):
 
 QueryString = Union[str, ListKeyValue, dict[str, Optional[str]]]
 """Raw URL querystring, list, or dict"""
-KeyValueFormat = Union[list[list[Optional[str]]], dict[str, Optional[str]]]
+KeyValueFormat = Union[list[list[Optional[str]]], dict[str, Optional[CoercedStr]]]
 """
 key-values in list or dict format. Example {browser: firefox} or [[browser, firefox]]
 """
@@ -250,7 +259,7 @@ class IngestIssueEvent(BaseIssueEvent):
     breadcrumbs: Optional[Union[list[EventBreadcrumb], ValueEventBreadcrumb]] = None
     sdk: Optional[ClientSDKInfo] = None
     request: Optional[IngestRequest] = None
-    contexts: Optional[Contexts] = None
+    contexts: Optional[ContextsSchema] = None
     user: Optional[EventUser] = None
 
     @field_validator("tags")
