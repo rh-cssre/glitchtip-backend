@@ -1,4 +1,5 @@
 from django.db import models
+
 from glitchtip.base_models import CreatedModel
 
 
@@ -8,9 +9,7 @@ class DebugInformationFile(CreatedModel):
     """
 
     class Meta:
-        indexes = [
-            models.Index(fields=["project", "file"])
-        ]
+        indexes = [models.Index(fields=["project", "file"])]
 
     name = models.TextField()
 

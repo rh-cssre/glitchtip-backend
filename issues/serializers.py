@@ -1,11 +1,14 @@
-from rest_framework import serializers
-from projects.serializers.base_serializers import ProjectReferenceSerializer
-from user_reports.serializers import UserReportSerializer
-from sentry.interfaces.stacktrace import get_context
-from glitchtip.serializers import FlexibleDateTimeField
-from releases.serializers import ReleaseSerializer
+from rest_framework import exceptions, serializers
+
 from events.models import Event
-from .models import Issue, EventType, EventStatus
+from glitchtip.serializers import FlexibleDateTimeField
+from projects.serializers.base_serializers import ProjectReferenceSerializer
+from releases.serializers import ReleaseSerializer
+from sentry.interfaces.stacktrace import get_context
+from user_reports.serializers import UserReportSerializer
+from users.serializers import UserSerializer
+
+from .models import Comment, EventStatus, EventType, Issue
 
 
 class EventUserSerializer(serializers.Serializer):
@@ -18,7 +21,7 @@ class EventUserSerializer(serializers.Serializer):
 
 
 class BaseBreadcrumbsSerializer(serializers.Serializer):
-    category = serializers.CharField()
+    category = serializers.CharField(required=False)
     level = serializers.CharField(default="info")
     event_id = serializers.CharField(required=False)
     data = serializers.JSONField(required=False)
@@ -214,7 +217,7 @@ class IssueSerializer(serializers.ModelSerializer):
     level = serializers.CharField(source="get_level_display", read_only=True)
     logger = serializers.CharField(default=None, read_only=True)
     metadata = serializers.JSONField(default=dict, read_only=True)
-    numComments = serializers.IntegerField(default=0, read_only=True)
+    numComments = serializers.IntegerField(source="num_comments", read_only=True)
     permalink = serializers.CharField(default="Not implemented", read_only=True)
     project = ProjectReferenceSerializer(read_only=True)
     shareId = serializers.IntegerField(default=None, read_only=True)
@@ -225,7 +228,7 @@ class IssueSerializer(serializers.ModelSerializer):
     subscriptionDetails = serializers.CharField(default=None, read_only=True)
     type = serializers.CharField(source="get_type_display", read_only=True)
     userReportCount = serializers.IntegerField(
-        source="userreport_set.count", read_only=True
+        source="user_report_count", read_only=True
     )
     userCount = serializers.IntegerField(default=0, read_only=True)
     matchingEventId = serializers.SerializerMethodField()
@@ -290,7 +293,7 @@ class IssueSerializer(serializers.ModelSerializer):
         )
 
     def to_representation(self, obj):
-        """ Workaround for "type" and "matchingEventId" fields """
+        """Workaround for "type" and "matchingEventId" fields"""
         primitive_repr = super().to_representation(obj)
         primitive_repr["type"] = obj.get_type_display()
 
@@ -305,3 +308,34 @@ class IssueSerializer(serializers.ModelSerializer):
             return matching_event_id
 
         return None
+
+
+class CommentDataSerializer(serializers.Field):
+    def to_internal_value(self, data):
+        try:
+            text = data["text"]
+        except Exception:
+            raise exceptions.ValidationError(
+                "Comment text should be sent as nested dictionary."
+            )
+        return text
+
+    def to_representation(self, value):
+        return {"text": value}
+
+
+class CommentSerializer(serializers.ModelSerializer):
+    data = CommentDataSerializer(source="text")
+    type = serializers.CharField(default="note", read_only=True)
+    dateCreated = serializers.DateTimeField(source="created", read_only=True)
+    user = UserSerializer(required=False, read_only=True)
+
+    class Meta:
+        model = Comment
+        fields = (
+            "id",
+            "data",
+            "type",
+            "dateCreated",
+            "user",
+        )
