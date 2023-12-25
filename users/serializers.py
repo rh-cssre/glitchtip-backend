@@ -1,10 +1,13 @@
+import hashlib
+import hmac
+
 from allauth.account import app_settings
 from allauth.account.adapter import get_adapter
 from allauth.account.forms import default_token_generator
 from allauth.account.models import EmailAddress
 from allauth.account.utils import filter_users_by_email
-from allauth.socialaccount import providers
 from allauth.socialaccount.models import SocialApp
+from allauth.socialaccount.providers.openid_connect.views import OpenIDConnectAdapter
 from dj_rest_auth.registration.serializers import (
     RegisterSerializer as BaseRegisterSerializer,
 )
@@ -51,22 +54,30 @@ class SocialAccountSerializer(BaseSocialAccountSerializer):
 class SocialAppSerializer(serializers.ModelSerializer):
     authorize_url = serializers.SerializerMethodField()
     scopes = serializers.SerializerMethodField()
+    provider = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialApp
         fields = ("provider", "name", "client_id", "authorize_url", "scopes")
 
     def get_authorize_url(self, obj):
-        adapter = SOCIAL_ADAPTER_MAP.get(obj.provider, None)
         request = self.context.get("request")
+        adapter_cls = SOCIAL_ADAPTER_MAP.get(obj.provider)
+        if adapter_cls == OpenIDConnectAdapter:
+            adapter = adapter_cls(request, obj.provider_id)
+        else:
+            adapter = adapter_cls(request)
         if adapter:
-            return adapter(request).authorize_url
+            return adapter.authorize_url
 
     def get_scopes(self, obj):
         request = self.context.get("request")
         if request:
-            provider = providers.registry.by_id(obj.provider, request)
+            provider = obj.get_provider(request)
             return provider.get_scope(request)
+
+    def get_provider(self, obj):
+        return obj.provider_id or obj.provider
 
 
 class ConfirmEmailAddressSerializer(serializers.Serializer):
@@ -154,6 +165,21 @@ class UserSerializer(serializers.ModelSerializer):
             "email",
             "options",
         )
+
+
+class CurrentUserSerializer(UserSerializer):
+    chatwootIdentifierHash = serializers.SerializerMethodField()
+
+    class Meta(UserSerializer.Meta):
+        fields = UserSerializer.Meta.fields + ("chatwootIdentifierHash",)
+
+    def get_chatwootIdentifierHash(self, obj):
+        if settings.CHATWOOT_WEBSITE_TOKEN and settings.CHATWOOT_IDENTITY_TOKEN:
+            secret = bytes(settings.CHATWOOT_IDENTITY_TOKEN, "utf-8")
+            message = bytes(str(obj.id), "utf-8")
+
+            hash = hmac.new(secret, message, hashlib.sha256)
+            return hash.hexdigest()
 
 
 class RegisterSerializer(BaseRegisterSerializer):
