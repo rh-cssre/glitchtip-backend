@@ -43,6 +43,7 @@ def to_camel_with_lower_id(string: str) -> str:
 
 
 class IssueSchema(ModelSchema):
+    id: str
     first_seen: datetime = Field(validation_alias="created")
     last_seen: datetime
     count: str

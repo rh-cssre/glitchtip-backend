@@ -3,6 +3,7 @@ import uuid
 from django.contrib.postgres.indexes import GinIndex
 from django.contrib.postgres.search import SearchVectorField
 from django.db import models
+from django.utils import timezone
 from psqlextra.models import PostgresPartitionedModel
 from psqlextra.types import PostgresPartitioningMethod
 
@@ -43,8 +44,8 @@ class Issue(SoftDeleteModel):
     short_id = models.PositiveIntegerField(null=True)
     search_vector = SearchVectorField(editable=False, default="")
     count = models.PositiveIntegerField(default=1, editable=False)
-    first_seen = models.DateTimeField(db_index=True)
-    last_seen = models.DateTimeField(db_index=True)
+    first_seen = models.DateTimeField(default=timezone.now, db_index=True)
+    last_seen = models.DateTimeField(default=timezone.now, db_index=True)
 
     objects = DeferedFieldManager(["search_vector"])
 

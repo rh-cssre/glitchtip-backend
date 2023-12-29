@@ -56,8 +56,35 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         issue.refresh_from_db()
         self.assertEqual(issue.status, EventStatus.UNRESOLVED)
 
+    def test_fingerprint(self):
+        data = {
+            "exception": [
+                {
+                    "type": "a",
+                    "value": "a",
+                }
+            ],
+            "event_id": uuid.uuid4(),
+            "fingerprint": ["foo"],
+        }
+        event = InterchangeIssueEvent(
+            project_id=self.project.id,
+            payload=IssueEventSchema(**data),
+        )
+        process_issue_events([event])
 
-class SentryCompatTestCase(IssueEventIngestTestCase):
+        data["exception"][0]["type"] = "lol"
+        data["event_id"] = uuid.uuid4()
+        event = InterchangeIssueEvent(
+            project_id=self.project.id,
+            payload=IssueEventSchema(**data),
+        )
+        process_issue_events([event])
+        self.assertEqual(Issue.objects.count(), 1)
+        self.assertEqual(IssueEvent.objects.count(), 2)
+
+
+class SentryCompatTestCase(EventIngestTestCase):
     """
     These tests specifically test former open source sentry compatibility
     But otherwise are part of issue event ingest testing

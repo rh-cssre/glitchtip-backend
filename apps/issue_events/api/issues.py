@@ -1,12 +1,13 @@
 import shlex
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from django.db.models import Count
 from django.db.models.expressions import RawSQL
-from django.http import Http404
+from django.http import Http404, HttpResponse
 
 from glitchtip.api.authentication import AuthHttpRequest
+from glitchtip.api.pagination import apaginate
 
 from ..constants import EventStatus
 from ..models import Issue
@@ -46,11 +47,22 @@ async def get_issue(request: AuthHttpRequest, issue_id: int):
     response=list[IssueSchema],
     by_alias=True,
 )
+@apaginate
 async def list_issues(
     request: AuthHttpRequest,
+    response: HttpResponse,
     organization_slug: str,
     query: Optional[str] = None,
-    sort: Optional[str] = None,
+    sort: Literal[
+        "last_seen",
+        "first_seen",
+        "count",
+        "priority",
+        "-last_seen",
+        "-first_seen",
+        "-count",
+        "-priority",
+    ] = "-last_seen",
     environment: Optional[list[str]] = None,
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
@@ -83,13 +95,14 @@ async def list_issues(
                 qs = qs.filter(search_vector=search_query)
                 # Search queries must be at end of query string, finished when parsing
                 break
-        if sort and sort.endswith("priority"):
-            # Raw SQL must be added when sorting by priority
-            # Inspired by https://stackoverflow.com/a/43788975/443457
-            qs = qs.annotate(
-                priority=RawSQL(
-                    "LOG10(count) + EXTRACT(EPOCH FROM last_seen)/300000", ()
-                )
-            )
 
-    return [obj async for obj in qs]
+    if sort.endswith("priority"):
+        # Raw SQL must be added when sorting by priority
+        # Inspired by https://stackoverflow.com/a/43788975/443457
+        qs = qs.annotate(
+            priority=RawSQL("LOG10(count) + EXTRACT(EPOCH FROM last_seen)/300000", ())
+        )
+
+    print(sort)
+    return qs.order_by(sort)
+    # return [obj async for obj in qs]

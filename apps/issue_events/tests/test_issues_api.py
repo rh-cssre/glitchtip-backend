@@ -1,7 +1,7 @@
 from django.db.models import Value
 from django.test import TestCase
-from django.utils import timezone
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
@@ -59,17 +59,17 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         """
         issue1 = baker.make(
             "issue_events.Issue",
-            first_seen=timezone.datetime(1999, 1, 1),
+            first_seen=timezone.make_aware(timezone.datetime(1999, 1, 1)),
             project=self.project,
         )
         issue2 = baker.make(
             "issue_events.Issue",
-            first_seen=timezone.datetime(2010, 1, 1),
+            first_seen=timezone.make_aware(timezone.datetime(2010, 1, 1)),
             project=self.project,
         )
         issue3 = baker.make(
             "issue_events.Issue",
-            first_seen=timezone.datetime(2020, 1, 1),
+            first_seen=timezone.make_aware(timezone.datetime(2020, 1, 1)),
             project=self.project,
         )
         res = self.client.get(
@@ -79,6 +79,23 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertContains(res, issue2.title)
         self.assertNotContains(res, issue1.title)
         self.assertNotContains(res, issue3.title)
+
+    def test_sort(self):
+        issue1 = baker.make("issue_events.Issue", project=self.project)
+        issue2 = baker.make("issue_events.Issue", project=self.project, count=2)
+        issue3 = baker.make("issue_events.Issue", project=self.project)
+
+        res = self.client.get(self.list_url)
+        self.assertEqual(res.json()[0]["id"], str(issue3.id))
+
+        res = self.client.get(self.list_url + "?sort=-count")
+        self.assertEqual(res.json()[0]["id"], str(issue2.id))
+
+        res = self.client.get(self.list_url + "?sort=priority")
+        self.assertEqual(res.json()[0]["id"], str(issue1.id))
+
+        res = self.client.get(self.list_url + "?sort=-priority")
+        self.assertEqual(res.json()[0]["id"], str(issue2.id))
 
     def test_search(self):
         from django.contrib.postgres.search import SearchVector

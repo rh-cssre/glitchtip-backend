@@ -1,10 +1,12 @@
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Optional, Union
 from urllib.parse import urlparse
 
 from django.contrib.postgres.search import SearchVector
 from django.db import transaction
 from django.db.models import F, Q, Value
+from django.db.models.functions import Greatest
 from django.db.utils import IntegrityError
 from ninja import Schema
 from user_agents import parse
@@ -42,6 +44,7 @@ class ProcessingEvent:
 
 @dataclass
 class IssueUpdate:
+    last_seen: datetime
     added_count: int = 1
     search_vector: str = ""
 
@@ -59,8 +62,12 @@ def update_issues(processing_events: list[ProcessingEvent]):
         if issue_id in issues_to_update:
             issues_to_update[issue_id].added_count += 1
             issues_to_update[issue_id].search_vector += f" {processing_event.title}"
+            if issues_to_update[issue_id].last_seen < processing_event.event.received:
+                issues_to_update[issue_id].last_seen = processing_event.event.received
         elif issue_id:
-            issues_to_update[issue_id] = IssueUpdate()
+            issues_to_update[issue_id] = IssueUpdate(
+                last_seen=processing_event.event.received
+            )
 
     for issue_id, value in issues_to_update.items():
         Issue.objects.filter(id=issue_id).update(
@@ -68,6 +75,7 @@ def update_issues(processing_events: list[ProcessingEvent]):
             search_vector=SearchVector(
                 PipeConcat(F("search_vector"), SearchVector(Value(value.search_vector)))
             ),
+            last_seen=Greatest(F("last_seen"), value.last_seen),
         )
 
 
@@ -152,7 +160,7 @@ def generate_tags(event: IngestIssueEvent) -> dict[str, str]:
 
 def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
     """
-    Accepts a list of events to ingest. Events should:
+    Accepts a list of events to ingest. Events should be:
     - Few enough to save in a single DB call
     - Permission is already checked, these events are to write to the DB
     - Some invalid events are tolerated (ignored), including duplicate event id
@@ -297,7 +305,6 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 processing_event.issue_id = IssueHash.objects.get(
                     project_id=project_id, value=issue_hash
                 ).issue_id
-                # TODO If it already exists, update count, last_seen, search_vector
         issue_events.append(
             IssueEvent(
                 id=processing_event.event.event_id,
