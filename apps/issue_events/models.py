@@ -6,15 +6,23 @@ from django.db import models
 from psqlextra.models import PostgresPartitionedModel
 from psqlextra.types import PostgresPartitioningMethod
 
-from glitchtip.base_models import CreatedModel
+from glitchtip.base_models import CreatedModel, SoftDeleteModel
 from sentry.constants import MAX_CULPRIT_LENGTH
 
 from .constants import EventStatus, IssueEventType, LogLevel
 from .utils import base32_encode
 
 
-class Issue(models.Model):
-    created = models.DateTimeField(auto_now_add=True)
+class DeferedFieldManager(models.Manager):
+    def __init__(self, defered_fields=[]):
+        super().__init__()
+        self.defered_fields = defered_fields
+
+    def get_queryset(self, *args, **kwargs):
+        return super().get_queryset(*args, **kwargs).defer(*self.defered_fields)
+
+
+class Issue(SoftDeleteModel):
     culprit = models.CharField(max_length=1024, blank=True, null=True)
     # has_seen = models.BooleanField(default=False)
     is_public = models.BooleanField(default=False)
@@ -33,9 +41,17 @@ class Issue(models.Model):
         choices=EventStatus.choices, default=EventStatus.UNRESOLVED
     )
     short_id = models.PositiveIntegerField(null=True)
+    search_vector = SearchVectorField(editable=False, default="")
+    count = models.PositiveIntegerField(default=1, editable=False)
+    first_seen = models.DateTimeField(db_index=True)
+    last_seen = models.DateTimeField(db_index=True)
+
+    objects = DeferedFieldManager(["search_vector"])
 
     class Meta:
+        base_manager_name = "objects"
         unique_together = (("project", "short_id"),)
+        indexes = [GinIndex(fields=["search_vector"])]
 
     @property
     def short_id_display(self):
@@ -46,17 +62,6 @@ class Issue(models.Model):
         if self.short_id is not None:
             return f"{self.project.slug.upper()}-{base32_encode(self.short_id)}"
         return ""
-
-
-class IssueStats(models.Model):
-    issue = models.OneToOneField(Issue, primary_key=True, on_delete=models.CASCADE)
-    search_vector = SearchVectorField(null=True, editable=False)
-    search_vector_created = models.DateTimeField(auto_now_add=True)
-    count = models.PositiveIntegerField(default=1, editable=False)
-    last_seen = models.DateTimeField(auto_now_add=True, db_index=True)
-
-    class Meta:
-        indexes = [GinIndex(fields=["search_vector"])]
 
 
 class IssueHash(models.Model):
@@ -86,8 +91,11 @@ class Comment(models.Model):
     class Meta:
         ordering = ("-created",)
 
+
 class UserReport(CreatedModel):
-    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE, related_name="+")
+    project = models.ForeignKey(
+        "projects.Project", on_delete=models.CASCADE, related_name="+"
+    )
     issue = models.ForeignKey(Issue, on_delete=models.CASCADE)
     event_id = models.UUIDField()
     name = models.CharField(max_length=128)
@@ -96,6 +104,7 @@ class UserReport(CreatedModel):
 
     class Meta:
         unique_together = (("project", "event_id"),)
+
 
 class IssueEvent(PostgresPartitionedModel, models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

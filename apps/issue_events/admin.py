@@ -14,4 +14,4 @@ class IssueEventAdmin(admin.ModelAdmin):
 
 @admin.register(Issue)
 class IssueAdmin(admin.ModelAdmin):
-    list_display = ("id", "created")
+    list_display = ("id", "first_seen")

@@ -34,7 +34,7 @@ class ProjectReference(CamelSchema, ModelSchema):
         return str(obj.id)
 
 
-# For Sentry compatability
+# For Sentry compatibility
 def to_camel_with_lower_id(string: str) -> str:
     return "".join(
         word if i == 0 else "Id" if word == "id" else word.capitalize()
@@ -44,15 +44,14 @@ def to_camel_with_lower_id(string: str) -> str:
 
 class IssueSchema(ModelSchema):
     first_seen: datetime = Field(validation_alias="created")
-    last_seen: Optional[datetime]
-    count: Optional[str]
+    last_seen: datetime
+    count: str
     type: str = Field(validation_alias="get_type_display")
     level: str = Field(validation_alias="get_level_display")
     status: str = Field(validation_alias="get_status_display")
     project: ProjectReference = Field(validation_alias="project")
     short_id: str = Field(validation_alias="short_id_display")
     num_comments: int
-    user_report_count: int
     stats: Optional[dict[str, str]] = {}
     share_id: Optional[int] = None
     logger: Optional[str] = None
@@ -63,21 +62,14 @@ class IssueSchema(ModelSchema):
 
     class Config:
         model = Issue
-        model_fields = ["id", "title", "metadata"]
+        model_fields = ["id", "title", "metadata", "count", "last_seen"]
         alias_generator = to_camel_with_lower_id
+        coerce_numbers_to_str = True
         populate_by_name = True
 
-    @staticmethod
-    def resolve_last_seen(obj):
-        if hasattr(obj, "issuestats"):
-            return obj.issuestats.last_seen
-        return None
 
-    @staticmethod
-    def resolve_count(obj):
-        if hasattr(obj, "issuestats"):
-            return str(obj.issuestats.count)
-        return ""
+class IssueDetailSchema(IssueSchema):
+    user_report_count: int
 
 
 class ExceptionEntryData(Schema):

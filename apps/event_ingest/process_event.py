@@ -2,8 +2,9 @@ from dataclasses import dataclass
 from typing import Any, Optional, Union
 from urllib.parse import urlparse
 
+from django.contrib.postgres.search import SearchVector
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import F, Q, Value
 from django.db.utils import IntegrityError
 from ninja import Schema
 from user_agents import parse
@@ -21,6 +22,7 @@ from ..shared.schema.contexts import (
     DeviceContext,
     OSContext,
 )
+from .model_functions import PipeConcat
 from .schema import IngestIssueEvent, InterchangeIssueEvent
 from .utils import generate_hash, transform_parameterized_message
 
@@ -36,6 +38,37 @@ class ProcessingEvent:
     event_tags: dict[str, str]
     issue_id: Optional[int] = None
     issue_created = False
+
+
+@dataclass
+class IssueUpdate:
+    added_count: int = 1
+    search_vector: str = ""
+
+
+def update_issues(processing_events: list[ProcessingEvent]):
+    """
+    Update any existing issues based on new statistics
+    """
+    issues_to_update: dict[int, IssueUpdate] = {}
+    for processing_event in processing_events:
+        if processing_event.issue_created:
+            break
+
+        issue_id = processing_event.issue_id
+        if issue_id in issues_to_update:
+            issues_to_update[issue_id].added_count += 1
+            issues_to_update[issue_id].search_vector += f" {processing_event.title}"
+        elif issue_id:
+            issues_to_update[issue_id] = IssueUpdate()
+
+    for issue_id, value in issues_to_update.items():
+        Issue.objects.filter(id=issue_id).update(
+            count=F("count") + value.added_count,
+            search_vector=SearchVector(
+                PipeConcat(F("search_vector"), SearchVector(Value(value.search_vector)))
+            ),
+        )
 
 
 def devalue(obj: Union[Schema, list]) -> Optional[Union[dict, list]]:
@@ -234,6 +267,8 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             "type": event_type,
             "title": processing_event.title,
             "metadata": processing_event.metadata,
+            "first_seen": processing_event.event.received,
+            "last_seen": processing_event.event.received,
         }
         for hash_obj in hash_queryset:
             if (
@@ -249,17 +284,20 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             try:
                 with transaction.atomic():
                     issue = Issue.objects.create(
-                        project_id=project_id, **issue_defaults
+                        project_id=project_id,
+                        search_vector=SearchVector(Value(issue_defaults["title"])),
+                        **issue_defaults,
                     )
                     IssueHash.objects.create(
                         issue=issue, value=issue_hash, project_id=project_id
                     )
-                    processing_event.issue_id = issue.id
-                    processing_event.issue_created = True
+                processing_event.issue_id = issue.id
+                processing_event.issue_created = True
             except IntegrityError:
                 processing_event.issue_id = IssueHash.objects.get(
                     project_id=project_id, value=issue_hash
                 ).issue_id
+                # TODO If it already exists, update count, last_seen, search_vector
         issue_events.append(
             IssueEvent(
                 id=processing_event.event.event_id,
@@ -273,6 +311,8 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 tags=processing_event.event_tags,
             )
         )
+
+    update_issues(processing_events)
 
     if issues_to_reopen:
         Issue.objects.filter(id__in=issues_to_reopen).update(
