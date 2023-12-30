@@ -5,6 +5,7 @@ from typing import Literal, Optional
 from django.db.models import Count
 from django.db.models.expressions import RawSQL
 from django.http import Http404, HttpResponse
+from ninja import Field, Query, Schema
 
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.pagination import apaginate
@@ -42,6 +43,13 @@ async def get_issue(request: AuthHttpRequest, issue_id: int):
         raise Http404()
 
 
+class IssueFilters(Schema):
+    first_seen__gte: datetime = Field(None, alias="start")
+    first_seen__lte: datetime = Field(None, alias="end")
+    project__in: list[str] = Field(None, alias="project")
+    tags__environment__has_any_keys: list[str] = Field(None, alias="environment")
+
+
 @router.get(
     "organizations/{slug:organization_slug}/issues/",
     response=list[IssueSchema],
@@ -52,6 +60,7 @@ async def list_issues(
     request: AuthHttpRequest,
     response: HttpResponse,
     organization_slug: str,
+    filters: Query[IssueFilters],
     query: Optional[str] = None,
     sort: Literal[
         "last_seen",
@@ -64,17 +73,10 @@ async def list_issues(
         "-priority",
     ] = "-last_seen",
     environment: Optional[list[str]] = None,
-    start: Optional[datetime] = None,
-    end: Optional[datetime] = None,
 ):
     qs = get_queryset(request, organization_slug=organization_slug)
-    if start:
-        # Should really be events, not first seen
-        qs = qs.filter(first_seen__gte=start)
-    if end:
-        qs = qs.filter(first_seen__lte=end)
-    if environment:
-        qs = qs.filter(tags__environment__has_any_keys=environment)
+    if qs_filters := filters.dict(exclude_none=True):
+        qs = qs.filter(**qs_filters)
     if query:
         queries = shlex.split(query)
         # First look for structured queries
@@ -103,6 +105,5 @@ async def list_issues(
             priority=RawSQL("LOG10(count) + EXTRACT(EPOCH FROM last_seen)/300000", ())
         )
 
-    print(sort)
     return qs.order_by(sort)
     # return [obj async for obj in qs]

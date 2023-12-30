@@ -46,6 +46,9 @@ class DeviceContext(Schema):
     supports_audio: Optional[bool] = None
     supports_location_service: Optional[bool] = None
 
+    class Config(Schema.Config):
+        protected_namespaces = ()
+
 
 class OSContext(Schema):
     type: Literal["os"] = "os"

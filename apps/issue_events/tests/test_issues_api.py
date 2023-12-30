@@ -1,3 +1,4 @@
+from django.contrib.postgres.search import SearchVector
 from django.db.models import Value
 from django.test import TestCase
 from django.urls import reverse
@@ -98,8 +99,6 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertEqual(res.json()[0]["id"], str(issue2.id))
 
     def test_search(self):
-        from django.contrib.postgres.search import SearchVector
-
         issue = baker.make(
             "issue_events.Issue",
             project=self.project,

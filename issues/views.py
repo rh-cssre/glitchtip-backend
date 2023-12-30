@@ -126,7 +126,7 @@ class IssueViewSet(
         if self.action in ["retrieve"]:
             qs = qs.annotate(
                 num_comments=Count("comment", distinct=True),
-                user_report_count=(Count("userreport", distinct=True))
+                user_report_count=(Count("userreport", distinct=True)),
             )
 
         return qs
