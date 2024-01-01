@@ -2,7 +2,7 @@ from django.http import HttpResponse
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from api_tokens.serializers import APITokenAuthScopesSerializer
+from apps.api_tokens.serializers import APITokenAuthScopesSerializer
 from users.serializers import UserSerializer
 
 
@@ -25,5 +25,5 @@ class APIRootView(APIView):
         )
 
 
-def health(request):
+async def health(request):
     return HttpResponse("ok", content_type="text/plain")

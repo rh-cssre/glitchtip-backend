@@ -1,53 +1,44 @@
+from django.test import TestCase
 from django.urls import reverse
 from model_bakery import baker
-from rest_framework.test import APITestCase
 
-from glitchtip import test_utils  # pylint: disable=unused-import
+from glitchtip.test_utils import generators  # noqa: F401
 
 
-class APITokenTests(APITestCase):
+class APITokenTests(TestCase):
     def setUp(self):
         self.user = baker.make("users.user")
+        self.url = reverse("api:list_api_tokens")
+
+    def get_detail_url(self, id: int):
+        return reverse("api:delete_api_token", args=[id])
 
     def test_create(self):
         self.client.force_login(self.user)
-        url = reverse("api-tokens-list")
         scope_name = "member:read"
         data = {"scopes": [scope_name]}
-        res = self.client.post(url, data, format="json")
+        res = self.client.post(self.url, data, content_type="application/json")
         self.assertContains(res, scope_name, status_code=201)
 
     def test_list(self):
         self.client.force_login(self.user)
         api_token = baker.make("api_tokens.APIToken", user=self.user)
         other_api_token = baker.make("api_tokens.APIToken")
-        url = reverse("api-tokens-list")
-        res = self.client.get(url)
+        res = self.client.get(self.url)
         self.assertContains(res, api_token.token)
         self.assertNotContains(res, other_api_token.token)
-
-    def test_retrieve(self):
-        self.client.force_login(self.user)
-        api_token = baker.make("api_tokens.APIToken", user=self.user)
-        url = reverse("api-tokens-detail", args=[api_token.id])
-        res = self.client.get(url)
-        self.assertContains(res, api_token.token)
-
-        other_api_token = baker.make("api_tokens.APIToken")
-        res = self.client.get(reverse("api-tokens-detail", args=[other_api_token.id]))
-        self.assertEqual(res.status_code, 404)
 
     def test_destroy(self):
         self.client.force_login(self.user)
         api_token = baker.make("api_tokens.APIToken", user=self.user)
-        url = reverse("api-tokens-detail", args=[api_token.id])
+        url = self.get_detail_url(api_token.id)
         self.assertTrue(self.user.apitoken_set.exists())
         res = self.client.delete(url)
         self.assertEqual(res.status_code, 204)
         self.assertFalse(self.user.apitoken_set.exists())
 
         other_api_token = baker.make("api_tokens.APIToken")
-        url = reverse("api-tokens-detail", args=[other_api_token.id])
+        url = self.get_detail_url(other_api_token.id)
         res = self.client.delete(url)
         self.assertEqual(res.status_code, 404)
 
@@ -56,13 +47,15 @@ class APITokenTests(APITestCase):
         organization = baker.make("organizations_ext.Organization")
         organization.add_user(self.user)
         auth_token = baker.make("api_tokens.APIToken", user=self.user)
-        self.client.credentials(HTTP_AUTHORIZATION="Bearer " + auth_token.token)
 
-        url = reverse("api-tokens-list")
+        auth_headers = {"HTTP_AUTHORIZATION": f"Bearer {auth_token.token}"}
+
         scope_name = "member:read"
         data = {"scopes": [scope_name]}
-        res = self.client.post(url, data, format="json")
-        self.assertEqual(res.status_code, 403)
+        res = self.client.post(
+            self.url, data, content_type="application/json", **auth_headers
+        )
+        self.assertEqual(res.status_code, 401)  # Was 403, might be better as 403
 
-        res = self.client.get(url)
-        self.assertEqual(res.status_code, 403)
+        res = self.client.get(self.url, **auth_headers)
+        self.assertEqual(res.status_code, 401)

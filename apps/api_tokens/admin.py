@@ -6,6 +6,7 @@ from bitfield.forms import BitFieldCheckboxSelectMultiple
 from .models import APIToken
 
 
+@admin.register(APIToken)
 class APITokenAdmin(admin.ModelAdmin):
     raw_id_fields = ("user",)
     list_display = ("token", "user", "label")
@@ -13,6 +14,3 @@ class APITokenAdmin(admin.ModelAdmin):
     formfield_overrides = {
         BitField: {"widget": BitFieldCheckboxSelectMultiple},
     }
-
-
-admin.site.register(APIToken, APITokenAdmin)
