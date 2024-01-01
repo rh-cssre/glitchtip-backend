@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('api_tokens', '0002_auto_20200821_1446'),
+        ("api_tokens", "0002_auto_20200821_1446"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='apitoken',
-            name='created',
+            model_name="apitoken",
+            name="created",
             field=models.DateTimeField(auto_now_add=True, db_index=True),
         ),
     ]

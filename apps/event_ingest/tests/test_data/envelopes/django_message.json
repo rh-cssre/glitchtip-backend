@@ -1,0 +1,94 @@
+[
+    {
+        "event_id": "e1681aa101a042548a99f82613b39727",
+        "sent_at": "2023-10-20T14:18:34.277989Z",
+        "trace": {
+            "trace_id": "6a02ac9d014e460dbb1d7f279ecaee07",
+            "environment": "production",
+            "public_key": "422f73a2fd8f4471a5ccc03c77a25d09",
+            "transaction": "/message/",
+            "sample_rate": "0.0",
+            "sampled": "false"
+        }
+    },
+    {"type": "event", "content_type": "application/json", "length": 3021},
+    {
+        "message": "Page not found!",
+        "level": "info",
+        "event_id": "e1681aa101a042548a99f82613b39727",
+        "timestamp": "2023-10-20T14:18:34.277268Z",
+        "breadcrumbs": {"values": []},
+        "transaction": "/message/",
+        "transaction_info": {"source": "route"},
+        "contexts": {
+            "trace": {
+                "trace_id": "6a02ac9d014e460dbb1d7f279ecaee07",
+                "span_id": "8cdb9895997a50f3",
+                "parent_span_id": "bdc6c108e7350928",
+                "op": "view.render",
+                "description": "message"
+            },
+            "runtime": {
+                "name": "CPython",
+                "version": "3.11.6",
+                "build": "3.11.6 (main, Oct 12 2023, 10:04:56) [GCC 12.2.0]"
+            }
+        },
+        "extra": {"sys.argv": ["./manage.py", "runserver", "0.0.0.0:8001"]},
+        "modules": {
+            "stack-data": "0.6.3"
+        },
+        "request": {
+            "url": "http://0.0.0.0:8001/message/",
+            "query_string": "",
+            "method": "GET",
+            "env": {"SERVER_NAME": "2355c75a1642", "SERVER_PORT": "8001"},
+            "headers": {
+                "Content-Length": "",
+                "Content-Type": "text/plain",
+                "Host": "0.0.0.0:8001",
+                "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/118.0",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+                "Accept-Encoding": "gzip, deflate",
+                "Referer": "http://0.0.0.0:8001/",
+                "Connection": "keep-alive",
+                "Cookie": "[Filtered]",
+                "Upgrade-Insecure-Requests": "1",
+                "Dnt": "1",
+                "Sec-Gpc": "1"
+            }
+        },
+        "environment": "production",
+        "server_name": "2355c75a1642",
+        "sdk": {
+            "name": "sentry.python.django",
+            "version": "1.32.0",
+            "packages": [{"name": "pypi:sentry-sdk", "version": "1.32.0"}],
+            "integrations": [
+                "argv",
+                "atexit",
+                "dedupe",
+                "django",
+                "excepthook",
+                "logging",
+                "modules",
+                "redis",
+                "stdlib",
+                "threading"
+            ]
+        },
+        "platform": "python",
+        "_meta": {
+            "request": {"headers": {"Cookie": {"": {"rem": [["!config", "s"]]}}}}
+        }
+    },
+    {"type": "client_report", "content_type": "application/json", "length": 175},
+    {
+        "timestamp": 1697811514.2782922,
+        "discarded_events": [
+            {"reason": "sample_rate", "category": "transaction", "quantity": 3},
+            {"reason": "network_error", "category": "error", "quantity": 2}
+        ]
+    }
+]
