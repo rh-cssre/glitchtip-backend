@@ -6,7 +6,7 @@ from django.db.models.functions import Lag
 from django.http import Http404, HttpResponse
 
 from glitchtip.api.authentication import AuthHttpRequest
-from glitchtip.api.pagination import apaginate
+from glitchtip.api.pagination import paginate
 
 from ..models import IssueEvent, UserReport
 from ..schema import IssueEventDetailSchema, IssueEventJsonSchema, IssueEventSchema
@@ -35,7 +35,7 @@ async def get_user_report(event_id: uuid.UUID) -> Optional[UserReport]:
 
 
 @router.get("/issues/{int:issue_id}/events/", response=list[IssueEventSchema])
-@apaginate
+@paginate
 async def list_issue_event(
     request: AuthHttpRequest, response: HttpResponse, issue_id: int
 ):
@@ -86,6 +86,7 @@ async def get_issue_event(request: AuthHttpRequest, issue_id: int, event_id: uui
     response=list[IssueEventSchema],
     by_alias=True,
 )
+@paginate
 async def list_project_issue_event(
     request: AuthHttpRequest,
     organization_slug: str,

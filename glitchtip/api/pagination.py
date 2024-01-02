@@ -1,17 +1,40 @@
 import inspect
+from abc import abstractmethod
 from functools import partial, wraps
-from typing import Any, Callable, Type
+from typing import Any, AsyncGenerator, Callable, List, Type, Union
 from urllib import parse
 
 from asgiref.sync import sync_to_async
 from django.db.models import QuerySet
 from django.http import HttpRequest, HttpResponse
+from django.utils.module_loading import import_string
 from ninja.conf import settings as ninja_settings
 from ninja.constants import NOT_SET
 from ninja.pagination import PaginationBase, make_response_paginated
-from ninja.utils import contribute_operation_args, contribute_operation_callback
+from ninja.utils import (
+    contribute_operation_args,
+    contribute_operation_callback,
+    is_async_callable,
+)
 
 from .cursor_pagination import CursorPagination, _clamp, _reverse_order
+
+
+class AsyncPaginationBase(PaginationBase):
+    @abstractmethod
+    async def apaginate_queryset(
+        self,
+        queryset: QuerySet,
+        pagination: Any,
+        **params: Any,
+    ) -> Any:
+        pass  # pragma: no cover
+
+    async def _aitems_count(self, queryset: QuerySet) -> int:
+        try:
+            return await queryset.all().acount()
+        except AttributeError:
+            return len(queryset)
 
 
 class AsyncLinkHeaderPagination(CursorPagination):
@@ -20,10 +43,19 @@ class AsyncLinkHeaderPagination(CursorPagination):
     # Remove Output schema because we only want to return a list of items
     Output = None
 
-    async def paginate_queryset(
-        self, queryset: QuerySet, pagination: CursorPagination.Input, request: HttpRequest, response: HttpResponse, **params
+    async def apaginate_queryset(
+        self,
+        queryset: QuerySet,
+        pagination: CursorPagination.Input,
+        request: HttpRequest,
+        response: HttpResponse,
+        **params,
     ) -> dict:
-        limit = _clamp(pagination.limit or ninja_settings.PAGINATION_PER_PAGE, 0, self.max_page_size)
+        limit = _clamp(
+            pagination.limit or ninja_settings.PAGINATION_PER_PAGE,
+            0,
+            self.max_page_size,
+        )
 
         full_queryset = queryset
         if not queryset.query.order_by:
@@ -73,31 +105,39 @@ class AsyncLinkHeaderPagination(CursorPagination):
             next_position = following_position if has_next else None
             previous_position = cursor.position if has_previous else None
 
-        next = self.next_link(
-                    base_url,
-                    page,
-                    cursor,
-                    order,
-                    has_previous,
-                    limit,
-                    next_position,
-                    previous_position,
-                ) if has_next else None
+        next = (
+            self.next_link(
+                base_url,
+                page,
+                cursor,
+                order,
+                has_previous,
+                limit,
+                next_position,
+                previous_position,
+            )
+            if has_next
+            else None
+        )
 
-        previous = self.previous_link(
-                    base_url,
-                    page,
-                    cursor,
-                    order,
-                    has_next,
-                    limit,
-                    next_position,
-                    previous_position,
-                ) if has_next else None
+        previous = (
+            self.previous_link(
+                base_url,
+                page,
+                cursor,
+                order,
+                has_next,
+                limit,
+                next_position,
+                previous_position,
+            )
+            if has_next
+            else None
+        )
 
         total_count = 0
         if has_next or has_previous:
-            total_count = await self._items_count(full_queryset)
+            total_count = await self._aitems_count(full_queryset)
         else:
             total_count = len(page)
 
@@ -115,9 +155,7 @@ class AsyncLinkHeaderPagination(CursorPagination):
                     )
                 )
             else:
-                links.append(
-                    '<{}>; rel="{}"; results="false"'.format(base_url, label)
-                )
+                links.append('<{}>; rel="{}"; results="false"'.format(base_url, label))
 
         response["Link"] = {", ".join(links)} if links else {}
         response["X-Max-Hits"] = self.max_hits
@@ -125,48 +163,59 @@ class AsyncLinkHeaderPagination(CursorPagination):
 
         return page
 
-    @sync_to_async
-    def _items_count(self, queryset: QuerySet) -> int:
-        return queryset.order_by()[: self.max_hits].count()  # type: ignore
-
-# async pagination based on https://github.com/vitalik/django-ninja/issues/547#issuecomment-1331292288
-def apaginate(func_or_pgn_class: Any = NOT_SET, **paginator_params) -> Callable:
-    isfunction = inspect.isfunction(func_or_pgn_class)
-    isnotset = func_or_pgn_class == NOT_SET
-
-    pagination_class: Type[PaginationBase] = AsyncLinkHeaderPagination
-
-    if isfunction:
-        return _inject_async_pagination(func_or_pgn_class, pagination_class)
-
-    if not isnotset:
-        pagination_class = func_or_pgn_class
-
-    def wrapper(func: Callable) -> Any:
-        return _inject_async_pagination(func, pagination_class, **paginator_params)
-
-    return wrapper
+    async def _aitems_count(self, queryset: QuerySet) -> int:
+        return await queryset.order_by()[: self.max_hits].acount()  # type: ignore
 
 
-def _inject_async_pagination(
+def _inject_pagination(
     func: Callable,
-    paginator_class: Type[PaginationBase],
+    paginator_class: Type[Union[PaginationBase, AsyncPaginationBase]],
     **paginator_params: Any,
 ) -> Callable:
-    paginator: PaginationBase = paginator_class(**paginator_params)
+    paginator = paginator_class(**paginator_params)
+    if is_async_callable(func):
 
-    @wraps(func)
-    async def view_with_pagination(request: HttpRequest, **kwargs: Any) -> Any:
-        pagination_params = kwargs.pop("ninja_pagination")
-        if paginator.pass_parameter:
-            kwargs[paginator.pass_parameter] = pagination_params
+        @wraps(func)
+        async def view_with_pagination(request: HttpRequest, **kwargs: Any) -> Any:
+            pagination_params = kwargs.pop("ninja_pagination")
+            if paginator.pass_parameter:
+                kwargs[paginator.pass_parameter] = pagination_params
 
-        items = await func(request, **kwargs)
+            items = await func(request, **kwargs)
 
-        result = await paginator.paginate_queryset(items, pagination=pagination_params, request=request, **kwargs)
-        if paginator.Output:
-            result[paginator.items_attribute] = list(result[paginator.items_attribute])
-        return result
+            result = await paginator.apaginate_queryset(
+                items, pagination=pagination_params, request=request, **kwargs
+            )
+
+            async def evaluate(results: Union[List, QuerySet]) -> AsyncGenerator:
+                for result in results:
+                    yield result
+
+            if paginator.Output:  # type: ignore
+                result[paginator.items_attribute] = [
+                    result
+                    async for result in evaluate(result[paginator.items_attribute])
+                ]
+            return result
+    else:
+
+        @wraps(func)
+        def view_with_pagination(request: HttpRequest, **kwargs: Any) -> Any:
+            pagination_params = kwargs.pop("ninja_pagination")
+            if paginator.pass_parameter:
+                kwargs[paginator.pass_parameter] = pagination_params
+
+            items = func(request, **kwargs)
+
+            result = paginator.paginate_queryset(
+                items, pagination=pagination_params, request=request, **kwargs
+            )
+            if paginator.Output:  # type: ignore
+                result[paginator.items_attribute] = list(
+                    result[paginator.items_attribute]
+                )
+                # ^ forcing queryset evaluation #TODO: check why pydantic did not do it here
+            return result
 
     contribute_operation_args(
         view_with_pagination,
@@ -175,10 +224,43 @@ def _inject_async_pagination(
         paginator.InputSource,
     )
 
-    if paginator.Output:
+    if paginator.Output:  # type: ignore
         contribute_operation_callback(
             view_with_pagination,
             partial(make_response_paginated, paginator),
         )
 
     return view_with_pagination
+
+
+def paginate(func_or_pgn_class: Any = NOT_SET, **paginator_params: Any) -> Callable:
+    """
+    @api.get(...
+    @paginate
+    def my_view(request):
+
+    or
+
+    @api.get(...
+    @paginate(PageNumberPagination)
+    def my_view(request):
+
+    """
+
+    isfunction = inspect.isfunction(func_or_pgn_class)
+    isnotset = func_or_pgn_class == NOT_SET
+
+    pagination_class: Type[Union[PaginationBase, AsyncPaginationBase]] = import_string(
+        ninja_settings.PAGINATION_CLASS
+    )
+
+    if isfunction:
+        return _inject_pagination(func_or_pgn_class, pagination_class)
+
+    if not isnotset:
+        pagination_class = func_or_pgn_class
+
+    def wrapper(func: Callable) -> Any:
+        return _inject_pagination(func, pagination_class, **paginator_params)
+
+    return wrapper

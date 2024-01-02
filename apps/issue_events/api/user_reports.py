@@ -3,7 +3,7 @@ from typing import List
 from django.http import HttpResponse
 
 from glitchtip.api.authentication import AuthHttpRequest
-from glitchtip.api.pagination import apaginate
+from glitchtip.api.pagination import paginate
 
 from ..models import UserReport
 from ..schema import UserReportSchema
@@ -15,7 +15,7 @@ from . import router
     response=List[UserReportSchema],
     by_alias=True,
 )
-@apaginate
+@paginate
 async def list_user_reports(request: AuthHttpRequest, response: HttpResponse, issue_id: int):
     user_id = request.auth
     return UserReport.objects.filter(
