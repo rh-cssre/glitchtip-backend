@@ -809,3 +809,7 @@ if CELERY_TASK_ALWAYS_EAGER:
 
 MFA_SERVER_NAME = GLITCHTIP_URL.hostname
 FIDO_SERVER_ID = GLITCHTIP_URL.hostname
+
+warnings.filterwarnings(
+    "ignore", message="No directory at", module="django.core.handlers.base"
+)
