@@ -8,7 +8,7 @@ from django.http import Http404, HttpResponse
 from ninja import Field, Query, Schema
 
 from glitchtip.api.authentication import AuthHttpRequest
-from glitchtip.api.pagination import apaginate
+from glitchtip.api.pagination import paginate
 
 from ..constants import EventStatus
 from ..models import Issue
@@ -55,7 +55,7 @@ class IssueFilters(Schema):
     response=list[IssueSchema],
     by_alias=True,
 )
-@apaginate
+@paginate
 async def list_issues(
     request: AuthHttpRequest,
     response: HttpResponse,

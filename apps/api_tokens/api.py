@@ -2,7 +2,7 @@ from django.http import Http404, HttpResponse
 from ninja import Router
 
 from glitchtip.api.authentication import AuthHttpRequest
-from glitchtip.api.pagination import apaginate
+from glitchtip.api.pagination import paginate
 
 from .models import APIToken
 from .schema import APITokenIn, APITokenSchema
@@ -15,7 +15,7 @@ def get_queryset(request: AuthHttpRequest):
 
 
 @router.get("api-tokens/", response=list[APITokenSchema])
-@apaginate
+@paginate
 async def list_api_tokens(request: AuthHttpRequest, response: HttpResponse):
     return get_queryset(request)
 
