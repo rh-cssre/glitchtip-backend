@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
-from api_tokens.models import APIToken
+from apps.api_tokens.models import APIToken
 from projects.models import Project
 
 from .serializers import SetupWizardResultSerializer, SetupWizardSerializer

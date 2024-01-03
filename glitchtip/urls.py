@@ -8,7 +8,6 @@ from django_rest_mfa.rest_auth_helpers.views import MFALoginView
 from organizations.backends import invitation_backend
 from rest_framework_nested import routers
 
-from api_tokens.urls import router as apiTokensRouter
 from issues.urls import router as issuesRouter
 from issues.views import EventJsonView
 from organizations_ext.urls import router as organizationsRouter
@@ -27,7 +26,6 @@ router.registry.extend(issuesRouter.registry)
 router.registry.extend(organizationsRouter.registry)
 router.registry.extend(teamsRouter.registry)
 router.registry.extend(usersRouter.registry)
-router.registry.extend(apiTokensRouter.registry)
 
 if settings.BILLING_ENABLED:
     from djstripe_ext.urls import router as djstripeRouter
@@ -45,8 +43,8 @@ urlpatterns = [
         "robots.txt",
         TemplateView.as_view(template_name="robots.txt", content_type="text/plain"),
     ),
-    path("api/", api.urls),
     path("api/", RedirectView.as_view(url="/profile/auth-tokens")),
+    path("api/", api.urls),
     path("api/0/", APIRootView.as_view(), name="api-root-view"),
     path("api/0/", include(router.urls)),
 ]
@@ -69,7 +67,6 @@ urlpatterns += [
     path("api/0/", include("users.urls")),
     path("api/0/", include("organizations_ext.urls")),
     path("api/0/", include("teams.urls")),
-    path("api/0/", include("api_tokens.urls")),
     path("api/0/", include("files.urls")),
     path("api/0/", include("difs.urls")),
     path("api/0/", include("glitchtip.stats.urls")),

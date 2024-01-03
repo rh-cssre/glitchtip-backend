@@ -7,6 +7,7 @@ from django.conf import settings
 from django.http import HttpRequest
 from ninja import Field, ModelSchema, NinjaAPI
 
+from apps.api_tokens.api import router as api_tokens_router
 from glitchtip.constants import SOCIAL_ADAPTER_MAP
 from users.utils import ais_user_registration_open
 
@@ -26,6 +27,8 @@ api = NinjaAPI(
     urls_namespace="api",
     auth=django_auth,
 )
+
+api.add_router("0", api_tokens_router)
 
 
 if settings.GLITCHTIP_ENABLE_NEW_ISSUES:
