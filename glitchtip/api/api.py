@@ -11,7 +11,7 @@ from apps.api_tokens.api import router as api_tokens_router
 from glitchtip.constants import SOCIAL_ADAPTER_MAP
 from users.utils import ais_user_registration_open
 
-from .authentication import django_auth
+from .authentication import SessionAuth, TokenAuth
 from .exceptions import ThrottleException
 from .parsers import EnvelopeParser
 from .schema import CamelSchema
@@ -25,7 +25,7 @@ api = NinjaAPI(
     parser=EnvelopeParser(),
     title="GlitchTip API",
     urls_namespace="api",
-    auth=django_auth,
+    auth=[SessionAuth(), TokenAuth()],
 )
 
 api.add_router("0", api_tokens_router)

@@ -19,7 +19,7 @@ def get_queryset(
     organization_slug: Optional[str] = None,
     project_slug: Optional[str] = None,
 ):
-    user_id = request.auth
+    user_id = request.auth.user_id
     qs = IssueEvent.objects.filter(issue__project__organization__users=user_id)
     if issue_id:
         qs = qs.filter(issue_id=issue_id)

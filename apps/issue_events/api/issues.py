@@ -17,7 +17,7 @@ from . import router
 
 
 def get_queryset(request: AuthHttpRequest, organization_slug: Optional[str] = None):
-    user_id = request.auth
+    user_id = request.auth.user_id
     qs = Issue.objects.filter(project__organization__users=user_id)
     if organization_slug:
         qs = qs.filter(project__organization__slug=organization_slug)
