@@ -9,6 +9,7 @@ from ninja import Field, Query, Schema
 
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.pagination import paginate
+from glitchtip.api.permissions import has_permission
 
 from ..constants import EventStatus
 from ..models import Issue
@@ -32,6 +33,7 @@ def get_queryset(request: AuthHttpRequest, organization_slug: Optional[str] = No
     response=IssueDetailSchema,
     by_alias=True,
 )
+@has_permission(["event:read", "event:write", "event:admin"])
 async def get_issue(request: AuthHttpRequest, issue_id: int):
     qs = get_queryset(request)
     qs = qs.annotate(
@@ -55,6 +57,7 @@ class IssueFilters(Schema):
     response=list[IssueSchema],
     by_alias=True,
 )
+@has_permission(["event:read", "event:write", "event:admin"])
 @paginate
 async def list_issues(
     request: AuthHttpRequest,

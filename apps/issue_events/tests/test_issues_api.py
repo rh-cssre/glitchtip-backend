@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
-from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
+from glitchtip.test_utils.test_case import APIPermissionTestCase, GlitchTipTestCaseMixin
 
 
 class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
@@ -111,3 +111,23 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertNotContains(res, other_issue.title)
         self.assertNotContains(res, "matchingEventId")
         self.assertNotIn("X-Sentry-Direct-Hit", res.headers)
+
+
+class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
+    def setUp(self):
+        self.create_user_org()
+        self.set_client_credentials(self.auth_token.token)
+        self.team = baker.make("teams.Team", organization=self.organization)
+        self.team.members.add(self.org_user)
+        self.project = baker.make("projects.Project", organization=self.organization)
+        self.project.team_set.add(self.team)
+        self.issue = baker.make("issues.Issue", project=self.project)
+
+        self.list_url = reverse(
+            "api:list_issues", kwargs={"organization_slug": self.organization.slug}
+        )
+
+    def test_list(self):
+        self.assertGetReqStatusCode(self.list_url, 403)
+        self.auth_token.add_permission("event:read")
+        self.assertGetReqStatusCode(self.list_url, 200)
