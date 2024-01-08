@@ -2,7 +2,7 @@ from django.db import models
 
 
 class SubscriptionQuotaWarning(models.Model):
-    """ Track when quota warnings are sent out """
+    """Track when quota warnings are sent out"""
 
     subscription = models.OneToOneField(
         "djstripe.Subscription", on_delete=models.CASCADE

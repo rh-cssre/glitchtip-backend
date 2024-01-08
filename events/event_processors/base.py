@@ -10,9 +10,9 @@ class EventProcessorBase(ABC):
     def transform(self):
         return self.data
 
-    def __init__(self, project, release, data):
+    def __init__(self, project, release_id, data):
         self.project = project
-        self.release = release
+        self.release_id = release_id
         self.data = data
 
     def run(self):

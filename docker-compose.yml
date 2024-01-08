@@ -1,26 +1,23 @@
 version: "3.8"
-x-environment:
-  &default-environment
+x-environment: &default-environment
   DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
   SECRET_KEY: change_me
   ENABLE_ORGANIZATION_CREATION: "true"
-  ENABLE_LOGIN_FORM: "false"
   ENABLE_TEST_API: "true"
   DEBUG: "true"
   EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
   ENABLE_OBSERVABILITY_API: "true"
   CELERY_WORKER_CONCURRENCY: 1
+  PYTHONBREAKPOINT: "ipdb.set_trace"
 
-x-depends_on:
-  &default-depends_on
+x-depends_on: &default-depends_on
   - postgres
   - redis
-x-volumes:
-  &default-volumes
+x-volumes: &default-volumes
   - .:/code
 services:
   postgres:
-    image: postgres:15
+    image: postgres:16
     environment:
       POSTGRES_HOST_AUTH_METHOD: "trust"
   redis:
@@ -41,3 +38,11 @@ services:
     depends_on: *default-depends_on
     volumes: *default-volumes
     environment: *default-environment
+  #flower:
+  #  build: .
+  #  command: bin/run-flower.sh
+  #  depends_on: *default-depends_on
+  #  volumes: *default-volumes
+  #  environment: *default-environment
+  #  ports:
+  #    - 5555:5555
