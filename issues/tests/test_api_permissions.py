@@ -169,12 +169,10 @@ class CommentsAPIPermissionTests(APIPermissionTestCase):
     def test_create(self):
         self.auth_token.add_permission("event:read")
         data = {"data": {"text": "Test"}}
-        res = self.client.post(self.list_url, data, format="json")
-        self.assertEqual(res.status_code, 403)
+        self.assertPostReqStatusCode(self.list_url, data, 403)
 
         self.auth_token.add_permission("event:write")
-        res = self.client.post(self.list_url, data, format="json")
-        self.assertEqual(res.status_code, 201)
+        self.assertPostReqStatusCode(self.list_url, data, 201)
 
     def test_destroy(self):
         self.auth_token.add_permissions(["event:read", "event:write"])
@@ -186,9 +184,7 @@ class CommentsAPIPermissionTests(APIPermissionTestCase):
     def test_update(self):
         self.auth_token.add_permission("event:read")
         data = {"data": {"text": "Test"}}
-        res = self.client.put(self.detail_url, data, format="json")
-        self.assertEqual(res.status_code, 403)
+        self.assertPutReqStatusCode(self.detail_url, data, 403)
 
         self.auth_token.add_permission("event:write")
-        res = self.client.put(self.detail_url, data, format="json")
-        self.assertEqual(res.status_code, 200)
+        self.assertPutReqStatusCode(self.detail_url, data, 200)

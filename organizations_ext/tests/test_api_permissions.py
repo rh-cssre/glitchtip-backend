@@ -92,7 +92,7 @@ class OrganizationMemberAPIPermissionTests(APIPermissionTestCase):
 
     def test_create(self):
         self.auth_token.add_permission("member:read")
-        data = {"email": "lol@example.com", "role": "member"}
+        data = {"email": "lol@example.com", "role": "member", "teams": []}
         self.assertPostReqStatusCode(self.list_url, data, 403)
         self.auth_token.add_permission("member:write")
         self.assertPostReqStatusCode(self.list_url, data, 201)

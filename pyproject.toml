@@ -60,6 +60,8 @@ aioresponses = "^0.7.6"
 requests-mock = "^1.9.3"
 memray = "^1.9.1"
 ruff = "^0.1.4"
+# Needed for test --parallel
+tblib = "^3.0.0"
 
 [tool.ruff.lint]
 extend-select = ["I"]

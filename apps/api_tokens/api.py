@@ -1,17 +1,18 @@
 from django.http import Http404, HttpResponse
 from ninja import Router
 
-from glitchtip.api.authentication import AuthHttpRequest
+from glitchtip.api.authentication import AuthHttpRequest, SessionAuth
 from glitchtip.api.pagination import paginate
 
 from .models import APIToken
 from .schema import APITokenIn, APITokenSchema
 
-router = Router()
+router = Router(auth=SessionAuth())
 
 
 def get_queryset(request: AuthHttpRequest):
-    return APIToken.objects.filter(user_id=request.auth)
+    user_id = request.auth.user_id
+    return APIToken.objects.filter(user_id=user_id)
 
 
 @router.get("api-tokens/", response=list[APITokenSchema])
@@ -22,8 +23,9 @@ async def list_api_tokens(request: AuthHttpRequest, response: HttpResponse):
 
 @router.post("api-tokens/", response={201: APITokenSchema})
 async def create_api_token(request: AuthHttpRequest, payload: APITokenIn):
+    user_id = request.auth.user_id
     return await APIToken.objects.acreate(
-        **payload.dict(exclude_none=True), user_id=request.auth
+        **payload.dict(exclude_none=True), user_id=user_id
     )
 
 

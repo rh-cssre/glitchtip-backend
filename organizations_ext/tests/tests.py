@@ -3,7 +3,6 @@ from django.test import TestCase
 from model_bakery import baker
 from rest_framework.test import APITestCase
 
-from glitchtip import test_utils  # pylint: disable=unused-import
 from organizations_ext.models import OrganizationUser
 
 

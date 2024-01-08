@@ -163,9 +163,13 @@ class IssuesAPITestCase(GlitchTipTestCase):
         self.assertEqual(res.get("X-Hits"), "1")
 
     def test_issues_multi_page_list(self):
-        first_issue = baker.make("issues.Issue", project=self.project, title="first_issue")
+        first_issue = baker.make(
+            "issues.Issue", project=self.project, title="first_issue"
+        )
         baker.make("issues.Issue", project=self.project, _quantity=50)
-        last_issue = baker.make("issues.Issue", project=self.project, title="last_issue")
+        last_issue = baker.make(
+            "issues.Issue", project=self.project, title="last_issue"
+        )
 
         with self.assertNumQueries(3):
             res = self.client.get(self.url)
@@ -174,7 +178,7 @@ class IssuesAPITestCase(GlitchTipTestCase):
         self.assertEqual(res.data[0]["id"], str(last_issue.id))
         self.assertNotContains(res, str(first_issue.title))
 
-        pattern = r'(?<=\<).+?(?=\>)'
+        pattern = r"(?<=\<).+?(?=\>)"
         links = re.findall(pattern, res.headers.get("Link"))
 
         res = self.client.get(links[1])
