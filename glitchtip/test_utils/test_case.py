@@ -1,9 +1,9 @@
 # pylint: disable=attribute-defined-outside-init,invalid-name
 from typing import Optional
 
+from django.test import TestCase
 from model_bakery import baker
 from rest_framework.test import APITestCase
-from django.test import TestCase
 
 from organizations_ext.models import Organization, OrganizationUserRole
 
