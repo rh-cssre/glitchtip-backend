@@ -569,16 +569,18 @@ USE_I18N = True
 USE_TZ = True
 
 STORAGES = {
+    "default": {
+        "BACKEND": env.str(
+            "DEFAULT_FILE_STORAGE", "django.core.files.storage.FileSystemStorage"
+        )
+    },
     "staticfiles": {
         "BACKEND": env.str(
             "STATICFILES_STORAGE",
             "whitenoise.storage.CompressedManifestStaticFilesStorage",
         )
-    }
+    },
 }
-
-if env("DEFAULT_FILE_STORAGE"):
-    STORAGES["default"] = {"BACKEND": env("DEFAULT_FILE_STORAGE")}
 
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
