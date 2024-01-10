@@ -7,6 +7,7 @@ from django.http import Http404, HttpResponse
 
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.pagination import paginate
+from glitchtip.api.permissions import has_permission
 
 from ..models import IssueEvent, UserReport
 from ..schema import IssueEventDetailSchema, IssueEventJsonSchema, IssueEventSchema
@@ -36,6 +37,7 @@ async def get_user_report(event_id: uuid.UUID) -> Optional[UserReport]:
 
 @router.get("/issues/{int:issue_id}/events/", response=list[IssueEventSchema])
 @paginate
+@has_permission(["event:read", "event:write", "event:admin"])
 async def list_issue_event(
     request: AuthHttpRequest, response: HttpResponse, issue_id: int
 ):
@@ -47,6 +49,7 @@ async def list_issue_event(
     response=IssueEventDetailSchema,
     by_alias=True,
 )
+@has_permission(["event:read", "event:write", "event:admin"])
 async def get_latest_issue_event(request: AuthHttpRequest, issue_id: int):
     qs = get_queryset(request, issue_id)
     qs = qs.annotate(
@@ -65,6 +68,7 @@ async def get_latest_issue_event(request: AuthHttpRequest, issue_id: int):
     response=IssueEventDetailSchema,
     by_alias=True,
 )
+@has_permission(["event:read", "event:write", "event:admin"])
 async def get_issue_event(request: AuthHttpRequest, issue_id: int, event_id: uuid.UUID):
     qs = get_queryset(request, issue_id)
     qs = qs.annotate(
@@ -87,6 +91,7 @@ async def get_issue_event(request: AuthHttpRequest, issue_id: int, event_id: uui
     by_alias=True,
 )
 @paginate
+@has_permission(["event:read", "event:write", "event:admin"])
 async def list_project_issue_event(
     request: AuthHttpRequest,
     organization_slug: str,
@@ -105,6 +110,7 @@ async def list_project_issue_event(
     response=IssueEventDetailSchema,
     by_alias=True,
 )
+@has_permission(["event:read", "event:write", "event:admin"])
 async def get_project_issue_event(
     request: AuthHttpRequest,
     organization_slug: str,
@@ -134,6 +140,7 @@ async def get_project_issue_event(
     by_alias=True,
     exclude_none=True,
 )
+@has_permission(["event:read", "event:write", "event:admin"])
 async def get_event_json(
     request: AuthHttpRequest, organization_slug: str, issue_id: int, event_id: uuid.UUID
 ):
