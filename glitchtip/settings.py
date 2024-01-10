@@ -23,7 +23,7 @@ from sentry_sdk.integrations.django import DjangoIntegration
 
 env = environ.FileAwareEnv(
     ALLOWED_HOSTS=(list, ["*"]),
-    DEFAULT_FILE_STORAGE=(str, None),
+    DEFAULT_FILE_STORAGE=(str, global_settings.STORAGES["default"]["BACKEND"]),
     AWS_ACCESS_KEY_ID=(str, None),
     AWS_SECRET_ACCESS_KEY=(str, None),
     AWS_STORAGE_BUCKET_NAME=(str, None),
@@ -569,16 +569,16 @@ USE_I18N = True
 USE_TZ = True
 
 STORAGES = {
+    "default": {
+        "BACKEND": env("DEFAULT_FILE_STORAGE"),
+    },
     "staticfiles": {
         "BACKEND": env.str(
             "STATICFILES_STORAGE",
             "whitenoise.storage.CompressedManifestStaticFilesStorage",
         )
-    }
+    },
 }
-
-if env("DEFAULT_FILE_STORAGE"):
-    STORAGES["default"] = {"BACKEND": env("DEFAULT_FILE_STORAGE")}
 
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
