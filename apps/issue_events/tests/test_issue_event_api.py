@@ -161,7 +161,7 @@ class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
 
 class CommentsAPIPermissionTests(APIPermissionTestCase):
     def setUp(self):
-        self.create_user_org()
+        self.create_org_team_project()
         self.set_client_credentials(self.auth_token.token)
         self.project = baker.make("projects.Project", organization=self.organization)
         self.issue = baker.make("issue_events.Issue", project=self.project)

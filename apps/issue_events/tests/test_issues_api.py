@@ -115,12 +115,8 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
 
 class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
     def setUp(self):
-        self.create_user_org()
+        self.create_org_team_project()
         self.set_client_credentials(self.auth_token.token)
-        self.team = baker.make("teams.Team", organization=self.organization)
-        self.team.members.add(self.org_user)
-        self.project = baker.make("projects.Project", organization=self.organization)
-        self.project.team_set.add(self.team)
         self.issue = baker.make("issues.Issue", project=self.project)
 
         self.list_url = reverse(
