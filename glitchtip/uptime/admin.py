@@ -4,7 +4,7 @@ from django.forms.models import BaseInlineFormSet
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Monitor, MonitorCheck
+from .models import Monitor, MonitorCheck, StatusPage
 
 
 class MonitorCheckInlineFormSet(BaseInlineFormSet):
@@ -70,9 +70,14 @@ class MonitorAdmin(admin.ModelAdmin):
 
 
 class MonitorCheckAdmin(admin.ModelAdmin):
-    list_filter = ["is_up", "reason", "created"]
-    list_display = ["monitor", "is_up", "reason", "created", "response_time"]
+    list_filter = ["is_up", "reason", "start_check"]
+    list_display = ["monitor", "is_up", "reason", "start_check", "response_time"]
+
+
+class StatusPageAdmin(admin.ModelAdmin):
+    list_display = ["organization", "name", "is_public"]
 
 
 admin.site.register(Monitor, MonitorAdmin)
 admin.site.register(MonitorCheck, MonitorCheckAdmin)
+admin.site.register(StatusPage, StatusPageAdmin)
