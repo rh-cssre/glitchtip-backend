@@ -19,7 +19,6 @@ def reverse_func(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("alerts", "0001_initial"),
     ]
@@ -40,11 +39,15 @@ class Migration(migrations.Migration):
             model_name="notification",
             name="project_alert",
             field=models.ForeignKey(
-                on_delete=django.db.models.deletion.CASCADE, to="alerts.projectalert",
+                on_delete=django.db.models.deletion.CASCADE,
+                to="alerts.projectalert",
             ),
             preserve_default=False,
         ),
-        migrations.RemoveField(model_name="notification", name="project",),
+        migrations.RemoveField(
+            model_name="notification",
+            name="project",
+        ),
         migrations.CreateModel(
             name="AlertRecipient",
             fields=[

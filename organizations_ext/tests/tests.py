@@ -1,10 +1,9 @@
-from django.conf import settings
 from django.shortcuts import reverse
-from django.test import TestCase, RequestFactory
-from rest_framework.test import APITestCase
+from django.test import TestCase
 from model_bakery import baker
-from organizations_ext.models import OrganizationUser, OrganizationUserRole
-from glitchtip import test_utils  # pylint: disable=unused-import
+from rest_framework.test import APITestCase
+
+from organizations_ext.models import OrganizationUser
 
 
 class OrganizationModelTestCase(TestCase):
@@ -23,18 +22,6 @@ class OrganizationModelTestCase(TestCase):
         self.assertEqual(organization.email, user.email)
         self.assertEqual(organization.users.count(), 2)
         self.assertEqual(organization.owners.count(), 1)
-
-    def test_organization_request_callback(self):
-        user = baker.make("users.user")
-        organization = baker.make("organizations_ext.Organization")
-        organization.add_user(user)
-
-        factory = RequestFactory()
-        request = factory.get("/")
-        request.user = user
-
-        callback = settings.DJSTRIPE_SUBSCRIBER_MODEL_REQUEST_CALLBACK
-        self.assertEqual(callback(request), organization)
 
     def test_slug_reserved_words(self):
         """Reserve some words for frontend routing needs"""
@@ -87,7 +74,7 @@ class OrganizationsAPITestCase(APITestCase):
 
     def test_organizations_create(self):
         data = {"name": "test"}
-        with self.assertNumQueries(7):
+        with self.assertNumQueries(6):
             res = self.client.post(self.url, data)
         self.assertContains(res, data["name"], status_code=201)
         self.assertEqual(
@@ -105,7 +92,7 @@ class OrganizationsAPITestCase(APITestCase):
         self.user.save()
 
         with self.settings(ENABLE_ORGANIZATION_CREATION=False):
-            with self.assertNumQueries(8):
+            with self.assertNumQueries(7):
                 res = self.client.post(self.url, data)
         self.assertEqual(res.status_code, 201)
 
