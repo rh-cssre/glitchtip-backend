@@ -23,12 +23,17 @@ async def embed_auth(request: HttpRequest):
     public_key = urlparts.username
     path = str(urlparts.path)
     project_id = path.rsplit("/", 1)[-1]
-    project = (
-        await Project.objects.filter(id=project_id, projectkey__public_key=public_key)
-        .select_related("organization")
-        .only("id", "organization__is_accepting_events")
-        .aget()
-    )
+    try:
+        project = (
+            await Project.objects.filter(
+                id=project_id, projectkey__public_key=public_key
+            )
+            .select_related("organization")
+            .only("id", "organization__is_accepting_events")
+            .aget()
+        )
+    except ValueError:
+        raise AuthenticationError([{"message": "Invalid DSN"}])
     if not project.organization.is_accepting_events:
         raise AuthenticationError([{"message": "Invalid DSN"}])
     return project
@@ -84,7 +89,18 @@ async def get_embed_error_page(request: HttpRequest, data: Query[EmbedGetSchema]
     form = UserReportForm(initial=initial)
     template = render_to_string(
         "user_reports/error-page-embed.html",
-        {"form": form, "show_branding": show_branding, **data.dict(by_alias=True)},
+        {
+            "form": form,
+            "show_branding": show_branding,
+            "title": data.title,
+            "subtitle": data.subtitle,
+            "subtitle2": data.subtitle2,
+            "name_label": data.label_name,
+            "email_label": data.label_email,
+            "comments_label": data.label_comments,
+            "submit_label": data.label_submit,
+            "close_label": data.label_close,
+        },
     )
 
     url = settings.GLITCHTIP_URL.geturl() + request.get_full_path()

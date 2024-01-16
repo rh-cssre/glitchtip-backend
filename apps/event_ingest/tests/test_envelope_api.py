@@ -1,4 +1,3 @@
-
 from django.shortcuts import reverse
 
 from apps.issue_events.models import IssueEvent
