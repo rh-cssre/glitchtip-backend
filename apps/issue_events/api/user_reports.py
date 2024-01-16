@@ -4,6 +4,7 @@ from django.http import HttpResponse
 
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.pagination import paginate
+from glitchtip.api.permissions import has_permission
 
 from ..models import UserReport
 from ..schema import UserReportSchema
@@ -16,6 +17,7 @@ from . import router
     by_alias=True,
 )
 @paginate
+@has_permission(["event:read", "event:write", "event:admin"])
 async def list_user_reports(
     request: AuthHttpRequest, response: HttpResponse, issue_id: int
 ):

@@ -53,6 +53,13 @@ class APIPermissionTestCase(TestCase):
         self.org_user = self.organization.add_user(self.user)
         self.auth_token = baker.make("api_tokens.APIToken", user=self.user)
 
+    def create_org_team_project(self):
+        self.create_user_org()
+        self.team = baker.make("teams.Team", organization=self.organization)
+        self.team.members.add(self.org_user)
+        self.project = baker.make("projects.Project", organization=self.organization)
+        self.project.team_set.add(self.team)
+
     def get_headers(self):
         return {"HTTP_AUTHORIZATION": f"Bearer {self.token}"}
 
