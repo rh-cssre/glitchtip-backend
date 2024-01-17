@@ -7,7 +7,7 @@ from django.db import IntegrityError
 from django.http import HttpRequest, HttpResponse
 from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
-from ninja import Field, Query, Router
+from ninja import Field, Form, Query, Router
 from ninja.errors import AuthenticationError
 
 from apps.issue_events.models import IssueEvent
@@ -79,6 +79,12 @@ class EmbedGetSchema(EmbedSchema):
     email: Optional[str] = None
 
 
+class UserReportFormInput(CamelSchema):
+    name: Optional[str]
+    email: Optional[str]
+    comments: Optional[str]
+
+
 @router.get("/error-page/")
 async def get_embed_error_page(request: HttpRequest, data: Query[EmbedGetSchema]):
     initial = {"name": data.name, "email": data.email}
@@ -126,19 +132,21 @@ async def get_embed_error_page(request: HttpRequest, data: Query[EmbedGetSchema]
 
 
 @router.post("/error-page/")
-async def submit_embed_error_page(request: HttpRequest, data: Query[EmbedSchema]):
+async def submit_embed_error_page(
+    request: HttpRequest, data: Query[EmbedGetSchema], form: Form[UserReportFormInput]
+):
     event_id = data.eventId
-    initial = {"name": request.GET.get("name"), "email": request.GET.get("email")}
-    form = UserReportForm(request.POST, initial=initial)
+    initial = {"name": data.name, "email": data.email}
+    form = UserReportForm(form.dict(), initial=initial)
     if form.is_valid():
         report = form.save(commit=False)
         report.project_id = request.auth.id
         report.event_id = event_id
-        event = await IssueEvent.objects.filter(event_id=event_id).afirst()
+        event = await IssueEvent.objects.filter(id=event_id).afirst()
         if event:
             report.issue_id = event.issue_id
         try:
-            report.save()
+            await report.asave()
         except IntegrityError:
             pass  # Duplicate, ignore
         return HttpResponse()

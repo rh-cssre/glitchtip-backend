@@ -1,9 +1,11 @@
+import json
 import uuid
 
 from django.shortcuts import reverse
 from model_bakery import baker
 
 from .utils import EventIngestTestCase
+from apps.issue_events.models import UserReport
 
 
 class ErrorPageEmbedTestCase(EventIngestTestCase):
@@ -25,21 +27,20 @@ class ErrorPageEmbedTestCase(EventIngestTestCase):
         res = self.client.get(self.url, params)
         self.assertContains(res, self.project_key.public_key.hex)
 
-    # def test_submit_report(self):
-    #     params = f"?dsn={self.project_key.get_dsn()}&eventId={uuid.uuid4().hex}"
-    #     # data = {"name": "Test Name", "email": "test@example.com", "comments": "hmm"}
-    #     data = json.dumps({"name": "Test Name", "email": "test@example.com", "comments": "hmm"})
-    #     res = self.client.post(self.url, params, data)
+    def test_submit_report(self):
+        params = f"?dsn={self.project_key.get_dsn()}&eventId={uuid.uuid4().hex}"
+        data = {"name": "Test Name", "email": "test@example.com", "comments": "hmm"}
+        res = self.client.post(self.url + params, data)
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(UserReport.objects.filter(project=self.project).exists())
 
-    #     self.assertEqual(res.status_code, 200)
-
-    #     self.assertTrue(UserReport.objects.filter(project=self.project).exists())
-
-    # def test_submit_report_with_issue(self):
-    #     issue = baker.make("issues.Issue", project=self.project)
-    #     event = baker.make("events.Event", issue=issue)
-    #     params = f"?dsn={self.project_key.get_dsn()}&eventId={event.event_id.hex}"
-    #     data = {"name": "Test Name", "email": "test@example.com", "comments": "hmm"}
-    #     res = self.client.post(self.url + params, data)
-    #     self.assertEqual(res.status_code, 200)
-    #     self.assertTrue(UserReport.objects.filter(issue=issue).exists())
+    def test_submit_report_with_issue(self):
+        issue = baker.make("issue_events.Issue", project=self.project)
+        event = baker.make("issue_events.IssueEvent", issue=issue)
+        params = f"?dsn={self.project_key.get_dsn()}&eventId={event.id.hex}"
+        data = {"name": "Test Name", "email": "test@example.com", "comments": "hmm"}
+        res = self.client.post(self.url + params, data)
+        self.assertEqual(res.status_code, 200)
+        created_report = UserReport.objects.filter(issue=issue).first()
+        self.assertEqual(created_report.comments, data["comments"])
+        self.assertEqual(created_report.name, data["name"])
