@@ -1,11 +1,11 @@
-import json
 import uuid
 
 from django.shortcuts import reverse
 from model_bakery import baker
 
-from .utils import EventIngestTestCase
 from apps.issue_events.models import UserReport
+
+from .utils import EventIngestTestCase
 
 
 class ErrorPageEmbedTestCase(EventIngestTestCase):
