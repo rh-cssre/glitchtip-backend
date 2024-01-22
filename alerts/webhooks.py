@@ -62,7 +62,7 @@ def send_webhook(
     data = WebhookPayload(
         alias="GlitchTip", text=message, attachments=attachments, sections=sections
     )
-    return requests.post(url, json=asdict(data), timeout=10)
+    return requests.post(url, json=asdict(data), headers={'Content-type': 'application/json'}, timeout=10)
 
 
 def send_issue_as_webhook(url, issues: List["Issue"], issue_count: int = 1):
