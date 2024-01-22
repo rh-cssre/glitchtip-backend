@@ -4,7 +4,7 @@ from django.utils.translation import gettext_lazy as _
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 
-from .models import User, UserProjectAlert
+from .models import User
 
 
 class UserResource(resources.ModelResource):
@@ -82,15 +82,4 @@ class UserAdmin(BaseUserAdmin, ImportExportModelAdmin):
         return ", ".join([org.name for org in obj.organizations_ext_organization.all()])
 
 
-class UserProjectAlertAdmin(admin.ModelAdmin):
-    list_display = ("user", "project", "status")
-    list_filter = ("status",)
-    search_fields = ("project__name", "user__email")
-    raw_id_fields = (
-        "user",
-        "project",
-    )
-
-
 admin.site.register(User, UserAdmin)
-admin.site.register(UserProjectAlert, UserProjectAlertAdmin)
