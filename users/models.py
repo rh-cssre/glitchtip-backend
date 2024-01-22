@@ -9,6 +9,8 @@ from django.db import models
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
+from projects.models import ProjectAlertStatus
+
 
 class UserManager(BaseUserManager):
     """
@@ -118,22 +120,3 @@ class User(AbstractBaseUser, PermissionsMixin):
         self.analytics["register"] = {
             tag[0]: tag[1] for tag in parsed_tags if tag[0].startswith("utm_")
         }
-
-
-class ProjectAlertStatus(models.IntegerChoices):
-    OFF = 0, "off"
-    ON = 1, "on"
-
-
-class UserProjectAlert(models.Model):
-    """
-    Determine if user alert notifications should always happen, never, or defer to default
-    Default is stored as the lack of record.
-    """
-
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
-    status = models.PositiveSmallIntegerField(choices=ProjectAlertStatus.choices)
-
-    class Meta:
-        unique_together = ("user", "project")
