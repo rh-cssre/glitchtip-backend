@@ -1,6 +1,6 @@
 import datetime
 
-from django.shortcuts import reverse
+from django.urls import reverse
 from django.utils import timezone
 from freezegun import freeze_time
 from model_bakery import baker

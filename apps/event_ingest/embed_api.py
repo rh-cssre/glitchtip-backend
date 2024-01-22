@@ -39,6 +39,12 @@ async def embed_auth(request: HttpRequest):
     return project
 
 
+class EmbedAuthHttpRequest(HttpRequest):
+    """Django HttpRequest that is known to be authenticated by the embed api"""
+
+    auth: Project
+
+
 router = Router(auth=embed_auth)
 
 
@@ -133,7 +139,9 @@ async def get_embed_error_page(request: HttpRequest, data: Query[EmbedGetSchema]
 
 @router.post("/error-page/")
 async def submit_embed_error_page(
-    request: HttpRequest, data: Query[EmbedGetSchema], form: Form[UserReportFormInput]
+    request: EmbedAuthHttpRequest,
+    data: Query[EmbedGetSchema],
+    form: Form[UserReportFormInput],
 ):
     event_id = data.eventId
     initial = {"name": data.name, "email": data.email}
@@ -150,4 +158,8 @@ async def submit_embed_error_page(
         except IntegrityError:
             pass  # Duplicate, ignore
         return HttpResponse()
-    return HttpResponse({"errors": form.errors}, status=400)
+    return HttpResponse(
+        json.dumps({"errors": form.errors}),
+        status=400,
+        content_type="application/json",
+    )

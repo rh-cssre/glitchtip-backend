@@ -3,7 +3,7 @@ from timeit import default_timer as timer
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.shortcuts import reverse
+from django.urls import reverse
 from django.test import RequestFactory
 
 from events.models import Event

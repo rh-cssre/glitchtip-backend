@@ -1,4 +1,4 @@
-from django.shortcuts import reverse
+from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from glitchtip.uptime.models import Monitor

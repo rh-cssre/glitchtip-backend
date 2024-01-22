@@ -311,6 +311,8 @@ CORS_ORIGIN_ALLOW_ALL = env.bool("CORS_ORIGIN_ALLOW_ALL", True)
 CORS_ORIGIN_WHITELIST = env.tuple("CORS_ORIGIN_WHITELIST", str, default=())
 CORS_ALLOW_HEADERS = list(default_headers) + [
     "x-sentry-auth",
+    "baggage",
+    "sentry-trace",
 ]
 
 BILLING_ENABLED = False

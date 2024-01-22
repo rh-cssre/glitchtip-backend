@@ -1,5 +1,5 @@
 from django.core import mail
-from django.shortcuts import reverse
+from django.urls import reverse
 from django.test import override_settings
 from model_bakery import baker
 from rest_framework.test import APITestCase

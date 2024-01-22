@@ -1,4 +1,4 @@
-from django.shortcuts import reverse
+from django.urls import reverse
 from model_bakery import baker
 
 from glitchtip.test_utils.test_case import APIPermissionTestCase

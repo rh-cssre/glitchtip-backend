@@ -1,4 +1,4 @@
-from django.shortcuts import reverse
+from django.urls import reverse
 from model_bakery import baker
 from prometheus_client import Metric
 from rest_framework import status
