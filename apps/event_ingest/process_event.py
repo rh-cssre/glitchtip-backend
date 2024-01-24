@@ -1,10 +1,11 @@
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional, Union
 from urllib.parse import urlparse
 
 from django.contrib.postgres.search import SearchVector
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import F, Q, Value
 from django.db.models.functions import Greatest
 from django.db.utils import IntegrityError
@@ -329,3 +330,37 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
 
     # ignore_conflicts because we could have an invalid duplicate event_id
     IssueEvent.objects.bulk_create(issue_events, ignore_conflicts=True)
+
+    # Group events by time and project for event count statistics
+    data_stats: defaultdict[datetime, defaultdict[int, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
+    for processing_event in processing_events:
+        hour_received = processing_event.event.received.replace(
+            minute=0, second=0, microsecond=0
+        )
+        data_stats[hour_received][processing_event.event.project_id] += 1
+    update_statistics(data_stats)
+
+
+def update_statistics(
+    project_event_stats: defaultdict[datetime, defaultdict[int, int]],
+):
+    # Flatten data for a sql param friendly format
+    data = [
+        [year, key, value]
+        for year, inner_dict in project_event_stats.items()
+        for key, value in inner_dict.items()
+    ]
+    # Django ORM cannot support F functions in a bulk_update
+    # psycopg3 does not support execute_values
+    # https://github.com/psycopg/psycopg/issues/114
+    with connection.cursor() as cursor:
+        args_str = ",".join(cursor.mogrify("(%s,%s,%s)", x) for x in data)
+        sql = (
+            "INSERT INTO projects_eventprojecthourlystatistic (date, project_id, count)\n"
+            f"VALUES {args_str}\n"
+            "ON CONFLICT (project_id, date)\n"
+            "DO UPDATE SET count = projects_eventprojecthourlystatistic.count + EXCLUDED.count;"
+        )
+        cursor.execute(sql)

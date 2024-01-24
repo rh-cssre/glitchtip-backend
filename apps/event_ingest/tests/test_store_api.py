@@ -19,7 +19,7 @@ class StoreAPITestCase(EventIngestTestCase):
         self.event = self.get_json_data("events/test_data/py_hi_event.json")
 
     def test_store_api(self):
-        with self.assertNumQueries(7):
+        with self.assertNumQueries(8):
             res = self.client.post(
                 self.url, self.event, content_type="application/json"
             )
