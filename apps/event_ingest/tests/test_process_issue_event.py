@@ -4,6 +4,7 @@ from django.urls import reverse
 
 from apps.issue_events.constants import EventStatus, LogLevel
 from apps.issue_events.models import Issue, IssueEvent, IssueHash
+from projects.models import EventProjectHourlyStatistic
 
 from ..process_event import process_issue_events
 from ..schema import (
@@ -42,6 +43,11 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         self.assertEqual(Issue.objects.count(), 1)
         self.assertEqual(IssueHash.objects.count(), 1)
         self.assertEqual(IssueEvent.objects.count(), 2)
+        self.assertTrue(
+            EventProjectHourlyStatistic.objects.filter(
+                count=2, project=self.project
+            ).exists()
+        )
 
     def test_reopen_resolved_issue(self):
         event = InterchangeIssueEvent(
