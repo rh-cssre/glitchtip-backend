@@ -7,6 +7,8 @@ x-environment: &default-environment
   DEBUG: "true"
   EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
   ENABLE_OBSERVABILITY_API: "true"
+  # GLITCHTIP_ENABLE_NEW_ISSUES: "true"
+  # IS_LOAD_TEST: "true"
   CELERY_WORKER_CONCURRENCY: 1
   PYTHONBREAKPOINT: "ipdb.set_trace"
 
@@ -38,11 +40,3 @@ services:
     depends_on: *default-depends_on
     volumes: *default-volumes
     environment: *default-environment
-  #flower:
-  #  build: .
-  #  command: bin/run-flower.sh
-  #  depends_on: *default-depends_on
-  #  volumes: *default-volumes
-  #  environment: *default-environment
-  #  ports:
-  #    - 5555:5555
