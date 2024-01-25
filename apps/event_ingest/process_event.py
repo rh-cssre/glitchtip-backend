@@ -205,7 +205,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             humanized_directive = event.csp.effective_directive.replace("-src", "")
             uri = urlparse(event.csp.blocked_uri).netloc
             full_title = title = f"Blocked '{humanized_directive}' from '{uri}'"
-            culprit = "fake culprit"
+            culprit = event.csp.effective_directive
             event_data["csp"] = event.csp.dict()
 
         issue_hash = generate_hash(title, culprit, event.type, event.fingerprint)
