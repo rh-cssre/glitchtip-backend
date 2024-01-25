@@ -26,6 +26,7 @@ router = Router(auth=event_auth)
 
 class EventIngestOut(Schema):
     event_id: str
+    task_id: Optional[str] = None  # For debug purposes only
 
 
 class EnvelopeIngestOut(Schema):
@@ -84,8 +85,11 @@ async def event_store(
         project_id=project_id,
         payload=issue_event_class(**payload.dict()),
     )
-    await async_call_celery_task(ingest_event, issue_event.dict())
-    return {"event_id": payload.event_id.hex}
+    task_result = await async_call_celery_task(ingest_event, issue_event.dict())
+    result = {"event_id": payload.event_id.hex}
+    if settings.IS_LOAD_TEST:
+        result["task_id"] = task_result.task_id
+    return result
 
 
 @router.post("/{project_id}/envelope/", response=EnvelopeIngestOut)

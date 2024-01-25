@@ -2,7 +2,7 @@ from unittest import skipIf
 from unittest.mock import patch
 
 from django.conf import settings
-from django.shortcuts import reverse
+from django.urls import reverse
 from django.utils import timezone
 from djstripe.enums import BillingScheme
 from freezegun import freeze_time

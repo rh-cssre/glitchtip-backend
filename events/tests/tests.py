@@ -4,7 +4,7 @@ from collections.abc import Iterable, Mapping
 from typing import Optional
 from unittest.mock import patch
 
-from django.shortcuts import reverse
+from django.urls import reverse
 from django.test import override_settings
 from model_bakery import baker
 from prometheus_client import Metric

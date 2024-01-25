@@ -97,7 +97,7 @@ class UserReport(CreatedModel):
     project = models.ForeignKey(
         "projects.Project", on_delete=models.CASCADE, related_name="+"
     )
-    issue = models.ForeignKey(Issue, on_delete=models.CASCADE)
+    issue = models.ForeignKey(Issue, null=True, on_delete=models.CASCADE)
     event_id = models.UUIDField()
     name = models.CharField(max_length=128)
     email = models.EmailField()

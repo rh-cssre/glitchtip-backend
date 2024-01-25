@@ -1,6 +1,6 @@
 from unittest import mock
 
-from django.shortcuts import reverse
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from freezegun import freeze_time

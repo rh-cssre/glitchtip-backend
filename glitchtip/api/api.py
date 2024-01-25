@@ -11,10 +11,10 @@ from apps.api_tokens.api import router as api_tokens_router
 from glitchtip.constants import SOCIAL_ADAPTER_MAP
 from users.utils import ais_user_registration_open
 
+from ..schema import CamelSchema
 from .authentication import SessionAuth, TokenAuth
 from .exceptions import ThrottleException
 from .parsers import EnvelopeParser
-from .schema import CamelSchema
 
 try:
     from djstripe.settings import djstripe_settings
@@ -33,10 +33,13 @@ api.add_router("0", api_tokens_router)
 
 if settings.GLITCHTIP_ENABLE_NEW_ISSUES:
     from apps.event_ingest.api import router as event_ingest_router
+    from apps.event_ingest.embed_api import router as embed_router
     from apps.issue_events.api import router as issue_events_router
 
-    api.add_router("v2", event_ingest_router)
-    api.add_router("v2", issue_events_router)
+    # Remove the x to override old urls
+    api.add_router("x", event_ingest_router)
+    api.add_router("x0", issue_events_router)
+    api.add_router("xembed", embed_router)
 
 
 @api.exception_handler(ThrottleException)

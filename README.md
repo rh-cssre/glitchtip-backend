@@ -57,6 +57,8 @@ VS Code can do type checking and type inference. However, it requires setting up
 
 ### Load testing
 
+First set the env var IS_LOAD_TEST to true in docker-compose.yml
+
 Locust is built into the dev dependencies. To run with Locust run
 `docker compose -f docker-compose.yml -f docker-compose.locust.yml up`
 

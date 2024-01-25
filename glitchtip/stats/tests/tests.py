@@ -1,4 +1,4 @@
-from django.shortcuts import reverse
+from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 

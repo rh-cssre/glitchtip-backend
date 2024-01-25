@@ -1,6 +1,6 @@
 import shutil
 
-from django.shortcuts import reverse
+from django.urls import reverse
 from model_bakery import baker
 from rest_framework.test import APITestCase
 

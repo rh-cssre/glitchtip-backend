@@ -1,5 +1,4 @@
-
-from django.shortcuts import reverse
+from django.urls import reverse
 
 from apps.issue_events.models import IssueEvent
 
@@ -20,7 +19,7 @@ class EnvelopeAPITestCase(EventIngestTestCase):
         )
 
     def test_envelope_api(self):
-        with self.assertNumQueries(7):
+        with self.assertNumQueries(8):
             res = self.client.post(
                 self.url, self.small_event, content_type="application/json"
             )

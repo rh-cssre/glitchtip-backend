@@ -33,6 +33,7 @@ env = environ.FileAwareEnv(
     AZURE_ACCOUNT_KEY=(str, None),
     AZURE_CONTAINER=(str, None),
     AZURE_URL_EXPIRATION_SECS=(int, None),
+    IS_LOAD_TEST=(bool, False),
     GS_BUCKET_NAME=(str, None),
     GS_PROJECT_ID=(str, None),
     DEBUG=(bool, False),
@@ -311,6 +312,8 @@ CORS_ORIGIN_ALLOW_ALL = env.bool("CORS_ORIGIN_ALLOW_ALL", True)
 CORS_ORIGIN_WHITELIST = env.tuple("CORS_ORIGIN_WHITELIST", str, default=())
 CORS_ALLOW_HEADERS = list(default_headers) + [
     "x-sentry-auth",
+    "baggage",
+    "sentry-trace",
 ]
 
 BILLING_ENABLED = False
@@ -453,6 +456,10 @@ if CELERY_BROKER_URL.startswith("sentinel"):
     CELERY_BROKER_TRANSPORT_OPTIONS["master_name"] = env.str(
         "CELERY_BROKER_MASTER_NAME", "mymaster"
     )
+IS_LOAD_TEST = env("IS_LOAD_TEST")
+# GlitchTip doesn't require a celery result backend
+if IS_LOAD_TEST:
+    CELERY_RESULT_BACKEND = REDIS_URL
 if socket_timeout := env.int("CELERY_BROKER_SOCKET_TIMEOUT", None):
     CELERY_BROKER_TRANSPORT_OPTIONS["socket_timeout"] = socket_timeout
 if broker_sentinel_password := env.str("CELERY_BROKER_SENTINEL_KWARGS_PASSWORD", None):
