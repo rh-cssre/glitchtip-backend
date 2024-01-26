@@ -6,6 +6,7 @@ from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.microsoft.views import MicrosoftGraphOAuth2Adapter
 from allauth.socialaccount.providers.nextcloud.views import NextCloudAdapter
 from allauth.socialaccount.providers.openid_connect.views import OpenIDConnectAdapter
+from allauth.socialaccount.providers.okta.views import OktaOAuth2Adapter
 
 SOCIAL_ADAPTER_MAP = {
     "digitalocean": DigitalOceanOAuth2Adapter,
@@ -16,4 +17,5 @@ SOCIAL_ADAPTER_MAP = {
     "gitea": GiteaOAuth2Adapter,
     "nextcloud": NextCloudAdapter,
     "openid_connect": OpenIDConnectAdapter,
+    "okta": OktaOAuth2Adapter,
 }
