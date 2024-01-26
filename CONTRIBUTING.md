@@ -38,6 +38,10 @@ Avoid:
 - Django Rest Framework, port this code to django-ninja. We value type hinting, performance, and async first approach
 - Inefficient database calls - GlitchTip must work for both small self hosters and 100 million event projects. Always assume scale. If you need to edit every user, assume there are 100 million users and the queries much be chunked in batches. Neither one query per user nor one giant query that takes too long to execute.
 
+## Formatting
+
+Use ruff and mypy. Use an editor plugin or run `ruff check glitchtip/ apps/`. Add --fix to auto fix.
+
 ## Terms
 
 - Event - Any piece of tracked data that is ephemeral and consumes resources (and thus can be billed for or limited).
