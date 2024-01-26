@@ -38,7 +38,7 @@ class IssueEventIngestTestCase(EventIngestTestCase):
             events.append(
                 InterchangeIssueEvent(project_id=self.project.id, payload=payload)
             )
-        with self.assertNumQueries(13):
+        with self.assertNumQueries(7):
             process_issue_events(events)
         self.assertEqual(Issue.objects.count(), 1)
         self.assertEqual(IssueHash.objects.count(), 1)

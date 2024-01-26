@@ -7,9 +7,12 @@ x-environment: &default-environment
   DEBUG: "true"
   EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
   ENABLE_OBSERVABILITY_API: "true"
-  # GLITCHTIP_ENABLE_NEW_ISSUES: "true"
-  # IS_LOAD_TEST: "true"
-  CELERY_WORKER_CONCURRENCY: 1
+  #GLITCHTIP_ENABLE_NEW_ISSUES: "true"
+  #IS_LOAD_TEST: "true"
+  CELERY_WORKER_CONCURRENCY: 4
+  CELERY_WORKER_PREFETCH_MULTIPLIER: 25
+  CELERY_WORKER_POOL: "threads"
+  CELERY_SKIP_CHECKS: "true"
   PYTHONBREAKPOINT: "ipdb.set_trace"
 
 x-depends_on: &default-depends_on
@@ -28,6 +31,7 @@ services:
     build: .
     user: root # Allows for usage of ipdb, apt, etc in dev
     command: ./manage.py runserver 0.0.0.0:8000
+    #command: python -m gunicorn glitchtip.asgi:application -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0
     depends_on: *default-depends_on
     volumes: *default-volumes
     ports:

@@ -159,6 +159,27 @@ def generate_tags(event: IngestIssueEvent) -> dict[str, str]:
     return {key: value for key, value in tags.items() if value}
 
 
+def check_set_issue_id(
+    processing_events: list[ProcessingEvent],
+    project_id: int,
+    issue_hash: str,
+    issue_id: int,
+):
+    """
+    It's common to receive two duplicate events at the same time,
+    where the issue has never been seen before. This is an optimization
+    that checks if there is a known project/hash. If so, we can infer the
+    issue_id.
+    """
+    for event in processing_events:
+        if (
+            event.issue_id is None
+            and event.event.project_id == project_id
+            and event.issue_hash == issue_hash
+        ):
+            event.issue_id = issue_id
+
+
 def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
     """
     Accepts a list of events to ingest. Events should be:
@@ -297,8 +318,14 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                         search_vector=SearchVector(Value(issue_defaults["title"])),
                         **issue_defaults,
                     )
-                    IssueHash.objects.create(
+                    new_issue_hash = IssueHash.objects.create(
                         issue=issue, value=issue_hash, project_id=project_id
+                    )
+                    check_set_issue_id(
+                        processing_events,
+                        issue.project_id,
+                        new_issue_hash.value,
+                        issue.id,
                     )
                 processing_event.issue_id = issue.id
                 processing_event.issue_created = True

@@ -10,6 +10,8 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: glitchtip.settings
       SECRET_KEY: nope
+      #GLITCHTIP_ENABLE_NEW_ISSUES: "true"
+      #IS_LOAD_TEST: "true"
     deploy:
       resources:
         limits:
