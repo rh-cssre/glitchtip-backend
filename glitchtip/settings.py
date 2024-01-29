@@ -207,6 +207,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.microsoft",
     "allauth.socialaccount.providers.nextcloud",
     "allauth.socialaccount.providers.openid_connect",
+    "allauth.socialaccount.providers.okta",
     "anymail",
     "corsheaders",
     "django_extensions",
