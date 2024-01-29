@@ -1,6 +1,8 @@
 import hashlib
 from typing import List, Optional, Union
 
+from django.core.cache import cache
+
 from apps.issue_events.models import IssueEventType
 
 from .schema import EventMessage
@@ -55,3 +57,16 @@ def transform_parameterized_message(message: Union[str, EventMessage]) -> str:
             # Params not provided, return message as is
             return message.message
     return message.formatted
+
+
+def cache_set_nx(key, value, timeout: Optional[int] = None) -> bool:
+    """
+    django-redis style cache set with nx, but with fallback for non-redis
+    """
+    try:
+        return cache.set(key, value, timeout, nx=True)
+    except TypeError:
+        if cache.get(key):
+            return False
+        cache.set(key, value, timeout)
+        return True
