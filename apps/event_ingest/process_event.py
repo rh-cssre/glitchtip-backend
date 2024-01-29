@@ -14,7 +14,14 @@ from user_agents import parse
 
 from alerts.models import Notification
 from apps.issue_events.constants import EventStatus
-from apps.issue_events.models import Issue, IssueEvent, IssueEventType, IssueHash
+from apps.issue_events.models import (
+    Issue,
+    IssueEvent,
+    IssueEventType,
+    IssueHash,
+    TagKey,
+    TagValue,
+)
 from sentry.culprit import generate_culprit
 from sentry.eventtypes.error import ErrorEvent
 from sentry.utils.strings import truncatechars
@@ -367,6 +374,8 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             minute=0, second=0, microsecond=0
         )
         data_stats[hour_received][processing_event.event.project_id] += 1
+
+    # update_tags(processing_events)
     update_statistics(data_stats)
 
 
@@ -391,3 +400,16 @@ def update_statistics(
             "DO UPDATE SET count = projects_eventprojecthourlystatistic.count + EXCLUDED.count;"
         )
         cursor.execute(sql)
+
+
+def update_tags(processing_events: list[ProcessingEvent]):
+    keys = {key for d in processing_events for key in d.event_tags.keys()}
+    values = {value for d in processing_events for value in d.event_tags.values()}
+
+    TagKey.objects.bulk_create([TagKey(key=key) for key in keys], ignore_conflicts=True)
+    TagValue.objects.bulk_create(
+        [TagValue(value=value) for value in values], ignore_conflicts=True
+    )
+    # Postgres cannot return ids with ignore_conflicts
+    tag_keys = TagKey.objects.filter(key__in=keys)
+    tag_values = TagValue.objects.filter(value__in=values)

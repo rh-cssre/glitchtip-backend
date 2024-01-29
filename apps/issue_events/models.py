@@ -4,10 +4,10 @@ from django.contrib.postgres.indexes import GinIndex
 from django.contrib.postgres.search import SearchVectorField
 from django.db import models
 from django.utils import timezone
-from psqlextra.models import PostgresPartitionedModel
-from psqlextra.types import PostgresPartitioningMethod
 
 from glitchtip.base_models import CreatedModel, SoftDeleteModel
+from psqlextra.models import PostgresPartitionedModel
+from psqlextra.types import PostgresPartitioningMethod
 from sentry.constants import MAX_CULPRIT_LENGTH
 
 from .constants import EventStatus, IssueEventType, LogLevel
@@ -21,6 +21,47 @@ class DeferedFieldManager(models.Manager):
 
     def get_queryset(self, *args, **kwargs):
         return super().get_queryset(*args, **kwargs).defer(*self.defered_fields)
+
+
+class TagKey(models.Model):
+    id = models.AutoField(primary_key=True)
+    key = models.CharField(max_length=255, unique=True)
+
+
+class TagValue(models.Model):
+    value = models.CharField(max_length=255, unique=True)
+
+
+# class IssueTag(models.Model):
+#     """
+#     This model is a aggregate of all event level tags for an issue.
+#     It is denormalized data that powers fast search results.
+#     """
+#     issue = models.ForeignKey("Issue", on_delete=models.CASCADE)
+#     tag_key = models.ForeignKey(TagKey, on_delete=models.CASCADE)
+#     tag_value = models.ForeignKey(TagValue, on_delete=models.CASCADE)
+
+#     class Meta:
+#         constraints = [
+#             models.UniqueConstraint(
+#                 fields=["issue", "tag_key", "tag_value"],
+#                 name="issue_tag_key_value_unique",
+#             )
+#         ]
+
+
+# class IssueEventTag(models.Model):
+#     issue_event = models.ForeignKey("IssueEvent", on_delete=models.CASCADE)
+#     tag_key = models.ForeignKey(TagKey, on_delete=models.CASCADE)
+#     tag_value = models.ForeignKey(TagValue, on_delete=models.CASCADE)
+
+#     class Meta:
+#         constraints = [
+#             models.UniqueConstraint(
+#                 fields=["issue_event", "tag_key"],
+#                 name="issue_event_tag_key_unique",
+#             )
+#         ]
 
 
 class Issue(SoftDeleteModel):
@@ -51,7 +92,12 @@ class Issue(SoftDeleteModel):
 
     class Meta:
         base_manager_name = "objects"
-        unique_together = (("project", "short_id"),)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["project", "short_id"],
+                name="project_short_id_unique",
+            )
+        ]
         indexes = [GinIndex(fields=["search_vector"])]
 
     @property
@@ -104,7 +150,12 @@ class UserReport(CreatedModel):
     comments = models.TextField()
 
     class Meta:
-        unique_together = (("project", "event_id"),)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["project", "event_id"],
+                name="project_event_unique",
+            )
+        ]
 
 
 class IssueEvent(PostgresPartitionedModel, models.Model):
