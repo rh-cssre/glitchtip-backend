@@ -1,7 +1,9 @@
-from django.shortcuts import reverse
+from django.urls import reverse
 from model_bakery import baker
-from organizations_ext.models import OrganizationUserRole
+
 from glitchtip.test_utils.test_case import GlitchTipTestCase
+from organizations_ext.models import OrganizationUserRole
+
 from ..models import Release
 
 

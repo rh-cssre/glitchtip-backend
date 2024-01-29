@@ -1,5 +1,6 @@
+from django.urls import reverse
+
 from glitchtip.test_utils.test_case import APIPermissionTestCase
-from django.shortcuts import reverse
 
 
 class ChunkUploadAPIPermissionTests(APIPermissionTestCase):
@@ -19,4 +20,3 @@ class ChunkUploadAPIPermissionTests(APIPermissionTestCase):
         self.assertGetReqStatusCode(self.url, 403)
         self.auth_token.add_permission("project:write")
         self.assertGetReqStatusCode(self.url, 200)
-

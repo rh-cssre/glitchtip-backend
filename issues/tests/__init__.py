@@ -1,1 +1,1 @@
-from glitchtip.test_utils import generators
+from glitchtip.test_utils import generators  # noqa
