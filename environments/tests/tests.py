@@ -1,8 +1,9 @@
-from django.shortcuts import reverse
+from django.urls import reverse
 from model_bakery import baker
 
-from ..models import EnvironmentProject
 from glitchtip.test_utils.test_case import GlitchTipTestCase
+
+from ..models import EnvironmentProject
 
 
 class EnvironmentTestCase(GlitchTipTestCase):
@@ -94,4 +95,3 @@ class EnvironmentProjectTestCase(GlitchTipTestCase):
         res = self.client.put(detail_url, data)
         self.assertContains(res, "true")
         self.assertTrue(EnvironmentProject.objects.filter(is_hidden=True).exists())
-

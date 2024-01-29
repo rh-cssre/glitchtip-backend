@@ -1,4 +1,4 @@
-from django.shortcuts import reverse
+from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
@@ -21,4 +21,3 @@ class StatsV2APITestCase(GlitchTipTestCase):
             {"category": "error", "start": start, "end": end, "field": "sum(quantity)"},
         )
         self.assertEqual(res.status_code, 200)
-

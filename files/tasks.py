@@ -33,10 +33,18 @@ def cleanup_old_files():
     if it hasn't been used for a long time and have no recent event data
     """
     days_ago = now() - timedelta(days=settings.GLITCHTIP_MAX_FILE_LIFE_DAYS)
-    for file_blob in (
-        FileBlob.objects.filter(created__lt=days_ago)
-        .exclude(file__created__gte=days_ago)
-        .exclude(file__releasefile__release__projects__issue__created__gte=days_ago)
-    ):
-        file_blob.blob.delete()  # Delete actual file
-        file_blob.delete()
+
+    while True:
+        file_blobs = (
+            FileBlob.objects.filter(created__lt=days_ago)
+            .exclude(file__created__gte=days_ago)
+            .exclude(file__releasefile__release__projects__issue__created__gte=days_ago)
+        ).only("id", "blob")[:1000]
+        ids = []
+        for file_blob in file_blobs:
+            ids.append(file_blob.id)
+            file_blob.blob.delete()  # Delete actual file
+        if ids:
+            FileBlob.objects.filter(id__in=ids).delete()
+        else:
+            break

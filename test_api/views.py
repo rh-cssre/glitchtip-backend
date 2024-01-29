@@ -1,14 +1,15 @@
-from django.conf import settings
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
-from rest_framework.exceptions import NotFound
 from allauth.account.models import EmailAddress
-from users.models import User
-from organizations_ext.models import Organization
-from teams.models import Team
-from projects.models import Project
+from django.conf import settings
+from rest_framework.exceptions import NotFound
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
 from glitchtip.uptime.models import Monitor
+from organizations_ext.models import Organization
+from projects.models import Project
+from teams.models import Team
+from users.models import User
 
 
 class SeedDataAPIView(APIView):
@@ -57,19 +58,23 @@ class SeedDataAPIView(APIView):
 
         Monitor.objects.filter(name="cytestmonitor").delete()
         Monitor.objects.create(
-            name = "cytestmonitor",
+            name="cytestmonitor",
             organization=organization,
             project=project,
             url="https://www.google.com",
             monitor_type="Ping",
-            interval="00:01:00"
+            interval="00:01:00",
         )
 
-        if (request.query_params.get("extras")):
+        if request.query_params.get("extras"):
             project_name = "SwitchGrip"
-            project2 = Project.objects.create(name=project_name, organization=organization)
+            project2 = Project.objects.create(
+                name=project_name, organization=organization
+            )
             project_name = "PitchFlip"
-            project3 = Project.objects.create(name=project_name, organization=organization, platform="JavaScript")
+            project3 = Project.objects.create(
+                name=project_name, organization=organization, platform="JavaScript"
+            )
             team.projects.add(project)
             team.projects.add(project2)
             team.projects.add(project3)
