@@ -362,7 +362,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         )
         Notification.objects.filter(issues__in=issues_to_reopen).delete()
 
-    # ignore_conflicts because we could have an invalid duplicate event_id
+    # ignore_conflicts because we could have an invalid duplicate event_id, received
     IssueEvent.objects.bulk_create(issue_events, ignore_conflicts=True)
 
     # Group events by time and project for event count statistics
@@ -411,5 +411,5 @@ def update_tags(processing_events: list[ProcessingEvent]):
         [TagValue(value=value) for value in values], ignore_conflicts=True
     )
     # Postgres cannot return ids with ignore_conflicts
-    tag_keys = TagKey.objects.filter(key__in=keys)
-    tag_values = TagValue.objects.filter(value__in=values)
+    # tag_keys = TagKey.objects.filter(key__in=keys)
+    # tag_values = TagValue.objects.filter(value__in=values)

@@ -1,3 +1,4 @@
+from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
 
@@ -17,6 +18,9 @@ class StoreAPITestCase(EventIngestTestCase):
         super().setUp()
         self.url = reverse("api:event_store", args=[self.project.id]) + self.params
         self.event = self.get_json_data("events/test_data/py_hi_event.json")
+
+    def tearDown(self):
+        cache.clear()
 
     def test_store_api(self):
         with self.assertNumQueries(8):

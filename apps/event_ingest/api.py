@@ -6,6 +6,7 @@ from django.conf import settings
 from django.http import HttpResponse
 from ipware import get_client_ip
 from ninja import Router, Schema
+from ninja.errors import ValidationError
 
 from .authentication import EventAuthHttpRequest, event_auth
 from .schema import (
@@ -20,6 +21,7 @@ from .schema import (
     SecuritySchema,
 )
 from .tasks import ingest_event
+from .utils import cache_set_nx
 
 router = Router(auth=event_auth)
 
@@ -73,6 +75,9 @@ async def event_store(
     Event store is the original event ingest API from OSS Sentry but is used less often
     Unlike Envelope, it accepts only one Issue event.
     """
+    if cache_set_nx("uuid" + payload.event_id.hex, True) is False:
+        raise ValidationError([{"message": "Duplicate event id"}])
+
     if client_ip := get_ip_address(request):
         if payload.user:
             payload.user.ip_address = client_ip
@@ -121,7 +126,10 @@ async def event_envelope(
                 project_id=project_id,
                 payload=issue_event_class(**item.dict()),
             )
-            await async_call_celery_task(ingest_event, issue_event.dict())
+            # Faux unique uuid as GlitchTip can accept duplicate UUIDs
+            # The primary key of an event is uuid, received
+            if cache_set_nx("uuid" + issue_event.event_id.hex, True) is True:
+                await async_call_celery_task(ingest_event, issue_event.dict())
         elif item_header.type == "transaction":
             pass
             # ingest_transaction.delay(project_id, {})

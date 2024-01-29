@@ -50,6 +50,24 @@ class TagValue(models.Model):
 #         ]
 
 
+# class IssueEventTag(PostgresPartitionedModel, models.Model):
+#     issue_event = models.ForeignKey("IssueEvent", on_delete=models.CASCADE)
+#     tag_key = models.ForeignKey(TagKey, on_delete=models.CASCADE)
+#     tag_value = models.ForeignKey(TagValue, on_delete=models.CASCADE)
+
+#     class Meta:
+#         constraints = [
+#             models.UniqueConstraint(
+#                 fields=["issue_event", "tag_key"],
+#                 name="issue_event_tag_key_unique",
+#             )
+#         ]
+
+#     class PartitioningMeta:
+#         method = PostgresPartitioningMethod.
+#         key = ["received"]
+
+
 # class IssueEventTag(models.Model):
 #     issue_event = models.ForeignKey("IssueEvent", on_delete=models.CASCADE)
 #     tag_key = models.ForeignKey(TagKey, on_delete=models.CASCADE)
