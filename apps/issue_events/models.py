@@ -32,22 +32,29 @@ class TagValue(models.Model):
     value = models.CharField(max_length=255, unique=True)
 
 
-# class IssueTag(models.Model):
-#     """
-#     This model is a aggregate of all event level tags for an issue.
-#     It is denormalized data that powers fast search results.
-#     """
-#     issue = models.ForeignKey("Issue", on_delete=models.CASCADE)
-#     tag_key = models.ForeignKey(TagKey, on_delete=models.CASCADE)
-#     tag_value = models.ForeignKey(TagValue, on_delete=models.CASCADE)
+class IssueTag(PostgresPartitionedModel, models.Model):
+    """
+    This model is a aggregate of event tags for an issue.
+    It is denormalized data that powers fast search results.
+    """
 
-#     class Meta:
-#         constraints = [
-#             models.UniqueConstraint(
-#                 fields=["issue", "tag_key", "tag_value"],
-#                 name="issue_tag_key_value_unique",
-#             )
-#         ]
+    issue = models.ForeignKey("Issue", on_delete=models.CASCADE)
+    date = models.DateTimeField()
+    tag_key = models.ForeignKey(TagKey, on_delete=models.CASCADE)
+    tag_value = models.ForeignKey(TagValue, on_delete=models.CASCADE)
+    count = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["issue", "date", "tag_key", "tag_value"],
+                name="issue_tag_key_value_unique",
+            )
+        ]
+
+    class PartitioningMeta:
+        method = PostgresPartitioningMethod.RANGE
+        key = ["date"]
 
 
 # class IssueEventTag(PostgresPartitionedModel, models.Model):
