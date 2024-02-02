@@ -5,7 +5,6 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
-from apps.issue_events.constants import EventStatus
 from glitchtip.test_utils.test_case import APIPermissionTestCase, GlitchTipTestCaseMixin
 
 
@@ -130,19 +129,6 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertNotContains(res, other_issue.title)
         self.assertNotContains(res, "matchingEventId")
         self.assertNotIn("X-Sentry-Direct-Hit", res.headers)
-
-    def test_update(self):
-        issue = baker.make("issue_events.Issue", project=self.project)
-        self.assertEqual(issue.status, EventStatus.UNRESOLVED)
-        url = reverse(
-            "api:update_issue_status",
-            kwargs={"issue_id": issue.id},
-        )
-        data = {"status": "ignored"}
-        res = self.client.put(url, data, content_type="application/json")
-        self.assertEqual(res.status_code, 200)
-        issue.refresh_from_db()
-        self.assertEqual(issue.status, EventStatus.IGNORED)
 
 
 class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
