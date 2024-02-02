@@ -47,19 +47,24 @@ class IssueSchema(ModelSchema):
     first_seen: datetime = Field(validation_alias="created")
     last_seen: datetime
     count: str
+    culprit: str
     type: str = Field(validation_alias="get_type_display")
     level: str = Field(validation_alias="get_level_display")
     status: str = Field(validation_alias="get_status_display")
     project: ProjectReference = Field(validation_alias="project")
     short_id: str = Field(validation_alias="short_id_display")
     num_comments: int
-    stats: Optional[dict[str, str]] = {}
+    stats: Optional[dict[str, list[list[float]]]] = {"24h": []}
     share_id: Optional[int] = None
     logger: Optional[str] = None
     permalink: Optional[str] = "Not implemented"
     status_details: Optional[dict[str, str]] = {}
     subscription_details: Optional[str] = None
     user_count: Optional[int] = 0
+
+    @staticmethod
+    def resolve_culprit(obj: Issue):
+        return obj.culprit or ""
 
     class Config:
         model = Issue
@@ -123,7 +128,7 @@ class IssueEventSchema(CamelSchema, ModelSchema, BaseIssueEvent):
     id: str = Field(validation_alias="id.hex")
     event_id: str
     project_id: int = Field(validation_alias="issue.project_id")
-    group_id: int = Field(validation_alias="issue_id")
+    group_id: str
     date_created: datetime = Field(validation_alias="timestamp")
     date_received: datetime = Field(validation_alias="received")
     dist: Optional[str] = None
@@ -148,6 +153,10 @@ class IssueEventSchema(CamelSchema, ModelSchema, BaseIssueEvent):
         model = IssueEvent
         model_fields = ["id", "type", "title"]
         populate_by_name = True
+
+    @staticmethod
+    def resolve_group_id(obj: IssueEvent):
+        return str(obj.issue_id)
 
     @staticmethod
     def resolve_tags(obj: IssueEvent):
