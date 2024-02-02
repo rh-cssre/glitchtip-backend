@@ -121,20 +121,40 @@ async def list_issues(
     organization_slug: str,
     filters: Query[IssueFilters],
     query: Optional[str] = None,
-    sort: Literal[
-        "last_seen",
-        "first_seen",
-        "count",
-        "priority",
-        "-last_seen",
-        "-first_seen",
-        "-count",
-        "-priority",
-    ] = "-last_seen",
+    sort: Optional[sort_options] = "-last_seen",
     environment: Optional[list[str]] = None,
 ):
     qs = get_queryset(request, organization_slug=organization_slug)
     return process_issue_list_queries(qs, filters, sort, query)
+
+status_options = Literal[
+    "resolved",
+    "ignored",
+    "unresolved"
+]
+
+class StatusSchema(Schema):
+    status: status_options
+
+@router.put(
+    "/issues/{int:issue_id}/",
+    response=StatusSchema,
+    by_alias=True,
+)
+@has_permission(["event:read", "event:write", "event:admin"])
+async def update_issue_status(
+    request: AuthHttpRequest,
+    issue_id: int,
+    data: StatusSchema,
+):
+    qs = get_queryset(request)
+    try:
+        issue = await qs.filter(id=issue_id).aget()
+    except Issue.DoesNotExist:
+        raise Http404()
+    issue.status = EventStatus.from_string(data.status)
+    await issue.asave()
+    return {"status": data.status}
 
 
 @router.get(
