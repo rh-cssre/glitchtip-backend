@@ -1,10 +1,18 @@
 import random
+from datetime import timedelta
 
 from django.contrib.postgres.search import SearchVector
 from django.db.models import Value
 from django.utils import timezone
 
-from apps.issue_events.models import Issue, IssueEvent, IssueEventType
+from apps.issue_events.models import (
+    Issue,
+    IssueEvent,
+    IssueEventType,
+    IssueTag,
+    TagKey,
+    TagValue,
+)
 from glitchtip.base_commands import MakeSampleCommand
 from glitchtip.utils import get_random_string
 
@@ -53,6 +61,59 @@ class Command(MakeSampleCommand):
 
         flat_events = [x for xs in issue_events for x in xs]
         IssueEvent.objects.bulk_create(flat_events)
+
+        keys = {
+            key for issue_event in issue_events for key in issue_event[0].tags.keys()
+        }
+        values = {
+            value
+            for issue_event in issue_events
+            for value in issue_event[0].tags.values()
+        }
+        TagKey.objects.bulk_create(
+            [TagKey(key=key) for key in keys], ignore_conflicts=True
+        )
+        TagValue.objects.bulk_create(
+            [TagValue(value=value) for value in values], ignore_conflicts=True
+        )
+        tag_keys = {
+            tag["key"]: tag["id"]
+            for tag in TagKey.objects.filter(key__in=keys).values()
+        }
+        tag_values = {
+            tag["value"]: tag["id"]
+            for tag in TagValue.objects.filter(value__in=values).values()
+        }
+
+        issue_tags = []
+        for i, issue in enumerate(issues):
+            events = issue_events[i]
+            tags = events[0].tags
+            for tag_key, tag_value in tags.items():
+                tag_key_id = tag_keys[tag_key]
+                tag_value_id = tag_values[tag_value]
+                tag_count = max(int(issue.count / 10), 1)
+                # Create a few groups of IssueTags over time
+                for _ in range(tag_count):
+                    # Rather than group to nearest minute, just make it random
+                    # To avoid conflicts. Good enough for performance testing.
+                    tag_date = issue.last_seen - timedelta(
+                        minutes=random.randint(0, 60),
+                        seconds=random.randint(0, 60),
+                        milliseconds=random.randint(0, 1000),
+                        microseconds=random.randint(0, 1000),
+                    )
+                    issue_tags.append(
+                        IssueTag(
+                            issue=issue,
+                            date=tag_date,
+                            tag_key_id=tag_key_id,
+                            tag_value_id=tag_value_id,
+                            count=tag_count,
+                        )
+                    )
+
+        IssueTag.objects.bulk_create(issue_tags)
         self.progress_tick()
 
     def handle(self, *args, **options):
@@ -62,9 +123,9 @@ class Command(MakeSampleCommand):
         self.events_quantity_per = options["events_quantity_per"]
 
         now = timezone.now()
-        start_time = now - timezone.timedelta(days=over_days)
+        start_time = now - timedelta(days=over_days)
         # timedelta between each new issue first_seen
-        issue_delta = timezone.timedelta(seconds=over_days * 86400 / over_days)
+        issue_delta = timedelta(seconds=over_days * 86400 / issue_quantity)
         # timedelta between each event for an issue
         event_delta = issue_delta / 100
 
@@ -91,11 +152,9 @@ class Command(MakeSampleCommand):
             event_count = self.get_events_count()
 
             # Include both realistic looking and random tags
-            tags = generate_tags() | random_tags
-            # if tags:
-            #     tags = {tag[0]: [tag[1]] for tag in tags}
-            # else:
-            #     tags = {}
+            tags = generate_tags() | {
+                tag: random.choice(value) for tag, value in random_tags.items()
+            }
 
             first_seen = start_time
             last_seen = first_seen + event_delta * event_count
@@ -137,6 +196,8 @@ class Command(MakeSampleCommand):
             issue_events.append(events)
             if len(issues) > issue_batch_size:
                 self.create_events_and_issues(issues, issue_events)
+                issues = []
+                issue_events = []
         if issues:
             self.create_events_and_issues(issues, issue_events)
 

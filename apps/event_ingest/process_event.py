@@ -431,8 +431,10 @@ def update_tags(processing_events: list[ProcessingEvent]):
     for processing_event in processing_events:
         if processing_event.issue_id is None:
             continue
+        # Group by most recent hour. More granular allows for a better search
+        # Less granular yields much better tag filter performance
         minute_received = processing_event.event.received.replace(
-            second=0, microsecond=0
+            hour=0, minute=0, second=0, microsecond=0
         )
         for key, value in processing_event.event_tags.items():
             key_id = tag_keys[key]
