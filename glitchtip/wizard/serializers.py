@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from api_tokens.serializers import APITokenSerializer
+from apps.api_tokens.serializers import APITokenSerializer
 from projects.serializers.serializers import ProjectWithKeysSerializer
 
 
