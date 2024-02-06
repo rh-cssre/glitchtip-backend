@@ -53,6 +53,24 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertNotContains(res, not_my_issue.title)
         self.assertEqual(len(res.json()), 1)
 
+    def test_project_issue_list(self):
+        not_my_project = baker.make("projects.Project", organization=self.organization)
+        not_my_issue = baker.make("issue_events.Issue", project=not_my_project)
+        issue = baker.make("issue_events.Issue", project=self.project, short_id=1)
+        baker.make("issue_events.IssueEvent", issue=issue)
+
+        url = reverse(
+            "api:list_project_issues",
+            kwargs={
+                "organization_slug": self.organization.slug,
+                "project_slug": self.project.slug,
+            },
+        )
+        res = self.client.get(url)
+        self.assertContains(res, issue.title)
+        self.assertNotContains(res, not_my_issue.title)
+        self.assertEqual(len(res.json()), 1)
+
     def test_filter_by_date(self):
         """
         A user should be able to filter by start and end datetimes.
