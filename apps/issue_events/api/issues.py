@@ -4,6 +4,7 @@ from typing import Literal, Optional
 
 from django.db.models import Count
 from django.db.models.expressions import RawSQL
+from django.db.models.query import QuerySet
 from django.http import Http404, HttpResponse
 from ninja import Field, Query, Schema
 
@@ -17,16 +18,21 @@ from ..schema import IssueDetailSchema, IssueSchema
 from . import router
 
 
-def get_queryset(request: AuthHttpRequest, organization_slug: Optional[str] = None):
+def get_queryset(
+    request: AuthHttpRequest,
+    organization_slug: Optional[str] = None,
+    project_slug: Optional[str] = None,
+):
     user_id = request.auth.user_id
     qs = Issue.objects.filter(project__organization__users=user_id)
     if organization_slug:
         qs = qs.filter(project__organization__slug=organization_slug)
+    if project_slug:
+        qs = qs.filter(project__slug=project_slug)
     qs = qs.annotate(
         num_comments=Count("comments", distinct=True),
     ).select_related("project")
     return qs
-
 
 @router.get(
     "/issues/{int:issue_id}/",
@@ -52,32 +58,23 @@ class IssueFilters(Schema):
     tags__environment__has_any_keys: list[str] = Field(None, alias="environment")
 
 
-@router.get(
-    "organizations/{slug:organization_slug}/issues/",
-    response=list[IssueSchema],
-    by_alias=True,
-)
-@has_permission(["event:read", "event:write", "event:admin"])
-@paginate
-async def list_issues(
-    request: AuthHttpRequest,
-    response: HttpResponse,
-    organization_slug: str,
+sort_options = Literal[
+    "last_seen",
+    "first_seen",
+    "count",
+    "priority",
+    "-last_seen",
+    "-first_seen",
+    "-count",
+    "-priority",
+]
+
+def filter_issue_list(
+    qs: QuerySet,
     filters: Query[IssueFilters],
+    sort: sort_options,
     query: Optional[str] = None,
-    sort: Literal[
-        "last_seen",
-        "first_seen",
-        "count",
-        "priority",
-        "-last_seen",
-        "-first_seen",
-        "-count",
-        "-priority",
-    ] = "-last_seen",
-    environment: Optional[list[str]] = None,
 ):
-    qs = get_queryset(request, organization_slug=organization_slug)
     if qs_filters := filters.dict(exclude_none=True):
         qs = qs.filter(**qs_filters)
     if query:
@@ -109,4 +106,46 @@ async def list_issues(
         )
 
     return qs.order_by(sort)
-    # return [obj async for obj in qs]
+
+
+@router.get(
+    "organizations/{slug:organization_slug}/issues/",
+    response=list[IssueSchema],
+    by_alias=True,
+)
+@has_permission(["event:read", "event:write", "event:admin"])
+@paginate
+async def list_issues(
+    request: AuthHttpRequest,
+    response: HttpResponse,
+    organization_slug: str,
+    filters: Query[IssueFilters],
+    query: Optional[str] = None,
+    sort: Optional[sort_options] = "-last_seen",
+    environment: Optional[list[str]] = None,
+):
+    qs = get_queryset(request, organization_slug=organization_slug)
+    return filter_issue_list(qs, filters, sort, query)
+
+
+@router.get(
+    "projects/{slug:organization_slug}/{slug:project_slug}/issues/",
+    response=list[IssueSchema],
+    by_alias=True,
+)
+@has_permission(["event:read", "event:write", "event:admin"])
+@paginate
+async def list_project_issues(
+    request: AuthHttpRequest,
+    response: HttpResponse,
+    organization_slug: str,
+    project_slug: str,
+    filters: Query[IssueFilters],
+    query: Optional[str] = None,
+    sort: sort_options = "-last_seen",
+    environment: Optional[list[str]] = None,
+):
+    qs = get_queryset(
+        request, organization_slug=organization_slug, project_slug=project_slug
+    )
+    return filter_issue_list(qs, filters, sort, query)
