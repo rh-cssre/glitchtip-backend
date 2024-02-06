@@ -3,8 +3,8 @@ from timeit import default_timer as timer
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.urls import reverse
 from django.test import RequestFactory
+from django.urls import reverse
 
 from events.models import Event
 from events.test_data.event_generator import get_seeded_benchmark_events
