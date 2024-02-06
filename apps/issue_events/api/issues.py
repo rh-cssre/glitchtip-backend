@@ -69,7 +69,7 @@ sort_options = Literal[
     "-priority",
 ]
 
-def process_issue_list_queries(
+def filter_issue_list(
     qs: QuerySet,
     filters: Query[IssueFilters],
     sort: sort_options,
@@ -125,7 +125,7 @@ async def list_issues(
     environment: Optional[list[str]] = None,
 ):
     qs = get_queryset(request, organization_slug=organization_slug)
-    return process_issue_list_queries(qs, filters, sort, query)
+    return filter_issue_list(qs, filters, sort, query)
 
 
 @router.get(
@@ -148,4 +148,4 @@ async def list_project_issues(
     qs = get_queryset(
         request, organization_slug=organization_slug, project_slug=project_slug
     )
-    return process_issue_list_queries(qs, filters, sort, query)
+    return filter_issue_list(qs, filters, sort, query)
