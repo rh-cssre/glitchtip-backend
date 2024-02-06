@@ -77,9 +77,8 @@ async def get_issue_event(request: AuthHttpRequest, issue_id: int, event_id: uui
         ),
         next=Subquery(qs.filter(received__gt=OuterRef("received")).values("id")[:1]),
     )
-    try:
-        event = await qs.filter(id=event_id).aget()
-    except IssueEvent.DoesNotExist:
+    event = await qs.filter(id=event_id).afirst()
+    if not event:
         raise Http404()
     event.user_report = await get_user_report(event.id)
     return event
@@ -126,9 +125,8 @@ async def get_project_issue_event(
         ),
         next=Subquery(qs.filter(received__gt=OuterRef("received")).values("id")[:1]),
     )
-    try:
-        event = await qs.aget(id=event_id)
-    except IssueEvent.DoesNotExist:
+    event = await qs.filter(id=event_id).afirst()
+    if not event:
         raise Http404()
     event.user_report = await get_user_report(event.id)
     return event
@@ -145,7 +143,7 @@ async def get_event_json(
     request: AuthHttpRequest, organization_slug: str, issue_id: int, event_id: uuid.UUID
 ):
     qs = get_queryset(request, organization_slug=organization_slug, issue_id=issue_id)
-    try:
-        return await qs.aget(id=event_id)
-    except IssueEvent.DoesNotExist:
-        raise Http404()
+    obj = await qs.filter(id=event_id).aget()
+    if not obj:
+        return Http404()
+    return obj

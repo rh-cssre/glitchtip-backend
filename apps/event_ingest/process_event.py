@@ -402,6 +402,12 @@ def update_statistics(
         cursor.execute(sql)
 
 
+TagStats = defaultdict[
+    datetime,
+    defaultdict[int, defaultdict[int, defaultdict[int, int]]],
+]
+
+
 def update_tags(processing_events: list[ProcessingEvent]):
     keys = {key for d in processing_events for key in d.event_tags.keys()}
     values = {value for d in processing_events for value in d.event_tags.values()}
@@ -411,5 +417,46 @@ def update_tags(processing_events: list[ProcessingEvent]):
         [TagValue(value=value) for value in values], ignore_conflicts=True
     )
     # Postgres cannot return ids with ignore_conflicts
-    # tag_keys = TagKey.objects.filter(key__in=keys)
-    # tag_values = TagValue.objects.filter(value__in=values)
+    tag_keys = {
+        tag["key"]: tag["id"] for tag in TagKey.objects.filter(key__in=keys).values()
+    }
+    tag_values = {
+        tag["value"]: tag["id"]
+        for tag in TagValue.objects.filter(value__in=values).values()
+    }
+
+    tag_stats: TagStats = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
+    )
+    for processing_event in processing_events:
+        if processing_event.issue_id is None:
+            continue
+        # Group by most recent hour. More granular allows for a better search
+        # Less granular yields much better tag filter performance
+        minute_received = processing_event.event.received.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        for key, value in processing_event.event_tags.items():
+            key_id = tag_keys[key]
+            value_id = tag_values[value]
+            tag_stats[minute_received][processing_event.issue_id][key_id][value_id] += 1
+
+    if not tag_stats:
+        return
+
+    data = [
+        [date, issue_id, key_id, value_id, count]
+        for date, d1 in tag_stats.items()
+        for issue_id, d2 in d1.items()
+        for key_id, d3 in d2.items()
+        for value_id, count in d3.items()
+    ]
+    with connection.cursor() as cursor:
+        args_str = ",".join(cursor.mogrify("(%s,%s,%s,%s,%s)", x) for x in data)
+        sql = (
+            "INSERT INTO issue_events_issuetag (date, issue_id, tag_key_id, tag_value_id, count)\n"
+            f"VALUES {args_str}\n"
+            "ON CONFLICT (issue_id, date, tag_key_id, tag_value_id)\n"
+            "DO UPDATE SET count = issue_events_issuetag.count + EXCLUDED.count;"
+        )
+        cursor.execute(sql)
