@@ -375,7 +375,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         )
         data_stats[hour_received][processing_event.event.project_id] += 1
 
-    update_tags(processing_events)
+    # update_tags(processing_events)
     update_statistics(data_stats)
 
 
