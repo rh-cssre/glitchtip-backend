@@ -375,7 +375,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         )
         data_stats[hour_received][processing_event.event.project_id] += 1
 
-    # update_tags(processing_events)
+    update_tags(processing_events)
     update_statistics(data_stats)
 
 
@@ -431,8 +431,8 @@ def update_tags(processing_events: list[ProcessingEvent]):
     for processing_event in processing_events:
         if processing_event.issue_id is None:
             continue
-        # Group by most recent hour. More granular allows for a better search
-        # Less granular yields much better tag filter performance
+        # Group by day. More granular allows for a better search
+        # Less granular yields better tag filter performance
         minute_received = processing_event.event.received.replace(
             hour=0, minute=0, second=0, microsecond=0
         )
