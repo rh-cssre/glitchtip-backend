@@ -9,6 +9,7 @@ from apps.issue_events.models import (
     Issue,
     IssueEvent,
     IssueEventType,
+    IssueTag,
     TagKey,
     TagValue,
 )
@@ -75,44 +76,44 @@ class Command(MakeSampleCommand):
         TagValue.objects.bulk_create(
             [TagValue(value=value) for value in values], ignore_conflicts=True
         )
-        # tag_keys = {
-        #     tag["key"]: tag["id"]
-        #     for tag in TagKey.objects.filter(key__in=keys).values()
-        # }
-        # tag_values = {
-        #     tag["value"]: tag["id"]
-        #     for tag in TagValue.objects.filter(value__in=values).values()
-        # }
+        tag_keys = {
+            tag["key"]: tag["id"]
+            for tag in TagKey.objects.filter(key__in=keys).values()
+        }
+        tag_values = {
+            tag["value"]: tag["id"]
+            for tag in TagValue.objects.filter(value__in=values).values()
+        }
 
-        # issue_tags = []
-        # for i, issue in enumerate(issues):
-        #     events = issue_events[i]
-        #     tags = events[0].tags
-        #     for tag_key, tag_value in tags.items():
-        #         tag_key_id = tag_keys[tag_key]
-        #         tag_value_id = tag_values[tag_value]
-        #         tag_count = max(int(issue.count / 10), 1)
-        #         # Create a few groups of IssueTags over time
-        #         for _ in range(tag_count):
-        #             # Rather than group to nearest minute, just make it random
-        #             # To avoid conflicts. Good enough for performance testing.
-        #             tag_date = issue.last_seen - timedelta(
-        #                 minutes=random.randint(0, 60),
-        #                 seconds=random.randint(0, 60),
-        #                 milliseconds=random.randint(0, 1000),
-        #                 microseconds=random.randint(0, 1000),
-        #             )
-        #             issue_tags.append(
-        #                 IssueTagKey(
-        #                     issue=issue,
-        #                     date=tag_date,
-        #                     tag_key_id=tag_key_id,
-        #                     # tag_value_id=tag_value_id,
-        #                     count=tag_count,
-        #                 )
-        #             )
+        issue_tags = []
+        for i, issue in enumerate(issues):
+            events = issue_events[i]
+            tags = events[0].tags
+            for tag_key, tag_value in tags.items():
+                tag_key_id = tag_keys[tag_key]
+                tag_value_id = tag_values[tag_value]
+                tag_count = max(int(issue.count / 10), 1)
+                # Create a few groups of IssueTags over time
+                for _ in range(tag_count):
+                    # Rather than group to nearest minute, just make it random
+                    # To avoid conflicts. Good enough for performance testing.
+                    tag_date = issue.last_seen - timedelta(
+                        minutes=random.randint(0, 60),
+                        seconds=random.randint(0, 60),
+                        milliseconds=random.randint(0, 1000),
+                        microseconds=random.randint(0, 1000),
+                    )
+                    issue_tags.append(
+                        IssueTag(
+                            issue=issue,
+                            date=tag_date,
+                            tag_key_id=tag_key_id,
+                            tag_value_id=tag_value_id,
+                            count=tag_count,
+                        )
+                    )
 
-        # IssueTag.objects.bulk_create(issue_tags)
+        IssueTag.objects.bulk_create(issue_tags)
         self.progress_tick()
 
     def handle(self, *args, **options):

@@ -10,7 +10,7 @@ from psqlextra.partitioning.config import PostgresPartitioningConfig
 
 issue_strategy = PostgresCurrentTimePartitioningStrategy(
     size=PostgresTimePartitionSize(days=1),
-    count=3,
+    count=7,
     max_age=relativedelta(months=3),
 )
 
