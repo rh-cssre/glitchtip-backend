@@ -42,6 +42,7 @@ async def get_queryset(
     )
     return qs.select_related("project")
 
+
 @router.get(
     "/issues/{int:issue_id}/",
     response=IssueDetailSchema,
@@ -76,6 +77,7 @@ sort_options = Literal[
     "-count",
     "-priority",
 ]
+
 
 def filter_issue_list(
     qs: QuerySet,
