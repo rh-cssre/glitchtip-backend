@@ -326,7 +326,7 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         baker.make(
             "issue_events.IssueEvent",
             issue=event.issue,
-            tags={tag_browser: tag_value, tag_browser: tag_value2},
+            tags={tag_browser: tag_value},
             _quantity=5,
         )
         baker.make(
