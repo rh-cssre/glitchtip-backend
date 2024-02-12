@@ -1,8 +1,10 @@
-from django.shortcuts import reverse
-from rest_framework.test import APITestCase
+from django.urls import reverse
 from model_bakery import baker
+from rest_framework.test import APITestCase
+
 from glitchtip import test_utils  # pylint: disable=unused-import
 from organizations_ext.models import OrganizationUserRole
+
 from ..models import ProjectKey
 
 

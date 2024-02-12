@@ -1,10 +1,12 @@
 import shutil
-from django.shortcuts import reverse
-from rest_framework.test import APITestCase
-from model_bakery import baker
-from glitchtip import test_utils  # pylint: disable=unused-import
-from ..models import Event
 
+from django.urls import reverse
+from model_bakery import baker
+from rest_framework.test import APITestCase
+
+from glitchtip import test_utils  # pylint: disable=unused-import
+
+from ..models import Event
 
 sample_event = {
     "event_id": "cf536c31b68a473f97e579507ce155e3",

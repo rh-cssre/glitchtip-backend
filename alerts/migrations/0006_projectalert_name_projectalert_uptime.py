@@ -4,20 +4,22 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('alerts', '0005_alter_alertrecipient_url'),
+        ("alerts", "0005_alter_alertrecipient_url"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='projectalert',
-            name='name',
+            model_name="projectalert",
+            name="name",
             field=models.CharField(blank=True, max_length=255),
         ),
         migrations.AddField(
-            model_name='projectalert',
-            name='uptime',
-            field=models.BooleanField(default=False, help_text='Send alert on any uptime monitor check failure'),
+            model_name="projectalert",
+            name="uptime",
+            field=models.BooleanField(
+                default=False,
+                help_text="Send alert on any uptime monitor check failure",
+            ),
         ),
     ]

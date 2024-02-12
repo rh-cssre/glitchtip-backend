@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 
 from anonymizeip import anonymize_ip
 from django.db import transaction
+from django.db.models.expressions import OuterRef, RawSQL
 from django.db.utils import IntegrityError
 from ipware import get_client_ip
 from rest_framework import serializers
@@ -14,6 +15,7 @@ from glitchtip.serializers import FlexibleDateTimeField
 from issues.models import EventType, Issue
 from issues.serializers import BaseBreadcrumbsSerializer
 from issues.tasks import update_search_index_issue
+from observability.metrics import events_counter, issues_counter
 from releases.models import Release
 from sentry.eventtypes.base import DefaultEvent
 from sentry.eventtypes.error import ErrorEvent
@@ -28,6 +30,7 @@ from .fields import (
     QueryStringField,
 )
 from .models import Event, LogLevel
+from .utils import generate_hash
 
 
 def replace(data: Union[str, dict, list], match: str, repl: str):
@@ -99,6 +102,7 @@ class SentrySDKEventSerializer(BaseSerializer):
     """Represents events coming from a OSS sentry SDK client"""
 
     breadcrumbs = serializers.JSONField(required=False)
+    fingerprint = serializers.ListField(child=serializers.CharField(), required=False)
     tags = ForgivingHStoreField(required=False)
     event_id = serializers.UUIDField(required=False, default=uuid.uuid4)
     extra = serializers.JSONField(required=False)
@@ -106,26 +110,36 @@ class SentrySDKEventSerializer(BaseSerializer):
     server_name = serializers.CharField(required=False)
     sdk = serializers.JSONField(required=False)
     platform = serializers.CharField(required=False)
-    release = serializers.CharField(required=False, allow_null=True)
+    release = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     environment = ForgivingDisallowRegexField(
         required=False, allow_null=True, disallow_regex=r"^[^\n\r\f\/]*$"
     )
     _meta = serializers.JSONField(required=False)
 
-    def get_environment(self, name: str, project):
-        environment, _ = Environment.objects.get_or_create(
-            name=name[: Environment._meta.get_field("name").max_length],
-            organization=project.organization,
-        )
-        environment.projects.add(project)
-        return environment
+    def set_environment(self, name: str, project) -> str:
+        if not project.environment_id and name:
+            environment, _ = Environment.objects.get_or_create(
+                name=name[: Environment._meta.get_field("name").max_length],
+                organization=project.organization,
+            )
+            environment.projects.add(project)
+            project.environment_id = environment.id
+            return environment.name
+        return name
 
-    def get_release(self, version: str, project):
-        release, _ = Release.objects.get_or_create(
-            version=version, organization=project.organization
-        )
-        release.projects.add(project)
-        return release
+    def set_release(self, version: str, project) -> str:
+        """
+        Set project.release_id if not already so
+        Create needed Release if necessary
+        """
+        if not project.release_id and version:
+            release, _ = Release.objects.get_or_create(
+                version=version, organization=project.organization
+            )
+            release.projects.add(project)
+            project.release_id = release.id
+            return release.version
+        return version
 
 
 class FormattedMessageSerializer(serializers.Serializer):
@@ -159,7 +173,7 @@ class MessageField(serializers.CharField):
 
 class LogEntrySerializer(serializers.Serializer):
     formatted = serializers.CharField(required=False)
-    message = serializers.CharField(required=False)
+    message = serializers.CharField(required=False, allow_blank=True)
     params = serializers.JSONField(required=False)
 
     def validate(self, attrs):
@@ -310,14 +324,22 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
             for value in exception.get("values", []):
                 self.normalize_stacktrace(value.get("stacktrace"))
 
-        if release := data.get("release"):
-            release = self.get_release(release, project)
+        tags = []
+        release = self.set_release(data.get("release"), project)
+        if project.release_id:
+            tags.append(("release", release))
+        environment = self.set_environment(data.get("environment"), project)
+        if project.environment_id:
+            tags.append(("environment", environment))
+        if data.get("server_name"):
+            tags.append(("server_name", data.get("server_name")))
 
         for Processor in EVENT_PROCESSORS:
-            Processor(project, release, data).run()
+            Processor(project, project.release_id, data).run()
 
         title = eventtype.get_title(metadata)
         culprit = eventtype.get_location(data)
+        issue_hash = generate_hash(title, culprit, self.type, data.get("fingerprint"))
         request = data.get("request")
         breadcrumbs = data.get("breadcrumbs")
         level = None
@@ -341,27 +363,34 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 project.save(update_fields=["first_event"])
             defaults = {
                 "metadata": sanitize_bad_postgres_json(metadata),
+                "title": sanitize_bad_postgres_chars(title),
+                "culprit": sanitize_bad_postgres_chars(culprit),
+                "type": self.type,
             }
             if level:
                 defaults["level"] = level
 
-            if environment := data.get("environment"):
-                environment = self.get_environment(data["environment"], project)
-            tags = []
-            if environment:
-                tags.append(("environment", environment.name))
-            if release:
-                tags.append(("release", release.version))
             tags = self.generate_tags(data, tags)
             defaults["tags"] = {tag[0]: [tag[1]] for tag in tags}
 
-            issue, _ = Issue.objects.get_or_create(
-                title=sanitize_bad_postgres_chars(title),
-                culprit=sanitize_bad_postgres_chars(culprit),
-                project_id=project.id,
-                type=self.type,
-                defaults=defaults,
-            )
+            issue_created = False
+            # Similar to get_or_create but with multiple tables
+            try:
+                issue = Issue.objects.get(
+                    project_id=project.id,
+                    issuehash__value=issue_hash,
+                )
+            except Issue.DoesNotExist:
+                with transaction.atomic():
+                    issue = Issue.objects.create(project_id=project.id, **defaults)
+                    try:
+                        issue.issuehash_set.create(value=issue_hash, project=project)
+                        issue_created = True
+                    except IntegrityError:
+                        issue = Issue.objects.get(
+                            project_id=project.id,
+                            issuehash__value=issue_hash,
+                        )
 
             json_data = {
                 "breadcrumbs": breadcrumbs,
@@ -379,8 +408,8 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 "type": self.type.label,
             }
 
-            if environment:
-                json_data["environment"] = environment.name
+            if project.environment_id:
+                json_data["environment"] = data.get("environment")
             if data.get("logentry"):
                 json_data["logentry"] = data.get("logentry")
 
@@ -413,10 +442,13 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                 "errors": errors,
                 "timestamp": data.get("timestamp"),
                 "data": sanitize_bad_postgres_json(json_data),
-                "release": release,
+                "release_id": project.release_id,
             }
             if level:
                 params["level"] = level
+            events_counter.labels(
+                project.slug, project.organization.slug, issue.title
+            ).inc()
             try:
                 event = Event.objects.create(**params)
             except IntegrityError as err:
@@ -428,9 +460,21 @@ class StoreDefaultSerializer(SentrySDKEventSerializer):
                     ) from err
                 raise err
 
-        issue.check_for_status_update()
-        # Expire after 1 hour - in case of major backup
-        update_search_index_issue(args=[issue.pk], countdown=10, expires=3600)
+        if issue_created:  # Do it right now, so that new issues look correct
+            issues_counter.labels(project.slug, project.organization.slug).inc()
+            event_data = Event.objects.filter(issue_id=OuterRef("id")).values("data")[
+                :1
+            ]
+            event_vector = event_data.annotate(
+                search_vector=RawSQL("select generate_issue_tsvector(data)", [])
+            ).values("search_vector")
+            Issue.objects.filter(pk=issue.pk).update(
+                search_vector=event_vector, last_seen=event.created
+            )
+        else:  # Updates can be slower and debounced
+            issue.check_for_status_update()
+            # Expire after 1 hour - in case of major backup
+            update_search_index_issue(args=[issue.pk])
 
         return event
 
