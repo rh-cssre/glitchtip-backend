@@ -1,7 +1,8 @@
 from django.urls import reverse
 from model_bakery import baker
-from organizations_ext.models import OrganizationUserRole
+
 from glitchtip.test_utils.test_case import APIPermissionTestCase
+from organizations_ext.models import OrganizationUserRole
 
 
 class IssueAPIPermissionTests(APIPermissionTestCase):
@@ -141,3 +142,49 @@ class EventAPIPermissionTests(APIPermissionTestCase):
         self.assertGetReqStatusCode(url, 403)
         self.auth_token.add_permission("event:read")
         self.assertGetReqStatusCode(url, 200)
+
+
+class CommentsAPIPermissionTests(APIPermissionTestCase):
+    def setUp(self):
+        self.create_user_org()
+        self.set_client_credentials(self.auth_token.token)
+        self.project = baker.make("projects.Project", organization=self.organization)
+        self.issue = baker.make("issues.Issue", project=self.project)
+        self.comment = baker.make("issues.Comment", issue=self.issue)
+        self.list_url = reverse(
+            "issue-comments-list",
+            kwargs={"issue_pk": self.issue.pk},
+        )
+        self.detail_url = reverse(
+            "issue-comments-detail",
+            kwargs={"issue_pk": self.issue.pk, "pk": self.comment.pk},
+        )
+
+    def test_list(self):
+        self.assertGetReqStatusCode(self.list_url, 403)
+
+        self.auth_token.add_permission("event:read")
+        self.assertGetReqStatusCode(self.list_url, 200)
+
+    def test_create(self):
+        self.auth_token.add_permission("event:read")
+        data = {"data": {"text": "Test"}}
+        self.assertPostReqStatusCode(self.list_url, data, 403)
+
+        self.auth_token.add_permission("event:write")
+        self.assertPostReqStatusCode(self.list_url, data, 201)
+
+    def test_destroy(self):
+        self.auth_token.add_permissions(["event:read", "event:write"])
+        self.assertDeleteReqStatusCode(self.detail_url, 403)
+
+        self.auth_token.add_permission("event:admin")
+        self.assertDeleteReqStatusCode(self.detail_url, 204)
+
+    def test_update(self):
+        self.auth_token.add_permission("event:read")
+        data = {"data": {"text": "Test"}}
+        self.assertPutReqStatusCode(self.detail_url, data, 403)
+
+        self.auth_token.add_permission("event:write")
+        self.assertPutReqStatusCode(self.detail_url, data, 200)

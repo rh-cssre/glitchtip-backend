@@ -1,12 +1,15 @@
-from unittest.mock import patch
 from unittest import skipIf
-from django.shortcuts import reverse
+from unittest.mock import patch
+
 from django.conf import settings
+from django.urls import reverse
 from django.utils import timezone
-from rest_framework.test import APITestCase
-from model_bakery import baker
+from djstripe.enums import BillingScheme
 from freezegun import freeze_time
-from glitchtip import test_utils  # pylint: disable=unused-import
+from model_bakery import baker
+from rest_framework.test import APITestCase
+
+from glitchtip.test_utils import generators  # pylint: disable=unused-import
 
 
 class SubscriptionAPITestCase(APITestCase):
@@ -37,16 +40,26 @@ class SubscriptionAPITestCase(APITestCase):
         customer = baker.make("djstripe.Customer", subscriber=self.organization)
         subscription = baker.make(
             "djstripe.Subscription",
+            status="active",
             customer=customer,
             livemode=False,
             created=timezone.make_aware(timezone.datetime(2020, 1, 2)),
         )
-        # Should only get most recent
+        # Should get most recent
         baker.make(
             "djstripe.Subscription",
+            status="active",
             customer=customer,
             livemode=False,
             created=timezone.make_aware(timezone.datetime(2020, 1, 1)),
+        )
+        # should not get canceled subscriptions
+        baker.make(
+            "djstripe.Subscription",
+            status="canceled",
+            customer=customer,
+            livemode=False,
+            created=timezone.make_aware(timezone.datetime(2020, 1, 3)),
         )
         baker.make("djstripe.Subscription")
         url = reverse("subscription-detail", args=[self.organization.slug])
@@ -54,6 +67,9 @@ class SubscriptionAPITestCase(APITestCase):
         self.assertContains(res, subscription.id)
 
     def test_events_count(self):
+        """
+        Event count should be accurate and work when there are multiple subscriptions for a given customer
+        """
         customer = baker.make("djstripe.Customer", subscriber=self.organization)
         baker.make(
             "djstripe.Subscription",
@@ -61,6 +77,14 @@ class SubscriptionAPITestCase(APITestCase):
             livemode=False,
             current_period_start=timezone.make_aware(timezone.datetime(2020, 1, 2)),
             current_period_end=timezone.make_aware(timezone.datetime(2020, 2, 2)),
+        )
+        baker.make(
+            "djstripe.Subscription",
+            customer=customer,
+            livemode=False,
+            status="Cancelled",
+            current_period_start=timezone.make_aware(timezone.datetime(2019, 1, 2)),
+            current_period_end=timezone.make_aware(timezone.datetime(2019, 2, 2)),
         )
         url = (
             reverse("subscription-detail", args=[self.organization.slug])
@@ -104,21 +128,27 @@ class SubscriptionAPITestCase(APITestCase):
         res = self.client.get(url)
         self.assertEqual(sum(res.data.values()), 0)
 
-    @patch("djstripe.models.Customer.subscribe")
-    def test_create(self, djstripe_customer_subscribe_mock):
-        customer = baker.make(
-            "djstripe.Customer", subscriber=self.organization, livemode=False
+    @skipIf(
+        settings.STRIPE_TEST_PUBLIC_KEY == "fake", "requires real Stripe test API key"
+    )
+    def test_create_free(self):
+        """
+        Users should not be able to create a free subscription if they have another non-canceled subscription
+        """
+        price = baker.make(
+            "djstripe.Price",
+            unit_amount=0,
+            id="price_1KO6e1J4NuO0bv3IEXhpWpzt",
+            billing_scheme=BillingScheme.per_unit,
         )
-        plan = baker.make("djstripe.Plan", amount=0)
-        subscription = baker.make(
-            "djstripe.Subscription",
-            customer=customer,
-            livemode=False,
-        )
-        djstripe_customer_subscribe_mock.return_value = subscription
-        data = {"plan": plan.id, "organization": self.organization.id}
+        baker.make("djstripe.Product", id="prod_L4F8CtH20Oad6S", default_price=price)
+        data = {"price": price.id, "organization": self.organization.id}
         res = self.client.post(self.url, data)
-        self.assertEqual(res.data["plan"], plan.id)
+        self.assertEqual(res.data["price"], price.id)
+
+        # Second attempt should fail
+        res = self.client.post(self.url, data)
+        self.assertEqual(res.status_code, 409)
 
     def test_create_invalid_org(self):
         """Only owners may create subscriptions"""
@@ -133,28 +163,28 @@ class SubscriptionAPITestCase(APITestCase):
 
 class ProductAPITestCase(APITestCase):
     def test_product_list(self):
-        plan = baker.make(
-            "djstripe.Plan",
-            amount=0,
-            livemode=False,
+        price = baker.make(
+            "djstripe.Price",
+            unit_amount=0,
+            billing_scheme=BillingScheme.per_unit,
             active=True,
             product__active=True,
             product__livemode=False,
             product__metadata={"events": 10, "is_public": "true"},
         )
-        inactive_plan = baker.make(
-            "djstripe.Plan",
-            amount=0,
-            livemode=False,
+        inactive_price = baker.make(
+            "djstripe.Price",
+            unit_amount=0,
+            billing_scheme=BillingScheme.per_unit,
             active=False,
             product__active=False,
             product__livemode=False,
             product__metadata={"events": 10, "is_public": "true"},
         )
-        hidden_plan = baker.make(
-            "djstripe.Plan",
-            amount=0,
-            livemode=False,
+        hidden_price = baker.make(
+            "djstripe.Price",
+            unit_amount=0,
+            billing_scheme=BillingScheme.per_unit,
             active=True,
             product__active=True,
             product__livemode=False,
@@ -163,32 +193,27 @@ class ProductAPITestCase(APITestCase):
         user = baker.make("users.user")
         self.client.force_login(user)
         res = self.client.get(reverse("product-list"))
-        self.assertContains(res, plan.id)
-        self.assertNotContains(res, inactive_plan.id)
-        self.assertNotContains(res, hidden_plan.id)
+        self.assertContains(res, price.id)
+        self.assertNotContains(res, inactive_price.id)
+        self.assertNotContains(res, hidden_price.id)
 
 
+# Price ID must be from a real price actually set up on Stripe Test account
 class StripeAPITestCase(APITestCase):
     @skipIf(
         settings.STRIPE_TEST_PUBLIC_KEY == "fake", "requires real Stripe test API key"
     )
     def test_create_checkout(self):
         url = reverse("create-stripe-subscription-checkout")
-        plan = baker.make(
-            "djstripe.Plan",
-            amount=1,
-            livemode=False,
-            active=True,
-            id="price_HNfVNr3ohLWkmv",
-            description="Small - 100k events",
-            product__active=True,
-            product__livemode=False,
+        price = baker.make(
+            "djstripe.Price",
+            id="price_1MZhMWJ4NuO0bv3IGMoDoFFI",
         )
         user = baker.make("users.user")
         organization = baker.make("organizations_ext.Organization")
         organization.add_user(user)
         self.client.force_login(user)
-        data = {"plan": plan.id, "organization": organization.id}
+        data = {"price": price.id, "organization": organization.id}
 
         res = self.client.post(url, data)
         self.assertEqual(res.status_code, 200)
@@ -213,31 +238,15 @@ class SubscriptionIntegrationAPITestCase(APITestCase):
         self.organization = baker.make("organizations_ext.Organization")
         self.organization.add_user(self.user)
         # Make these in this manner to avoid syncing data to stripe actual
-        self.plan = baker.make("djstripe.Plan", active=True, amount=0)
+        self.price = baker.make(
+            "djstripe.Price",
+            active=True,
+            unit_amount=0,
+            billing_scheme=BillingScheme.per_unit,
+        )
         self.customer = baker.make(
             "djstripe.Customer", subscriber=self.organization, livemode=False
         )
         self.client.force_login(self.user)
         self.list_url = reverse("subscription-list")
         self.detail_url = reverse("subscription-detail", args=[self.organization.slug])
-
-    @patch("djstripe.models.Customer.subscribe")
-    def test_new_org_flow(self, djstripe_customer_subscribe_mock):
-        """Test checking if subscription exists and when not, creating a free tier one"""
-        res = self.client.get(self.detail_url)
-        self.assertFalse(res.data["id"])  # No subscription, user should create one
-
-        subscription = baker.make(
-            "djstripe.Subscription",
-            customer=self.customer,
-            livemode=False,
-        )
-        djstripe_customer_subscribe_mock.return_value = subscription
-
-        data = {"plan": self.plan.id, "organization": self.organization.id}
-        res = self.client.post(self.list_url, data)
-        self.assertContains(res, self.plan.id, status_code=201)
-        djstripe_customer_subscribe_mock.assert_called_once()
-
-        res = self.client.get(self.detail_url)
-        self.assertEqual(res.data["id"], subscription.id)
