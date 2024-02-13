@@ -7,8 +7,8 @@ from django.core.files import File as DjangoFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from model_bakery import baker
 
+from apps.files.models import File
 from difs.tasks import ChecksumMismatched, difs_create_file_from_chunks
-from files.models import File
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 
 
@@ -83,7 +83,9 @@ class DifsAssembleAPITestCase(GlitchTipTestCase):
 class DsymsAPIViewTestCase(GlitchTipTestCase):
     def setUp(self):
         self.create_user_and_project()
-        self.url = f"/api/0/projects/{self.organization.slug}/{self.project.slug}/files/dsyms/"  # noqa
+        self.url = (
+            f"/api/0/projects/{self.organization.slug}/{self.project.slug}/files/dsyms/"  # noqa
+        )
         self.uuid = "afb116cf-efec-49af-a7fe-281ac680d8a0"
         self.checksum = "da39a3ee5e6b4b0d3255bfef95601890afd80709"
 
@@ -94,9 +96,7 @@ class DsymsAPIViewTestCase(GlitchTipTestCase):
 
         uploaded_zip_file = MagicMock()
         uploaded_zip_file.namelist.return_value = iter([f"proguard/{self.uuid}.txt"])
-        uploaded_zip_file.open.return_value.__enter__.return_value = (
-            proguard_file  # noqa
-        )
+        uploaded_zip_file.open.return_value.__enter__.return_value = proguard_file  # noqa
 
         with patch("zipfile.is_zipfile", return_value=True), patch(
             "zipfile.ZipFile"

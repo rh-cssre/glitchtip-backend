@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 
 from symbolic import SourceMapView, SourceView
 
-from files.models import File
+from apps.files.models import File
 from sentry.utils.safe import get_path
 
 from .base import EventProcessorBase

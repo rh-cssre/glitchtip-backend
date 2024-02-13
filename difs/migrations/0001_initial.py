@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("files", "0004_auto_20210509_1658"),
+        ("files", "0001_squashed_0007_remove_file_blobs_file_blob"),
         ("projects", "0008_alter_projectkey_created"),
     ]
 

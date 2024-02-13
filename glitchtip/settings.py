@@ -224,7 +224,6 @@ INSTALLED_APPS += [
     "alerts",
     "ninja",
     "environments",
-    "files",
     "organizations_ext",
     "events",
     "issues",
@@ -238,6 +237,7 @@ INSTALLED_APPS += [
     "releases",
     "difs",
     "apps.api_tokens",
+    "apps.files",
 ]
 
 if GLITCHTIP_ENABLE_NEW_ISSUES:

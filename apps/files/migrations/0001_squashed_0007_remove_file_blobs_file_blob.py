@@ -4,23 +4,7 @@ from django.db import migrations, models
 import django.db.models.deletion
 
 
-# Functions from the following migrations need manual copying.
-# Move them and any dependencies into this file, then update the
-# RunPython operations to refer to the local versions:
-# files.migrations.0007_remove_file_blobs_file_blob
-
-
 class Migration(migrations.Migration):
-    replaces = [
-        ("files", "0001_initial"),
-        ("files", "0002_fileblob_organizations"),
-        ("files", "0003_auto_20210507_1549"),
-        ("files", "0004_auto_20210509_1658"),
-        ("files", "0005_file_type_fileblobindex"),
-        ("files", "0006_alter_file_headers"),
-        ("files", "0007_remove_file_blobs_file_blob"),
-    ]
-
     initial = True
 
     dependencies = [

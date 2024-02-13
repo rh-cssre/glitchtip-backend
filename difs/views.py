@@ -12,7 +12,7 @@ from rest_framework import exceptions, status, views
 from rest_framework.response import Response
 from symbolic import ProguardMapper
 
-from files.models import File, FileBlob
+from apps.files.models import File, FileBlob
 from organizations_ext.models import Organization
 from projects.models import Project
 
@@ -181,9 +181,7 @@ class DsymsAPIView(views.APIView):
                         )
                         if result is None:
                             return Response(
-                                {
-                                    "error": "Invalid proguard mapping file uploaded"
-                                },  # noqa
+                                {"error": "Invalid proguard mapping file uploaded"},  # noqa
                                 status=status.HTTP_400_BAD_REQUEST,
                             )
                         results.append(result)

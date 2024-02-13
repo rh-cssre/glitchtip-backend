@@ -2,7 +2,7 @@ from rest_framework import exceptions, mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from files.tasks import assemble_artifacts_task
+from apps.files.tasks import assemble_artifacts_task
 from organizations_ext.models import Organization
 from projects.models import Project
 

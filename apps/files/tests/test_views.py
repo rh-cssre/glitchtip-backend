@@ -1,3 +1,4 @@
+import os
 from io import BytesIO
 
 from django.core.files.uploadedfile import InMemoryUploadedFile, SimpleUploadedFile
@@ -55,7 +56,8 @@ class ReleaseAssembleAPITests(GlitchTipTestCase):
         filename = "runtime-es2015.456e9ca9da400255beb4.js"
         map_filename = filename + ".map"
         zip_file = SimpleUploadedFile(
-            checksum, open("files/tests/test_zip/" + checksum, "rb").read()
+            checksum,
+            open(os.path.dirname(__file__) + "/test_zip/" + checksum, "rb").read(),
         )
         FileBlob.objects.create(blob=zip_file, size=3635, checksum=checksum)
         res = self.client.post(self.url, {"checksum": checksum, "chunks": [checksum]})

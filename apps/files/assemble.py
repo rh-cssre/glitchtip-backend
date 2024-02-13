@@ -7,8 +7,6 @@ from enum import Enum
 from os import path
 
 from django.core.cache import cache
-from django.core.files import File
-from django.db import IntegrityError, transaction
 
 from organizations_ext.models import Organization
 from releases.models import Release, ReleaseFile

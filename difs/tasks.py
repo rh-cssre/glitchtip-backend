@@ -6,10 +6,10 @@ from hashlib import sha1
 from celery import shared_task
 from symbolic import Archive
 
+from apps.files.models import File, FileBlob
 from difs.models import DebugInformationFile
 from difs.stacktrace_processor import StacktraceProcessor
 from events.models import Event
-from files.models import File, FileBlob
 from projects.models import Project
 
 
