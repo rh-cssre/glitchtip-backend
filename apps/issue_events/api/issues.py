@@ -2,6 +2,7 @@ import re
 import shlex
 from datetime import datetime, timedelta
 from typing import Any, Literal, Optional
+from uuid import UUID
 
 from django.db.models import Count
 from django.db.models.expressions import RawSQL
@@ -121,10 +122,14 @@ def filter_issue_list(
     filters: Query[IssueFilters],
     sort: sort_options,
     query: Optional[str] = None,
+    event_id: Optional[UUID] = None,
 ):
     if qs_filters := filters.dict(exclude_none=True):
         qs = qs.filter(**qs_filters)
-    if query:
+
+    if event_id:
+        qs = qs.filter(issueevent__id=event_id)
+    elif query:
         queries = shlex.split(query)
         # First look for structured queries
         for i, query in enumerate(queries):
@@ -174,11 +179,19 @@ async def list_issues(
     organization_slug: str,
     filters: Query[IssueFilters],
     query: Optional[str] = None,
-    sort: Optional[sort_options] = "-last_seen",
+    sort: sort_options = "-last_seen",
     environment: Optional[list[str]] = None,
 ):
     qs = await get_queryset(request, organization_slug=organization_slug)
-    return filter_issue_list(qs, filters, sort, query)
+    event_id: Optional[UUID] = None
+    if query:
+        try:
+            event_id = UUID(query)
+            request.matching_event_id = event_id
+            response["X-Sentry-Direct-Hit"] = "1"
+        except ValueError:
+            pass
+    return filter_issue_list(qs, filters, sort, query, event_id)
 
 
 @router.get(
@@ -201,4 +214,12 @@ async def list_project_issues(
     qs = await get_queryset(
         request, organization_slug=organization_slug, project_slug=project_slug
     )
-    return filter_issue_list(qs, filters, sort, query)
+    event_id: Optional[UUID] = None
+    if query:
+        try:
+            event_id = UUID(query)
+            request.matching_event_id = event_id
+            response["X-Sentry-Direct-Hit"] = "1"
+        except ValueError:
+            pass
+    return filter_issue_list(qs, filters, sort, query, event_id)
