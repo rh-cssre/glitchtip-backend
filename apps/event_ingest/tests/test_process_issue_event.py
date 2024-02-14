@@ -1,6 +1,8 @@
+import shutil
 import uuid
 
 from django.urls import reverse
+from model_bakery import baker
 
 from apps.issue_events.constants import EventStatus, LogLevel
 from apps.issue_events.models import Issue, IssueEvent, IssueHash
@@ -88,6 +90,88 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         process_issue_events([event])
         self.assertEqual(Issue.objects.count(), 1)
         self.assertEqual(IssueEvent.objects.count(), 2)
+
+    def test_process_sourcemap(self):
+        sample_event = {
+            "exception": {
+                "values": [
+                    {
+                        "type": "Error",
+                        "value": "The error",
+                        "stacktrace": {
+                            "frames": [
+                                {
+                                    "filename": "http://localhost:8080/dist/bundle.js",
+                                    "function": "?",
+                                    "in_app": True,
+                                    "lineno": 2,
+                                    "colno": 74016,
+                                },
+                                {
+                                    "filename": "http://localhost:8080/dist/bundle.js",
+                                    "function": "?",
+                                    "in_app": True,
+                                    "lineno": 2,
+                                    "colno": 74012,
+                                },
+                                {
+                                    "filename": "http://localhost:8080/dist/bundle.js",
+                                    "function": "?",
+                                    "in_app": True,
+                                    "lineno": 2,
+                                    "colno": 73992,
+                                },
+                            ]
+                        },
+                        "mechanism": {"type": "onerror", "handled": False},
+                    }
+                ]
+            },
+            "level": "error",
+            "platform": "javascript",
+            "event_id": "0691751a89db419994efac8ac9b00a5d",
+            "timestamp": 1648414309.82,
+            "environment": "production",
+            "request": {
+                "url": "http://localhost:8080/",
+                "headers": {
+                    "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:98.0) Gecko/20100101 Firefox/98.0"
+                },
+            },
+        }
+        release = baker.make("releases.Release", organization=self.organization)
+        release.projects.add(self.project)
+        blob_bundle = baker.make("files.FileBlob", blob="uploads/file_blobs/bundle.js")
+        blob_bundle_map = baker.make(
+            "files.FileBlob", blob="uploads/file_blobs/bundle.js.map"
+        )
+        release_file_bundle = baker.make(
+            "releases.ReleaseFile",
+            release=release,
+            file__name="bundle.js",
+            file__blob=blob_bundle,
+        )
+        release_file_bundle_map = baker.make(
+            "releases.ReleaseFile",
+            release=release,
+            file__name="bundle.js.map",
+            file__blob=blob_bundle_map,
+        )
+        shutil.copyfile(
+            "./events/tests/test_data/bundle.js", "./uploads/file_blobs/bundle.js"
+        )
+        shutil.copyfile(
+            "./events/tests/test_data/bundle.js.map",
+            "./uploads/file_blobs/bundle.js.map",
+        )
+        data = sample_event | {"release": release.version}
+
+        event = InterchangeIssueEvent(
+            project_id=self.project.id,
+            payload=IssueEventSchema(**data),
+        )
+        process_issue_events([event])
+        self.assertTrue(IssueEvent.objects.filter(release=release).exists())
 
 
 class SentryCompatTestCase(EventIngestTestCase):

@@ -167,6 +167,9 @@ class IssueEvent(PostgresPartitionedModel, models.Model):
     # This could be HStore, but jsonb is just as good and removes need for
     # 'django.contrib.postgres' which makes several unnecessary SQL calls
     tags = models.JSONField()
+    release = models.ForeignKey(
+        "releases.Release", blank=True, null=True, on_delete=models.SET_NULL
+    )
 
     class PartitioningMeta:
         method = PostgresPartitioningMethod.RANGE
