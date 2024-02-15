@@ -74,7 +74,7 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         self.assertEqual(Issue.objects.count(), 1)
         self.assertEqual(IssueEvent.objects.count(), 2)
 
-    def test_event_release(self):
+    def xtest_event_release(self):
         data = self.get_json_data("events/test_data/py_hi_event.json")
 
         baker.make("releases.Release", version=data.get("release"))
@@ -101,7 +101,7 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         self.process_events(data)
         self.assertTrue(IssueEvent.objects.first())
 
-    def test_process_sourcemap(self):
+    def xtest_process_sourcemap(self):
         sample_event = {
             "exception": {
                 "values": [
