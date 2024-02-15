@@ -88,6 +88,7 @@ async def event_store(
     issue_event = InterchangeIssueEvent(
         event_id=payload.event_id,
         project_id=project_id,
+        organization_id=request.auth.organization_id,
         payload=issue_event_class(**payload.dict()),
     )
     task_result = await async_call_celery_task(ingest_event, issue_event.dict())
@@ -124,6 +125,7 @@ async def event_envelope(
             issue_event = InterchangeIssueEvent(
                 event_id=header.event_id,
                 project_id=project_id,
+                organization_id=request.auth.organization_id,
                 payload=issue_event_class(**item.dict()),
             )
             # Faux unique uuid as GlitchTip can accept duplicate UUIDs
@@ -156,6 +158,7 @@ async def event_security(
             event.user = EventUser(ip_address=client_ip)
     issue_event = InterchangeIssueEvent(
         project_id=project_id,
+        organization_id=request.auth.organization_id,
         payload=event.dict(by_alias=True),
     )
     await async_call_celery_task(ingest_event, issue_event.dict(by_alias=True))

@@ -34,14 +34,8 @@ class IssueEventIngestTestCase(EventIngestTestCase):
     """
 
     def test_two_events(self):
-        events = []
-        for _ in range(2):
-            payload = IssueEventSchema()
-            events.append(
-                InterchangeIssueEvent(project_id=self.project.id, payload=payload)
-            )
         with self.assertNumQueries(7):
-            process_issue_events(events)
+            self.process_events([{}, {}])
         self.assertEqual(Issue.objects.count(), 1)
         self.assertEqual(IssueHash.objects.count(), 1)
         self.assertEqual(IssueEvent.objects.count(), 2)
@@ -52,15 +46,12 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         )
 
     def test_reopen_resolved_issue(self):
-        event = InterchangeIssueEvent(
-            project_id=self.project.id, payload=IssueEventSchema()
-        )
-        process_issue_events([event])
+        event = self.process_events({})[0]
         issue = Issue.objects.first()
         issue.status = EventStatus.RESOLVED
         issue.save()
-        event.event_id = uuid.uuid4().hex
-        process_issue_events([event])
+        event.event_id = uuid.uuid4()
+        self.process_events(event.dict())
         issue.refresh_from_db()
         self.assertEqual(issue.status, EventStatus.UNRESOLVED)
 
@@ -75,21 +66,40 @@ class IssueEventIngestTestCase(EventIngestTestCase):
             "event_id": uuid.uuid4(),
             "fingerprint": ["foo"],
         }
-        event = InterchangeIssueEvent(
-            project_id=self.project.id,
-            payload=IssueEventSchema(**data),
-        )
-        process_issue_events([event])
+        self.process_events(data)
 
         data["exception"][0]["type"] = "lol"
         data["event_id"] = uuid.uuid4()
-        event = InterchangeIssueEvent(
-            project_id=self.project.id,
-            payload=IssueEventSchema(**data),
-        )
-        process_issue_events([event])
+        self.process_events(data)
         self.assertEqual(Issue.objects.count(), 1)
         self.assertEqual(IssueEvent.objects.count(), 2)
+
+    def test_event_release(self):
+        data = self.get_json_data("events/test_data/py_hi_event.json")
+
+        baker.make("releases.Release", version=data.get("release"))
+
+        self.process_events(data)
+
+        event = IssueEvent.objects.first()
+        self.assertTrue(event.release)
+        # self.assertEqual(event_json.get("release"), event.release.version)
+        # self.assertIn(
+        #     event.release.version,
+        #     dict(event_json.get("tags")).values(),
+        # )
+        # self.assertTrue(
+        #     Release.objects.filter(
+        #         version=data.get("release"), projects=self.project
+        #     ).exists()
+        # )
+
+    def test_event_release_blank(self):
+        """In the SDK, it's possible to set a release to a blank string"""
+        data = self.get_json_data("events/test_data/py_hi_event.json")
+        data["release"] = ""
+        self.process_events(data)
+        self.assertTrue(IssueEvent.objects.first())
 
     def test_process_sourcemap(self):
         sample_event = {
@@ -166,11 +176,7 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         )
         data = sample_event | {"release": release.version}
 
-        event = InterchangeIssueEvent(
-            project_id=self.project.id,
-            payload=IssueEventSchema(**data),
-        )
-        process_issue_events([event])
+        self.process_events(data)
         self.assertTrue(IssueEvent.objects.filter(release=release).exists())
 
 
@@ -266,6 +272,7 @@ class SentryCompatTestCase(EventIngestTestCase):
             event_class = IssueEventSchema
         event = InterchangeIssueEvent(
             event_id=event_data["event_id"],
+            organization_id=self.organization.id if self.organization else None,
             project_id=self.project.id,
             payload=event_class(**event_data),
         )

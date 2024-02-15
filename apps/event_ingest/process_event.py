@@ -22,6 +22,7 @@ from apps.issue_events.models import (
     TagKey,
     TagValue,
 )
+from releases.models import Release
 from sentry.culprit import generate_culprit
 from sentry.eventtypes.error import ErrorEvent
 from sentry.utils.strings import truncatechars
@@ -198,6 +199,20 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
     error, or ignore. If the SDK sends "weird" data, we want to log that.
     It's better to save a minimal event than to ignore it.
     """
+    # for ingest_event in ingest_events:
+    #     version = ingest_event.payload.release
+    #     environment = ingest_event.payload.environment
+    #     project_id = ingest_event.project_id
+    #     organization_id = ingest_event.organization_id
+    # new_releases = Release.objects.bulk_create(
+    #     [Release(version=version, organization_id=1)], ignore_conflicts=True
+    # )
+
+    # release, _ = Release.objects.get_or_create(
+    #     version=version, organization=project.organization
+    # )
+    # release.projects.add(project)
+
     # Collected/calculated event data while processing
     processing_events: list[ProcessingEvent] = []
     # Collect Q objects for bulk issue hash lookup
@@ -364,6 +379,9 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
 
     # ignore_conflicts because we could have an invalid duplicate event_id, received
     IssueEvent.objects.bulk_create(issue_events, ignore_conflicts=True)
+
+    # for processing_event in processing_events:
+    #     JavascriptEventProcessor(project.release_id, data).run()
 
     # Group events by time and project for event count statistics
     data_stats: defaultdict[datetime, defaultdict[int, int]] = defaultdict(

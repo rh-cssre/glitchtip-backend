@@ -370,6 +370,7 @@ class InterchangeIssueEvent(Schema):
 
     event_id: uuid.UUID = Field(default_factory=uuid.uuid4)
     project_id: int
+    organization_id: int
     received: datetime = Field(default_factory=now)
     payload: Union[
         IssueEventSchema, ErrorIssueEventSchema, CSPIssueEventSchema

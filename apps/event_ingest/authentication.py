@@ -77,6 +77,7 @@ async def get_project(request: HttpRequest) -> Optional[Project]:
         .only(
             "id",
             "scrub_ip_addresses",
+            "organization_id",
             "organization__is_accepting_events",
             "organization__scrub_ip_addresses",
         )
