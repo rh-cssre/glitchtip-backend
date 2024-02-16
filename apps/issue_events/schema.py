@@ -61,10 +61,18 @@ class IssueSchema(ModelSchema):
     status_details: Optional[dict[str, str]] = {}
     subscription_details: Optional[str] = None
     user_count: Optional[int] = 0
+    matching_event_id: Optional[str] = Field(
+        default=None, serialization_alias="matchingEventId"
+    )
 
     @staticmethod
     def resolve_culprit(obj: Issue):
         return obj.culprit or ""
+
+    @staticmethod
+    def resolve_matching_event_id(obj: Issue, context):
+        if event_id := context["request"].matching_event_id:
+            return event_id.hex
 
     class Config:
         model = Issue

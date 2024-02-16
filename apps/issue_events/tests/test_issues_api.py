@@ -1,14 +1,17 @@
 import datetime
 
 from django.contrib.postgres.search import SearchVector
-from django.db.models import Value
+from django.db.models import F, Value
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from freezegun import freeze_time
 from model_bakery import baker
 
+from apps.event_ingest.model_functions import PipeConcat
 from glitchtip.test_utils.test_case import APIPermissionTestCase, GlitchTipTestCaseMixin
+
+from ..models import Issue
 
 
 class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
@@ -125,13 +128,44 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
             project=self.project,
             search_vector=SearchVector(Value("apple sauce")),
         )
+        event = baker.make("issue_events.IssueEvent", issue=issue)
         other_issue = baker.make("issue_events.Issue", project=self.project)
 
         res = self.client.get(self.list_url + "?query=is:unresolved apple+sauce")
         self.assertContains(res, issue.title)
         self.assertNotContains(res, other_issue.title)
-        self.assertNotContains(res, "matchingEventId")
+        # Not sure how to do this in Ninja without always removing None field values
+        # self.assertNotContains(res, "matchingEventId")
         self.assertNotIn("X-Sentry-Direct-Hit", res.headers)
+
+        res = self.client.get(self.list_url + "?query=is:unresolved apple sauce")
+        self.assertContains(res, issue.title)
+        self.assertNotContains(res, other_issue.title)
+
+        res = self.client.get(self.list_url + '?query=is:unresolved "apple sauce"')
+        self.assertContains(res, issue.title)
+        self.assertNotContains(res, other_issue.title)
+
+        res = self.client.get(self.list_url + "?query=" + event.id.hex)
+        self.assertContains(res, issue.title)
+        self.assertNotContains(res, other_issue.title)
+        self.assertContains(res, "matchingEventId")
+        self.assertContains(res, event.id.hex)
+        self.assertEqual(res.headers.get("X-Sentry-Direct-Hit"), "1")
+
+        event3 = baker.make(
+            "issue_events.IssueEvent", issue=issue, data={"name": "plum sauce"}
+        )
+        Issue.objects.filter(id=issue.id).update(
+            search_vector=SearchVector(
+                PipeConcat(F("search_vector"), SearchVector(Value(event3.data["name"])))
+            )
+        )
+        issue.search_vector = SearchVector(Value("apple sauce plum "))
+        res = self.client.get(self.list_url + '?query=is:unresolved "plum sauce"')
+        self.assertContains(res, event3.issue.title)
+        res = self.client.get(self.list_url + '?query=is:unresolved "apple sauce"')
+        self.assertContains(res, event.issue.title)
 
     def test_list_relative_datetime_filter(self):
         now = timezone.now()
