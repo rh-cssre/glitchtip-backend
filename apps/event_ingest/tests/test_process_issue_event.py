@@ -6,6 +6,7 @@ from model_bakery import baker
 
 from apps.issue_events.constants import EventStatus, LogLevel
 from apps.issue_events.models import Issue, IssueEvent, IssueHash
+from apps.releases.models import Release
 from projects.models import EventProjectHourlyStatistic
 
 from ..process_event import process_issue_events
@@ -74,7 +75,7 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         self.assertEqual(Issue.objects.count(), 1)
         self.assertEqual(IssueEvent.objects.count(), 2)
 
-    def xtest_event_release(self):
+    def test_event_release(self):
         data = self.get_json_data("events/test_data/py_hi_event.json")
 
         baker.make("releases.Release", version=data.get("release"))
@@ -83,16 +84,11 @@ class IssueEventIngestTestCase(EventIngestTestCase):
 
         event = IssueEvent.objects.first()
         self.assertTrue(event.release)
-        # self.assertEqual(event_json.get("release"), event.release.version)
-        # self.assertIn(
-        #     event.release.version,
-        #     dict(event_json.get("tags")).values(),
-        # )
-        # self.assertTrue(
-        #     Release.objects.filter(
-        #         version=data.get("release"), projects=self.project
-        #     ).exists()
-        # )
+        self.assertTrue(
+            Release.objects.filter(
+                version=data.get("release"), projects=self.project
+            ).exists()
+        )
 
     def test_event_release_blank(self):
         """In the SDK, it's possible to set a release to a blank string"""
@@ -155,13 +151,13 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         blob_bundle_map = baker.make(
             "files.FileBlob", blob="uploads/file_blobs/bundle.js.map"
         )
-        release_file_bundle = baker.make(
+        baker.make(
             "releases.ReleaseFile",
             release=release,
             file__name="bundle.js",
             file__blob=blob_bundle,
         )
-        release_file_bundle_map = baker.make(
+        baker.make(
             "releases.ReleaseFile",
             release=release,
             file__name="bundle.js.map",

@@ -3,7 +3,7 @@ from rest_framework import exceptions, serializers
 from events.models import Event
 from glitchtip.serializers import FlexibleDateTimeField
 from projects.serializers.base_serializers import ProjectReferenceSerializer
-from releases.serializers import ReleaseSerializer
+from apps.releases.serializers import ReleaseSerializer
 from sentry.interfaces.stacktrace import get_context
 from user_reports.serializers import UserReportSerializer
 from users.serializers import UserSerializer

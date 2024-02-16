@@ -8,8 +8,8 @@ from os import path
 
 from django.core.cache import cache
 
+from apps.releases.models import Release, ReleaseFile
 from organizations_ext.models import Organization
-from releases.models import Release, ReleaseFile
 from sentry.utils.zip import safe_extract_zip
 
 from .exceptions import AssembleArtifactsError, AssembleChecksumMismatch
@@ -120,12 +120,12 @@ def assemble_artifacts(organization, version, checksum, chunks):
         with open(full_path, "rb") as fp:
             file.putfile(fp)
 
-        kwargs = {
-            "organization_id": organization.id,
-            "release": release,
-            "name": artifact_url,
-            # "dist": dist,
-        }
+        # kwargs = {
+        #     "organization_id": organization.id,
+        #     "release": release,
+        #     "name": artifact_url,
+        #     # "dist": dist,
+        # }
 
         release_file, created = ReleaseFile.objects.get_or_create(
             release=release, name=artifact_url, defaults={"file": file}

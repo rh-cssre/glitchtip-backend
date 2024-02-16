@@ -22,7 +22,7 @@ from apps.issue_events.models import (
     TagKey,
     TagValue,
 )
-from releases.models import Release
+from apps.releases.models import Release, ReleaseProject
 from sentry.culprit import generate_culprit
 from sentry.eventtypes.error import ErrorEvent
 from sentry.utils.strings import truncatechars
@@ -199,19 +199,34 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
     error, or ignore. If the SDK sends "weird" data, we want to log that.
     It's better to save a minimal event than to ignore it.
     """
-    # for ingest_event in ingest_events:
-    #     version = ingest_event.payload.release
-    #     environment = ingest_event.payload.environment
-    #     project_id = ingest_event.project_id
-    #     organization_id = ingest_event.organization_id
-    # new_releases = Release.objects.bulk_create(
-    #     [Release(version=version, organization_id=1)], ignore_conflicts=True
-    # )
-
-    # release, _ = Release.objects.get_or_create(
-    #     version=version, organization=project.organization
-    # )
-    # release.projects.add(project)
+    releases_set = {
+        (event.payload.release, event.project_id, event.organization_id)
+        for event in ingest_events
+        if event.payload.release
+    }
+    # environment = ingest_event.payload.environment
+    Release.objects.bulk_create(
+        [
+            Release(version=version, organization_id=organization_id)
+            for (version, _, organization_id) in releases_set
+        ],
+        ignore_conflicts=True,
+    )
+    releases = Release.objects.filter(
+        version__in={version for (version, _, _) in releases_set},
+        organization_id__in={
+            organization_id for (_, _, organization_id) in releases_set
+        },
+    )
+    release_projects: list[ReleaseProject] = []
+    for release in releases:
+        project_id = next(
+            project_id
+            for (version, project_id, _) in releases_set
+            if release.version == version
+        )
+        release_projects.append(ReleaseProject(project_id=project_id, release=release))
+    ReleaseProject.objects.bulk_create(release_projects, ignore_conflicts=True)
 
     # Collected/calculated event data while processing
     processing_events: list[ProcessingEvent] = []
@@ -355,6 +370,14 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 processing_event.issue_id = IssueHash.objects.get(
                     project_id=project_id, value=issue_hash
                 ).issue_id
+        release_id = next(
+            (
+                release.id
+                for release in releases
+                if release.version == processing_event.event_tags.get("release")
+            ),
+            None,
+        )
         issue_events.append(
             IssueEvent(
                 id=processing_event.event.event_id,
@@ -366,6 +389,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 transaction=processing_event.transaction,
                 data=processing_event.event_data,
                 tags=processing_event.event_tags,
+                release_id=release_id,
             )
         )
 

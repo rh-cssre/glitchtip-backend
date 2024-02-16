@@ -9,7 +9,9 @@ class Release(CreatedModel):
     organization = models.ForeignKey(
         "organizations_ext.Organization", on_delete=models.CASCADE
     )
-    projects = models.ManyToManyField("projects.Project", related_name="releases")
+    projects = models.ManyToManyField(
+        "projects.Project", related_name="releases", through="ReleaseProject"
+    )
     version = models.CharField(max_length=255)
     ref = models.CharField(
         max_length=255, null=True, blank=True, help_text="May be branch or tag name"

@@ -74,7 +74,7 @@ class ReleaseViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def assemble(self, request, organization_slug: str, version: str):
         organization = self.get_organization()
-        release = self.get_object()
+        # release = self.get_object()
         serializer = AssembleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 

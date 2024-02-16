@@ -16,7 +16,7 @@ from glitchtip.test_utils import generators  # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.models import EventStatus, Issue
 from observability.metrics import events_counter, issues_counter
-from releases.models import Release
+from apps.releases.models import Release
 
 from ..models import Event, LogLevel
 from ..test_data.csp import mdn_sample_csp
@@ -119,13 +119,13 @@ class EventStoreTestCase(APITestCase):
     def test_performance(self):
         with open("events/test_data/py_hi_event.json") as json_file:
             data = json.load(json_file)
-        with self.assertNumQueries(18):
+        with self.assertNumQueries(19):
             res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 
         # Second event should have less queries
         data["event_id"] = "6600a066e64b4caf8ed7ec5af64ac4bb"
-        with self.assertNumQueries(10):
+        with self.assertNumQueries(8):
             res = self.client.post(self.url, data, format="json")
         self.assertEqual(res.status_code, 200)
 

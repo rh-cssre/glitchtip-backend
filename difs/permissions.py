@@ -1,4 +1,4 @@
-from releases.permissions import ReleasePermission
+from apps.releases.permissions import ReleasePermission
 
 
 class DifsAssemblePermission(ReleasePermission):
