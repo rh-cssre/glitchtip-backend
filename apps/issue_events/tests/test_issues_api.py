@@ -1,8 +1,11 @@
+import datetime
+
 from django.contrib.postgres.search import SearchVector
 from django.db.models import Value
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
+from freezegun import freeze_time
 from model_bakery import baker
 
 from glitchtip.test_utils.test_case import APIPermissionTestCase, GlitchTipTestCaseMixin
@@ -129,6 +132,41 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertNotContains(res, other_issue.title)
         self.assertNotContains(res, "matchingEventId")
         self.assertNotIn("X-Sentry-Direct-Hit", res.headers)
+
+    def test_list_relative_datetime_filter(self):
+        now = timezone.now()
+        last_minute = now - datetime.timedelta(minutes=1)
+        with freeze_time(last_minute):
+            baker.make("issue_events.IssueEvent", issue__project=self.project)
+
+        two_minutes_ago = now - datetime.timedelta(minutes=2)
+        with freeze_time(two_minutes_ago):
+            baker.make("issue_events.IssueEvent", issue__project=self.project)
+
+        yesterday = now - datetime.timedelta(days=1)
+        with freeze_time(yesterday):
+            baker.make("issue_events.IssueEvent", issue__project=self.project)
+
+        url = self.list_url
+        with freeze_time(now):
+            res = self.client.get(url, {"start": "now-1m"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.json()), 1)
+
+        with freeze_time(now):
+            res = self.client.get(url, {"start": "now-2m"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.json()), 2)
+
+        with freeze_time(now):
+            res = self.client.get(url, {"start": "now-24h", "end": "now"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.json()), 3)
+
+        with freeze_time(now):
+            res = self.client.get(url, {"end": "now-3m"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.json()), 1)
 
     def test_tag_space(self):
         tag_name = "os.name"

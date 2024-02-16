@@ -1,12 +1,16 @@
+import re
 import shlex
-from datetime import datetime
-from typing import Literal, Optional
+from datetime import datetime, timedelta
+from typing import Any, Literal, Optional
 
 from django.db.models import Count
 from django.db.models.expressions import RawSQL
 from django.db.models.query import QuerySet
 from django.http import Http404, HttpResponse
+from django.utils import timezone
 from ninja import Field, Query, Schema
+from pydantic.functional_validators import BeforeValidator
+from typing_extensions import Annotated
 
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.pagination import paginate
@@ -60,9 +64,42 @@ async def get_issue(request: AuthHttpRequest, issue_id: int):
         raise Http404()
 
 
+RELATIVE_TIME_REGEX = re.compile(r"now\s*\-\s*\d+\s*(m|h|d)\s*$")
+
+
+def relative_to_datetime(v: Any) -> datetime:
+    """
+    Allow relative terms like now or now-1h. Only 0 or 1 subtraction operation is permitted.
+
+    Accepts
+    - now
+    - - (subtraction)
+    - m (minutes)
+    - h (hours)
+    - d (days)
+    """
+    result = timezone.now()
+    if v == "now":
+        return result
+    if RELATIVE_TIME_REGEX.match(v):
+        spaces_stripped = v.replace(" ", "")
+        numbers = int(re.findall(r"\d+", spaces_stripped)[0])
+        if spaces_stripped[-1] == "m":
+            result -= timedelta(minutes=numbers)
+        if spaces_stripped[-1] == "h":
+            result -= timedelta(hours=numbers)
+        if spaces_stripped[-1] == "d":
+            result -= timedelta(days=numbers)
+        return result
+    return v
+
+
+RelativeDateTime = Annotated[datetime, BeforeValidator(relative_to_datetime)]
+
+
 class IssueFilters(Schema):
-    first_seen__gte: datetime = Field(None, alias="start")
-    first_seen__lte: datetime = Field(None, alias="end")
+    first_seen__gte: RelativeDateTime = Field(None, alias="start")
+    first_seen__lte: RelativeDateTime = Field(None, alias="end")
     project__in: list[str] = Field(None, alias="project")
     tags__environment__has_any_keys: list[str] = Field(None, alias="environment")
 
