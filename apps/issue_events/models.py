@@ -32,71 +32,33 @@ class TagValue(models.Model):
     value = models.CharField(max_length=255, unique=True)
 
 
-# class IssueTagKey(models.Model):
-#     issue = models.ForeignKey("Issue", on_delete=models.CASCADE)
-#     tag_key = models.ForeignKey(TagKey, on_delete=models.CASCADE)
+class IssueTag(PostgresPartitionedModel, models.Model):
+    """
+    This model is a aggregate of event tags for an issue.
+    It is denormalized data that powers fast search results.
+    """
 
-#     class Meta:
-#         constraints = [
-#             models.UniqueConstraint(
-#                 fields=["issue", "tag_key"],
-#                 name="issue_tag_key_unique",
-#             )
-#         ]
+    issue = models.ForeignKey("Issue", on_delete=models.CASCADE)
+    date = models.DateTimeField()
+    tag_key = models.ForeignKey(TagKey, on_delete=models.CASCADE)
+    tag_value = models.ForeignKey(TagValue, on_delete=models.CASCADE)
+    count = models.PositiveIntegerField(default=1)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["issue", "date", "tag_key", "tag_value"],
+                name="issue_tag_key_value_unique",
+            )
+        ]
 
-# class IssueTagValue(PostgresPartitionedModel, models.Model):
-#     """
-#     This model is a aggregate of event tags for an issue.
-#     It is denormalized data that powers fast search results.
-#     """
-
-#     issue_tag_key = models.ForeignKey(IssueTagKey, on_delete=models.CASCADE)
-#     date = models.DateTimeField()
-#     tag_value = models.ForeignKey(TagValue, on_delete=models.CASCADE)
-#     count = models.PositiveIntegerField(default=1)
-
-#     class Meta:
-#         constraints = [
-#             models.UniqueConstraint(
-#                 fields=["issue_tag_key", "date", "tag_value"],
-#                 name="issue_tag_value_unique",
-#             )
-#         ]
-
-#     class PartitioningMeta:
-#         method = PostgresPartitioningMethod.RANGE
-#         key = ["date"]
-
-
-# class IssueTag(PostgresPartitionedModel, models.Model):
-#     """
-#     This model is a aggregate of event tags for an issue.
-#     It is denormalized data that powers fast search results.
-#     """
-
-#     issue = models.ForeignKey("Issue", on_delete=models.CASCADE)
-#     date = models.DateTimeField()
-#     tag_key = models.ForeignKey(TagKey, on_delete=models.CASCADE)
-#     tag_value = models.ForeignKey(TagValue, on_delete=models.CASCADE)
-#     count = models.PositiveIntegerField(default=1)
-
-#     class Meta:
-#         constraints = [
-#             models.UniqueConstraint(
-#                 fields=["issue", "date", "tag_key", "tag_value"],
-#                 name="issue_tag_key_value_unique",
-#             )
-#         ]
-
-#     class PartitioningMeta:
-#         method = PostgresPartitioningMethod.RANGE
-#         key = ["date"]
+    class PartitioningMeta:
+        method = PostgresPartitioningMethod.RANGE
+        key = ["date"]
 
 
 class Issue(SoftDeleteModel):
     culprit = models.CharField(max_length=1024, blank=True, null=True)
-    # has_seen = models.BooleanField(default=False)
     is_public = models.BooleanField(default=False)
     level = models.PositiveSmallIntegerField(
         choices=LogLevel.choices, default=LogLevel.ERROR
@@ -117,8 +79,6 @@ class Issue(SoftDeleteModel):
     count = models.PositiveIntegerField(default=1, editable=False)
     first_seen = models.DateTimeField(default=timezone.now, db_index=True)
     last_seen = models.DateTimeField(default=timezone.now, db_index=True)
-    # keys = ArrayField(models.PositiveBigIntegerField())
-    # keys2 = models.JSONField()
 
     objects = DeferedFieldManager(["search_vector"])
 
@@ -132,8 +92,6 @@ class Issue(SoftDeleteModel):
         ]
         indexes = [
             GinIndex(fields=["search_vector"]),
-            # GinIndex(fields=["keys"]),
-            # GinIndex(fields=["keys2"]),
         ]
 
     @property

@@ -19,7 +19,7 @@ class EnvelopeAPITestCase(EventIngestTestCase):
         )
 
     def test_envelope_api(self):
-        with self.assertNumQueries(8):
+        with self.assertNumQueries(13):
             res = self.client.post(
                 self.url, self.small_event, content_type="application/json"
             )
