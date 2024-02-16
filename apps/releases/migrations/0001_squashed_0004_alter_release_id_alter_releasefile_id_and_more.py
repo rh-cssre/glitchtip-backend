@@ -76,7 +76,6 @@ class Migration(migrations.Migration):
                     models.ManyToManyField(
                         related_name="releases",
                         to="projects.project",
-                        through="releases.ReleaseProject",
                     ),
                 ),
             ],

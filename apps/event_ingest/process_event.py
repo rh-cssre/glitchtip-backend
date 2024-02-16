@@ -22,7 +22,7 @@ from apps.issue_events.models import (
     TagKey,
     TagValue,
 )
-from apps.releases.models import Release, ReleaseProject
+from apps.releases.models import Release
 from sentry.culprit import generate_culprit
 from sentry.eventtypes.error import ErrorEvent
 from sentry.utils.strings import truncatechars
@@ -218,7 +218,8 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             organization_id for (_, _, organization_id) in releases_set
         },
     )
-    release_projects: list[ReleaseProject] = []
+    ReleaseProject = Release.projects.through
+    release_projects: list = []
     for release in releases:
         project_id = next(
             project_id
