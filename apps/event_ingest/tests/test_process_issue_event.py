@@ -98,12 +98,21 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         self.assertTrue(IssueEvent.objects.first())
 
     def test_event_environment(self):
+        # Some noise to test queries
+        baker.make("environments.Environment", organization=self.organization)
+        baker.make("environments.EnvironmentProject", project=self.project)
+
         data = self.get_json_data("events/test_data/py_hi_event.json")
         data["environment"] = "dev"
         self.process_events(data)
 
         event = IssueEvent.objects.first()
         self.assertTrue(event.issue.project.environment_set.filter(name="dev").exists())
+        self.assertEqual(event.issue.project.environment_set.count(), 2)
+
+        data["event_id"] = uuid.uuid4().hex
+        self.process_events(data)
+        self.assertEqual(event.issue.project.environment_set.count(), 2)
 
     def xtest_process_sourcemap(self):
         sample_event = {

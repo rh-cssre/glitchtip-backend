@@ -229,7 +229,6 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         release_projects.append(ReleaseProject(project_id=project_id, release=release))
     ReleaseProject.objects.bulk_create(release_projects, ignore_conflicts=True)
 
-    # TODO environment can likely be optimized by checking if it already exists in the issues hash lookup
     environments_set = {
         (event.payload.environment[:256], event.project_id, event.organization_id)
         for event in ingest_events
