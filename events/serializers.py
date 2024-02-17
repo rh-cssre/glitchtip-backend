@@ -10,7 +10,7 @@ from ipware import get_client_ip
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
-from environments.models import Environment
+from apps.environments.models import Environment
 from glitchtip.serializers import FlexibleDateTimeField
 from issues.models import EventType, Issue
 from issues.serializers import BaseBreadcrumbsSerializer

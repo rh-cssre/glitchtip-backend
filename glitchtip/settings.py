@@ -223,7 +223,7 @@ INSTALLED_APPS += [
     "glitchtip",
     "alerts",
     "ninja",
-    "environments",
+    "apps.environments",
     "organizations_ext",
     "events",
     "issues",

@@ -24,7 +24,10 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("projects", "0008_alter_projectkey_created"),
-        ("environments", "0002_auto_20201229_1643"),
+        (
+            "environments",
+            "0001_squashed_0003_alter_environment_id_alter_environmentproject_id",
+        ),
         ("organizations_ext", "0001_squashed_0009_organization_scrub_ip_addresses"),
         ("organizations_ext", "0004_organizationsubscription_alter_organization_slug"),
     ]

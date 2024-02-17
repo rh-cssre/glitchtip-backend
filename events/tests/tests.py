@@ -11,7 +11,7 @@ from prometheus_client import Metric
 from prometheus_client.parser import text_string_to_metric_families
 from rest_framework.test import APITestCase
 
-from environments.models import Environment, EnvironmentProject
+from apps.environments.models import Environment, EnvironmentProject
 from glitchtip.test_utils import generators  # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.models import EventStatus, Issue

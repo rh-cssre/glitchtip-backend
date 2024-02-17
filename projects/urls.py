@@ -2,7 +2,7 @@ from django.urls import include, path
 from rest_framework_nested import routers
 
 from alerts.views import ProjectAlertViewSet
-from environments.views import EnvironmentProjectViewSet
+from apps.environments.views import EnvironmentProjectViewSet
 from issues.views import EventViewSet, IssueViewSet
 from apps.releases.views import ReleaseFileViewSet, ReleaseViewSet
 

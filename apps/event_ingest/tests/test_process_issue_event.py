@@ -97,6 +97,19 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         self.process_events(data)
         self.assertTrue(IssueEvent.objects.first())
 
+    def test_event_environment(self):
+        data = self.get_json_data("events/test_data/py_hi_event.json")
+        data["environment"] = "dev"
+        self.process_events(data)
+
+        event = IssueEvent.objects.first()
+        self.assertTrue(event.environment)
+        self.assertTrue(
+            Release.objects.filter(
+                version=data.get("release"), projects=self.project
+            ).exists()
+        )
+
     def xtest_process_sourcemap(self):
         sample_event = {
             "exception": {

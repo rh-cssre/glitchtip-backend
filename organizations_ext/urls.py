@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework_nested import routers
 
-from environments.views import EnvironmentViewSet
+from apps.environments.views import EnvironmentViewSet
 from glitchtip.routers import BulkSimpleRouter
 from glitchtip.uptime.views import (
     MonitorCheckViewSet,

@@ -204,7 +204,6 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         for event in ingest_events
         if event.payload.release
     }
-    # environment = ingest_event.payload.environment
     Release.objects.bulk_create(
         [
             Release(version=version, organization_id=organization_id)
@@ -228,6 +227,14 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         )
         release_projects.append(ReleaseProject(project_id=project_id, release=release))
     ReleaseProject.objects.bulk_create(release_projects, ignore_conflicts=True)
+
+    # environment = ingest_event.payload.environment
+    # breakpoint()
+    # environment, _ = Environment.objects.get_or_create(
+    #     name=name[: Environment._meta.get_field("name").max_length],
+    #     organization=project.organization,
+    # )
+    # environment.projects.add(project)
 
     # Collected/calculated event data while processing
     processing_events: list[ProcessingEvent] = []
