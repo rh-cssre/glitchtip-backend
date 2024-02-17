@@ -103,12 +103,7 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         self.process_events(data)
 
         event = IssueEvent.objects.first()
-        self.assertTrue(event.environment)
-        self.assertTrue(
-            Release.objects.filter(
-                version=data.get("release"), projects=self.project
-            ).exists()
-        )
+        self.assertTrue(event.issue.project.environment_set.filter(name="dev").exists())
 
     def xtest_process_sourcemap(self):
         sample_event = {

@@ -22,6 +22,7 @@ from apps.issue_events.models import (
     TagKey,
     TagValue,
 )
+from apps.environments.models import Environment, EnvironmentProject
 from apps.releases.models import Release
 from sentry.culprit import generate_culprit
 from sentry.eventtypes.error import ErrorEvent
@@ -222,19 +223,43 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
     for release in releases:
         project_id = next(
             project_id
-            for (version, project_id, _) in releases_set
-            if release.version == version
+            for (version, project_id, organization_id) in releases_set
+            if release.version == version and release.organization_id == organization_id
         )
         release_projects.append(ReleaseProject(project_id=project_id, release=release))
     ReleaseProject.objects.bulk_create(release_projects, ignore_conflicts=True)
 
-    # environment = ingest_event.payload.environment
-    # breakpoint()
-    # environment, _ = Environment.objects.get_or_create(
-    #     name=name[: Environment._meta.get_field("name").max_length],
-    #     organization=project.organization,
-    # )
-    # environment.projects.add(project)
+    # TODO environment can likely be optimized by checking if it already exists in the issues hash lookup
+    environments_set = {
+        (event.payload.environment[:256], event.project_id, event.organization_id)
+        for event in ingest_events
+        if event.payload.environment
+    }
+    Environment.objects.bulk_create(
+        [
+            Environment(name=name, organization_id=organization_id)
+            for (name, _, organization_id) in environments_set
+        ],
+        ignore_conflicts=True,
+    )
+    environments = Environment.objects.filter(
+        name__in={name for (name, _, _) in environments_set},
+        organization_id__in={
+            organization_id for (_, _, organization_id) in environments_set
+        },
+    )
+    environment_projects: list = []
+    for environment in environments:
+        project_id = next(
+            project_id
+            for (name, project_id, organization_id) in environments_set
+            if environment.name == name
+            and environment.organization_id == organization_id
+        )
+        environment_projects.append(
+            EnvironmentProject(project_id=project_id, environment=environment)
+        )
+    EnvironmentProject.objects.bulk_create(environment_projects, ignore_conflicts=True)
 
     # Collected/calculated event data while processing
     processing_events: list[ProcessingEvent] = []
