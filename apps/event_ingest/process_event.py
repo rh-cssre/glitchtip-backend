@@ -13,6 +13,7 @@ from ninja import Schema
 from user_agents import parse
 
 from alerts.models import Notification
+from apps.environments.models import Environment, EnvironmentProject
 from apps.issue_events.constants import EventStatus
 from apps.issue_events.models import (
     Issue,
@@ -22,7 +23,6 @@ from apps.issue_events.models import (
     TagKey,
     TagValue,
 )
-from apps.environments.models import Environment, EnvironmentProject
 from apps.releases.models import Release
 from sentry.culprit import generate_culprit
 from sentry.eventtypes.error import ErrorEvent
@@ -34,6 +34,7 @@ from ..shared.schema.contexts import (
     DeviceContext,
     OSContext,
 )
+from .javascript_event_processor import JavascriptEventProcessor
 from .model_functions import PipeConcat
 from .schema import IngestIssueEvent, InterchangeIssueEvent
 from .utils import generate_hash, transform_parameterized_message
@@ -50,6 +51,7 @@ class ProcessingEvent:
     event_tags: dict[str, str]
     issue_id: Optional[int] = None
     issue_created = False
+    release_id: Optional[int] = None
 
 
 @dataclass
@@ -272,6 +274,18 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         title = ""
         culprit = ""
         metadata: dict[str, Any] = {}
+
+        release_id = next(
+            (
+                release.id
+                for release in releases
+                if release.version == event_tags.get("release")
+            ),
+            None,
+        )
+        if event.platform in ("javascript", "node") and release_id:
+            JavascriptEventProcessor(release_id, event).transform()
+
         if event.type in [IssueEventType.ERROR, IssueEventType.DEFAULT]:
             sentry_event = ErrorEvent()
             metadata = sentry_event.get_metadata(event.dict())
@@ -350,6 +364,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 metadata=metadata,
                 event_data=event_data,
                 event_tags=event_tags,
+                release_id=release_id,
             )
         )
         q_objects |= Q(project_id=ingest_event.project_id, value=issue_hash)
@@ -402,14 +417,6 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 processing_event.issue_id = IssueHash.objects.get(
                     project_id=project_id, value=issue_hash
                 ).issue_id
-        release_id = next(
-            (
-                release.id
-                for release in releases
-                if release.version == processing_event.event_tags.get("release")
-            ),
-            None,
-        )
         issue_events.append(
             IssueEvent(
                 id=processing_event.event.event_id,
@@ -421,7 +428,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 transaction=processing_event.transaction,
                 data=processing_event.event_data,
                 tags=processing_event.event_tags,
-                release_id=release_id,
+                release_id=processing_event.release_id,
             )
         )
 
@@ -435,9 +442,6 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
 
     # ignore_conflicts because we could have an invalid duplicate event_id, received
     IssueEvent.objects.bulk_create(issue_events, ignore_conflicts=True)
-
-    # for processing_event in processing_events:
-    #     JavascriptEventProcessor(project.release_id, data).run()
 
     # Group events by time and project for event count statistics
     data_stats: defaultdict[datetime, defaultdict[int, int]] = defaultdict(

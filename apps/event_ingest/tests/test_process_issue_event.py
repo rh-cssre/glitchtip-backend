@@ -114,7 +114,7 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         self.process_events(data)
         self.assertEqual(event.issue.project.environment_set.count(), 2)
 
-    def xtest_process_sourcemap(self):
+    def test_process_sourcemap(self):
         sample_event = {
             "exception": {
                 "values": [
@@ -190,6 +190,13 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         data = sample_event | {"release": release.version}
 
         self.process_events(data)
+        # Show that colno changes
+        self.assertEqual(
+            IssueEvent.objects.first().data["exception"][0]["stacktrace"]["frames"][0][
+                "colno"
+            ],
+            13,
+        )
         self.assertTrue(IssueEvent.objects.filter(release=release).exists())
 
 
