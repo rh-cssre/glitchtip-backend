@@ -68,9 +68,36 @@ class DeviceTagProcessor(EventContextsTagProcessor):
         return contexts.get("device", {}).get("model")
 
 
+class UserIDProcessor(EventContextsTagProcessor):
+    tag = "user.id"
+
+    def get_tag_values(self, event) -> Optional[str]:
+        if user := event.get("user"):
+            return user.get("id")
+
+
+class UserEmailProcessor(EventContextsTagProcessor):
+    tag = "user.email"
+
+    def get_tag_values(self, event) -> Optional[str]:
+        if user := event.get("user"):
+            return user.get("email")
+
+
+class UserUsernameProcessor(EventContextsTagProcessor):
+    tag = "user.username"
+
+    def get_tag_values(self, event) -> Optional[str]:
+        if user := event.get("user"):
+            return user.get("username")
+
+
 TAG_PROCESSORS = [
     BrowserTagProcessor,
     BrowserNameTagProcessor,
     OsTagProcessor,
     DeviceTagProcessor,
+    UserIDProcessor,
+    UserEmailProcessor,
+    UserUsernameProcessor,
 ]

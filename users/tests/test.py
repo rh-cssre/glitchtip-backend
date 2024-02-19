@@ -1,12 +1,15 @@
 from django.core import mail
+from django.urls import reverse
 from django.test import override_settings
-from django.shortcuts import reverse
-from rest_framework.test import APITestCase
 from model_bakery import baker
+from rest_framework.test import APITestCase
+
 from glitchtip import test_utils  # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from organizations_ext.models import OrganizationUserRole
-from ..models import UserProjectAlert, User
+from projects.models import UserProjectAlert
+
+from ..models import User
 
 
 class UserRegistrationTestCase(APITestCase):
@@ -78,6 +81,13 @@ class UsersTestCase(GlitchTipTestCase):
         )
 
         url = reverse("user-detail", args=[self.user.pk])
+        res = self.client.delete(url)
+        self.assertEqual(
+            res.status_code, 400, "Not allowed to destroy owned organization"
+        )
+
+        # Delete organization to allow user deletion
+        self.organization.delete()
         res = self.client.delete(url)
         self.assertEqual(res.status_code, 204)
         self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
@@ -198,7 +208,7 @@ class UsersTestCase(GlitchTipTestCase):
     def test_alerts_retrieve(self):
         url = reverse("user-detail", args=["me"]) + "notifications/alerts/"
         alert = baker.make(
-            "users.UserProjectAlert", user=self.user, project=self.project
+            "projects.UserProjectAlert", user=self.user, project=self.project
         )
         res = self.client.get(url)
         self.assertContains(res, self.project.id)
@@ -228,20 +238,20 @@ class UsersTestCase(GlitchTipTestCase):
         self.assertEqual(UserProjectAlert.objects.all().count(), 0)
 
     def test_reset_password(self):
-        url = reverse("rest_password_reset")
-
-        # Normal behavior
-        res = self.client.post(url, {"email": self.user.email})
-        self.assertEqual(len(mail.outbox), 1)
-
         """
         Social accounts weren't getting reset password emails. This
         approximates the issue by testing an account that has an
         unusable password.
         """
+        url = reverse("rest_password_reset")
+
+        # Normal behavior
+        self.client.post(url, {"email": self.user.email})
+        self.assertEqual(len(mail.outbox), 1)
+
         user_without_password = baker.make("users.User")
         user_without_password.set_unusable_password()
         user_without_password.save()
         self.assertFalse(user_without_password.has_usable_password())
-        res = self.client.post(url, {"email": user_without_password.email})
+        self.client.post(url, {"email": user_without_password.email})
         self.assertEqual(len(mail.outbox), 2)

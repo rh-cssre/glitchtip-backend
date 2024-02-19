@@ -1,9 +1,17 @@
 #!/usr/bin/env sh
 set -e
 
+if echo "$PORT" | grep -qF :; then
+    HTTP_SOCKET="$PORT"
+else
+    HTTP_SOCKET=":$PORT"
+fi
+
 UWSGI_LISTEN="${UWSGI_LISTEN:-128}"
 PORT="${PORT:-8000}"
 CHEAPER_OVERLOAD="${UWSGI_CHEAPER_OVERLOAD:-30}"
+MAX_REQUESTS="${UWSGI_MAX_REQUESTS:-10000}"
+WORKER_RELOAD_MERCY="${UWSGI_WORKER_RELOAD_MERCY:-10}"
 
 exec uwsgi \
     --module=glitchtip.wsgi:application \
@@ -11,7 +19,7 @@ exec uwsgi \
     --master --pidfile=/tmp/project-master.pid \
     --log-x-forwarded-for \
     --log-format-strftime \
-    --http-socket=:$PORT \
+    --http-socket=$HTTP_SOCKET \
     --cheaper-algo=busyness \
     --cheaper-overload=$CHEAPER_OVERLOAD \
     --cheaper-step=1 \
@@ -19,7 +27,8 @@ exec uwsgi \
     --cheaper-busyness-min=25 \
     --cheaper-busyness-multiplier=20 \
     --harakiri=60 \
-    --max-requests=10000 \
+    --max-requests=$MAX_REQUESTS \
+    --worker-reload-mercy=$WORKER_RELOAD_MERCY \
     --die-on-term \
     --enable-threads \
     --single-interpreter \
