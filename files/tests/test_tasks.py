@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from django.conf import settings
-from django.shortcuts import reverse
+from django.urls import reverse
 from django.utils.timezone import now
 from freezegun import freeze_time
 from model_bakery import baker
