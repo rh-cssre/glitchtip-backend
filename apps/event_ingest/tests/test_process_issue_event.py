@@ -1,3 +1,4 @@
+import os
 import shutil
 import uuid
 
@@ -180,6 +181,10 @@ class IssueEventIngestTestCase(EventIngestTestCase):
             file__name="bundle.js.map",
             file__blob=blob_bundle_map,
         )
+        try:
+            os.mkdir("./uploads/file_blobs")
+        except FileExistsError:
+            pass
         shutil.copyfile(
             "./events/tests/test_data/bundle.js", "./uploads/file_blobs/bundle.js"
         )
