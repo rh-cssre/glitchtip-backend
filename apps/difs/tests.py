@@ -7,8 +7,8 @@ from django.core.files import File as DjangoFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from model_bakery import baker
 
+from apps.difs.tasks import ChecksumMismatched, difs_create_file_from_chunks
 from apps.files.models import File
-from difs.tasks import ChecksumMismatched, difs_create_file_from_chunks
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 
 

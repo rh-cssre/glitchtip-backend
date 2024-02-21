@@ -235,7 +235,7 @@ INSTALLED_APPS += [
     "projects",
     "teams",
     "apps.releases",
-    "difs",
+    "apps.difs",
     "apps.api_tokens",
     "apps.files",
 ]
