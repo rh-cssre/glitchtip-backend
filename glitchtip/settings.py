@@ -494,7 +494,7 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=6, minute=30),
     },
     "cleanup-old-files": {
-        "task": "files.tasks.cleanup_old_files",
+        "task": "apps.files.tasks.cleanup_old_files",
         "schedule": crontab(hour=7, minute=0),
     },
     "uptime-dispatch-checks": {
