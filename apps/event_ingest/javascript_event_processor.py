@@ -9,7 +9,7 @@ from symbolic import SourceMapView, SourceView
 from apps.files.models import File
 from sentry.utils.safe import get_path
 
-from .base import EventProcessorBase
+from .schema import StackTrace, StackTraceFrame
 
 UNKNOWN_MODULE = "<unknown module>"
 CLEAN_MODULE_RE = re.compile(
@@ -56,34 +56,27 @@ def generate_module(src):
     return CLEAN_MODULE_RE.sub("", filename) or UNKNOWN_MODULE
 
 
-class JavascriptEventProcessor(EventProcessorBase):
+class JavascriptEventProcessor:
     """
     Based partially on sentry/lang/javascript/processor.py
     """
 
-    release_files = None
+    def __init__(self, release_id, data):
+        self.release_id = release_id
+        self.data = data
 
-    def should_run(self):
-        return self.data.get("platform") in ("javascript", "node") and self.release_id
+    def get_stacktraces(self) -> list[StackTrace]:
+        return [e.stacktrace for e in self.data.exception.values if e.stacktrace]
 
-    def get_stacktraces(self):
-        exceptions = get_path(self.data, "exception", "values", filter=True, default=())
-        stacktraces = [e["stacktrace"] for e in exceptions if e.get("stacktrace")]
-
-        if "stacktrace" in self.data:
-            stacktraces.append(self.data["stacktrace"])
-        return stacktraces
-
-    def get_valid_frames(self, stacktraces):
-        frames = []
-        frames = [stacktrace["frames"] for stacktrace in stacktraces]
+    def get_valid_frames(self, stacktraces) -> list[StackTraceFrame]:
+        frames = [stacktrace.frames for stacktrace in stacktraces]
 
         merged = list(itertools.chain(*frames))
-        return [f for f in merged if f is not None and f.get("lineno") is not None]
+        return [f for f in merged if f is not None and f.lineno is not None]
 
     def process_frame(self, frame, map_file, minified_source):
         # Required to determine source
-        if not frame.get("abs_path") or not frame.get("lineno"):
+        if not frame.abs_path or not frame.lineno:
             return
 
         minified_source.blob.blob.seek(0)
@@ -91,21 +84,21 @@ class JavascriptEventProcessor(EventProcessorBase):
         sourcemap_view = SourceMapView.from_json_bytes(map_file.blob.blob.read())
         minified_source_view = SourceView.from_bytes(minified_source.blob.blob.read())
         token = sourcemap_view.lookup(
-            frame["lineno"] - 1,
-            frame["colno"] - 1,
-            frame["function"],
+            frame.lineno - 1,
+            frame.colno - 1,
+            frame.function,
             minified_source_view,
         )
 
         if not token:
             return
-        frame["lineno"] = token.src_line + 1
-        frame["colno"] = token.src_col + 1
+        frame.lineno = token.src_line + 1
+        frame.colno = token.src_col + 1
         if token.function_name:
-            frame["function"] = token.function_name
+            frame.function = token.function_name
 
         filename = token.src
-        abs_path = frame["abs_path"]
+        abs_path = frame.abs_path
         in_app = None
         # special case webpack support
         # abs_path will always be the full path with webpack:/// prefix.
@@ -145,18 +138,18 @@ class JavascriptEventProcessor(EventProcessorBase):
             else:
                 in_app = True
 
-        frame["filename"] = filename
-        if not frame.get("module") and abs_path.startswith(
+        frame.filename = filename
+        if not frame.module and abs_path.startswith(
             ("http:", "https:", "webpack:", "app:")
         ):
-            frame["module"] = generate_module(abs_path)
+            frame.module = generate_module(abs_path)
         if in_app is not None:
-            frame["in_app"] = in_app
+            frame.in_app = in_app
 
     def transform(self):
         stacktraces = self.get_stacktraces()
         frames = self.get_valid_frames(stacktraces)
-        filenames = {frame["filename"].split("/")[-1] for frame in frames}
+        filenames = {frame.filename.split("/")[-1] for frame in frames}
         # Make a guess at which files are relevant, match then better after
         source_files = File.objects.filter(
             releasefile__release_id=self.release_id,
@@ -174,7 +167,7 @@ class JavascriptEventProcessor(EventProcessorBase):
 
         frames_with_source = []
         for frame in frames:
-            minified_filename = frame["abs_path"].split("/")[-1]
+            minified_filename = frame.abs_path.split("/")[-1] if frame.abs_path else ""
             map_filename = minified_filename + ".map"
             minified_file = None
             map_file = None

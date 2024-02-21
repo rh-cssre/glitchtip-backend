@@ -10,13 +10,13 @@ from ipware import get_client_ip
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
-from environments.models import Environment
+from apps.environments.models import Environment
 from glitchtip.serializers import FlexibleDateTimeField
 from issues.models import EventType, Issue
 from issues.serializers import BaseBreadcrumbsSerializer
 from issues.tasks import update_search_index_issue
 from observability.metrics import events_counter, issues_counter
-from releases.models import Release
+from apps.releases.models import Release
 from sentry.eventtypes.base import DefaultEvent
 from sentry.eventtypes.error import ErrorEvent
 

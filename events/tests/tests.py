@@ -11,12 +11,12 @@ from prometheus_client import Metric
 from prometheus_client.parser import text_string_to_metric_families
 from rest_framework.test import APITestCase
 
-from environments.models import Environment, EnvironmentProject
+from apps.environments.models import Environment, EnvironmentProject
 from glitchtip.test_utils import generators  # pylint: disable=unused-import
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.models import EventStatus, Issue
 from observability.metrics import events_counter, issues_counter
-from releases.models import Release
+from apps.releases.models import Release
 
 from ..models import Event, LogLevel
 from ..test_data.csp import mdn_sample_csp

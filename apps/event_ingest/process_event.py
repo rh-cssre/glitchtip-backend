@@ -13,6 +13,7 @@ from ninja import Schema
 from user_agents import parse
 
 from alerts.models import Notification
+from apps.environments.models import Environment, EnvironmentProject
 from apps.issue_events.constants import EventStatus
 from apps.issue_events.models import (
     Issue,
@@ -22,6 +23,7 @@ from apps.issue_events.models import (
     TagKey,
     TagValue,
 )
+from apps.releases.models import Release
 from sentry.culprit import generate_culprit
 from sentry.eventtypes.error import ErrorEvent
 from sentry.utils.strings import truncatechars
@@ -32,6 +34,7 @@ from ..shared.schema.contexts import (
     DeviceContext,
     OSContext,
 )
+from .javascript_event_processor import JavascriptEventProcessor
 from .model_functions import PipeConcat
 from .schema import IngestIssueEvent, InterchangeIssueEvent
 from .utils import generate_hash, transform_parameterized_message
@@ -48,6 +51,7 @@ class ProcessingEvent:
     event_tags: dict[str, str]
     issue_id: Optional[int] = None
     issue_created = False
+    release_id: Optional[int] = None
 
 
 @dataclass
@@ -198,6 +202,66 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
     error, or ignore. If the SDK sends "weird" data, we want to log that.
     It's better to save a minimal event than to ignore it.
     """
+    releases_set = {
+        (event.payload.release, event.project_id, event.organization_id)
+        for event in ingest_events
+        if event.payload.release
+    }
+    Release.objects.bulk_create(
+        [
+            Release(version=version, organization_id=organization_id)
+            for (version, _, organization_id) in releases_set
+        ],
+        ignore_conflicts=True,
+    )
+    releases = Release.objects.filter(
+        version__in={version for (version, _, _) in releases_set},
+        organization_id__in={
+            organization_id for (_, _, organization_id) in releases_set
+        },
+    )
+    ReleaseProject = Release.projects.through
+    release_projects: list = []
+    for release in releases:
+        project_id = next(
+            project_id
+            for (version, project_id, organization_id) in releases_set
+            if release.version == version and release.organization_id == organization_id
+        )
+        release_projects.append(ReleaseProject(project_id=project_id, release=release))
+    ReleaseProject.objects.bulk_create(release_projects, ignore_conflicts=True)
+
+    environments_set = {
+        (event.payload.environment[:256], event.project_id, event.organization_id)
+        for event in ingest_events
+        if event.payload.environment
+    }
+    Environment.objects.bulk_create(
+        [
+            Environment(name=name, organization_id=organization_id)
+            for (name, _, organization_id) in environments_set
+        ],
+        ignore_conflicts=True,
+    )
+    environments = Environment.objects.filter(
+        name__in={name for (name, _, _) in environments_set},
+        organization_id__in={
+            organization_id for (_, _, organization_id) in environments_set
+        },
+    )
+    environment_projects: list = []
+    for environment in environments:
+        project_id = next(
+            project_id
+            for (name, project_id, organization_id) in environments_set
+            if environment.name == name
+            and environment.organization_id == organization_id
+        )
+        environment_projects.append(
+            EnvironmentProject(project_id=project_id, environment=environment)
+        )
+    EnvironmentProject.objects.bulk_create(environment_projects, ignore_conflicts=True)
+
     # Collected/calculated event data while processing
     processing_events: list[ProcessingEvent] = []
     # Collect Q objects for bulk issue hash lookup
@@ -210,6 +274,18 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         title = ""
         culprit = ""
         metadata: dict[str, Any] = {}
+
+        release_id = next(
+            (
+                release.id
+                for release in releases
+                if release.version == event_tags.get("release")
+            ),
+            None,
+        )
+        if event.platform in ("javascript", "node") and release_id:
+            JavascriptEventProcessor(release_id, event).transform()
+
         if event.type in [IssueEventType.ERROR, IssueEventType.DEFAULT]:
             sentry_event = ErrorEvent()
             metadata = sentry_event.get_metadata(event.dict())
@@ -288,6 +364,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 metadata=metadata,
                 event_data=event_data,
                 event_tags=event_tags,
+                release_id=release_id,
             )
         )
         q_objects |= Q(project_id=ingest_event.project_id, value=issue_hash)
@@ -351,6 +428,7 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
                 transaction=processing_event.transaction,
                 data=processing_event.event_data,
                 tags=processing_event.event_tags,
+                release_id=processing_event.release_id,
             )
         )
 

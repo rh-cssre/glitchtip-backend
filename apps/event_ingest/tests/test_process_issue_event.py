@@ -1,9 +1,13 @@
+import os
+import shutil
 import uuid
 
 from django.urls import reverse
+from model_bakery import baker
 
 from apps.issue_events.constants import EventStatus, LogLevel
 from apps.issue_events.models import Issue, IssueEvent, IssueHash
+from apps.releases.models import Release
 from projects.models import EventProjectHourlyStatistic
 
 from ..process_event import process_issue_events
@@ -32,14 +36,8 @@ class IssueEventIngestTestCase(EventIngestTestCase):
     """
 
     def test_two_events(self):
-        events = []
-        for _ in range(2):
-            payload = IssueEventSchema()
-            events.append(
-                InterchangeIssueEvent(project_id=self.project.id, payload=payload)
-            )
         with self.assertNumQueries(7):
-            process_issue_events(events)
+            self.process_events([{}, {}])
         self.assertEqual(Issue.objects.count(), 1)
         self.assertEqual(IssueHash.objects.count(), 1)
         self.assertEqual(IssueEvent.objects.count(), 2)
@@ -50,15 +48,12 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         )
 
     def test_reopen_resolved_issue(self):
-        event = InterchangeIssueEvent(
-            project_id=self.project.id, payload=IssueEventSchema()
-        )
-        process_issue_events([event])
+        event = self.process_events({})[0]
         issue = Issue.objects.first()
         issue.status = EventStatus.RESOLVED
         issue.save()
-        event.event_id = uuid.uuid4().hex
-        process_issue_events([event])
+        event.event_id = uuid.uuid4()
+        self.process_events(event.dict())
         issue.refresh_from_db()
         self.assertEqual(issue.status, EventStatus.UNRESOLVED)
 
@@ -73,21 +68,141 @@ class IssueEventIngestTestCase(EventIngestTestCase):
             "event_id": uuid.uuid4(),
             "fingerprint": ["foo"],
         }
-        event = InterchangeIssueEvent(
-            project_id=self.project.id,
-            payload=IssueEventSchema(**data),
-        )
-        process_issue_events([event])
+        self.process_events(data)
 
         data["exception"][0]["type"] = "lol"
         data["event_id"] = uuid.uuid4()
-        event = InterchangeIssueEvent(
-            project_id=self.project.id,
-            payload=IssueEventSchema(**data),
-        )
-        process_issue_events([event])
+        self.process_events(data)
         self.assertEqual(Issue.objects.count(), 1)
         self.assertEqual(IssueEvent.objects.count(), 2)
+
+    def test_event_release(self):
+        data = self.get_json_data("events/test_data/py_hi_event.json")
+
+        baker.make("releases.Release", version=data.get("release"))
+
+        self.process_events(data)
+
+        event = IssueEvent.objects.first()
+        self.assertTrue(event.release)
+        self.assertTrue(
+            Release.objects.filter(
+                version=data.get("release"), projects=self.project
+            ).exists()
+        )
+
+    def test_event_release_blank(self):
+        """In the SDK, it's possible to set a release to a blank string"""
+        data = self.get_json_data("events/test_data/py_hi_event.json")
+        data["release"] = ""
+        self.process_events(data)
+        self.assertTrue(IssueEvent.objects.first())
+
+    def test_event_environment(self):
+        # Some noise to test queries
+        baker.make("environments.Environment", organization=self.organization)
+        baker.make("environments.EnvironmentProject", project=self.project)
+
+        data = self.get_json_data("events/test_data/py_hi_event.json")
+        data["environment"] = "dev"
+        self.process_events(data)
+
+        event = IssueEvent.objects.first()
+        self.assertTrue(event.issue.project.environment_set.filter(name="dev").exists())
+        self.assertEqual(event.issue.project.environment_set.count(), 2)
+
+        data["event_id"] = uuid.uuid4().hex
+        self.process_events(data)
+        self.assertEqual(event.issue.project.environment_set.count(), 2)
+
+    def test_process_sourcemap(self):
+        sample_event = {
+            "exception": {
+                "values": [
+                    {
+                        "type": "Error",
+                        "value": "The error",
+                        "stacktrace": {
+                            "frames": [
+                                {
+                                    "filename": "http://localhost:8080/dist/bundle.js",
+                                    "function": "?",
+                                    "in_app": True,
+                                    "lineno": 2,
+                                    "colno": 74016,
+                                },
+                                {
+                                    "filename": "http://localhost:8080/dist/bundle.js",
+                                    "function": "?",
+                                    "in_app": True,
+                                    "lineno": 2,
+                                    "colno": 74012,
+                                },
+                                {
+                                    "filename": "http://localhost:8080/dist/bundle.js",
+                                    "function": "?",
+                                    "in_app": True,
+                                    "lineno": 2,
+                                    "colno": 73992,
+                                },
+                            ]
+                        },
+                        "mechanism": {"type": "onerror", "handled": False},
+                    }
+                ]
+            },
+            "level": "error",
+            "platform": "javascript",
+            "event_id": "0691751a89db419994efac8ac9b00a5d",
+            "timestamp": 1648414309.82,
+            "environment": "production",
+            "request": {
+                "url": "http://localhost:8080/",
+                "headers": {
+                    "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:98.0) Gecko/20100101 Firefox/98.0"
+                },
+            },
+        }
+        release = baker.make("releases.Release", organization=self.organization)
+        release.projects.add(self.project)
+        blob_bundle = baker.make("files.FileBlob", blob="uploads/file_blobs/bundle.js")
+        blob_bundle_map = baker.make(
+            "files.FileBlob", blob="uploads/file_blobs/bundle.js.map"
+        )
+        baker.make(
+            "releases.ReleaseFile",
+            release=release,
+            file__name="bundle.js",
+            file__blob=blob_bundle,
+        )
+        baker.make(
+            "releases.ReleaseFile",
+            release=release,
+            file__name="bundle.js.map",
+            file__blob=blob_bundle_map,
+        )
+        try:
+            os.mkdir("./uploads/file_blobs")
+        except FileExistsError:
+            pass
+        shutil.copyfile(
+            "./events/tests/test_data/bundle.js", "./uploads/file_blobs/bundle.js"
+        )
+        shutil.copyfile(
+            "./events/tests/test_data/bundle.js.map",
+            "./uploads/file_blobs/bundle.js.map",
+        )
+        data = sample_event | {"release": release.version}
+
+        self.process_events(data)
+        # Show that colno changes
+        self.assertEqual(
+            IssueEvent.objects.first().data["exception"][0]["stacktrace"]["frames"][0][
+                "colno"
+            ],
+            13,
+        )
+        self.assertTrue(IssueEvent.objects.filter(release=release).exists())
 
 
 class SentryCompatTestCase(EventIngestTestCase):
@@ -182,6 +297,7 @@ class SentryCompatTestCase(EventIngestTestCase):
             event_class = IssueEventSchema
         event = InterchangeIssueEvent(
             event_id=event_data["event_id"],
+            organization_id=self.organization.id if self.organization else None,
             project_id=self.project.id,
             payload=event_class(**event_data),
         )

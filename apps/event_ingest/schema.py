@@ -3,7 +3,7 @@ import typing
 import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal, Optional, Union
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlparse
 
 from django.utils.timezone import now
 from ninja import Field
@@ -110,6 +110,17 @@ class StackTraceFrame(Schema):
     image_addr: Optional[str] = None
     package: Optional[str] = None
     platform: Optional[str] = None
+
+    def is_url(self, filename: str) -> bool:
+        return filename.startswith(("file:", "http:", "https:", "applewebdata:"))
+
+    @model_validator(mode="after")
+    def normalize_files(self):
+        if not self.abs_path and self.filename:
+            self.abs_path = self.filename
+        if self.filename and self.is_url(self.filename):
+            self.filename = urlparse(self.filename).path
+        return self
 
 
 class StackTrace(Schema):
@@ -370,6 +381,7 @@ class InterchangeIssueEvent(Schema):
 
     event_id: uuid.UUID = Field(default_factory=uuid.uuid4)
     project_id: int
+    organization_id: int
     received: datetime = Field(default_factory=now)
     payload: Union[
         IssueEventSchema, ErrorIssueEventSchema, CSPIssueEventSchema

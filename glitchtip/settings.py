@@ -223,8 +223,7 @@ INSTALLED_APPS += [
     "glitchtip",
     "alerts",
     "ninja",
-    "environments",
-    "files",
+    "apps.environments",
     "organizations_ext",
     "events",
     "issues",
@@ -235,9 +234,10 @@ INSTALLED_APPS += [
     "performance",
     "projects",
     "teams",
-    "releases",
-    "difs",
+    "apps.releases",
+    "apps.difs",
     "apps.api_tokens",
+    "apps.files",
 ]
 
 if GLITCHTIP_ENABLE_NEW_ISSUES:
@@ -494,7 +494,7 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=6, minute=30),
     },
     "cleanup-old-files": {
-        "task": "files.tasks.cleanup_old_files",
+        "task": "apps.files.tasks.cleanup_old_files",
         "schedule": crontab(hour=7, minute=0),
     },
     "uptime-dispatch-checks": {

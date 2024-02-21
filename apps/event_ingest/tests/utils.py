@@ -1,10 +1,17 @@
 import json
+from typing import Union
 
 from django.test import TestCase
 from model_bakery import baker
 
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 from organizations_ext.models import OrganizationUserRole
+
+from ..process_event import process_issue_events
+from ..schema import (
+    InterchangeIssueEvent,
+    IssueEventSchema,
+)
 
 
 class EventIngestTestCase(GlitchTipTestCaseMixin, TestCase):
@@ -30,3 +37,18 @@ class EventIngestTestCase(GlitchTipTestCaseMixin, TestCase):
         self.team.members.add(self.org_user)
         self.project = baker.make("projects.Project", organization=self.organization)
         self.project.team_set.add(self.team)
+
+    def process_events(self, data: Union[dict, list[dict]]) -> list:
+        if isinstance(data, dict):
+            data = [data]
+
+        events = [
+            InterchangeIssueEvent(
+                project_id=self.project.id,
+                organization_id=self.organization.id if self.organization else None,
+                payload=IssueEventSchema(**dat),
+            )
+            for dat in data
+        ]
+        process_issue_events(events)
+        return events
