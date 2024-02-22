@@ -1,4 +1,6 @@
 import datetime
+import logging
+from timeit import default_timer as timer
 
 from django.contrib.postgres.search import SearchVector
 from django.db.models import F, Value
@@ -12,6 +14,8 @@ from apps.event_ingest.model_functions import PipeConcat
 from glitchtip.test_utils.test_case import APIPermissionTestCase, GlitchTipTestCaseMixin
 
 from ..models import Issue
+
+logger = logging.getLogger(__name__)
 
 
 class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
@@ -223,7 +227,9 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
             tag_value__value="bar",
         )
         event2 = baker.make(
-            "events.Event", issue__project=self.project, tags={tag_name: "BananaOS 7"}
+            "issue_events.IssueEvent",
+            issue__project=self.project,
+            tags={tag_name: "BananaOS 7"},
         )
 
         res = self.client.get(
@@ -293,7 +299,9 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
             tag_value=value_chrome,
         )
 
-        event_no_tags = baker.make("events.Event", issue__project=self.project)
+        event_no_tags = baker.make(
+            "issue_events.IssueEvent", issue__project=self.project
+        )
 
         event_browser_chrome_mythic_animal_firefox = baker.make(
             "issue_events.IssueEvent",
@@ -481,7 +489,7 @@ class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
     def setUp(self):
         self.create_org_team_project()
         self.set_client_credentials(self.auth_token.token)
-        self.issue = baker.make("issues.Issue", project=self.project)
+        self.issue = baker.make("issue_events.Issue", project=self.project)
 
         self.list_url = reverse(
             "api:list_issues", kwargs={"organization_slug": self.organization.slug}
@@ -491,3 +499,155 @@ class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
         self.assertGetReqStatusCode(self.list_url, 403)
         self.auth_token.add_permission("event:read")
         self.assertGetReqStatusCode(self.list_url, 200)
+
+
+class IssueEventTagsAPITestCase(GlitchTipTestCaseMixin, TestCase):
+    def get_url(self, issue_id: int) -> str:
+        return reverse("api:list_issue_tags", kwargs={"issue_id": issue_id})
+
+    def setUp(self):
+        super().create_logged_in_user()
+
+    def test_issue_tags(self):
+        issue = baker.make("issue_events.Issue", project=self.project)
+
+        key_foo = baker.make("issue_events.TagKey", key="foo")
+        key_animal = baker.make("issue_events.TagKey", key="animal")
+        value_bar = baker.make("issue_events.TagValue", value="bar")
+        value_cat = baker.make("issue_events.TagValue", value="cat")
+        value_dog = baker.make("issue_events.TagValue", value="dog")
+
+        baker.make(
+            "issue_events.IssueTag",
+            issue=issue,
+            tag_key=key_foo,
+            tag_value=value_bar,
+            count=2,
+        )
+        baker.make(
+            "issue_events.IssueTag",
+            issue=issue,
+            tag_key=key_foo,
+            tag_value=value_bar,
+            count=1,
+        )
+        baker.make(
+            "issue_events.IssueTag",
+            issue=issue,
+            tag_key=key_animal,
+            tag_value=value_cat,
+        )
+        baker.make(
+            "issue_events.IssueTag",
+            issue=issue,
+            tag_key=key_animal,
+            tag_value=value_dog,
+            count=4,
+        )
+        baker.make(
+            "issue_events.IssueTag",
+            issue=issue,
+            tag_key=key_foo,
+            tag_value=value_cat,
+            count=4,
+        )
+
+        url = self.get_url(issue.id)
+        res = self.client.get(url)
+        data = res.json()
+
+        # Order is random
+        if data[0]["name"] == "animal":
+            animal = data[0]
+            foo = data[1]
+        else:
+            animal = data[1]
+            foo = data[0]
+
+        self.assertEqual(animal["totalValues"], 5)
+        self.assertEqual(animal["topValues"][0]["value"], "dog")
+        self.assertEqual(animal["topValues"][0]["count"], 4)
+        self.assertEqual(animal["uniqueValues"], 2)
+
+        self.assertEqual(foo["totalValues"], 7)
+        self.assertEqual(foo["topValues"][0]["value"], "cat")
+        self.assertEqual(foo["topValues"][0]["count"], 4)
+        self.assertEqual(foo["uniqueValues"], 2)
+
+    def test_issue_tags_filter(self):
+        issue = baker.make("issue_events.Issue", project=self.project)
+        value_bar = baker.make("issue_events.TagValue", value="bar")
+        baker.make(
+            "issue_events.IssueTag",
+            issue=issue,
+            tag_key__key="foo",
+            tag_value=value_bar,
+        )
+        baker.make(
+            "issue_events.IssueTag",
+            issue=issue,
+            tag_key__key="lol",
+            tag_value=value_bar,
+        )
+        baker.make(
+            "issue_events.IssueEvent", issue=issue, tags={"foo": "bar", "lol": "bar"}
+        )
+        url = self.get_url(issue.id)
+        res = self.client.get(url + "?key=foo")
+        self.assertEqual(len(res.json()), 1)
+
+    def test_issue_tags_performance(self):
+        issue = baker.make("issue_events.Issue", project=self.project)
+        key_foo = baker.make("issue_events.TagKey", key="foo")
+        key_animal = baker.make("issue_events.TagKey", key="animal")
+        value_bar = baker.make("issue_events.TagValue", value="bar")
+        value_cat = baker.make("issue_events.TagValue", value="cat")
+        value_dog = baker.make("issue_events.TagValue", value="dog")
+        quantity = 2
+
+        baker.make(
+            "issue_events.IssueTag",
+            issue=issue,
+            tag_key=key_foo,
+            tag_value=value_bar,
+            count=5,
+            _quantity=quantity,
+            _bulk_create=True,
+        )
+        baker.make(
+            "issue_events.IssueTag",
+            tag_key=key_foo,
+            tag_value=value_bar,
+            _quantity=quantity,
+            _bulk_create=True,
+        )
+        baker.make(
+            "issue_events.IssueTag",
+            issue=issue,
+            tag_key=key_animal,
+            tag_value=value_cat,
+            count=5,
+            _quantity=quantity,
+            _bulk_create=True,
+        )
+        baker.make(
+            "issue_events.IssueTag",
+            _quantity=quantity,
+            _bulk_create=True,
+        )
+        baker.make(
+            "issue_events.IssueTag",
+            issue=issue,
+            tag_key=key_animal,
+            tag_value=value_dog,
+            count=5,
+            _quantity=quantity,
+            _bulk_create=True,
+        )
+
+        url = self.get_url(issue.id)
+        with self.assertNumQueries(2):  # Includes many auth related queries
+            start = timer()
+            self.client.get(url)
+            end = timer()
+        logger.info(end - start)

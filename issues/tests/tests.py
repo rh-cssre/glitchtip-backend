@@ -507,9 +507,9 @@ class IssuesAPITestCase(GlitchTipTestCase):
         url = reverse("issue-detail", args=[issue.id])
         with self.assertNumQueries(5):  # Includes many auth related queries
             start = timer()
-            res = self.client.get(url + "tags/")
+            self.client.get(url + "tags/")
             end = timer()
-        # print(end - start)
+        print(end - start)
 
     def test_issue_related_counts(self):
         issue = baker.make("issues.Issue", project=self.project)

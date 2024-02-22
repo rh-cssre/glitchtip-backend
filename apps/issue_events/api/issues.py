@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import Any, Literal, Optional
 from uuid import UUID
 
-from django.db.models import Count
+from django.db.models import Count, Sum
 from django.db.models.expressions import RawSQL
 from django.db.models.query import QuerySet
 from django.http import Http404, HttpResponse
@@ -20,7 +20,7 @@ from organizations_ext.models import Organization
 
 from ..constants import EventStatus
 from ..models import Issue
-from ..schema import IssueDetailSchema, IssueSchema
+from ..schema import IssueDetailSchema, IssueSchema, IssueTagSchema
 from . import router
 
 
@@ -227,4 +227,55 @@ async def list_project_issues(
             response["X-Sentry-Direct-Hit"] = "1"
         except ValueError:
             pass
+<<<<<<< Updated upstream
     return filter_issue_list(qs, filters, sort, query, event_id, environment)
+=======
+    return filter_issue_list(qs, filters, sort, query, event_id)
+
+
+@router.get(
+    "/issues/{int:issue_id}/tags/", response=list[IssueTagSchema], by_alias=True
+)
+@has_permission(["event:read", "event:write", "event:admin"])
+async def list_issue_tags(
+    request: AuthHttpRequest, issue_id: int, key: Optional[str] = None
+):
+    qs = await get_queryset(request)
+    try:
+        issue = await qs.filter(id=issue_id).aget()
+    except Issue.DoesNotExist:
+        raise Http404()
+
+    qs = issue.issuetag_set
+    if key:
+        qs = qs.filter(tag_key__key=key)
+    qs = (
+        qs.values("tag_key__key", "tag_value__value")
+        .annotate(total_count=Sum("count"))
+        .order_by("-total_count")[:100000]
+    )
+    keys = {row["tag_key__key"] async for row in qs}
+    return [
+        {
+            "topValues": [
+                {
+                    "name": group["tag_value__value"],
+                    "value": group["tag_value__value"],
+                    "count": group["total_count"],
+                    "key": group["tag_key__key"],
+                }
+                for group in qs
+                if group["tag_key__key"] == key
+            ],
+            "uniqueValues": len(
+                [group for group in qs if group["tag_key__key"] == key]
+            ),
+            "key": key,
+            "name": key,
+            "totalValues": sum(
+                [group["total_count"] for group in qs if group["tag_key__key"] == key]
+            ),
+        }
+        for key in keys
+    ]
+>>>>>>> Stashed changes

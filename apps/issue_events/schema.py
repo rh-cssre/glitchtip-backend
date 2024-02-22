@@ -302,3 +302,18 @@ class IssueEventDataSchema(Schema):
 
 class CSPIssueEventDataSchema(IssueEventDataSchema):
     csp: CSPReportSchema
+
+
+class IssueTagTopValue(CamelSchema):
+    name: str
+    value: str
+    count: int
+    key: str
+
+
+class IssueTagSchema(CamelSchema):
+    top_values: list[IssueTagTopValue]
+    unique_values: int
+    key: str
+    name: str
+    total_values: int
