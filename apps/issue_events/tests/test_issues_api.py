@@ -429,6 +429,53 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         res = self.client.get(self.list_url + f'?query={tag_browser}:"{tag_value}"')
         self.assertEqual(len(res.json()), 1)
 
+    def test_filter_environment(self):
+        environment1_name = "prod"
+        environment2_name = "staging"
+
+        key_environment = baker.make("issue_events.TagKey", key="environment")
+        environment1_value = baker.make(
+            "issue_events.TagValue", value=environment1_name
+        )
+        environment2_value = baker.make(
+            "issue_events.TagValue", value=environment2_name
+        )
+        environment3_value = baker.make("issue_events.TagValue", value="dev")
+        issue1 = baker.make(
+            "issue_events.Issue",
+            project=self.project,
+        )
+        baker.make(
+            "issue_events.IssueTag",
+            issue=issue1,
+            tag_key=key_environment,
+            tag_value=environment1_value,
+        )
+        issue2 = baker.make(
+            "issue_events.Issue",
+            project=self.project,
+        )
+        baker.make(
+            "issue_events.IssueTag",
+            issue=issue2,
+            tag_key=key_environment,
+            tag_value=environment2_value,
+        )
+        issue3 = baker.make("issue_events.Issue", project=self.project)
+        baker.make(
+            "issue_events.IssueTag",
+            issue=issue3,
+            tag_key=key_environment,
+            tag_value=environment3_value,
+        )
+        res = self.client.get(
+            self.list_url
+            + f"?environment={environment1_name}&environment={environment2_name}"
+        )
+        self.assertEqual(len(res.json()), 2)
+        self.assertContains(res, issue1.id)
+        self.assertContains(res, issue2.id)
+
 
 class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
     def setUp(self):

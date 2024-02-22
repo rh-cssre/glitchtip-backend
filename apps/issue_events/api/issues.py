@@ -102,7 +102,6 @@ class IssueFilters(Schema):
     first_seen__gte: RelativeDateTime = Field(None, alias="start")
     first_seen__lte: RelativeDateTime = Field(None, alias="end")
     project__in: list[str] = Field(None, alias="project")
-    tags__environment__has_any_keys: list[str] = Field(None, alias="environment")
 
 
 sort_options = Literal[
@@ -123,7 +122,13 @@ def filter_issue_list(
     sort: sort_options,
     query: Optional[str] = None,
     event_id: Optional[UUID] = None,
+    environment: Optional[list[str]] = Query(None),
 ):
+    if environment:
+        qs = qs.filter(
+            issuetag__tag_key__key="environment",
+            issuetag__tag_value__value__in=environment,
+        )
     if qs_filters := filters.dict(exclude_none=True):
         qs = qs.filter(**qs_filters)
 
@@ -180,7 +185,7 @@ async def list_issues(
     filters: Query[IssueFilters],
     query: Optional[str] = None,
     sort: sort_options = "-last_seen",
-    environment: Optional[list[str]] = None,
+    environment: Optional[list[str]] = Query(None),
 ):
     qs = await get_queryset(request, organization_slug=organization_slug)
     event_id: Optional[UUID] = None
@@ -191,7 +196,7 @@ async def list_issues(
             response["X-Sentry-Direct-Hit"] = "1"
         except ValueError:
             pass
-    return filter_issue_list(qs, filters, sort, query, event_id)
+    return filter_issue_list(qs, filters, sort, query, event_id, environment)
 
 
 @router.get(
@@ -209,7 +214,7 @@ async def list_project_issues(
     filters: Query[IssueFilters],
     query: Optional[str] = None,
     sort: sort_options = "-last_seen",
-    environment: Optional[list[str]] = None,
+    environment: Optional[list[str]] = Query(None),
 ):
     qs = await get_queryset(
         request, organization_slug=organization_slug, project_slug=project_slug
@@ -222,4 +227,4 @@ async def list_project_issues(
             response["X-Sentry-Direct-Hit"] = "1"
         except ValueError:
             pass
-    return filter_issue_list(qs, filters, sort, query, event_id)
+    return filter_issue_list(qs, filters, sort, query, event_id, environment)
