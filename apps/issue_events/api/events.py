@@ -28,7 +28,7 @@ def get_queryset(
         qs = qs.filter(issue__project__organization__slug=organization_slug)
     if project_slug:
         qs = qs.filter(issue__project__slug=project_slug)
-    return qs.select_related("issue").order_by("-received")
+    return qs.select_related("issue")
 
 
 async def get_user_report(event_id: uuid.UUID) -> Optional[UserReport]:
@@ -41,7 +41,7 @@ async def get_user_report(event_id: uuid.UUID) -> Optional[UserReport]:
 async def list_issue_event(
     request: AuthHttpRequest, response: HttpResponse, issue_id: int
 ):
-    return get_queryset(request, issue_id=issue_id)
+    return get_queryset(request, issue_id=issue_id).order_by("-received")
 
 
 @router.get(
@@ -51,7 +51,7 @@ async def list_issue_event(
 )
 @has_permission(["event:read", "event:write", "event:admin"])
 async def get_latest_issue_event(request: AuthHttpRequest, issue_id: int):
-    qs = get_queryset(request, issue_id)
+    qs = get_queryset(request, issue_id).order_by("-received")
     qs = qs.annotate(
         previous=Window(expression=Lag("id"), order_by="received"),
     )
@@ -73,9 +73,15 @@ async def get_issue_event(request: AuthHttpRequest, issue_id: int, event_id: uui
     qs = get_queryset(request, issue_id)
     qs = qs.annotate(
         previous=Subquery(
-            qs.filter(received__lt=OuterRef("received")).values("id")[:1]
+            qs.filter(received__lt=OuterRef("received"))
+            .order_by("-received")
+            .values("id")[:1]
         ),
-        next=Subquery(qs.filter(received__gt=OuterRef("received")).values("id")[:1]),
+        next=Subquery(
+            qs.filter(received__gt=OuterRef("received"))
+            .order_by("received")
+            .values("id")[:1]
+        ),
     )
     event = await qs.filter(id=event_id).afirst()
     if not event:
@@ -93,15 +99,13 @@ async def get_issue_event(request: AuthHttpRequest, issue_id: int, event_id: uui
 @has_permission(["event:read", "event:write", "event:admin"])
 async def list_project_issue_event(
     request: AuthHttpRequest,
+    response: HttpResponse,
     organization_slug: str,
     project_slug: str,
 ):
-    return [
-        obj
-        async for obj in get_queryset(
-            request, organization_slug=organization_slug, project_slug=project_slug
-        )
-    ]
+    return get_queryset(
+        request, organization_slug=organization_slug, project_slug=project_slug
+    ).order_by("-received")
 
 
 @router.get(
@@ -121,9 +125,15 @@ async def get_project_issue_event(
     )
     qs = qs.annotate(
         previous=Subquery(
-            qs.filter(received__lt=OuterRef("received")).values("id")[:1]
+            qs.filter(received__lt=OuterRef("received"))
+            .order_by("-received")
+            .values("id")[:1]
         ),
-        next=Subquery(qs.filter(received__gt=OuterRef("received")).values("id")[:1]),
+        next=Subquery(
+            qs.filter(received__gt=OuterRef("received"))
+            .order_by("received")
+            .values("id")[:1]
+        ),
     )
     event = await qs.filter(id=event_id).afirst()
     if not event:

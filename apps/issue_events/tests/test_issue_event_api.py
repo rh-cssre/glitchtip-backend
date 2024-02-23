@@ -88,18 +88,36 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertContains(res, first_event.pk.hex)
 
     def test_retrieve(self):
-        event = baker.make("issue_events.IssueEvent", issue__project=self.project)
-        url = get_issue_event_url(event.issue_id, "a" * 32)
+        issue = baker.make("issue_events.issue", project=self.project)
+        baker.make("issue_events.IssueEvent", issue=issue, _quantity=10)
+        previous_event = baker.make("issue_events.IssueEvent", issue=issue)
+        latest_event = baker.make("issue_events.IssueEvent", issue=issue)
+        url = get_issue_event_url(issue.id, "a" * 32)
         res = self.client.get(url)
         self.assertEqual(res.status_code, 404)
 
-        url = get_issue_event_url(event.issue_id, event.id)
+        url = get_issue_event_url(issue.id, latest_event.id)
         res = self.client.get(url)
-        self.assertContains(res, event.pk.hex)
+        self.assertContains(res, latest_event.pk.hex)
 
-        url = get_latest_issue_event_url(event.issue_id)
+        url = get_latest_issue_event_url(issue.id)
         res = self.client.get(url)
-        self.assertContains(res, event.pk.hex)
+        event_details = res.json()
+        self.assertEqual(event_details["id"], latest_event.pk.hex)
+        self.assertEqual(event_details["previousEventID"], previous_event.pk.hex)
+
+    def test_relative_event_ordering(self):
+        issue = baker.make("issue_events.issue", project=self.project)
+        baker.make("issue_events.IssueEvent", issue=issue)
+        event1 = baker.make("issue_events.IssueEvent", issue=issue)
+        event2 = baker.make("issue_events.IssueEvent", issue=issue)
+        event3 = baker.make("issue_events.IssueEvent", issue=issue)
+        baker.make("issue_events.IssueEvent", issue=issue)
+        url = get_issue_event_url(issue.id, event2.id)
+        res = self.client.get(url)
+        event_details = res.json()
+        self.assertEqual(event_details["nextEventID"], event3.pk.hex)
+        self.assertEqual(event_details["previousEventID"], event1.pk.hex)
 
     def test_authentication(self):
         url = get_list_issue_event_url(1)
@@ -119,18 +137,22 @@ class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
         self.event = baker.make("issue_events.IssueEvent", issue__project=self.project)
 
         self.list_url = get_list_issue_event_url(self.event.issue_id)
-        # self.project_list_url = reverse(
-        #     "project-events-list",
-        #     kwargs={"project_pk": self.organization.slug + "/" + self.project.slug},
-        # )
+        self.project_list_url = reverse(
+            "api:list_project_issue_event",
+            kwargs={
+                "organization_slug": self.organization.slug,
+                "project_slug": self.project.slug,
+            },
+        )
         self.detail_url = get_issue_event_url(self.event.issue_id, self.event.pk)
-        # self.project_detail_url = reverse(
-        #     "project-events-detail",
-        #     kwargs={
-        #         "project_pk": self.organization.slug + "/" + self.project.slug,
-        #         "pk": self.event.pk,
-        #     },
-        # )
+        self.project_detail_url = reverse(
+            "api:get_project_issue_event",
+            kwargs={
+                "organization_slug": self.organization.slug,
+                "project_slug": self.project.slug,
+                "event_id": self.event.pk.hex,
+            },
+        )
         self.latest_detail_url = get_latest_issue_event_url(self.event.issue_id)
         self.event_json_url = get_event_json_url(
             self.organization.slug, self.event.issue_id, self.event.pk
@@ -138,18 +160,18 @@ class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
 
     def test_list(self):
         self.assertGetReqStatusCode(self.list_url, 403)
-        # self.assertGetReqStatusCode(self.project_list_url, 403)
+        self.assertGetReqStatusCode(self.project_list_url, 403)
         self.auth_token.add_permission("event:read")
         self.assertGetReqStatusCode(self.list_url, 200)
-        # self.assertGetReqStatusCode(self.project_list_url, 200)
+        self.assertGetReqStatusCode(self.project_list_url, 200)
 
     def test_retrieve(self):
         self.assertGetReqStatusCode(self.detail_url, 403)
-        # self.assertGetReqStatusCode(self.project_detail_url, 403)
+        self.assertGetReqStatusCode(self.project_detail_url, 403)
         self.assertGetReqStatusCode(self.latest_detail_url, 403)
         self.auth_token.add_permission("event:read")
         self.assertGetReqStatusCode(self.detail_url, 200)
-        # self.assertGetReqStatusCode(self.project_detail_url, 200)
+        self.assertGetReqStatusCode(self.project_detail_url, 200)
         self.assertGetReqStatusCode(self.latest_detail_url, 200)
 
     def test_event_json_view(self):
