@@ -227,10 +227,7 @@ async def list_project_issues(
             response["X-Sentry-Direct-Hit"] = "1"
         except ValueError:
             pass
-<<<<<<< Updated upstream
     return filter_issue_list(qs, filters, sort, query, event_id, environment)
-=======
-    return filter_issue_list(qs, filters, sort, query, event_id)
 
 
 @router.get(
@@ -278,4 +275,3 @@ async def list_issue_tags(
         }
         for key in keys
     ]
->>>>>>> Stashed changes
