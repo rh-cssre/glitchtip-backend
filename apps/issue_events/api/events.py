@@ -75,7 +75,11 @@ async def get_issue_event(request: AuthHttpRequest, issue_id: int, event_id: uui
         previous=Subquery(
             qs.filter(received__lt=OuterRef("received")).values("id")[:1]
         ),
-        next=Subquery(qs.filter(received__gt=OuterRef("received")).values("id")[:1]),
+        next=Subquery(
+            qs.filter(received__gt=OuterRef("received"))
+            .order_by("received")
+            .values("id")[:1]
+        ),
     )
     event = await qs.filter(id=event_id).afirst()
     if not event:

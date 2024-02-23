@@ -101,6 +101,18 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         res = self.client.get(url)
         self.assertContains(res, event.pk.hex)
 
+    def test_relative_event_ordering(self):
+        issue = baker.make("issue_events.issue", project=self.project)
+        event1 = baker.make("issue_events.IssueEvent", issue=issue)
+        event2 = baker.make("issue_events.IssueEvent", issue=issue)
+        event3 = baker.make("issue_events.IssueEvent", issue=issue)
+        baker.make("issue_events.IssueEvent", issue=issue)
+        url = get_issue_event_url(issue.id, event2.id)
+        res = self.client.get(url)
+        event_details = res.json()
+        self.assertEqual(event_details["nextEventID"], event3.pk.hex)
+        self.assertEqual(event_details["previousEventID"], event1.pk.hex)
+
     def test_authentication(self):
         url = get_list_issue_event_url(1)
         self.client.logout()
