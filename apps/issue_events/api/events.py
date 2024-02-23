@@ -51,11 +51,11 @@ async def list_issue_event(
 )
 @has_permission(["event:read", "event:write", "event:admin"])
 async def get_latest_issue_event(request: AuthHttpRequest, issue_id: int):
-    qs = get_queryset(request, issue_id).order_by("received")
+    qs = get_queryset(request, issue_id).order_by("-received")
     qs = qs.annotate(
-        previous=Window(expression=Lag("id")),
+        previous=Window(expression=Lag("id"), order_by="received"),
     )
-    event = await qs.alast()
+    event = await qs.afirst()
     if not event:
         raise Http404()
     event.next = None  # We know the next after "latest" must be None
