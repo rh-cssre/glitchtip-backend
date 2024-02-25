@@ -13,6 +13,7 @@ from ninja import Field, Query, Schema
 from pydantic.functional_validators import BeforeValidator
 from typing_extensions import Annotated
 
+from events.models import LogLevel
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.pagination import paginate
 from glitchtip.api.permissions import has_permission
@@ -149,6 +150,10 @@ def filter_issue_list(
                     # Does not require distinct as we already have a group by from annotations
                     qs = qs.filter(
                         issuetag__tag_key__key=query_value,
+                    )
+                elif query_name == "level":
+                    qs = qs.filter(
+                        level=LogLevel.from_string(query_value)
                     )
                 else:
                     qs = qs.filter(

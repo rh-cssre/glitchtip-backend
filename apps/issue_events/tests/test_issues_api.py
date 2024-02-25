@@ -11,6 +11,7 @@ from freezegun import freeze_time
 from model_bakery import baker
 
 from apps.event_ingest.model_functions import PipeConcat
+from events.models import LogLevel
 from glitchtip.test_utils.test_case import APIPermissionTestCase, GlitchTipTestCaseMixin
 
 from ..models import Issue
@@ -484,6 +485,40 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertContains(res, issue1.id)
         self.assertContains(res, issue2.id)
 
+    def test_filter_by_level(self):
+        """
+        A user should be able to filter by issue levels.
+        """
+        level_warning = LogLevel.WARNING
+        level_fatal = LogLevel.FATAL
+
+        issue1 = baker.make("issue_events.Issue", project=self.project, level=level_warning)
+        issue2 = baker.make("issue_events.Issue", project=self.project, level=level_fatal)
+        issue3 = baker.make("issue_events.Issue", project=self.project)
+
+        res = self.client.get(
+            self.list_url
+            + f"?query=level:{level_warning.label}"
+        )
+        self.assertEqual(len(res.json()), 1)
+        self.assertContains(res, issue1.id)
+        self.assertNotContains(res, issue2.id)
+        self.assertNotContains(res, issue3.id)
+
+        res = self.client.get(
+            self.list_url
+            + f"?query=level:{level_fatal.label}"
+        )
+        self.assertEqual(len(res.json()), 1)
+        self.assertContains(res, issue2.id)
+        self.assertNotContains(res, issue1.id)
+        self.assertNotContains(res, issue3.id)
+
+        res = self.client.get(self.list_url)
+        self.assertEqual(len(res.json()), 3)
+        self.assertContains(res, issue1.id)
+        self.assertContains(res, issue2.id)
+        self.assertContains(res, issue3.id)
 
 class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
     def setUp(self):
