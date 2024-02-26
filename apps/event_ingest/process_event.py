@@ -203,6 +203,11 @@ def check_set_issue_id(
 def create_environments(
     environment_set: set[tuple[str, int, int]], projects_with_data: QuerySet
 ):
+    """
+    Create newly seen environments.
+    Functions determines which, if any, environments are present in event data
+    but not the database. Optimized to do a much work in python and reduce queries.
+    """
     environments_to_create = [
         Environment(name=name, organization_id=organization_id)
         for name, project_id, organization_id in environment_set
@@ -244,7 +249,7 @@ def get_and_create_releases(
     release_set: set[tuple[str, int, int]], projects_with_data: QuerySet
 ) -> list[tuple[str, int, int]]:
     """
-    Create newly seen releases. Return full list of releases with ID.
+    Create newly seen releases.
     functions determines which, if any, releases are present in event data
     but not the database. Optimized to do a much work in python and reduce queries.
     Return list of tuples: Release version, project_id, release_id

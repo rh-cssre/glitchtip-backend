@@ -54,7 +54,7 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         environment = baker.make(
             "environments.Environment", name="e", projects=[self.project]
         )
-        dif = baker.make("difs.DebugInformationFile", project=self.project)
+        baker.make("difs.DebugInformationFile", project=self.project)
         baker.make("releases.Release", projects=[self.project, project2])
         baker.make("releases.Release", version="r", projects=[project2])
         baker.make("releases.Release", version="r")
