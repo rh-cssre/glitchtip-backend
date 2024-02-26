@@ -1,7 +1,6 @@
 # No longer used
 UPDATE_ISSUE_TRIGGER = """
 DROP TRIGGER IF EXISTS event_issue_update on events_event;
-DROP FUNCTION IF EXISTS update_issue;
 """
 
 INCREMENT_PROJECT_COUNTER_TRIGGER = """

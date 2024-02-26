@@ -91,7 +91,7 @@ class ImporterTestCase(GlitchTipTestCase):
         other_org.add_user(other_user)
         res = self.client.post(url, data)
         self.assertEqual(res.status_code, 400)
-        org_user = other_org.add_user(self.user)
+        other_org.add_user(self.user)
         m.get(self.url + self.importer.api_root_url, json={"user": {"username": "foo"}})
         res = self.client.post(url, data)
         self.assertEqual(res.status_code, 400)

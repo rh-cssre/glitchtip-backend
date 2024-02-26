@@ -1,7 +1,9 @@
-from django.shortcuts import reverse
+from django.urls import reverse
 from model_bakery import baker
-from glitchtip import test_utils  # pylint: disable=unused-import
+
 from glitchtip.test_utils.test_case import GlitchTipTestCase
+from organizations_ext.models import OrganizationUserRole
+
 from ..models import ProjectAlert
 
 
@@ -15,18 +17,20 @@ class AlertAPITestCase(GlitchTipTestCase):
         )
         url = reverse(
             "project-alerts-list",
-            kwargs={"project_pk": f"{self.organization.slug}/{self.project.slug}",},
+            kwargs={
+                "project_pk": f"{self.organization.slug}/{self.project.slug}",
+            },
         )
         res = self.client.get(url)
         self.assertContains(res, alert.timespan_minutes)
 
     def test_retrieve_with_second_team(self):
-        baker.make(
-            "alerts.ProjectAlert", project=self.project, timespan_minutes=60
-        )
+        baker.make("alerts.ProjectAlert", project=self.project, timespan_minutes=60)
         url = reverse(
             "project-alerts-list",
-            kwargs={"project_pk": f"{self.organization.slug}/{self.project.slug}",},
+            kwargs={
+                "project_pk": f"{self.organization.slug}/{self.project.slug}",
+            },
         )
 
         team2 = baker.make("teams.Team", organization=self.organization)
@@ -38,7 +42,9 @@ class AlertAPITestCase(GlitchTipTestCase):
     def test_project_alerts_create(self):
         url = reverse(
             "project-alerts-list",
-            kwargs={"project_pk": f"{self.organization.slug}/{self.project.slug}",},
+            kwargs={
+                "project_pk": f"{self.organization.slug}/{self.project.slug}",
+            },
         )
         data = {
             "name": "foo",
@@ -53,6 +59,38 @@ class AlertAPITestCase(GlitchTipTestCase):
         self.assertEqual(project_alert.timespan_minutes, data["timespan_minutes"])
         self.assertEqual(project_alert.project, self.project)
 
+    def test_project_alerts_create_permissions(self):
+        user = baker.make("users.user")
+        org_user = self.organization.add_user(user, OrganizationUserRole.MEMBER)
+        self.client.force_login(user)
+        url = reverse(
+            "project-alerts-list",
+            kwargs={
+                "project_pk": f"{self.organization.slug}/{self.project.slug}",
+            },
+        )
+        data = {
+            "name": "foo",
+            "timespan_minutes": 60,
+            "quantity": 2,
+            "uptime": True,
+            "alertRecipients": [{"recipientType": "email", "url": "example.com"}],
+        }
+        res = self.client.post(url, data)
+        # Member without project team membership cannot create alerts
+        self.assertEqual(res.status_code, 400)
+
+        org_user.role = OrganizationUserRole.ADMIN
+        org_user.save()
+        res = self.client.post(url, data)
+        self.assertEqual(res.status_code, 201)
+
+        org_user.role = OrganizationUserRole.MEMBER
+        org_user.save()
+        res = self.client.get(url)
+        # Members can still view alerts
+        self.assertEqual(len(res.data), 1)
+
     def test_create_with_second_team(self):
         team2 = baker.make("teams.Team", organization=self.organization)
         team2.members.add(self.org_user)
@@ -60,7 +98,9 @@ class AlertAPITestCase(GlitchTipTestCase):
 
         url = reverse(
             "project-alerts-list",
-            kwargs={"project_pk": f"{self.organization.slug}/{self.project.slug}",},
+            kwargs={
+                "project_pk": f"{self.organization.slug}/{self.project.slug}",
+            },
         )
         data = {
             "name": "foo",
@@ -109,7 +149,7 @@ class AlertAPITestCase(GlitchTipTestCase):
         self.assertEqual(project_alert.quantity, 2)
 
     def test_project_alerts_update_auth(self):
-        """ Cannot update alert on project that user does not belong to """
+        """Cannot update alert on project that user does not belong to"""
         alert = baker.make("alerts.ProjectAlert", timespan_minutes=60)
         url = reverse(
             "project-alerts-detail",
