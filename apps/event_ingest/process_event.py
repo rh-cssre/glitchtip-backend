@@ -21,6 +21,7 @@ from user_agents import parse
 
 from alerts.models import Notification
 from apps.difs.models import DebugInformationFile
+from apps.difs.tasks import event_difs_resolve_stacktrace
 from apps.environments.models import Environment, EnvironmentProject
 from apps.issue_events.constants import EventStatus
 from apps.issue_events.models import (
@@ -45,7 +46,7 @@ from ..shared.schema.contexts import (
 )
 from .javascript_event_processor import JavascriptEventProcessor
 from .model_functions import PipeConcat
-from .schema import IngestIssueEvent, InterchangeIssueEvent
+from .schema import ErrorIssueEventSchema, IngestIssueEvent, InterchangeIssueEvent
 from .utils import generate_hash, transform_parameterized_message
 
 
@@ -396,6 +397,19 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         )
         if event.platform in ("javascript", "node") and release_id:
             JavascriptEventProcessor(release_id, event).transform()
+        elif (
+            event.exception
+            and isinstance(event.exception, ErrorIssueEventSchema)
+            and next(
+                (
+                    project["has_difs"]
+                    for project in projects_with_data
+                    if project["id"] == ingest_event.project_id
+                ),
+                False,
+            )
+        ):
+            event_difs_resolve_stacktrace(event, ingest_event.project_id)
 
         if event.type in [IssueEventType.ERROR, IssueEventType.DEFAULT]:
             sentry_event = ErrorEvent()

@@ -8,6 +8,7 @@ from symbolic import Archive
 
 from apps.difs.models import DebugInformationFile
 from apps.difs.stacktrace_processor import StacktraceProcessor
+from apps.event_ingest.schema import ErrorIssueEventSchema, StackTraceFrame
 from apps.files.models import File, FileBlob
 from events.models import Event
 from projects.models import Project
@@ -84,6 +85,40 @@ def difs_resolve_stacktrace(event_id):
         )
         StacktraceProcessor.update_frames(event, best_remapped_stacktrace.frames)
         event.save()
+
+
+def event_difs_resolve_stacktrace(event: ErrorIssueEventSchema, project_id: int):
+    difs = DebugInformationFile.objects.filter(project_id=project_id).order_by(
+        "-created"
+    )
+    resolved_stracktrackes = []
+    event_json = event.dict()
+
+    for dif in difs:
+        if StacktraceProcessor.is_supported(event_json, dif) is False:
+            continue
+        blobs = [dif.file.blob]
+        with difs_concat_file_blobs_to_disk(blobs) as symbol_file:
+            remapped_stacktrace = StacktraceProcessor.resolve_stacktrace(
+                event_json, symbol_file.name
+            )
+            if remapped_stacktrace is not None and remapped_stacktrace.score > 0:
+                resolved_stracktrackes.append(remapped_stacktrace)
+    if len(resolved_stracktrackes) > 0:
+        best_remapped_stacktrace = max(
+            resolved_stracktrackes, key=lambda item: item.score
+        )
+        update_frames(event, best_remapped_stacktrace.frames)
+
+
+def update_frames(event: ErrorIssueEventSchema, frames):
+    # This should be rewritten
+    try:
+        new_frames = [StackTraceFrame(**frame) for frame in frames]
+        event.exception.values[0].stacktrace.frames = new_frames
+    except Exception as e:
+        getLogger().error(f"StacktraceProcessor: Unexpected error: {e}")
+        pass
 
 
 def difs_get_file_from_chunks(checksum, chunks):
