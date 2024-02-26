@@ -1,13 +1,16 @@
-from rest_framework import serializers, status
-from rest_framework.exceptions import APIException, PermissionDenied
-from projects.serializers.base_serializers import ProjectReferenceWithMemberSerializer
-from users.serializers import UserSerializer
-from teams.serializers import TeamSerializer
+from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
+
+from glitchtip.exceptions import ConflictException
+from projects.serializers.serializers import OrganizationProjectSerializer
 from teams.models import Team
+from teams.serializers import TeamSerializer
 from users.models import User
+from users.serializers import UserSerializer
 from users.utils import is_user_registration_open
+
+from ..models import ROLES, OrganizationUser, OrganizationUserRole
 from .base_serializers import OrganizationReferenceSerializer
-from ..models import OrganizationUser, OrganizationUserRole, ROLES
 
 
 class OrganizationSerializer(OrganizationReferenceSerializer):
@@ -15,7 +18,7 @@ class OrganizationSerializer(OrganizationReferenceSerializer):
 
 
 class OrganizationDetailSerializer(OrganizationSerializer):
-    projects = ProjectReferenceWithMemberSerializer(many=True)
+    projects = OrganizationProjectSerializer(many=True)
     teams = TeamSerializer(many=True)
     openMembership = serializers.BooleanField(source="open_membership")
     scrubIPAddresses = serializers.BooleanField(source="scrub_ip_addresses")
@@ -29,10 +32,6 @@ class OrganizationDetailSerializer(OrganizationSerializer):
         )
 
 
-class HTTP409APIException(APIException):
-    status_code = status.HTTP_409_CONFLICT
-
-
 class OrganizationUserSerializer(serializers.ModelSerializer):
     user = UserSerializer(required=False, read_only=True)
     role = serializers.CharField(source="get_role")
@@ -41,6 +40,7 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
     teams = serializers.SlugRelatedField(
         many=True, write_only=True, slug_field="slug", queryset=Team.objects.none()
     )
+    isOwner = serializers.SerializerMethodField()
 
     class Meta:
         model = OrganizationUser
@@ -53,6 +53,7 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
             "email",
             "teams",
             "pending",
+            "isOwner",
         )
 
     def __init__(self, *args, request_user=None, **kwargs):
@@ -72,6 +73,11 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
 
         return extra_kwargs
 
+    def get_isOwner(self, obj):
+        if owner := obj.organization.owner:
+            return owner.organization_user_id == obj.id
+        return False
+
     def create(self, validated_data):
         role = OrganizationUserRole.from_string(validated_data.get("get_role"))
         email = validated_data.get("email")
@@ -83,9 +89,9 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
         ):
             raise PermissionDenied("Only existing users may be invited")
         if organization.organization_users.filter(email=email).exists():
-            raise HTTP409APIException(f"The user {email} is already invited", "email")
+            raise ConflictException(f"The user {email} is already invited", "email")
         if organization.organization_users.filter(user__email=email).exists():
-            raise HTTP409APIException(f"The user {email} is already a member", "email")
+            raise ConflictException(f"The user {email} is already a member", "email")
         org_user = super().create(
             {"role": role, "email": email, "organization": organization}
         )
@@ -100,7 +106,7 @@ class OrganizationUserSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
     def to_representation(self, obj):
-        """Override email for representation to potientially show user's email"""
+        """Override email for representation to potentially show user's email"""
         self.fields["email"] = serializers.SerializerMethodField()
         return super().to_representation(obj)
 

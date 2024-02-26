@@ -1,9 +1,10 @@
 import copy
 import random
-import string
 import uuid
 
 from django.utils import timezone
+
+from glitchtip.utils import get_random_string
 
 from . import django_error_factory
 from .csp import mdn_sample_csp
@@ -11,11 +12,7 @@ from .csp import mdn_sample_csp
 events = django_error_factory.all_django_events
 events.append(mdn_sample_csp)
 
-
-def get_random_string(length=16):
-    letters = string.ascii_lowercase
-    result_str = "".join(random.choice(letters) for i in range(length))
-    return result_str
+things = ["a", "b", "c", None]
 
 
 def make_event_unique(event, unique_issue=False):
@@ -23,6 +20,8 @@ def make_event_unique(event, unique_issue=False):
     new_event = copy.deepcopy(event)
     new_event["event_id"] = uuid.uuid4().hex
     new_event["timestamp"] = timezone.now().isoformat()
+    new_event["release"] = random.choice(things)
+    new_event["environment"] = random.choice(things)
     if unique_issue:
         title = get_random_string()
         if "message" in new_event:

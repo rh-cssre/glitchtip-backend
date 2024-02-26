@@ -1,26 +1,28 @@
 version: "3.8"
-x-environment:
-  &default-environment
+x-environment: &default-environment
   DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
   SECRET_KEY: change_me
   ENABLE_ORGANIZATION_CREATION: "true"
-  ENABLE_LOGIN_FORM: "false"
   ENABLE_TEST_API: "true"
   DEBUG: "true"
   EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
   ENABLE_OBSERVABILITY_API: "true"
-  CELERY_WORKER_CONCURRENCY: 1
+  #GLITCHTIP_ENABLE_NEW_ISSUES: "true"
+  #IS_LOAD_TEST: "true"
+  CELERY_WORKER_CONCURRENCY: 4
+  CELERY_WORKER_PREFETCH_MULTIPLIER: 25
+  CELERY_WORKER_POOL: "threads"
+  CELERY_SKIP_CHECKS: "true"
+  PYTHONBREAKPOINT: "ipdb.set_trace"
 
-x-depends_on:
-  &default-depends_on
+x-depends_on: &default-depends_on
   - postgres
   - redis
-x-volumes:
-  &default-volumes
+x-volumes: &default-volumes
   - .:/code
 services:
   postgres:
-    image: postgres:15
+    image: postgres:16
     environment:
       POSTGRES_HOST_AUTH_METHOD: "trust"
   redis:
@@ -29,6 +31,7 @@ services:
     build: .
     user: root # Allows for usage of ipdb, apt, etc in dev
     command: ./manage.py runserver 0.0.0.0:8000
+    #command: python -m gunicorn glitchtip.asgi:application -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0
     depends_on: *default-depends_on
     volumes: *default-volumes
     ports:
