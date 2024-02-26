@@ -6,13 +6,21 @@ from urllib.parse import urlparse
 
 from django.contrib.postgres.search import SearchVector
 from django.db import connection, transaction
-from django.db.models import F, Q, Value
-from django.db.models.functions import Greatest
+from django.db.models import (
+    Exists,
+    F,
+    OuterRef,
+    Q,
+    QuerySet,
+    Value,
+)
+from django.db.models.functions import Coalesce, Greatest
 from django.db.utils import IntegrityError
 from ninja import Schema
 from user_agents import parse
 
 from alerts.models import Notification
+from apps.difs.models import DebugInformationFile
 from apps.environments.models import Environment, EnvironmentProject
 from apps.issue_events.constants import EventStatus
 from apps.issue_events.models import (
@@ -24,6 +32,7 @@ from apps.issue_events.models import (
     TagValue,
 )
 from apps.releases.models import Release
+from projects.models import Project
 from sentry.culprit import generate_culprit
 from sentry.eventtypes.error import ErrorEvent
 from sentry.utils.strings import truncatechars
@@ -191,6 +200,117 @@ def check_set_issue_id(
             event.issue_id = issue_id
 
 
+def create_environments(
+    environment_set: set[tuple[str, int, int]], projects_with_data: QuerySet
+):
+    environments_to_create = [
+        Environment(name=name, organization_id=organization_id)
+        for name, project_id, organization_id in environment_set
+        if not next(
+            (
+                x
+                for x in projects_with_data
+                if x["environment_name"] == name and x["id"] == project_id
+            ),
+            None,
+        )
+    ]
+
+    if environments_to_create:
+        Environment.objects.bulk_create(environments_to_create, ignore_conflicts=True)
+        environments = Environment.objects.filter(
+            name__in={name for (name, _, _) in environment_set},
+            organization_id__in={
+                organization_id for (_, _, organization_id) in environment_set
+            },
+        )
+        environment_projects: list = []
+        for environment in environments:
+            project_id = next(
+                project_id
+                for (name, project_id, organization_id) in environment_set
+                if environment.name == name
+                and environment.organization_id == organization_id
+            )
+            environment_projects.append(
+                EnvironmentProject(project_id=project_id, environment=environment)
+            )
+        EnvironmentProject.objects.bulk_create(
+            environment_projects, ignore_conflicts=True
+        )
+
+
+def get_and_create_releases(
+    release_set: set[tuple[str, int, int]], projects_with_data: QuerySet
+) -> list[tuple[str, int, int]]:
+    """
+    Create newly seen releases. Return full list of releases with ID.
+    functions determines which, if any, releases are present in event data
+    but not the database. Optimized to do a much work in python and reduce queries.
+    Return list of tuples: Release version, project_id, release_id
+    """
+    releases_to_create = [
+        Release(version=release_name, organization_id=organization_id)
+        for release_name, project_id, organization_id in release_set
+        if not next(
+            (
+                x
+                for x in projects_with_data
+                if x["release_name"] == release_name and x["id"] == project_id
+            ),
+            None,
+        )
+    ]
+    releases: Union[list, QuerySet] = []
+    if releases_to_create:
+        # Create database records for any release that doesn't exist
+        Release.objects.bulk_create(releases_to_create, ignore_conflicts=True)
+        releases = Release.objects.filter(
+            version__in=[release.version for release in releases_to_create],
+            organization_id__in=[
+                release.organization_id for release in releases_to_create
+            ],
+        )
+        ReleaseProject = Release.projects.through
+        release_projects = [
+            ReleaseProject(
+                release=release,
+                project_id=next(
+                    project_id
+                    for (version, project_id, organization_id) in release_set
+                    if release.version == version
+                    and release.organization_id == organization_id
+                ),
+            )
+            for release in releases
+        ]
+        ReleaseProject.objects.bulk_create(release_projects, ignore_conflicts=True)
+    return [
+        (
+            version,
+            project_id,
+            next(
+                (
+                    project["release_id"]
+                    for project in projects_with_data
+                    if project["release_name"] == version
+                    and project["id"] == project_id
+                ),
+                next(
+                    (
+                        release.id
+                        for release in releases
+                        if release.version == version
+                        and release.organization_id == organization_id
+                    ),
+                    0,
+                ),
+            ),
+        )
+        for version, project_id, organization_id in release_set
+    ]
+
+
 def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
     """
     Accepts a list of events to ingest. Events should be:
@@ -202,65 +322,50 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
     error, or ignore. If the SDK sends "weird" data, we want to log that.
     It's better to save a minimal event than to ignore it.
     """
-    releases_set = {
+
+    # Fetch any needed releases, environments, and whether there is a dif file association
+    # Get unique release/environment for each project_id
+    release_set = {
         (event.payload.release, event.project_id, event.organization_id)
         for event in ingest_events
         if event.payload.release
     }
-    Release.objects.bulk_create(
-        [
-            Release(version=version, organization_id=organization_id)
-            for (version, _, organization_id) in releases_set
-        ],
-        ignore_conflicts=True,
-    )
-    releases = Release.objects.filter(
-        version__in={version for (version, _, _) in releases_set},
-        organization_id__in={
-            organization_id for (_, _, organization_id) in releases_set
-        },
-    )
-    ReleaseProject = Release.projects.through
-    release_projects: list = []
-    for release in releases:
-        project_id = next(
-            project_id
-            for (version, project_id, organization_id) in releases_set
-            if release.version == version and release.organization_id == organization_id
-        )
-        release_projects.append(ReleaseProject(project_id=project_id, release=release))
-    ReleaseProject.objects.bulk_create(release_projects, ignore_conflicts=True)
-
-    environments_set = {
-        (event.payload.environment[:256], event.project_id, event.organization_id)
+    environment_set = {
+        (event.payload.environment[:255], event.project_id, event.organization_id)
         for event in ingest_events
         if event.payload.environment
     }
-    Environment.objects.bulk_create(
-        [
-            Environment(name=name, organization_id=organization_id)
-            for (name, _, organization_id) in environments_set
-        ],
-        ignore_conflicts=True,
+    project_set = {project_id for _, project_id, _ in release_set}.union(
+        {project_id for _, project_id, _ in environment_set}
     )
-    environments = Environment.objects.filter(
-        name__in={name for (name, _, _) in environments_set},
-        organization_id__in={
-            organization_id for (_, _, organization_id) in environments_set
-        },
+    release_version_set = {version for version, _, _ in release_set}
+    environment_name_set = {name for name, _, _ in environment_set}
+
+    projects_with_data = (
+        Project.objects.filter(id__in=project_set)
+        .annotate(
+            has_difs=Exists(
+                DebugInformationFile.objects.filter(project_id=OuterRef("pk"))
+            ),
+            release_id=Coalesce("releases__id", Value(None)),
+            release_name=Coalesce("releases__version", Value(None)),
+            environment_id=Coalesce("environment__id", Value(None)),
+            environment_name=Coalesce("environment__name", Value(None)),
+        )
+        .filter(release_name__in=release_version_set.union({None}))
+        .filter(environment_name__in=environment_name_set.union({None}))
+        .values(
+            "id",
+            "has_difs",
+            "release_id",
+            "release_name",
+            "environment_id",
+            "environment_name",
+        )
     )
-    environment_projects: list = []
-    for environment in environments:
-        project_id = next(
-            project_id
-            for (name, project_id, organization_id) in environments_set
-            if environment.name == name
-            and environment.organization_id == organization_id
-        )
-        environment_projects.append(
-            EnvironmentProject(project_id=project_id, environment=environment)
-        )
-    EnvironmentProject.objects.bulk_create(environment_projects, ignore_conflicts=True)
+
+    releases = get_and_create_releases(release_set, projects_with_data)
+    create_environments(environment_set, projects_with_data)
 
     # Collected/calculated event data while processing
     processing_events: list[ProcessingEvent] = []
@@ -277,9 +382,10 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
 
         release_id = next(
             (
-                release.id
-                for release in releases
-                if release.version == event_tags.get("release")
+                release_id
+                for version, project_id, release_id in releases
+                if version == event_tags.get("release")
+                and ingest_event.project_id == project_id
             ),
             None,
         )

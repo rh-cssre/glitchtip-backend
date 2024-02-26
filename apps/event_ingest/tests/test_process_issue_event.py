@@ -47,6 +47,33 @@ class IssueEventIngestTestCase(EventIngestTestCase):
             ).exists()
         )
 
+    def test_query_release_environment_difs(self):
+        """Test efficiency of existing release/environment/dif"""
+        project2 = baker.make("projects.Project", organization=self.organization)
+        release = baker.make("releases.Release", version="r", projects=[self.project])
+        environment = baker.make(
+            "environments.Environment", name="e", projects=[self.project]
+        )
+        dif = baker.make("difs.DebugInformationFile", project=self.project)
+        baker.make("releases.Release", projects=[self.project, project2])
+        baker.make("releases.Release", version="r", projects=[project2])
+        baker.make("releases.Release", version="r")
+        baker.make("environments.Environment", projects=[self.project])
+        baker.make("difs.DebugInformationFile", project=self.project)
+        event1 = {
+            "release": release.version,
+            "environment": environment.name,
+        }
+        event2 = {
+            "release": "newr",
+            "environment": "newe",
+        }
+        with self.assertNumQueries(13):
+            self.process_events([event1, {}])
+        self.process_events([event1, event2, {}])
+        self.assertEqual(self.project.releases.count(), 3)
+        self.assertEqual(self.project.environment_set.count(), 3)
+
     def test_reopen_resolved_issue(self):
         event = self.process_events({})[0]
         issue = Issue.objects.first()
