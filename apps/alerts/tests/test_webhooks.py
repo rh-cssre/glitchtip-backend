@@ -4,7 +4,6 @@ from django.test import TestCase
 from model_bakery import baker
 
 from events.models import LogLevel
-from glitchtip import test_utils  # pylint: disable=unused-import
 
 from ..constants import RecipientType
 from ..models import Notification

@@ -11,16 +11,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    replaces = [
-        ("alerts", "0001_initial"),
-        ("alerts", "0002_auto_20210314_2022"),
-        ("alerts", "0003_auto_20210327_1648"),
-        ("alerts", "0004_auto_20210411_1913"),
-        ("alerts", "0005_alter_alertrecipient_url"),
-        ("alerts", "0006_projectalert_name_projectalert_uptime"),
-        ("alerts", "0007_alter_alertrecipient_id_alter_notification_id_and_more"),
-    ]
-
     initial = True
 
     dependencies = [
@@ -73,7 +63,7 @@ class Migration(migrations.Migration):
                 ),
                 ("created", models.DateField(auto_now_add=True)),
                 ("is_sent", models.BooleanField(default=False)),
-                ("issues", models.ManyToManyField(to="issues.issue")),
+                ("issues", models.ManyToManyField(to="issues.Issue")),
                 (
                     "project",
                     models.ForeignKey(

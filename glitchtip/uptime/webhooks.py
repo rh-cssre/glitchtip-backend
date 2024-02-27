@@ -1,8 +1,8 @@
 from datetime import datetime
 
-from alerts.constants import RecipientType
-from alerts.models import AlertRecipient
-from alerts.webhooks import (
+from apps.alerts.constants import RecipientType
+from apps.alerts.models import AlertRecipient
+from apps.alerts.webhooks import (
     DiscordEmbed,
     GoogleChatCard,
     MSTeamsSection,

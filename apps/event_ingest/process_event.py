@@ -19,7 +19,7 @@ from django.db.utils import IntegrityError
 from ninja import Schema
 from user_agents import parse
 
-from alerts.models import Notification
+from apps.alerts.models import Notification
 from apps.difs.models import DebugInformationFile
 from apps.difs.tasks import event_difs_resolve_stacktrace
 from apps.environments.models import Environment, EnvironmentProject
