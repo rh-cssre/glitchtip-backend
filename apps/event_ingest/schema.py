@@ -299,9 +299,9 @@ SUPPORTED_ITEMS = typing.get_args(SupportedItemType)
 
 
 class ItemHeaderSchema(Schema):
-    content_type: Optional[str]
+    content_type: Optional[str] = None
     type: SupportedItemType
-    length: Optional[int]
+    length: Optional[int] = None
 
 
 class EnvelopeSchema(RootModel[list[dict[str, Any]]]):
