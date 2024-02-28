@@ -7,7 +7,7 @@ x-environment: &default-environment
   DEBUG: "true"
   EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
   ENABLE_OBSERVABILITY_API: "true"
-  #GLITCHTIP_ENABLE_NEW_ISSUES: "true"
+  GLITCHTIP_ENABLE_NEW_ISSUES: "true"
   #IS_LOAD_TEST: "true"
   CELERY_WORKER_CONCURRENCY: 4
   CELERY_WORKER_PREFETCH_MULTIPLIER: 25
