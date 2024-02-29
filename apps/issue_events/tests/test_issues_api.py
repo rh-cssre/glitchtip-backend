@@ -481,9 +481,9 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
             self.list_url
             + f"?environment={environment1_name}&environment={environment2_name}"
         )
-        self.assertEqual(len(res.json()), 2)
-        self.assertContains(res, issue1.id)
-        self.assertContains(res, issue2.id)
+        data = res.json()
+        self.assertEqual(len(data), 2)
+        self.assertNotIn(str(issue3.id), [data[0]['id'], data[1]['id']])
 
     def test_filter_by_level(self):
         """
@@ -492,33 +492,27 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         level_warning = LogLevel.WARNING
         level_fatal = LogLevel.FATAL
 
-        issue1 = baker.make("issue_events.Issue", project=self.project, level=level_warning)
-        issue2 = baker.make("issue_events.Issue", project=self.project, level=level_fatal)
-        issue3 = baker.make("issue_events.Issue", project=self.project)
-
-        res = self.client.get(
-            self.list_url
-            + f"?query=level:{level_warning.label}"
+        issue1 = baker.make(
+            "issue_events.Issue", project=self.project, level=level_warning
         )
-        self.assertEqual(len(res.json()), 1)
-        self.assertContains(res, issue1.id)
-        self.assertNotContains(res, issue2.id)
-        self.assertNotContains(res, issue3.id)
-
-        res = self.client.get(
-            self.list_url
-            + f"?query=level:{level_fatal.label}"
+        issue2 = baker.make(
+            "issue_events.Issue", project=self.project, level=level_fatal
         )
-        self.assertEqual(len(res.json()), 1)
-        self.assertContains(res, issue2.id)
-        self.assertNotContains(res, issue1.id)
-        self.assertNotContains(res, issue3.id)
+        baker.make("issue_events.Issue", project=self.project)
+
+        res = self.client.get(self.list_url + f"?query=level:{level_warning.label}")
+        data = res.json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]['id'], str(issue1.id))
+
+        res = self.client.get(self.list_url + f"?query=level:{level_fatal.label}")
+        data = res.json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]['id'], str(issue2.id))
 
         res = self.client.get(self.list_url)
         self.assertEqual(len(res.json()), 3)
-        self.assertContains(res, issue1.id)
-        self.assertContains(res, issue2.id)
-        self.assertContains(res, issue3.id)
+
 
 class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
     def setUp(self):
