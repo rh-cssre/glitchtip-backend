@@ -1,4 +1,5 @@
 from dateutil.relativedelta import relativedelta
+from django.conf import settings
 
 from apps.issue_events.models import IssueEvent, IssueTag
 from psqlextra.partitioning import (
@@ -11,7 +12,7 @@ from psqlextra.partitioning.config import PostgresPartitioningConfig
 issue_strategy = PostgresCurrentTimePartitioningStrategy(
     size=PostgresTimePartitionSize(days=1),
     count=7,
-    max_age=relativedelta(months=3),
+    max_age=relativedelta(days=settings.GLITCHTIP_MAX_EVENT_LIFE_DAYS),
 )
 
 manager = PostgresPartitioningManager(
