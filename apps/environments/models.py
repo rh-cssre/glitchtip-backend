@@ -15,7 +15,7 @@ class EnvironmentProject(CreatedModel):
 
 
 class Environment(CreatedModel):
-    name = models.CharField(max_length=256)
+    name = models.CharField(max_length=255)
     organization = models.ForeignKey(
         "organizations_ext.Organization", on_delete=models.CASCADE
     )
