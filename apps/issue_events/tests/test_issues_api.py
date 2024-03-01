@@ -481,9 +481,9 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
             self.list_url
             + f"?environment={environment1_name}&environment={environment2_name}"
         )
-        self.assertEqual(len(res.json()), 2)
-        self.assertContains(res, issue1.id)
-        self.assertContains(res, issue2.id)
+        data = res.json()
+        self.assertEqual(len(data), 2)
+        self.assertNotIn(str(issue3.id), [data[0]["id"], data[1]["id"]])
 
     def test_filter_by_level(self):
         """
@@ -498,25 +498,20 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         issue2 = baker.make(
             "issue_events.Issue", project=self.project, level=level_fatal
         )
-        issue3 = baker.make("issue_events.Issue", project=self.project)
+        baker.make("issue_events.Issue", project=self.project)
 
         res = self.client.get(self.list_url + f"?query=level:{level_warning.label}")
-        self.assertEqual(len(res.json()), 1)
-        self.assertContains(res, issue1.title)
-        self.assertNotContains(res, issue2.title)
-        self.assertNotContains(res, issue3.title)
+        data = res.json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["id"], str(issue1.id))
 
         res = self.client.get(self.list_url + f"?query=level:{level_fatal.label}")
-        self.assertEqual(len(res.json()), 1)
-        self.assertContains(res, issue2.title)
-        self.assertNotContains(res, issue1.title)
-        self.assertNotContains(res, issue3.title)
+        data = res.json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["id"], str(issue2.id))
 
         res = self.client.get(self.list_url)
         self.assertEqual(len(res.json()), 3)
-        self.assertContains(res, issue1.title)
-        self.assertContains(res, issue2.title)
-        self.assertContains(res, issue3.title)
 
 
 class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
