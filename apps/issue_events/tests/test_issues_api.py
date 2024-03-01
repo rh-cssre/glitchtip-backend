@@ -492,33 +492,32 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         level_warning = LogLevel.WARNING
         level_fatal = LogLevel.FATAL
 
-        issue1 = baker.make("issue_events.Issue", project=self.project, level=level_warning)
-        issue2 = baker.make("issue_events.Issue", project=self.project, level=level_fatal)
+        issue1 = baker.make(
+            "issue_events.Issue", project=self.project, level=level_warning
+        )
+        issue2 = baker.make(
+            "issue_events.Issue", project=self.project, level=level_fatal
+        )
         issue3 = baker.make("issue_events.Issue", project=self.project)
 
-        res = self.client.get(
-            self.list_url
-            + f"?query=level:{level_warning.label}"
-        )
+        res = self.client.get(self.list_url + f"?query=level:{level_warning.label}")
         self.assertEqual(len(res.json()), 1)
-        self.assertContains(res, issue1.id)
-        self.assertNotContains(res, issue2.id)
-        self.assertNotContains(res, issue3.id)
+        self.assertContains(res, issue1.title)
+        self.assertNotContains(res, issue2.title)
+        self.assertNotContains(res, issue3.title)
 
-        res = self.client.get(
-            self.list_url
-            + f"?query=level:{level_fatal.label}"
-        )
+        res = self.client.get(self.list_url + f"?query=level:{level_fatal.label}")
         self.assertEqual(len(res.json()), 1)
-        self.assertContains(res, issue2.id)
-        self.assertNotContains(res, issue1.id)
-        self.assertNotContains(res, issue3.id)
+        self.assertContains(res, issue2.title)
+        self.assertNotContains(res, issue1.title)
+        self.assertNotContains(res, issue3.title)
 
         res = self.client.get(self.list_url)
         self.assertEqual(len(res.json()), 3)
-        self.assertContains(res, issue1.id)
-        self.assertContains(res, issue2.id)
-        self.assertContains(res, issue3.id)
+        self.assertContains(res, issue1.title)
+        self.assertContains(res, issue2.title)
+        self.assertContains(res, issue3.title)
+
 
 class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
     def setUp(self):

@@ -4,7 +4,6 @@ import django.contrib.postgres.indexes
 import django.contrib.postgres.search
 import django.db.models.deletion
 import django.utils.timezone
-import psqlextra.backend.migrations.operations.add_default_partition
 import psqlextra.backend.migrations.operations.create_partitioned_model
 import psqlextra.manager.manager
 import psqlextra.models.partitioned
@@ -14,6 +13,7 @@ from django.conf import settings
 from django.db import migrations, models
 
 from .functions.partition import create_partitions
+from .functions.default_partition import TestDefaultPartition
 
 
 class Migration(migrations.Migration):
@@ -210,6 +210,10 @@ class Migration(migrations.Migration):
                 ("objects", psqlextra.manager.manager.PostgresManager()),
             ],
         ),
+        TestDefaultPartition(
+            model_name="IssueEvent",
+            name="default",
+        ),
         migrations.CreateModel(
             name="IssueHash",
             fields=[
@@ -272,7 +276,7 @@ class Migration(migrations.Migration):
                 ("objects", psqlextra.manager.manager.PostgresManager()),
             ],
         ),
-        psqlextra.backend.migrations.operations.add_default_partition.PostgresAddDefaultPartition(
+        TestDefaultPartition(
             model_name="IssueTag",
             name="default",
         ),
