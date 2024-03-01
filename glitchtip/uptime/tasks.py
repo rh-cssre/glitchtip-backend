@@ -11,8 +11,8 @@ from django.db.models.expressions import Func
 from django.utils import timezone
 from django_redis import get_redis_connection
 
-from alerts.constants import RecipientType
-from alerts.models import AlertRecipient
+from apps.alerts.constants import RecipientType
+from apps.alerts.models import AlertRecipient
 
 from .email import MonitorEmail
 from .models import Monitor, MonitorCheck, MonitorType

@@ -77,8 +77,7 @@ class AlertTestCase(GlitchTipTestCase):
 
         process_event_alerts()
         # Trigger both alerts, as both meet criteria, total of 3
-        # TODO FIX
-        # self.assertEqual(Notification.objects.count(), 3)
+        self.assertEqual(Notification.objects.count(), 3)
 
     def test_alert_timing(self):
         baker.make(

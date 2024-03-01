@@ -221,7 +221,7 @@ INSTALLED_APPS += [
     "import_export",
     "storages",
     "glitchtip",
-    "alerts",
+    "apps.alerts",
     "ninja",
     "apps.environments",
     "organizations_ext",
@@ -474,7 +474,7 @@ UPTIME_CHECK_INTERVAL = 10
 ALERT_NOTIFICATION_INTERVAL = env.int("ALERT_NOTIFICATION_INTERVAL", 60)
 CELERY_BEAT_SCHEDULE = {
     "send-alert-notifications": {
-        "task": "alerts.tasks.process_event_alerts",
+        "task": "apps.alerts.tasks.process_event_alerts",
         "schedule": ALERT_NOTIFICATION_INTERVAL,
     },
     "cleanup-old-events": {
