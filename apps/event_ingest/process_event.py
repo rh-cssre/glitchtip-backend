@@ -398,8 +398,8 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
         if event.platform in ("javascript", "node") and release_id:
             JavascriptEventProcessor(release_id, event).transform()
         elif (
-            event.exception
-            and isinstance(event.exception, ErrorIssueEventSchema)
+            isinstance(event, ErrorIssueEventSchema)
+            and event.exception
             and next(
                 (
                     project["has_difs"]
@@ -436,7 +436,6 @@ def process_issue_events(ingest_events: list[InterchangeIssueEvent]):
             full_title = title = f"Blocked '{humanized_directive}' from '{uri}'"
             culprit = event.csp.effective_directive
             event_data["csp"] = event.csp.dict()
-
         issue_hash = generate_hash(title, culprit, event.type, event.fingerprint)
         if metadata:
             event_data["metadata"] = metadata
