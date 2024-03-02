@@ -58,7 +58,7 @@ django-sslserver = "^0.22"
 aioresponses = "^0.7.6"
 requests-mock = "^1.9.3"
 memray = "^1.9.1"
-ruff = "^0.2.0"
+ruff = "^0.3.0"
 # Needed for test --parallel
 tblib = "^3.0.0"
 
