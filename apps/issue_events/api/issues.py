@@ -114,7 +114,7 @@ async def update_organization_issue(
 @router.put("/issues/", response=UpdateIssueSchema)
 @has_permission(["event:write", "event:admin"])
 async def update_issues(request: AuthHttpRequest, query: Query[UpdateIssuesQuery]):
-    ids = query.id
+    # ids = query.id
     return {"status": "resolved"}
 
 
