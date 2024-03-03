@@ -19,7 +19,6 @@ def assemble_artifacts_task(org_id, version, checksum, chunks, **kwargs):
     assemble_artifacts(organization, version, checksum, chunks)
 
 
-@shared_task
 def cleanup_old_files():
     """
     Delete files in both the database and media storage

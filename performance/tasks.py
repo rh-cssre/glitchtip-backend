@@ -1,13 +1,11 @@
 from datetime import timedelta
 
-from celery import shared_task
 from django.conf import settings
 from django.utils.timezone import now
 
 from .models import Span, TransactionEvent, TransactionGroup
 
 
-@shared_task
 def cleanup_old_transaction_events():
     """Delete older events and associated data"""
     days = settings.GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS

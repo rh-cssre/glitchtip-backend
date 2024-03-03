@@ -14,12 +14,24 @@ from apps.event_ingest.model_functions import PipeConcat
 from events.models import LogLevel
 from glitchtip.test_utils.test_case import APIPermissionTestCase, GlitchTipTestCaseMixin
 
+from ..constants import EventStatus
 from ..models import Issue
 
 logger = logging.getLogger(__name__)
 
 
-class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
+def get_issue_url(issue_id: int) -> str:
+    return reverse("api:get_issue", kwargs={"issue_id": issue_id})
+
+
+def get_organization_issue_url(organization_slug: str, issue_id: int) -> str:
+    return reverse(
+        "api:update_organization_issue",
+        kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+    )
+
+
+class IssueAPITestCase(GlitchTipTestCaseMixin, TestCase):
     def setUp(self):
         super().create_logged_in_user()
         self.list_url = reverse(
@@ -512,6 +524,29 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
 
         res = self.client.get(self.list_url)
         self.assertEqual(len(res.json()), 3)
+
+    def test_issue_delete(self):
+        issue = baker.make("issue_events.Issue", project=self.project)
+        not_my_issue = baker.make("issue_events.Issue")
+
+        res = self.client.delete(get_issue_url(issue.id))
+        self.assertEqual(res.status_code, 204)
+
+        res = self.client.delete(get_issue_url(not_my_issue.id))
+        self.assertEqual(res.status_code, 404)
+
+    def test_issue_update(self):
+        issue = baker.make("issue_events.Issue", project=self.project)
+        self.assertEqual(issue.status, EventStatus.UNRESOLVED)
+        data = {"status": "resolved"}
+        res = self.client.put(
+            get_organization_issue_url(self.organization.slug, issue.pk),
+            data,
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        issue.refresh_from_db()
+        self.assertEqual(issue.status, EventStatus.RESOLVED)
 
 
 class IssueEventAPIPermissionTestCase(APIPermissionTestCase):

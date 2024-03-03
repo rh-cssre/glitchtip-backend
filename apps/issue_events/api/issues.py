@@ -17,11 +17,13 @@ from events.models import LogLevel
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.pagination import paginate
 from glitchtip.api.permissions import has_permission
+from glitchtip.utils import async_call_celery_task
 from organizations_ext.models import Organization
 
 from ..constants import EventStatus
 from ..models import Issue
 from ..schema import IssueDetailSchema, IssueSchema, IssueTagSchema
+from ..tasks import delete_issue_task
 from . import router
 
 
@@ -64,6 +66,56 @@ async def get_issue(request: AuthHttpRequest, issue_id: int):
         return await qs.filter(id=issue_id).aget()
     except Issue.DoesNotExist:
         raise Http404()
+
+
+@router.delete("/issues/{int:issue_id}/", response={204: None})
+@has_permission(["event:write", "event:admin"])
+async def delete_issue(request: AuthHttpRequest, issue_id: int):
+    qs = await get_queryset(request)
+    result = await qs.filter(id=issue_id).aupdate(is_deleted=True)
+    if not result:
+        raise Http404()
+    await async_call_celery_task(delete_issue_task, issue_id)
+    return 204, None
+
+
+class UpdateIssueSchema(Schema):
+    status: str
+
+
+class UpdateIssuesQuery(Schema):
+    id: list[int]
+
+
+@router.put(
+    "organizations/{slug:organization_slug}/issues/{int:issue_id}/",
+    response=IssueDetailSchema,
+)
+@has_permission(["event:write", "event:admin"])
+async def update_organization_issue(
+    request: AuthHttpRequest,
+    organization_slug: str,
+    issue_id: int,
+    payload: UpdateIssueSchema,
+):
+    qs = await get_queryset(request, organization_slug=organization_slug)
+    qs = qs.annotate(
+        user_report_count=Count("userreport", distinct=True),
+    )
+    try:
+        obj = await qs.filter(id=issue_id).aget()
+    except Issue.DoesNotExist:
+        raise Http404()
+    obj.status = EventStatus.from_string(payload.status)
+    await obj.asave()
+    return obj
+
+
+@router.put("/issues/", response=UpdateIssueSchema)
+@has_permission(["event:write", "event:admin"])
+async def update_issues(request: AuthHttpRequest, query: Query[UpdateIssuesQuery]):
+    ids = query.id
+    return {"status": "resolved"}
 
 
 RELATIVE_TIME_REGEX = re.compile(r"now\s*\-\s*\d+\s*(m|h|d)\s*$")
@@ -152,9 +204,7 @@ def filter_issue_list(
                         issuetag__tag_key__key=query_value,
                     )
                 elif query_name == "level":
-                    qs = qs.filter(
-                        level=LogLevel.from_string(query_value)
-                    )
+                    qs = qs.filter(level=LogLevel.from_string(query_value))
                 else:
                     qs = qs.filter(
                         issuetag__tag_key__key=query_name,

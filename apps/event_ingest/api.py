@@ -1,12 +1,13 @@
 from typing import Optional
 
 from anonymizeip import anonymize_ip
-from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.http import HttpResponse
 from ipware import get_client_ip
 from ninja import Router, Schema
 from ninja.errors import ValidationError
+
+from glitchtip.utils import async_call_celery_task
 
 from .authentication import EventAuthHttpRequest, event_auth
 from .schema import (
@@ -33,17 +34,6 @@ class EventIngestOut(Schema):
 
 class EnvelopeIngestOut(Schema):
     id: str
-
-
-async def async_call_celery_task(task, *args):
-    """
-    Either dispatch the real celery task or run it with sync_to_async
-    This can be used for testing or a celery-less operation.
-    """
-    if settings.CELERY_TASK_ALWAYS_EAGER:
-        return await sync_to_async(task.delay)(*args)
-    else:
-        return task.delay(*args)
 
 
 def get_issue_event_class(event: IngestIssueEvent):
