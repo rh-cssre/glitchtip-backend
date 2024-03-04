@@ -75,16 +75,12 @@ async def delete_issue(request: AuthHttpRequest, issue_id: int):
     result = await qs.filter(id=issue_id).aupdate(is_deleted=True)
     if not result:
         raise Http404()
-    await async_call_celery_task(delete_issue_task, issue_id)
+    await async_call_celery_task(delete_issue_task, [issue_id])
     return 204, None
 
 
 class UpdateIssueSchema(Schema):
     status: str
-
-
-class UpdateIssuesQuery(Schema):
-    id: list[int]
 
 
 @router.put(
@@ -109,13 +105,6 @@ async def update_organization_issue(
     obj.status = EventStatus.from_string(payload.status)
     await obj.asave()
     return obj
-
-
-@router.put("/issues/", response=UpdateIssueSchema)
-@has_permission(["event:write", "event:admin"])
-async def update_issues(request: AuthHttpRequest, query: Query[UpdateIssuesQuery]):
-    # ids = query.id
-    return {"status": "resolved"}
 
 
 RELATIVE_TIME_REGEX = re.compile(r"now\s*\-\s*\d+\s*(m|h|d)\s*$")
@@ -252,6 +241,44 @@ async def list_issues(
         except ValueError:
             pass
     return filter_issue_list(qs, filters, sort, query, event_id, environment)
+
+
+class UpdateIssuesQuery(Schema):
+    id: list[int]
+
+
+@router.delete(
+    "organizations/{slug:organization_slug}/issues/", response=UpdateIssueSchema
+)
+@has_permission(["event:write", "event:admin"])
+async def delete_issues(
+    request: AuthHttpRequest, organization_slug: str, query: Query[UpdateIssuesQuery]
+):
+    qs = await get_queryset(request, organization_slug=organization_slug)
+    qs = qs.filter(id__in=query.id)
+    await qs.aupdate(is_deleted=True)
+    issue_ids = [
+        issue_id
+        async for issue_id in qs.filter(is_deleted=True).values_list("id", flat=True)
+    ]
+    await async_call_celery_task(delete_issue_task, issue_ids)
+    return {"status": "resolved"}
+
+
+@router.put(
+    "organizations/{slug:organization_slug}/issues/", response=UpdateIssueSchema
+)
+@has_permission(["event:write", "event:admin"])
+async def update_issues(
+    request: AuthHttpRequest,
+    organization_slug: str,
+    query: Query[UpdateIssuesQuery],
+    payload: UpdateIssueSchema,
+):
+    qs = await get_queryset(request, organization_slug=organization_slug)
+    qs = qs.filter(id__in=query.id)
+    await qs.aupdate(status=EventStatus.from_string(payload.status))
+    return payload
 
 
 @router.get(
