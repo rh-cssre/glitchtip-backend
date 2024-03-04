@@ -1,10 +1,14 @@
 from datetime import datetime
-from typing import List
 
-from alerts.webhooks import (
+from apps.alerts.constants import RecipientType
+from apps.alerts.models import AlertRecipient
+from apps.alerts.webhooks import (
+    DiscordEmbed,
+    GoogleChatCard,
     MSTeamsSection,
     WebhookAttachment,
-    WebhookPayload,
+    send_discord_webhook,
+    send_googlechat_webhook,
     send_webhook,
 )
 
@@ -12,7 +16,10 @@ from .models import MonitorCheck
 
 
 def send_uptime_as_webhook(
-    url, monitor_check_id: int, went_down: bool, last_change: datetime
+    recipient: AlertRecipient,
+    monitor_check_id: int,
+    went_down: bool,
+    last_change: datetime,
 ):
     """
     Notification about uptime event via webhook.
@@ -20,9 +27,33 @@ def send_uptime_as_webhook(
     monitor_check = MonitorCheck.objects.get(pk=monitor_check_id)
     monitor = monitor_check.monitor
 
-    message = "The monitored site has gone down." if went_down else "The monitored site is back up."
-    attachment = WebhookAttachment(str(monitor.name), monitor.get_detail_url(), message)
-    section = MSTeamsSection(str(monitor.name), message)
+    message = (
+        "The monitored site has gone down."
+        if went_down
+        else "The monitored site is back up."
+    )
+    subject = "GlitchTip Uptime Alert"
 
-    message = "GlitchTip Uptime Alert"
-    return send_webhook(url, message, [attachment], [section])
+    if recipient.recipient_type == RecipientType.GENERAL_WEBHOOK:
+        attachment = WebhookAttachment(
+            str(monitor.name), monitor.get_detail_url(), message
+        )
+        section = MSTeamsSection(str(monitor.name), message)
+        return send_webhook(recipient.url, subject, [attachment], [section])
+    elif recipient.recipient_type == RecipientType.GOOGLE_CHAT:
+        card = GoogleChatCard().construct_uptime_card(
+            title=subject,
+            subtitle=str(monitor.name),
+            text=message,
+            url=monitor.get_detail_url(),
+        )
+        return send_googlechat_webhook(recipient.url, [card])
+    elif recipient.recipient_type == RecipientType.DISCORD:
+        embed = DiscordEmbed(
+            title=monitor,
+            description=message,
+            color=None,
+            fields=[],
+            url=monitor.get_detail_url(),
+        )
+        return send_discord_webhook(recipient.url, subject, [embed])

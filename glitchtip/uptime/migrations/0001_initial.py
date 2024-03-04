@@ -7,12 +7,17 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ("organizations_ext", "0001_squashed_0009_organization_scrub_ip_addresses"),
-        ("environments", "0002_auto_20201229_1643"),
+        (
+            "organizations_ext",
+            "0001_squashed_0009_organization_scrub_ip_addresses",
+        ),
+        (
+            "environments",
+            "0001_squashed_0003_alter_environment_id_alter_environmentproject_id",
+        ),
         ("projects", "0008_alter_projectkey_created"),
     ]
 
@@ -79,7 +84,9 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
-            options={"abstract": False,},
+            options={
+                "abstract": False,
+            },
         ),
         migrations.CreateModel(
             name="MonitorCheck",
@@ -127,7 +134,9 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
-            options={"ordering": ("-created",),},
+            options={
+                "ordering": ("-created",),
+            },
         ),
         migrations.AddIndex(
             model_name="monitorcheck",

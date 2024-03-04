@@ -1,15 +1,20 @@
+import random
+from datetime import timedelta
 from urllib.parse import urlparse
 from uuid import uuid4
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator
 from django.db import models
+from django.db.models import Count, Q
 from django.utils.text import slugify
 from django_extensions.db.fields import AutoSlugField
 
-from glitchtip.base_models import CreatedModel
+from glitchtip.base_models import CreatedModel, SoftDeleteModel
+from observability.metrics import clear_metrics_cache
 
 
-class Project(CreatedModel):
+class Project(CreatedModel, SoftDeleteModel):
     """
     Projects are permission based namespaces which generally
     are the top level entry point for all data.
@@ -28,6 +33,11 @@ class Project(CreatedModel):
         default=True,
         help_text="Should project anonymize IP Addresses",
     )
+    event_throttle_rate = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MaxValueValidator(100)],
+        help_text="Probability (in percent) on how many events are throttled. Used for throttling at project level",
+    )
 
     class Meta:
         unique_together = (("organization", "slug"),)
@@ -41,7 +51,43 @@ class Project(CreatedModel):
             first = True
         super().save(*args, **kwargs)
         if first:
+            clear_metrics_cache()
             ProjectKey.objects.create(project=self)
+
+    def delete(self, *args, **kwargs):
+        """Mark the record as deleted instead of deleting it"""
+        # avoid circular import
+        from projects.tasks import delete_project
+
+        super().delete(*args, **kwargs)
+        delete_project.delay(self.pk)
+
+    def force_delete(self, *args, **kwargs):
+        """Really delete the project and all related data."""
+        # avoid circular import
+        from events.models import Event
+        from issues.models import Issue
+
+        # bulk delete all events
+        events_qs = Event.objects.filter(issue__project=self)
+        events_qs._raw_delete(events_qs.db)
+
+        # bulk delete all issues in batches of 1k
+        issues_qs = self.issue_set.order_by("id")
+        while True:
+            try:
+                issue_delimiter = issues_qs.values_list("id", flat=True)[
+                    1000:1001
+                ].get()
+                issues_qs.filter(id__lte=issue_delimiter).delete()
+            except Issue.DoesNotExist:
+                break
+
+        issues_qs.delete()
+
+        # lastly delete the project itself
+        super().force_delete(*args, **kwargs)
+        clear_metrics_cache()
 
     @property
     def should_scrub_ip_addresses(self):
@@ -53,9 +99,21 @@ class Project(CreatedModel):
         Make the slug the project name. Validate uniqueness with both name and org id.
         This works because when it runs on organization_id it returns an empty string.
         """
+        reserved_words = ["new"]
+
+        slug = ""
         if isinstance(content, str):
-            return slugify(self.name)
-        return ""
+            slug = slugify(self.name)
+            if slug in reserved_words:
+                slug += "-1"
+        return slug
+
+    @property
+    def is_accepting_events(self):
+        """Is the project in its limits for event creation"""
+        if self.event_throttle_rate == 0:
+            return True
+        return random.randint(0, 100) > self.event_throttle_rate
 
 
 class ProjectCounter(models.Model):
@@ -134,3 +192,133 @@ class ProjectKey(CreatedModel):
             self.project_id,
             self.public_key_hex,
         )
+
+
+class ProjectStatisticBase(models.Model):
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
+    date = models.DateTimeField()
+    count = models.PositiveIntegerField()
+
+    class Meta:
+        unique_together = (("project", "date"),)
+        abstract = True
+
+    @classmethod
+    def update(cls, project_id: int, start_time: "datetime"):
+        """
+        Update current hour and last hour statistics
+        start_time should be the time of the last known event creation
+        This method recalculates both stats, replacing any previous entry
+        """
+        current_hour = start_time.replace(second=0, microsecond=0, minute=0)
+        next_hour = current_hour + timedelta(hours=1)
+        previous_hour = current_hour - timedelta(hours=1)
+        projects = Project.objects.filter(pk=project_id)
+        event_counts = cls.aggregate_queryset(
+            projects, previous_hour, current_hour, next_hour
+        )
+        statistics = []
+        if event_counts["previous_hour_count"]:
+            statistics.append(
+                cls(
+                    project_id=project_id,
+                    date=previous_hour,
+                    count=event_counts["previous_hour_count"],
+                )
+            )
+        if event_counts["current_hour_count"]:
+            statistics.append(
+                cls(
+                    project_id=project_id,
+                    date=current_hour,
+                    count=event_counts["current_hour_count"],
+                )
+            )
+        if statistics:
+            cls.objects.bulk_create(
+                statistics,
+                update_conflicts=True,
+                unique_fields=["project", "date"],
+                update_fields=["count"],
+            )
+
+
+class TransactionEventProjectHourlyStatistic(ProjectStatisticBase):
+    @classmethod
+    def aggregate_queryset(
+        cls,
+        project_queryset,
+        previous_hour: "datetime",
+        current_hour: "datetime",
+        next_hour: "datetime",
+    ):
+        # Redundant filter optimization - otherwise all rows are scanned
+        return project_queryset.filter(
+            transactiongroup__transactionevent__created__gte=previous_hour,
+            transactiongroup__transactionevent__created__lt=next_hour,
+        ).aggregate(
+            previous_hour_count=Count(
+                "transactiongroup__transactionevent",
+                filter=Q(
+                    transactiongroup__transactionevent__created__gte=previous_hour,
+                    transactiongroup__transactionevent__created__lt=current_hour,
+                ),
+            ),
+            current_hour_count=Count(
+                "transactiongroup__transactionevent",
+                filter=Q(
+                    transactiongroup__transactionevent__created__gte=current_hour,
+                    transactiongroup__transactionevent__created__lt=next_hour,
+                ),
+            ),
+        )
+
+
+class EventProjectHourlyStatistic(ProjectStatisticBase):
+    @classmethod
+    def aggregate_queryset(
+        cls,
+        project_queryset,
+        previous_hour: "datetime",
+        current_hour: "datetime",
+        next_hour: "datetime",
+    ):
+        # Redundant filter optimization - otherwise all rows are scanned
+        return project_queryset.filter(
+            issue__event__created__gte=previous_hour,
+            issue__event__created__lt=next_hour,
+        ).aggregate(
+            previous_hour_count=Count(
+                "issue__event",
+                filter=Q(
+                    issue__event__created__gte=previous_hour,
+                    issue__event__created__lt=current_hour,
+                ),
+            ),
+            current_hour_count=Count(
+                "issue__event",
+                filter=Q(
+                    issue__event__created__gte=current_hour,
+                    issue__event__created__lt=next_hour,
+                ),
+            ),
+        )
+
+
+class ProjectAlertStatus(models.IntegerChoices):
+    OFF = 0, "off"
+    ON = 1, "on"
+
+
+class UserProjectAlert(models.Model):
+    """
+    Determine if user alert notifications should always happen, never, or defer to default
+    Default is stored as the lack of record.
+    """
+
+    user = models.ForeignKey("users.User", on_delete=models.CASCADE)
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
+    status = models.PositiveSmallIntegerField(choices=ProjectAlertStatus.choices)
+
+    class Meta:
+        unique_together = ("user", "project")
