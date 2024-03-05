@@ -568,32 +568,32 @@ class IssueAPITestCase(GlitchTipTestCaseMixin, TestCase):
         issues = Issue.objects.all().count()
         self.assertEqual(issues, 0)
 
-    # def test_bulk_delete_via_search(self):
-    #     """Bulk delete Issues via search string"""
-    #     project2 = baker.make("projects.Project", organization=self.organization)
-    #     project2.team_set.add(self.team)
-    #     issue1 = baker.make(Issue, project=self.project)
-    #     issue2 = baker.make(Issue, project=project2)
-    #     url = f"{self.url}?query=is:unresolved&project={self.project.id}"
-    #     res = self.client.delete(url)
-    #     self.assertEqual(Issue.objects.filter(id=issue1.id).exists(), False)
-    #     self.assertEqual(Issue.objects.filter(id=issue2.id).exists(), True)
+    def test_bulk_delete_via_search(self):
+        """Bulk delete Issues via search string"""
+        project2 = baker.make("projects.Project", organization=self.organization)
+        project2.team_set.add(self.team)
+        issue1 = baker.make(Issue, project=self.project)
+        issue2 = baker.make(Issue, project=project2)
+        url = f"{self.list_url}?query=is:unresolved&project={self.project.id}"
+        self.client.delete(url)
+        self.assertFalse(Issue.objects.filter(id=issue1.id).exists())
+        self.assertTrue(Issue.objects.filter(id=issue2.id).exists())
 
-    # def test_bulk_update_query(self):
-    #     """Bulk update only supports Issue status"""
-    #     project2 = baker.make("projects.Project", organization=self.organization)
-    #     project2.team_set.add(self.team)
-    #     issue1 = baker.make(Issue, project=self.project)
-    #     issue2 = baker.make(Issue, project=project2)
-    #     url = f"{self.url}?query=is:unresolved&project={self.project.id}"
-    #     status_to_set = EventStatus.RESOLVED
-    #     data = {"status": status_to_set.label}
-    #     res = self.client.put(url, data)
-    #     self.assertContains(res, status_to_set.label)
-    #     issue1.refresh_from_db()
-    #     issue2.refresh_from_db()
-    #     self.assertEqual(issue1.status, status_to_set)
-    #     self.assertEqual(issue2.status, EventStatus.UNRESOLVED)
+    def test_bulk_update_query(self):
+        """Bulk update only supports Issue status"""
+        project2 = baker.make("projects.Project", organization=self.organization)
+        project2.team_set.add(self.team)
+        issue1 = baker.make(Issue, project=self.project)
+        issue2 = baker.make(Issue, project=project2)
+        url = f"{self.list_url}?query=is:unresolved&project={self.project.id}"
+        status_to_set = EventStatus.RESOLVED
+        data = {"status": status_to_set.label}
+        res = self.client.put(url, data, content_type="application/json")
+        self.assertContains(res, status_to_set.label)
+        issue1.refresh_from_db()
+        issue2.refresh_from_db()
+        self.assertEqual(issue1.status, status_to_set)
+        self.assertEqual(issue2.status, EventStatus.UNRESOLVED)
 
 
 class IssueEventAPIPermissionTestCase(APIPermissionTestCase):

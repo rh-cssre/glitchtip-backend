@@ -141,9 +141,12 @@ RelativeDateTime = Annotated[datetime, BeforeValidator(relative_to_datetime)]
 
 
 class IssueFilters(Schema):
+    id__in: list[int] = Field(None, alias="id")
     first_seen__gte: RelativeDateTime = Field(None, alias="start")
     first_seen__lte: RelativeDateTime = Field(None, alias="end")
     project__in: list[str] = Field(None, alias="project")
+    environment: Optional[list[str]] = None
+    query: Optional[str] = None
 
 
 sort_options = Literal[
@@ -161,17 +164,15 @@ sort_options = Literal[
 def filter_issue_list(
     qs: QuerySet,
     filters: Query[IssueFilters],
-    sort: sort_options,
-    query: Optional[str] = None,
+    sort: Optional[sort_options] = None,
     event_id: Optional[UUID] = None,
-    environment: Optional[list[str]] = Query(None),
 ):
-    if environment:
-        qs = qs.filter(
-            issuetag__tag_key__key="environment",
-            issuetag__tag_value__value__in=environment,
-        )
-    if qs_filters := filters.dict(exclude_none=True):
+    qs_filters = filters.dict(exclude_none=True)
+    query = qs_filters.pop("query", None)
+    if filters.environment:
+        qs_filters["issuetag__tag_key__key"] = "environment"
+        qs_filters["issuetag__tag_value__value__in"] = qs_filters.pop("environment")
+    if qs_filters:
         qs = qs.filter(**qs_filters)
 
     if event_id:
@@ -205,14 +206,17 @@ def filter_issue_list(
                 # Search queries must be at end of query string, finished when parsing
                 break
 
-    if sort.endswith("priority"):
-        # Raw SQL must be added when sorting by priority
-        # Inspired by https://stackoverflow.com/a/43788975/443457
-        qs = qs.annotate(
-            priority=RawSQL("LOG10(count) + EXTRACT(EPOCH FROM last_seen)/300000", ())
-        )
-
-    return qs.order_by(sort)
+    if sort:
+        if sort.endswith("priority"):
+            # Raw SQL must be added when sorting by priority
+            # Inspired by https://stackoverflow.com/a/43788975/443457
+            qs = qs.annotate(
+                priority=RawSQL(
+                    "LOG10(count) + EXTRACT(EPOCH FROM last_seen)/300000", ()
+                )
+            )
+        qs = qs.order_by(sort)
+    return qs
 
 
 @router.get(
@@ -227,24 +231,18 @@ async def list_issues(
     response: HttpResponse,
     organization_slug: str,
     filters: Query[IssueFilters],
-    query: Optional[str] = None,
     sort: sort_options = "-last_seen",
-    environment: Optional[list[str]] = Query(None),
 ):
     qs = await get_queryset(request, organization_slug=organization_slug)
     event_id: Optional[UUID] = None
-    if query:
+    if filters.query:
         try:
-            event_id = UUID(query)
+            event_id = UUID(filters.query)
             request.matching_event_id = event_id
             response["X-Sentry-Direct-Hit"] = "1"
         except ValueError:
             pass
-    return filter_issue_list(qs, filters, sort, query, event_id, environment)
-
-
-class UpdateIssuesQuery(Schema):
-    id: list[int]
+    return filter_issue_list(qs, filters, sort, event_id)
 
 
 @router.delete(
@@ -252,10 +250,12 @@ class UpdateIssuesQuery(Schema):
 )
 @has_permission(["event:write", "event:admin"])
 async def delete_issues(
-    request: AuthHttpRequest, organization_slug: str, query: Query[UpdateIssuesQuery]
+    request: AuthHttpRequest,
+    organization_slug: str,
+    filters: Query[IssueFilters],
 ):
     qs = await get_queryset(request, organization_slug=organization_slug)
-    qs = qs.filter(id__in=query.id)
+    qs = filter_issue_list(qs, filters)
     await qs.aupdate(is_deleted=True)
     issue_ids = [
         issue_id
@@ -272,11 +272,11 @@ async def delete_issues(
 async def update_issues(
     request: AuthHttpRequest,
     organization_slug: str,
-    query: Query[UpdateIssuesQuery],
+    filters: Query[IssueFilters],
     payload: UpdateIssueSchema,
 ):
     qs = await get_queryset(request, organization_slug=organization_slug)
-    qs = qs.filter(id__in=query.id)
+    qs = filter_issue_list(qs, filters)
     await qs.aupdate(status=EventStatus.from_string(payload.status))
     return payload
 
@@ -294,22 +294,20 @@ async def list_project_issues(
     organization_slug: str,
     project_slug: str,
     filters: Query[IssueFilters],
-    query: Optional[str] = None,
     sort: sort_options = "-last_seen",
-    environment: Optional[list[str]] = Query(None),
 ):
     qs = await get_queryset(
         request, organization_slug=organization_slug, project_slug=project_slug
     )
     event_id: Optional[UUID] = None
-    if query:
+    if filters.query:
         try:
-            event_id = UUID(query)
+            event_id = UUID(filters.query)
             request.matching_event_id = event_id
             response["X-Sentry-Direct-Hit"] = "1"
         except ValueError:
             pass
-    return filter_issue_list(qs, filters, sort, query, event_id, environment)
+    return filter_issue_list(qs, filters, sort, event_id)
 
 
 @router.get(
