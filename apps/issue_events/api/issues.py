@@ -1,6 +1,7 @@
 import re
 import shlex
 from datetime import datetime, timedelta
+from enum import StrEnum
 from typing import Any, Literal, Optional
 from uuid import UUID
 
@@ -79,8 +80,11 @@ async def delete_issue(request: AuthHttpRequest, issue_id: int):
     return 204, None
 
 
+EventStatusEnum = StrEnum("EventStatusEnum", EventStatus.labels)
+
+
 class UpdateIssueSchema(Schema):
-    status: str
+    status: EventStatusEnum
 
 
 @router.put(
