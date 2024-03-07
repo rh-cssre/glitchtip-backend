@@ -7,8 +7,8 @@ from model_bakery import baker
 
 from apps.issue_events.constants import EventStatus, LogLevel
 from apps.issue_events.models import Issue, IssueEvent, IssueHash
+from apps.projects.models import EventProjectHourlyStatistic
 from apps.releases.models import Release
-from projects.models import EventProjectHourlyStatistic
 
 from ..process_event import process_issue_events
 from ..schema import (

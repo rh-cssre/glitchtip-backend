@@ -224,16 +224,16 @@ INSTALLED_APPS += [
     "apps.alerts",
     "ninja",
     "apps.environments",
-    "organizations_ext",
+    "apps.organizations_ext",
     "events",
     "issues",
-    "users",
-    "user_reports",
-    "glitchtip.importer",
-    "glitchtip.uptime",
-    "performance",
-    "projects",
-    "teams",
+    "apps.users",
+    "apps.user_reports",
+    "apps.importer",
+    "apps.uptime",
+    "apps.performance",
+    "apps.projects",
+    "apps.teams",
     "apps.releases",
     "apps.difs",
     "apps.api_tokens",
@@ -482,7 +482,7 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=5, minute=0),
     },
     "uptime-dispatch-checks": {
-        "task": "glitchtip.uptime.tasks.dispatch_checks",
+        "task": "apps.uptime.tasks.dispatch_checks",
         "schedule": UPTIME_CHECK_INTERVAL,
     },
 }
@@ -633,7 +633,7 @@ ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_ADAPTER = "glitchtip.social.MFAAccountAdapter"
 SOCIALACCOUNT_ADAPTER = "glitchtip.social.CustomSocialAccountAdapter"
-INVITATION_BACKEND = "organizations_ext.invitation_backend.InvitationBackend"
+INVITATION_BACKEND = "apps.organizations_ext.invitation_backend.InvitationBackend"
 SOCIALACCOUNT_PROVIDERS = {}
 if GITLAB_URL := env.url("SOCIALACCOUNT_PROVIDERS_gitlab_GITLAB_URL", None):
     SOCIALACCOUNT_PROVIDERS["gitlab"] = {"GITLAB_URL": GITLAB_URL.geturl()}
@@ -658,14 +658,14 @@ ENABLE_ORGANIZATION_CREATION = env.bool(
 
 REST_AUTH = {
     "TOKEN_MODEL": None,
-    "TOKEN_CREATOR": "users.utils.noop_token_creator",
+    "TOKEN_CREATOR": "apps.users.utils.noop_token_creator",
     "REGISTER_PERMISSION_CLASSES": (
         "glitchtip.permissions.UserRegistrationPermission",
     ),
-    "REGISTER_SERIALIZER": "users.serializers.RegisterSerializer",
-    "USER_DETAILS_SERIALIZER": "users.serializers.UserSerializer",
-    "TOKEN_SERIALIZER": "users.serializers.NoopTokenSerializer",
-    "PASSWORD_RESET_SERIALIZER": "users.serializers.PasswordSetResetSerializer",
+    "REGISTER_SERIALIZER": "apps.users.serializers.RegisterSerializer",
+    "USER_DETAILS_SERIALIZER": "apps.users.serializers.UserSerializer",
+    "TOKEN_SERIALIZER": "apps.users.serializers.NoopTokenSerializer",
+    "PASSWORD_RESET_SERIALIZER": "apps.users.serializers.PasswordSetResetSerializer",
     "OLD_PASSWORD_FIELD_ENABLED": True,
 }
 
@@ -761,25 +761,25 @@ STRIPE_LIVE_MODE = env.bool("STRIPE_LIVE_MODE", False)
 if BILLING_ENABLED:
     I_PAID_FOR_GLITCHTIP = True
     INSTALLED_APPS.append("djstripe")
-    INSTALLED_APPS.append("djstripe_ext")
+    INSTALLED_APPS.append("apps.djstripe_ext")
     STRIPE_TEST_PUBLIC_KEY = env.str("STRIPE_TEST_PUBLIC_KEY", None)
     STRIPE_TEST_SECRET_KEY = env.str("STRIPE_TEST_SECRET_KEY", None)
     STRIPE_LIVE_PUBLIC_KEY = env.str("STRIPE_LIVE_PUBLIC_KEY", None)
     STRIPE_LIVE_SECRET_KEY = env.str("STRIPE_LIVE_SECRET_KEY", None)
     DJSTRIPE_WEBHOOK_SECRET = env.str("DJSTRIPE_WEBHOOK_SECRET", None)
     CELERY_BEAT_SCHEDULE["set-organization-throttle"] = {
-        "task": "organizations_ext.tasks.set_organization_throttle",
+        "task": "apps.organizations_ext.tasks.set_organization_throttle",
         "schedule": crontab(hour=7, minute=1),
     }
     CELERY_BEAT_SCHEDULE["warn-organization-throttle"] = {
-        "task": "djstripe_ext.tasks.warn_organization_throttle",
+        "task": "apps.djstripe_ext.tasks.warn_organization_throttle",
         "schedule": crontab(minute=30),
     }
 elif TESTING:
     # Must run tests with djstripe enabled
     BILLING_ENABLED = True
     INSTALLED_APPS.append("djstripe")
-    INSTALLED_APPS.append("djstripe_ext")
+    INSTALLED_APPS.append("apps.djstripe_ext")
     STRIPE_TEST_PUBLIC_KEY = "fake"
     STRIPE_TEST_SECRET_KEY = "sk_test_fake"  # nosec
     DJSTRIPE_WEBHOOK_SECRET = "whsec_fake"  # nosec

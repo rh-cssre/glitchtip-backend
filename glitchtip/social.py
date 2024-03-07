@@ -18,7 +18,7 @@ from requests.exceptions import HTTPError
 from rest_framework import serializers
 from rest_framework.response import Response
 
-from users.utils import is_user_registration_open
+from apps.users.utils import is_user_registration_open
 
 from .constants import SOCIAL_ADAPTER_MAP
 

@@ -2,7 +2,7 @@ from django.urls import include, path
 from rest_framework_nested import routers
 
 from glitchtip.routers import BulkSimpleRouter
-from user_reports.views import UserReportViewSet
+from apps.user_reports.views import UserReportViewSet
 
 from .views import CommentViewSet, EventViewSet, IssueViewSet
 

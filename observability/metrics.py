@@ -23,7 +23,7 @@ OBSERVABILITY_ORG_CACHE_KEY = "observability_org_metrics"
 
 def compile_metrics():
     """Update and cache the organization and project metrics"""
-    from organizations_ext.models import Organization  # avoid circular import
+    from apps.organizations_ext.models import Organization  # avoid circular import
 
     orgs = cache.get_or_set(
         OBSERVABILITY_ORG_CACHE_KEY,

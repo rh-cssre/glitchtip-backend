@@ -1,5 +1,5 @@
-from organizations_ext.permissions import OrganizationPermission
-from projects.permissions import ProjectPermission
+from apps.organizations_ext.permissions import OrganizationPermission
+from apps.projects.permissions import ProjectPermission
 
 
 class EnvironmentPermission(OrganizationPermission):

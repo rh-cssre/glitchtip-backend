@@ -3,8 +3,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.files.tasks import assemble_artifacts_task
-from organizations_ext.models import Organization
-from projects.models import Project
+from apps.organizations_ext.models import Organization
+from apps.projects.models import Project
 
 from .models import Release, ReleaseFile
 from .permissions import ReleaseFilePermission, ReleasePermission

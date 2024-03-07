@@ -1,8 +1,8 @@
 from django.db.models import Q
 from rest_framework import exceptions, viewsets
 
-from organizations_ext.models import OrganizationUserRole
-from projects.models import Project
+from apps.organizations_ext.models import OrganizationUserRole
+from apps.projects.models import Project
 
 from .models import ProjectAlert
 from .permissions import ProjectAlertPermission

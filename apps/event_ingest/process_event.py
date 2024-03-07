@@ -32,8 +32,8 @@ from apps.issue_events.models import (
     TagKey,
     TagValue,
 )
+from apps.projects.models import Project
 from apps.releases.models import Release
-from projects.models import Project
 from sentry.culprit import generate_culprit
 from sentry.eventtypes.error import ErrorEvent
 from sentry.utils.strings import truncatechars

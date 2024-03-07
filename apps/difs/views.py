@@ -13,8 +13,8 @@ from rest_framework.response import Response
 from symbolic import ProguardMapper
 
 from apps.files.models import File, FileBlob
-from organizations_ext.models import Organization
-from projects.models import Project
+from apps.organizations_ext.models import Organization
+from apps.projects.models import Project
 
 from .models import DebugInformationFile
 from .permissions import (

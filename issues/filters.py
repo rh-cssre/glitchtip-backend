@@ -1,7 +1,7 @@
 from django_filters import rest_framework as filters
 
 from glitchtip.filters import StartEndRelativeIsoDateTimeRangeFilter
-from projects.models import Project
+from apps.projects.models import Project
 
 from .models import Issue
 

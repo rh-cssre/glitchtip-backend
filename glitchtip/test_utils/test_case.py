@@ -5,7 +5,7 @@ from django.test import TestCase
 from model_bakery import baker
 from rest_framework.test import APITestCase
 
-from organizations_ext.models import Organization, OrganizationUserRole
+from apps.organizations_ext.models import Organization, OrganizationUserRole
 
 
 class GlitchTipTestCaseMixin:

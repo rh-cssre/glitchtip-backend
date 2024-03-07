@@ -5,11 +5,11 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from glitchtip.uptime.models import Monitor
-from organizations_ext.models import Organization
-from projects.models import Project
-from teams.models import Team
-from users.models import User
+from apps.uptime.models import Monitor
+from apps.organizations_ext.models import Organization
+from apps.projects.models import Project
+from apps.teams.models import Team
+from apps.users.models import User
 
 
 class SeedDataAPIView(APIView):

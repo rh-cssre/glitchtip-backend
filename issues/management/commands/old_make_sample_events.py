@@ -5,9 +5,9 @@ from events.test_data import bulk_event_data, event_generator
 from glitchtip.base_commands import MakeSampleCommand
 from issues.models import Issue
 from issues.tasks import update_search_index_issue
-from organizations_ext.models import Organization
-from projects.models import Project
-from projects.tasks import update_event_project_hourly_statistic
+from apps.organizations_ext.models import Organization
+from apps.projects.models import Project
+from apps.projects.tasks import update_event_project_hourly_statistic
 
 
 class Command(MakeSampleCommand):

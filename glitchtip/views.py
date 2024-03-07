@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api_tokens.schema import APITokenSchema
-from users.serializers import UserSerializer
+from apps.users.serializers import UserSerializer
 
 
 class APIRootView(APIView):

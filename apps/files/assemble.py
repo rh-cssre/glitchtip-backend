@@ -8,8 +8,8 @@ from os import path
 
 from django.core.cache import cache
 
+from apps.organizations_ext.models import Organization
 from apps.releases.models import Release, ReleaseFile
-from organizations_ext.models import Organization
 from sentry.utils.zip import safe_extract_zip
 
 from .exceptions import AssembleArtifactsError, AssembleChecksumMismatch

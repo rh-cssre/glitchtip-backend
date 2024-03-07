@@ -10,8 +10,8 @@ from apps.difs.models import DebugInformationFile
 from apps.difs.stacktrace_processor import StacktraceProcessor
 from apps.event_ingest.schema import ErrorIssueEventSchema, StackTraceFrame
 from apps.files.models import File, FileBlob
+from apps.projects.models import Project
 from events.models import Event
-from projects.models import Project
 
 
 def getLogger():

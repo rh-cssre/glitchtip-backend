@@ -9,7 +9,7 @@ from events.views import EventStoreAPIView
 from glitchtip.base_commands import MakeSampleCommand
 from glitchtip.utils import get_random_string
 from issues.models import EventType, Issue
-from projects.models import Project
+from apps.projects.models import Project
 
 from .issue_generator import CULPRITS, EXCEPTIONS, SDKS, TITLE_CHOICES, generate_tag
 

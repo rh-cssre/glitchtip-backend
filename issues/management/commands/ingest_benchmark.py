@@ -9,8 +9,8 @@ from django.test import RequestFactory
 from events.models import Event
 from events.test_data.event_generator import get_seeded_benchmark_events
 from events.views import EventStoreAPIView
-from organizations_ext.models import Organization
-from projects.models import Project
+from apps.organizations_ext.models import Organization
+from apps.projects.models import Project
 
 
 class Command(BaseCommand):
