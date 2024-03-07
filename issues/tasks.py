@@ -11,7 +11,6 @@ from glitchtip.debounced_celery_task import debounced_task, debounced_wrap
 from .models import Issue
 
 
-@shared_task
 def cleanup_old_events():
     """Delete older events and associated data"""
     days = settings.GLITCHTIP_MAX_EVENT_LIFE_DAYS
@@ -53,7 +52,6 @@ def update_search_index_issue(issue_id: int):
     Issue.update_index(issue_id)
 
 
-@shared_task
 def reindex_issues_model():
     """
     The GIN index on the issues table grows indefinitely, it needs reindexed regularly

@@ -14,12 +14,24 @@ from apps.event_ingest.model_functions import PipeConcat
 from events.models import LogLevel
 from glitchtip.test_utils.test_case import APIPermissionTestCase, GlitchTipTestCaseMixin
 
+from ..constants import EventStatus
 from ..models import Issue
 
 logger = logging.getLogger(__name__)
 
 
-class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
+def get_issue_url(issue_id: int) -> str:
+    return reverse("api:get_issue", kwargs={"issue_id": issue_id})
+
+
+def get_organization_issue_url(organization_slug: str, issue_id: int) -> str:
+    return reverse(
+        "api:update_organization_issue",
+        kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+    )
+
+
+class IssueAPITestCase(GlitchTipTestCaseMixin, TestCase):
     def setUp(self):
         super().create_logged_in_user()
         self.list_url = reverse(
@@ -483,7 +495,7 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         )
         data = res.json()
         self.assertEqual(len(data), 2)
-        self.assertNotIn(str(issue3.id), [data[0]['id'], data[1]['id']])
+        self.assertNotIn(str(issue3.id), [data[0]["id"], data[1]["id"]])
 
     def test_filter_by_level(self):
         """
@@ -503,15 +515,85 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         res = self.client.get(self.list_url + f"?query=level:{level_warning.label}")
         data = res.json()
         self.assertEqual(len(data), 1)
-        self.assertEqual(data[0]['id'], str(issue1.id))
+        self.assertEqual(data[0]["id"], str(issue1.id))
 
         res = self.client.get(self.list_url + f"?query=level:{level_fatal.label}")
         data = res.json()
         self.assertEqual(len(data), 1)
-        self.assertEqual(data[0]['id'], str(issue2.id))
+        self.assertEqual(data[0]["id"], str(issue2.id))
 
         res = self.client.get(self.list_url)
         self.assertEqual(len(res.json()), 3)
+
+    def test_issue_delete(self):
+        issue = baker.make("issue_events.Issue", project=self.project)
+        not_my_issue = baker.make("issue_events.Issue")
+
+        res = self.client.delete(get_issue_url(issue.id))
+        self.assertEqual(res.status_code, 204)
+
+        res = self.client.delete(get_issue_url(not_my_issue.id))
+        self.assertEqual(res.status_code, 404)
+
+    def test_issue_update(self):
+        issue = baker.make("issue_events.Issue", project=self.project)
+        self.assertEqual(issue.status, EventStatus.UNRESOLVED)
+        data = {"status": "resolved"}
+        res = self.client.put(
+            get_organization_issue_url(self.organization.slug, issue.pk),
+            data,
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        issue.refresh_from_db()
+        self.assertEqual(issue.status, EventStatus.RESOLVED)
+
+    def test_bulk_update(self):
+        """Bulk update only supports Issue status"""
+        issues = baker.make("issue_events.Issue", project=self.project, _quantity=2)
+        url = f"{self.list_url}?id={issues[0].id}&id={issues[1].id}"
+        status_to_set = EventStatus.RESOLVED
+        data = {"status": status_to_set.label}
+        res = self.client.put(url, data, content_type="application/json")
+        self.assertContains(res, status_to_set.label)
+        issues = Issue.objects.all()
+        self.assertEqual(issues[0].status, status_to_set)
+        self.assertEqual(issues[1].status, status_to_set)
+
+    def test_bulk_delete_via_ids(self):
+        """Bulk delete Issues with ids"""
+        issues = baker.make("issue_events.Issue", project=self.project, _quantity=2)
+        url = f"{self.list_url}?id={issues[0].id}&id={issues[1].id}"
+        self.client.delete(url)
+        issues = Issue.objects.all().count()
+        self.assertEqual(issues, 0)
+
+    def test_bulk_delete_via_search(self):
+        """Bulk delete Issues via search string"""
+        project2 = baker.make("projects.Project", organization=self.organization)
+        project2.team_set.add(self.team)
+        issue1 = baker.make(Issue, project=self.project)
+        issue2 = baker.make(Issue, project=project2)
+        url = f"{self.list_url}?query=is:unresolved&project={self.project.id}"
+        self.client.delete(url)
+        self.assertFalse(Issue.objects.filter(id=issue1.id).exists())
+        self.assertTrue(Issue.objects.filter(id=issue2.id).exists())
+
+    def test_bulk_update_query(self):
+        """Bulk update only supports Issue status"""
+        project2 = baker.make("projects.Project", organization=self.organization)
+        project2.team_set.add(self.team)
+        issue1 = baker.make(Issue, project=self.project)
+        issue2 = baker.make(Issue, project=project2)
+        url = f"{self.list_url}?query=is:unresolved&project={self.project.id}"
+        status_to_set = EventStatus.RESOLVED
+        data = {"status": status_to_set.label}
+        res = self.client.put(url, data, content_type="application/json")
+        self.assertContains(res, status_to_set.label)
+        issue1.refresh_from_db()
+        issue2.refresh_from_db()
+        self.assertEqual(issue1.status, status_to_set)
+        self.assertEqual(issue2.status, EventStatus.UNRESOLVED)
 
 
 class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
