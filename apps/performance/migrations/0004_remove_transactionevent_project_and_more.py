@@ -17,7 +17,10 @@ def reverse_func(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("projects", "0008_alter_projectkey_created"),
+        (
+            "projects",
+            "0001_squashed_0009_alter_project_id_alter_projectcounter_id_and_more",
+        ),
         ("performance", "0003_transactionevent"),
     ]
 

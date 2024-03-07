@@ -5,7 +5,10 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("projects", "0008_alter_projectkey_created"),
+        (
+            "projects",
+            "0001_squashed_0009_alter_project_id_alter_projectcounter_id_and_more",
+        ),
         ("performance", "0005_alter_span_data"),
     ]
 

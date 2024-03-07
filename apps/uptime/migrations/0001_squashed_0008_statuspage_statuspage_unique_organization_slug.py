@@ -23,7 +23,10 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("projects", "0008_alter_projectkey_created"),
+        (
+            "projects",
+            "0001_squashed_0009_alter_project_id_alter_projectcounter_id_and_more",
+        ),
         (
             "environments",
             "0001_squashed_0003_alter_environment_id_alter_environmentproject_id",

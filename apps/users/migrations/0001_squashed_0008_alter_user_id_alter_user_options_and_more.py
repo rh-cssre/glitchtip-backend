@@ -6,17 +6,6 @@ import django.utils.timezone
 
 
 class Migration(migrations.Migration):
-    replaces = [
-        ("users", "0001_initial"),
-        ("users", "0002_auto_20200225_0247"),
-        ("users", "0003_auto_20200417_1830"),
-        ("users", "0004_auto_20200429_2348"),
-        ("users", "0005_auto_20200612_2011"),
-        ("users", "0006_user_analytics"),
-        ("users", "0007_user_options"),
-        ("users", "0008_alter_user_id_alter_user_options_and_more"),
-    ]
-
     initial = True
 
     dependencies = [
