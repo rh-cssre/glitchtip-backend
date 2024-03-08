@@ -1,4 +1,4 @@
-from projects.permissions import ProjectPermission
+from apps.projects.permissions import ProjectPermission
 
 
 class ProjectAlertPermission(ProjectPermission):

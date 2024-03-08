@@ -11,8 +11,8 @@ from ninja import Field, Form, Query, Router
 from ninja.errors import AuthenticationError
 
 from apps.issue_events.models import IssueEvent
+from apps.projects.models import Project
 from glitchtip.schema import CamelSchema
-from projects.models import Project
 
 from .forms import UserReportForm
 

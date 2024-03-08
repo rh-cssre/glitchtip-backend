@@ -2,11 +2,11 @@ from rest_framework import exceptions, serializers
 
 from events.models import Event
 from glitchtip.serializers import FlexibleDateTimeField
-from projects.serializers.base_serializers import ProjectReferenceSerializer
+from apps.projects.serializers.base_serializers import ProjectReferenceSerializer
 from apps.releases.serializers import ReleaseSerializer
 from sentry.interfaces.stacktrace import get_context
-from user_reports.serializers import UserReportSerializer
-from users.serializers import UserSerializer
+from apps.user_reports.serializers import UserReportSerializer
+from apps.users.serializers import UserSerializer
 
 from .models import Comment, EventStatus, EventType, Issue
 

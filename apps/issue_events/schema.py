@@ -5,8 +5,8 @@ from ninja import Field, ModelSchema, Schema
 from pydantic import computed_field
 
 from apps.event_ingest.schema import CSPReportSchema, EventException
+from apps.projects.models import Project
 from glitchtip.schema import CamelSchema
-from projects.models import Project
 from sentry.interfaces.stacktrace import get_context
 
 from ..shared.schema.contexts import Contexts

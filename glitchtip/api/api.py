@@ -8,8 +8,8 @@ from django.http import HttpRequest
 from ninja import Field, ModelSchema, NinjaAPI
 
 from apps.api_tokens.api import router as api_tokens_router
+from apps.users.utils import ais_user_registration_open
 from glitchtip.constants import SOCIAL_ADAPTER_MAP
-from users.utils import ais_user_registration_open
 
 from ..schema import CamelSchema
 from .authentication import SessionAuth, TokenAuth

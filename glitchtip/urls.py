@@ -8,13 +8,13 @@ from django_rest_mfa.rest_auth_helpers.views import MFALoginView
 from organizations.backends import invitation_backend
 from rest_framework_nested import routers
 
+from apps.organizations_ext.urls import router as organizationsRouter
+from apps.projects.urls import router as projectsRouter
+from apps.teams.urls import router as teamsRouter
+from apps.users.urls import router as usersRouter
+from apps.users.views import SocialAccountDisconnectView
 from issues.urls import router as issuesRouter
 from issues.views import EventJsonView
-from organizations_ext.urls import router as organizationsRouter
-from projects.urls import router as projectsRouter
-from teams.urls import router as teamsRouter
-from users.urls import router as usersRouter
-from users.views import SocialAccountDisconnectView
 
 from . import social
 from .api import api
@@ -28,7 +28,7 @@ router.registry.extend(teamsRouter.registry)
 router.registry.extend(usersRouter.registry)
 
 if settings.BILLING_ENABLED:
-    from djstripe_ext.urls import router as djstripeRouter
+    from apps.djstripe_ext.urls import router as djstripeRouter
 
     router.registry.extend(djstripeRouter.registry)
 
@@ -53,28 +53,28 @@ if "django.contrib.admin" in settings.INSTALLED_APPS:
     urlpatterns += [
         path("admin/", include("django_rest_mfa.mfa_admin.urls")),
         path("admin/", admin.site.urls),
-        path("api/0/", include("glitchtip.importer.urls")),
+        path("api/0/", include("apps.importer.urls")),
     ]
 
 if settings.BILLING_ENABLED:
     urlpatterns += [
-        path("api/0/", include("djstripe_ext.urls")),
+        path("api/0/", include("apps.djstripe_ext.urls")),
     ]
 
 urlpatterns += [
-    path("api/0/", include("projects.urls")),
+    path("api/0/", include("apps.projects.urls")),
     path("api/0/", include("issues.urls")),
-    path("api/0/", include("users.urls")),
-    path("api/0/", include("organizations_ext.urls")),
-    path("api/0/", include("teams.urls")),
+    path("api/0/", include("apps.users.urls")),
+    path("api/0/", include("apps.organizations_ext.urls")),
+    path("api/0/", include("apps.teams.urls")),
     path("api/0/", include("apps.files.urls")),
     path("api/0/", include("apps.difs.urls")),
-    path("api/0/", include("glitchtip.stats.urls")),
-    path("api/0/", include("glitchtip.wizard.urls")),
+    path("api/0/", include("apps.stats.urls")),
+    path("api/0/", include("apps.wizard.urls")),
     path("api/mfa/", include("django_rest_mfa.urls")),
     path("api/", include("events.urls")),
-    path("api/embed/", include("user_reports.urls")),
-    path("", include("glitchtip.uptime.urls")),
+    path("api/embed/", include("apps.user_reports.urls")),
+    path("", include("apps.uptime.urls")),
     # What an oddball API endpoint
     path(
         "organizations/<slug:org>/issues/<int:issue>/events/<str:event>/json/",

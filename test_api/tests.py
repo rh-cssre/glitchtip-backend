@@ -1,8 +1,8 @@
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
-from glitchtip.uptime.models import Monitor
-from users.models import User
+from apps.uptime.models import Monitor
+from apps.users.models import User
 
 
 class TestAPITestCase(APITestCase):

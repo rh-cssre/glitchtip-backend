@@ -2,7 +2,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from glitchtip.test_utils.test_case import APIPermissionTestCase
-from organizations_ext.models import OrganizationUserRole
+from apps.organizations_ext.models import OrganizationUserRole
 
 
 class IssueAPIPermissionTests(APIPermissionTestCase):

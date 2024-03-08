@@ -20,8 +20,8 @@ from sentry_sdk import capture_exception, set_context, set_level
 from apps.difs.models import DebugInformationFile
 from apps.difs.tasks import difs_run_resolve_stacktrace
 from glitchtip.exceptions import ServiceUnavailableException
-from performance.serializers import TransactionEventSerializer
-from projects.models import Project
+from apps.performance.serializers import TransactionEventSerializer
+from apps.projects.models import Project
 from sentry.utils.auth import parse_auth_header
 
 from .negotiation import IgnoreClientContentNegotiation

@@ -9,7 +9,7 @@ from django.urls import reverse
 from rest_framework import status, views
 from rest_framework.response import Response
 
-from organizations_ext.models import Organization
+from apps.organizations_ext.models import Organization
 
 from .models import FileBlob
 from .permissions import ChunkUploadPermission

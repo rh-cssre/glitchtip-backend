@@ -4,7 +4,7 @@ from celery import shared_task
 from django.conf import settings
 from django.utils.timezone import now
 
-from organizations_ext.models import Organization
+from apps.organizations_ext.models import Organization
 
 from .assemble import assemble_artifacts
 from .models import FileBlob

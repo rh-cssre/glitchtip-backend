@@ -6,8 +6,8 @@ from django.core.cache import cache
 from django.http import HttpRequest
 from ninja.errors import AuthenticationError, HttpError, ValidationError
 
+from apps.projects.models import Project
 from glitchtip.api.exceptions import ThrottleException
-from projects.models import Project
 from sentry.utils.auth import parse_auth_header
 
 from .constants import EVENT_BLOCK_CACHE_KEY

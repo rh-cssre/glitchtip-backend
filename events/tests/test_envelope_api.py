@@ -7,7 +7,7 @@ from model_bakery import baker
 from rest_framework.test import APITestCase
 
 from glitchtip import test_utils  # pylint: disable=unused-import
-from performance.models import TransactionEvent, TransactionGroup
+from apps.performance.models import TransactionEvent, TransactionGroup
 
 from ..models import Event
 

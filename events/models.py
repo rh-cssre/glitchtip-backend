@@ -5,8 +5,8 @@ from django.db import models
 
 from glitchtip.base_models import CreatedModel
 from glitchtip.model_utils import FromStringIntegerChoices
-from projects.tasks import update_event_project_hourly_statistic
-from user_reports.models import UserReport
+from apps.projects.tasks import update_event_project_hourly_statistic
+from apps.user_reports.models import UserReport
 
 
 class AbstractEvent(CreatedModel):

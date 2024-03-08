@@ -7,10 +7,10 @@ from django.utils import timezone
 from freezegun import freeze_time
 from model_bakery import baker
 
+from apps.organizations_ext.models import OrganizationUserRole
+from apps.projects.models import ProjectAlertStatus
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 from issues.models import EventStatus, Issue
-from organizations_ext.models import OrganizationUserRole
-from projects.models import ProjectAlertStatus
 
 from ..models import Notification
 from ..tasks import process_event_alerts

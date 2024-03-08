@@ -4,8 +4,8 @@ from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.urls import reverse
 from model_bakery import baker
 
+from apps.organizations_ext.models import OrganizationUserRole
 from glitchtip.test_utils.test_case import APIPermissionTestCase
-from organizations_ext.models import OrganizationUserRole
 
 
 class ReleaseAPIPermissionTests(APIPermissionTestCase):

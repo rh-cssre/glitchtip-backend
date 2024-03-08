@@ -2,8 +2,8 @@ from django.db import IntegrityError
 from rest_framework import serializers
 
 from apps.files.models import File
+from apps.projects.serializers.base_serializers import ProjectReferenceSerializer
 from glitchtip.exceptions import ConflictException
-from projects.serializers.base_serializers import ProjectReferenceSerializer
 
 from .models import Release, ReleaseFile
 

@@ -4,8 +4,8 @@ from typing import Union
 from django.test import TestCase
 from model_bakery import baker
 
+from apps.organizations_ext.models import OrganizationUserRole
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
-from organizations_ext.models import OrganizationUserRole
 
 from ..process_event import process_issue_events
 from ..schema import (

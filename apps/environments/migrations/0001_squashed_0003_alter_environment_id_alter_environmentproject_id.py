@@ -10,7 +10,10 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("organizations_ext", "0001_squashed_0009_organization_scrub_ip_addresses"),
+        (
+            "organizations_ext",
+            "0001_squashed_0003_alter_organization_id_alter_organization_users_and_more",
+        ),
         (
             "projects",
             "0001_squashed_0009_alter_project_id_alter_projectcounter_id_and_more",

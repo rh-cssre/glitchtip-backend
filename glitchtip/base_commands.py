@@ -2,11 +2,11 @@ from django.core.management.base import BaseCommand
 from model_bakery import baker
 from model_bakery.random_gen import gen_json, gen_slug
 
-from organizations_ext.models import Organization
-from projects.models import Project
+from apps.organizations_ext.models import Organization
+from apps.projects.models import Project
 
 baker.generators.add("organizations.fields.SlugField", gen_slug)
-baker.generators.add("organizations_ext.fields.OrganizationSlugField", gen_slug)
+baker.generators.add("apps.organizations_ext.fields.OrganizationSlugField", gen_slug)
 baker.generators.add("django.db.models.JSONField", gen_json)
 
 
