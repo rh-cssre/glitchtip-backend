@@ -7,6 +7,7 @@ def currency_code():
 
 
 baker.generators.add("organizations.fields.SlugField", gen_slug)
+baker.generators.add("apps.organizations_ext.fields.OrganizationSlugField", gen_slug)
 baker.generators.add("djstripe.fields.StripeCurrencyCodeField", currency_code)
 baker.generators.add("djstripe.fields.StripeIdField", gen_slug)
 baker.generators.add("djstripe.fields.StripeDateTimeField", gen_datetime)
