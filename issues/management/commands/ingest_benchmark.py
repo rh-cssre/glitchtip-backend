@@ -3,14 +3,14 @@ from timeit import default_timer as timer
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.shortcuts import reverse
+from django.urls import reverse
 from django.test import RequestFactory
 
 from events.models import Event
 from events.test_data.event_generator import get_seeded_benchmark_events
 from events.views import EventStoreAPIView
-from organizations_ext.models import Organization
-from projects.models import Project
+from apps.organizations_ext.models import Organization
+from apps.projects.models import Project
 
 
 class Command(BaseCommand):

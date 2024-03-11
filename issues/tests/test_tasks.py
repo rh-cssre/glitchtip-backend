@@ -1,11 +1,14 @@
 from datetime import timedelta
+
 from django.conf import settings
 from django.test import TestCase
 from django.utils.timezone import now
-from model_bakery import baker
 from freezegun import freeze_time
+from model_bakery import baker
+
 from events.models import Event
 from issues.models import Issue
+
 from ..tasks import cleanup_old_events
 
 
