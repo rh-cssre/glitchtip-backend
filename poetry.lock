@@ -1779,17 +1779,18 @@ grpc = ["grpcio (>=1.38.0,<2.0dev)", "grpcio-status (>=1.38.0,<2.0.dev0)"]
 
 [[package]]
 name = "google-cloud-logging"
-version = "3.9.0"
+version = "3.10.0"
 description = "Stackdriver Logging API client library"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "google-cloud-logging-3.9.0.tar.gz", hash = "sha256:4decb1b0bed4a0e3c0e58a376646e6002d6be7cad039e3466822e8665072ea33"},
-    {file = "google_cloud_logging-3.9.0-py2.py3-none-any.whl", hash = "sha256:094a2db068ff7f38c9e0c1017673fa49c0768fbae02769e03e06baa30f138b87"},
+    {file = "google-cloud-logging-3.10.0.tar.gz", hash = "sha256:d93d347351240ddb14cfe201987a2d32cf9d7f478b8b2fabed3015b425b3274f"},
+    {file = "google_cloud_logging-3.10.0-py2.py3-none-any.whl", hash = "sha256:132192beb45731130a2ffbcd4b2b5cbd87370e7dcfa7397ae4002154f542bd20"},
 ]
 
 [package.dependencies]
-google-api-core = {version = ">=1.33.2,<2.0.dev0 || >=2.8.dev0,<3.0.0dev", extras = ["grpc"]}
+google-api-core = {version = ">=1.34.1,<2.0.dev0 || >=2.11.dev0,<3.0.0dev", extras = ["grpc"]}
+google-auth = ">=2.14.1,<2.24.0 || >2.24.0,<2.25.0 || >2.25.0,<3.0.0dev"
 google-cloud-appengine-logging = ">=0.1.0,<2.0.0dev"
 google-cloud-audit-log = ">=0.1.0,<1.0.0dev"
 google-cloud-core = ">=2.0.0,<3.0.0dev"
