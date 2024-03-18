@@ -1,10 +1,11 @@
+import os
 import shutil
-from django.shortcuts import reverse
-from rest_framework.test import APITestCase
-from model_bakery import baker
-from glitchtip import test_utils  # pylint: disable=unused-import
-from ..models import Event
 
+from django.urls import reverse
+from model_bakery import baker
+from rest_framework.test import APITestCase
+
+from ..models import Event
 
 sample_event = {
     "event_id": "cf536c31b68a473f97e579507ce155e3",
@@ -89,6 +90,10 @@ class JavaScriptProcessorTestCase(APITestCase):
             file__name="bundle.js.map",
             file__blob=blob_bundle_map,
         )
+        try:
+            os.mkdir("./uploads/file_blobs")
+        except FileExistsError:
+            pass
         shutil.copyfile(
             "./events/tests/test_data/bundle.js", "./uploads/file_blobs/bundle.js"
         )
