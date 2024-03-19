@@ -1092,18 +1092,24 @@ test = ["django-stubs", "mypy (==1.7.1)", "psycopg2-binary", "pytest", "pytest-a
 
 [[package]]
 name = "django-organizations"
-version = "2.3.1"
+version = "2.4.1"
 description = "Group accounts for Django"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "django-organizations-2.3.1.tar.gz", hash = "sha256:e692177ddf1a9fb55a66e97ed8a51778569d28af013cde4952b8101ce25004b9"},
-    {file = "django_organizations-2.3.1-py2.py3-none-any.whl", hash = "sha256:14c44905bdec5b928f80c1686306fe6909cced84eae22ea4a16130f9236af49d"},
+    {file = "django_organizations-2.4.1-py3-none-any.whl", hash = "sha256:bdf48e6e43ac0aa0cd687dbc3ec087d47aa852784dce5121d401affaec20f773"},
+    {file = "django_organizations-2.4.1.tar.gz", hash = "sha256:9bef08ebf9ace6bbe594edc24359698cabb1f972c15535bd27f93323713b8912"},
 ]
 
 [package.dependencies]
-Django = ">=3.2.0"
+django = ">=3.2"
 django-extensions = ">=2.0.8"
+
+[package.extras]
+dev = ["django-organizations[linting,tests]", "pre-commit", "tox"]
+docs = ["furo (==2023.9.10)", "sphinx (==7.2.6)"]
+linting = ["isort", "ruff"]
+tests = ["coverage", "django-autoslug (>=1.9.8)", "django-extensions (>=2.0.8)", "mock-django (==0.6.9)", "pytest (>=6.0)", "pytest-cov (>=2.4.0)", "pytest-django (>=3.0.0)"]
 
 [[package]]
 name = "django-prometheus"
