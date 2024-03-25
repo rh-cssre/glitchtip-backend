@@ -1,5 +1,6 @@
 from rest_framework.permissions import BasePermission
-from users.utils import is_user_registration_open
+
+from apps.users.utils import is_user_registration_open
 
 
 class ScopedPermission(BasePermission):
