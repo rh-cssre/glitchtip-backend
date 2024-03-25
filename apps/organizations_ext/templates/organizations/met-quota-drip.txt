@@ -1,0 +1,5 @@
+You have reached your event quota
+Organization: {{ organization_name }}
+Your plan allows for {{ event_limit }} events per month, and your projects have exceeded that limit.
+You will no longer receive events until the monthly cycle resets, or you upgrade your plan.
+Manage your subscription: {{ subscription_link }}"

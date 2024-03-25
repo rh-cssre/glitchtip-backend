@@ -6,8 +6,9 @@ import uuid
 from urllib.parse import urlparse
 
 from django.conf import settings
-from django.core.exceptions import SuspiciousOperation, ValidationError
+from django.core.exceptions import ValidationError
 from django.db.models import Exists, OuterRef
+from django.db.models.expressions import RawSQL
 from django.db.utils import IntegrityError
 from django.http import HttpResponse
 from django.test import RequestFactory
@@ -16,10 +17,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from sentry_sdk import capture_exception, set_context, set_level
 
-from difs.models import DebugInformationFile
-from difs.tasks import difs_run_resolve_stacktrace
-from performance.serializers import TransactionEventSerializer
-from projects.models import Project
+from apps.difs.models import DebugInformationFile
+from apps.difs.tasks import difs_run_resolve_stacktrace
+from glitchtip.exceptions import ServiceUnavailableException
+from apps.performance.serializers import TransactionEventSerializer
+from apps.projects.models import Project
 from sentry.utils.auth import parse_auth_header
 
 from .negotiation import IgnoreClientContentNegotiation
@@ -61,53 +63,67 @@ class BaseEventAPIView(APIView):
     content_negotiation_class = IgnoreClientContentNegotiation
     http_method_names = ["post"]
 
+    def check_status(self):
+        if settings.MAINTENANCE_EVENT_FREEZE:
+            raise ServiceUnavailableException(
+                {
+                    "message": "Events are not currently being accepted due to maintenance."
+                },
+            )
+        if settings.EVENT_STORE_DEBUG:
+            print(json.dumps(self.request.data))
+
     @classmethod
     def auth_from_request(cls, request):
         # Accept both sentry or glitchtip prefix.
-        # Prefer glitchtip when not using a sentry SDK but support both.
-        result = {
-            k: request.GET[k]
-            for k in request.GET.keys()
-            if k[:7] == "sentry_" or k[:10] == "glitchtip_"
-        }
+        for k in request.GET.keys():
+            if k in ["sentry_key", "glitchtip_key"]:
+                return request.GET[k]
 
-        if request.META.get("HTTP_X_SENTRY_AUTH", "")[:7].lower() == "sentry ":
-            if result:
-                raise SuspiciousOperation(
-                    "Multiple authentication payloads were detected."
-                )
-            result = parse_auth_header(request.META["HTTP_X_SENTRY_AUTH"])
-        elif request.META.get("HTTP_AUTHORIZATION", "")[:7].lower() == "sentry ":
-            if result:
-                raise SuspiciousOperation(
-                    "Multiple authentication payloads were detected."
-                )
-            result = parse_auth_header(request.META["HTTP_AUTHORIZATION"])
+        if auth_header := request.META.get(
+            "HTTP_X_SENTRY_AUTH", request.META.get("HTTP_AUTHORIZATION")
+        ):
+            result = parse_auth_header(auth_header)
+            return result.get("sentry_key", result.get("glitchtip_key"))
 
-        if not result:
-            if (
-                isinstance(request.data, list)
-                and len(request.data)
-                and "dsn" in request.data[0]
-            ):
-                dsn = urlparse(request.data[0]["dsn"])
-                if username := dsn.username:
-                    return username
-            raise exceptions.NotAuthenticated(
-                "Unable to find authentication information"
-            )
-
-        return result.get("sentry_key", result.get("glitchtip_key"))
+        if isinstance(request.data, list):
+            if data_first := next(iter(request.data), None):
+                if isinstance(data_first, dict):
+                    dsn = urlparse(data_first.get("dsn"))
+                    if username := dsn.username:
+                        return username
+        raise exceptions.NotAuthenticated("Unable to find authentication information")
 
     def get_project(self, request, project_id):
         sentry_key = BaseEventAPIView.auth_from_request(request)
         difs_subquery = DebugInformationFile.objects.filter(project_id=OuterRef("pk"))
+        if isinstance(request.data, list) and len(request.data) > 1:
+            data = request.data[2]
+        else:
+            data = request.data
         try:
             project = (
                 Project.objects.filter(id=project_id, projectkey__public_key=sentry_key)
-                .annotate(has_difs=Exists(difs_subquery))
+                .annotate(
+                    has_difs=Exists(difs_subquery),
+                    release_id=RawSQL(
+                        "select releases_release.id from releases_release inner join releases_releaseproject on releases_releaseproject.release_id = releases_release.id and releases_releaseproject.project_id=%s where version=%s limit 1",
+                        [project_id, data.get("release")],
+                    ),
+                    environment_id=RawSQL(
+                        "select environments_environment.id from environments_environment inner join environments_environmentproject on environments_environmentproject.environment_id = environments_environment.id and environments_environmentproject.project_id=%s where environments_environment.name=%s limit 1",
+                        [project_id, data.get("environment")],
+                    ),
+                )
                 .select_related("organization")
-                .only("id", "first_event", "organization__is_accepting_events")
+                .only(
+                    "id",
+                    "first_event",
+                    "slug",
+                    "event_throttle_rate",
+                    "organization__is_accepting_events",
+                    "organization__slug",
+                )
                 .first()
             )
         except ValidationError as err:
@@ -116,7 +132,10 @@ class BaseEventAPIView(APIView):
             if Project.objects.filter(id=project_id).exists():
                 raise exceptions.AuthenticationFailed({"error": "Invalid api key"})
             raise exceptions.ValidationError("Invalid project_id: %s" % project_id)
-        if not project.organization.is_accepting_events:
+        if (
+            not project.organization.is_accepting_events
+            or not project.is_accepting_events
+        ):
             raise exceptions.Throttled(detail="event rejected due to rate limit")
         return project
 
@@ -150,15 +169,7 @@ class BaseEventAPIView(APIView):
 
 class EventStoreAPIView(BaseEventAPIView):
     def post(self, request, *args, **kwargs):
-        if settings.MAINTENANCE_EVENT_FREEZE:
-            return Response(
-                {
-                    "message": "Events are not currently being accepted due to database maintenance."
-                },
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-        if settings.EVENT_STORE_DEBUG:
-            print(json.dumps(request.data))
+        self.check_status()
         try:
             project = self.get_project(request, kwargs.get("id"))
         except exceptions.AuthenticationFailed as err:
@@ -178,15 +189,7 @@ class EnvelopeAPIView(BaseEventAPIView):
         return TransactionEventSerializer
 
     def post(self, request, *args, **kwargs):
-        if settings.MAINTENANCE_EVENT_FREEZE:
-            return Response(
-                {
-                    "message": "Events are not currently being accepted due to database maintenance."
-                },
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-        if settings.EVENT_STORE_DEBUG:
-            print(json.dumps(request.data))
+        self.check_status()
         project = self.get_project(request, kwargs.get("id"))
 
         data = request.data
@@ -217,7 +220,9 @@ class EnvelopeAPIView(BaseEventAPIView):
             return self.process_event(event_data, request, project)
         elif message_header.get("type") == "session":
             return Response(
-                {"message": "Session events are not supported at this time."},
+                {
+                    "message": "Attempted to record a session event, which are not supported. This is safe to ignore. You may be able to suppress this message by disabling auto session tracking in your SDK. See https://gitlab.com/glitchtip/glitchtip-backend/-/issues/206"
+                },
                 status=status.HTTP_501_NOT_IMPLEMENTED,
             )
 
