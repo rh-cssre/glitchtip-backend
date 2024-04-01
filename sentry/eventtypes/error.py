@@ -1,8 +1,10 @@
 from django.utils.encoding import force_str
+
 from sentry.culprit import generate_culprit
-from sentry.utils.safe import truncatechars, get_path, trim
-from sentry.stacktraces.processing import get_crash_frame_from_event_data
 from sentry.stacktraces.functions import get_function_name_for_frame
+from sentry.stacktraces.processing import get_crash_frame_from_event_data
+from sentry.utils.safe import get_path, trim, truncatechars
+
 from .base import BaseEvent
 
 
