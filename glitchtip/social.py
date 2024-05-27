@@ -1,9 +1,10 @@
+from allauth.account import app_settings as allauth_account_settings
 from allauth.account.adapter import DefaultAccountAdapter
-from allauth.account import app_settings as allauth_settings
 from allauth.account.auth_backends import AuthenticationBackend
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter, get_adapter
 from allauth.socialaccount.helpers import complete_social_login
-from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+from allauth.socialaccount.providers.oauth2.client import OAuth2Client, OAuth2Error
+from allauth.socialaccount.providers.openid_connect.views import OpenIDConnectAdapter
 from dj_rest_auth.registration.serializers import (
     SocialLoginSerializer as BaseSocialLoginSerializer,
 )
@@ -17,7 +18,8 @@ from requests.exceptions import HTTPError
 from rest_framework import serializers
 from rest_framework.response import Response
 
-from users.utils import is_user_registration_open
+from apps.users.utils import is_user_registration_open
+
 from .constants import SOCIAL_ADAPTER_MAP
 
 DOMAIN = settings.GLITCHTIP_URL.geturl()
@@ -82,8 +84,13 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
         if not adapter_class:
             raise serializers.ValidationError(_("Define adapter_class in view"))
 
-        adapter = adapter_class(request)
-        app = adapter.get_provider().get_app(request)
+        # The OIDC provider has a dynamic provider id. Fetch it from the request.
+        if adapter_class == OpenIDConnectAdapter:
+            provider = request.resolver_match.captured_kwargs.get("provider")
+            adapter = adapter_class(request, provider)
+        else:
+            adapter = adapter_class(request)
+        app = adapter.get_provider().app
 
         access_token = attrs.get("access_token")
         code = attrs.get("code")
@@ -117,7 +124,13 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
                 headers=adapter.headers,
                 basic_auth=adapter.basic_auth,
             )
-            token = client.get_access_token(code)
+            try:
+                token = client.get_access_token(code)
+            except OAuth2Error as ex:
+                raise serializers.ValidationError(
+                    _("Failed to exchange code for access token")
+                ) from ex
+
             access_token = token["access_token"]
             tokens_to_parse = {"access_token": access_token}
 
@@ -133,7 +146,12 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
         social_token.app = app
 
         try:
-            login = self.get_social_login(adapter, app, social_token, token)
+            if adapter.provider_id == "google" and not code:
+                login = self.get_social_login(
+                    adapter, app, social_token, response={"id_token": id_token}
+                )
+            else:
+                login = self.get_social_login(adapter, app, social_token, token)
             ret = complete_social_login(request, login)
         except HTTPError:
             raise serializers.ValidationError(_("Incorrect value"))
@@ -142,7 +160,7 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
             raise serializers.ValidationError(ret.content)
 
         if not login.is_existing:
-            if allauth_settings.UNIQUE_EMAIL:
+            if allauth_account_settings.UNIQUE_EMAIL:
                 account_exists = (
                     get_user_model()
                     .objects.filter(
@@ -160,6 +178,7 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
             else:
                 login.lookup()
                 login.save(request, connect=True)
+                self.post_signup(login, attrs)
 
         attrs["user"] = login.account.user
 
@@ -167,17 +186,23 @@ class SocialLoginSerializer(BaseSocialLoginSerializer):
 
 
 class GenericMFAMixin:
-    client_class = OAuth2Client  # Needed for Github. Would this ever break a provider?
+    client_class = OAuth2Client  # Only OAuth2 client is supported
 
     @property
     def callback_url(self):
-        provider_id = self.adapter_class.provider_id
+        # Set dynamic OIDC provider ID
+        provider_id = self.kwargs.get("provider", self.adapter_class.provider_id)
         return DOMAIN + "/auth/" + provider_id
 
     @property
     def adapter_class(self):
         provider = self.kwargs.get("provider")
-        return SOCIAL_ADAPTER_MAP[provider]
+        adapter_class = SOCIAL_ADAPTER_MAP.get(
+            provider, SOCIAL_ADAPTER_MAP["openid_connect"]
+        )
+        # Set dynamic OIDC provider ID
+        adapter_class.provider_id = provider
+        return adapter_class
 
 
 class GlitchTipSocialConnectView(GenericMFAMixin, SocialConnectView):
