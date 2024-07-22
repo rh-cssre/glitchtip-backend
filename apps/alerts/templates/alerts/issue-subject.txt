@@ -1,0 +1,5 @@
+{% if issue_count == 1 %}
+Error in {{ first_issue.project }}: {{ first_issue.title }}
+{% else %}
+{{ issue_count }} errors reported in {{ first_issue.project }}
+{% endif %}
