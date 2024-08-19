@@ -1,0 +1,6 @@
+# 4.1.0 (Unreleased)
+
+- Remove event migration tool from 3.x. To migrate event data from 3.x to 4.1, first upgrade to 4.0.12. If event data doesn't need migrated, it's safe to upgrade from 3.x to any 4.x version.
+- Migrate MFA to django-allauth
+- Upgrade to django 5.1
+- Add support for django postgres pooling via env vars DATABASE_POOL, DATABASE_POOL_MIN_SIZE, and DATABASE_POOL_MAX_SIZE

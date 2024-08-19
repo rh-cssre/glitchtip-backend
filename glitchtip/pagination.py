@@ -19,9 +19,13 @@ class LinkHeaderPagination(CursorPagination):
     max_hits = 1000
 
     def paginate_queryset(self, queryset, request, view=None):
-        self.count = self.get_count(queryset)
         try:
-            return super().paginate_queryset(queryset, request, view)
+            page = super().paginate_queryset(queryset, request, view)
+            if self.has_next or self.has_previous:
+                self.count = self.get_count(queryset)
+            else:
+                self.count = len(page)
+            return page
         except ValueError as err:
             # https://gitlab.com/glitchtip/glitchtip-backend/-/issues/136
             logging.warning("Pagination received invalid cursor", exc_info=True)
@@ -29,7 +33,8 @@ class LinkHeaderPagination(CursorPagination):
 
     def get_count(self, queryset):
         """Count with max limit, to prevent slowdown"""
-        return queryset[: self.max_hits].count()
+        # Remove order by, it can slow down counts but has no effect
+        return queryset.order_by()[: self.max_hits].count()
 
     def get_paginated_response(self, data):
         next_url = self.get_next_link()
