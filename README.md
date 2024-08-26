@@ -14,22 +14,23 @@ GlitchTip is an open source, Sentry API compatible error tracking platform. It i
 of Sentry's open source codebase before it went proprietary. Its goals are to be a modern, easy-to-develop error
 tracking platform that respects your freedom to use it any way you wish. Some differences include:
 
-- A modern development environment with Python 3 and Django 4.
+- A modern development environment with Python 3, Django 5, async, and types.
 - Simplicity over features. We use Postgres to store error data. Our code base is a fraction of the size of Sentry and
   looks like a typical Django app. We leverage existing open source Django ecosystem apps whenever possible.
+- Lightweight - GlitchTip runs with as little as 1GB of ram, PostgreSQL, and Redis.
 - Respects your privacy. No massive JS bundles. No invasive tracking. No third party spying. Our marketing site runs the
   privacy-focused Plausible analytics. Self hosted GlitchTip will never report home. We will never know if you run it
   yourself.
 - Commitment to open source. We use open source tools like GitLab whenever possible. With our MIT license, you can use
   it for anything you'd like and even sell it. We believe in competition and hope you make GlitchTip even better.
 
-Project status: Stable. Open an issue and say hello if you'd like to help. We are able to process basic error requests
-from the open source Sentry client tools. More features are on the way.
+GlitchTip is a stable platform used in production environments for several years.
 
 # Developing
 
 We use Docker for development.
 View our [Contributing](./CONTRIBUTING.md) documentation if you'd like to help make GlitchTip better.
+See [API Documentation](https://app.glitchtip.com/api/docs)
 
 ## Run local dev environment
 
@@ -49,13 +50,15 @@ Run tests with `docker-compose run --rm web ./manage.py test`
 
 VS Code can do type checking and type inference. However, it requires setting up a virtual environment.
 
-1. Install Python 3 dependencies. For Ubuntu this is `apt install python3-dev python3-venv`
+1. Install Python. For Ubuntu this is `apt install python3-dev python3-venv`
 2. Install [poetry](https://python-poetry.org/docs/#installation)
-3. Create Python virtual environment `python3 -m venv env`
+3. Create Python virtual environment `python -m venv env`
 4. Activate environment `source env/bin/activate`
 5. Install packages `poetry install`
 
 ### Load testing
+
+First set the env var IS_LOAD_TEST to true in docker-compose.yml
 
 Locust is built into the dev dependencies. To run with Locust run
 `docker compose -f docker-compose.yml -f docker-compose.locust.yml up`
@@ -82,5 +85,7 @@ UWSGI_LOG_ENCODER='json {"severity":"info","timestamp":${unix},"message":"${msg}
 
 - Thank you to the Sentry team for their ongoing open source SDK work and formerly open source backend of which this
   project is based on.
-- We use element.io for internal chat and public gitter room
+- We use element.io for our public gitter room
 - Plausible Analytics is used for analytics
+- Django - no other web framework is as feature complete
+- django-ninja/Pydantic - brings typed and async-first api design
