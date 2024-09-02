@@ -1,8 +1,9 @@
 import collections
 import json
-from django.utils.encoding import force_str
-from sentry.utils.strings import truncatechars
 
+from django.utils.encoding import force_str
+
+from sentry.utils.strings import truncatechars
 
 SENTRY_MAX_VARIABLE_SIZE = 512
 
@@ -42,7 +43,7 @@ def trim(
     object_hook=None,
     _depth=0,
     _size=0,
-    **kwargs
+    **kwargs,
 ):
     """
     Truncates a value to ```MAX_VARIABLE_SIZE```.
@@ -92,4 +93,3 @@ def trim(
     if object_hook is None:
         return result
     return object_hook(result)
-
