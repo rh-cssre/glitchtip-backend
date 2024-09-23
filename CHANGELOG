@@ -1,0 +1,20 @@
+# Unreleased
+
+- Fix bug where release names with special chars did not allow release assemble to work
+
+# v4.1.3
+
+- Optimize alert sending logic to only consider recently ingested issues
+- Fixed https://gitlab.com/glitchtip/glitchtip-backend/-/issues/260
+
+# 4.1.2
+
+- Save performance transaction data in bulk, instead of one at a time
+- Fix migration that would fail in Postgres 13, which we still aim to support
+
+# 4.1.0
+
+- Remove event migration tool from 3.x. To migrate event data from 3.x to 4.1, first upgrade to 4.0.12. If event data doesn't need migrated, it's safe to upgrade from 3.x to any 4.x version.
+- Migrate MFA to django-allauth
+- Upgrade to django 5.1
+- Add support for django postgres pooling via env vars DATABASE_POOL, DATABASE_POOL_MIN_SIZE, and DATABASE_POOL_MAX_SIZE
