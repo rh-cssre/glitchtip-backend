@@ -1,0 +1,5 @@
+You are near your event quota
+Organization: {{ organization }}
+Your plan allows for {{ plan_event_count }} events per month, and your projects have used {{ event_count }}.
+If you reach the limit, you will not receive events in GlitchTip until the monthly cycle resets. You can avoid this by upgrading your plan or by adjusting the sample rate in your SDK. 
+Manage your subscription: {{ subscription_link }}
