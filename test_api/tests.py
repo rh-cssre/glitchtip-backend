@@ -1,10 +1,11 @@
-from django.shortcuts import reverse
-from rest_framework.test import APITestCase
-from users.models import User
-from glitchtip.uptime.models import Monitor
+from django.test import TestCase
+from django.urls import reverse
+
+from apps.uptime.models import Monitor
+from apps.users.models import User
 
 
-class TestAPITestCase(APITestCase):
+class TestAPITestCase(TestCase):
     def test_seed_data(self):
         with self.settings(ENABLE_TEST_API=True):
             url = reverse("seed_data")
