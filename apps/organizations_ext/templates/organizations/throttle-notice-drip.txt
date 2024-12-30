@@ -1,0 +1,26 @@
+{% load humanize %}
+
+{% if product %}
+Hello and thank you for using GlitchTip. We noticed your organization {{ organization.name|striptags }}
+has exceeded its monthly event limit on your {{ product.name }} and wanted to give you a heads up.
+Your plan allows for {{ event_limit|intcomma }} events, but for the current billing period we have received
+{{ organization.total_event_count|intcomma }} events for your organization. Here are a couple options to avoid this in the future.
+
+Upgrade to a new plan for more events at this link:
+{{ subscription_link }}
+
+Read about configuring your SDK to send fewer events to GlitchTip here:
+{{ faq_link }}
+
+In the meantime, we have placed a {{ organization.event_throttle_rate }}% throttle on incoming events
+from projects on your organization account for this billing period. If you choose to upgrade your plan,
+this throttle will be removed. Otherwise, it will reset at the beginning of your next billing cycle.
+{% else %}
+Hello and thank you for using GlitchTip. We noticed you recently created an account for your organization
+{{ organization.name|striptags }}, but that you haven't yet signed up for a subscription plan. We invite you to
+check out our subscription options and choose the right one for your organization at this link:
+{{ subscription_link }}
+
+Your organization won't be able to receive events on GlitchTip until you choose a subscription,
+so please do sign up to get started.
+{% endif %}
