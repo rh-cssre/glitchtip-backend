@@ -1,0 +1,47 @@
+from django.conf import settings
+from django.contrib import admin
+from django.utils.html import format_html
+
+from .models import StripeProduct, StripeSubscription
+from .utils import get_stripe_link
+
+
+class StripeBaseAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def stripe_link(self, obj):
+        return format_html(
+            '<a href="{}" target="_blank">{}</a>',
+            get_stripe_link(obj.stripe_id),
+            obj.stripe_id,
+        )
+
+    def get_readonly_fields(self, request, obj=None):
+        return (
+            list(self.readonly_fields)
+            + [field.name for field in obj._meta.fields]
+            + [field.name for field in obj._meta.many_to_many]
+            + ["stripe_link"]
+        )
+
+
+class StripeProductAdmin(StripeBaseAdmin):
+    list_display = ["stripe_id", "name", "price", "events", "is_public"]
+
+
+class StripeSubscriptionAdmin(StripeBaseAdmin):
+    list_display = [
+        "stripe_id",
+        "organization",
+        "product",
+        "current_period_start",
+        "current_period_end",
+        "is_active",
+    ]
+    list_filter = ["is_active", "product"]
+
+
+if settings.BILLING_ENABLED:
+    admin.site.register(StripeSubscription, StripeSubscriptionAdmin)
+    admin.site.register(StripeProduct, StripeProductAdmin)
