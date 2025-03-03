@@ -1,0 +1,5 @@
+{% if product %}
+Met event quota for {{ organization.name|striptags }}
+{% else %}
+Choose a GlitchTip subscription for {{ organization.name|striptags }}
+{% endif %}
