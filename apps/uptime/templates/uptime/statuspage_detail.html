@@ -1,0 +1,108 @@
+{% load static %}
+<style>
+  .content {
+    margin: auto;
+    width: fit-content;
+    max-width: 600px;
+    padding: 10px;
+    font-family:Helvetica,Arial,sans-serif;
+    font-size:16px;
+    font-weight:400
+  }
+  .monitor-item {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    margin-top: 10px;
+  }
+  .uptime-symbol-container {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    height: 25px;
+    width: 25px;
+  }
+  .up-symbol {
+    font-size: 22px;
+    color: #54a65a;
+  }
+  .down-symbol {
+    font-size: 14px;
+    color: #e22a46;
+  }
+  .no-status-symbol {
+    font-size: 20px;
+    color: black;
+  }
+  .status-details {
+    font-size: 14px;
+    font-weight: 300;
+  }
+  .glitchtip-branding {
+    margin-top: 20px;
+  }
+  .logo-link {
+    display: inline-block;
+    position: relative;
+    z-index: 1;
+  }
+  .logo-span {
+    display: inline-block;
+  }
+  .logo {
+    position: relative;
+    z-index: -1;
+    margin-top: 5px;
+  }
+</style>
+
+<div class="content">
+  <h1>{{ object }}</h1>
+
+  <div>
+    {% for monitor in monitors %}
+    <div class="monitor-item">
+      <div class="uptime-symbol-container">
+        {% if monitor.latest_is_up == True %}
+          <span class="up-symbol">&#10004;</span>
+        {% elif monitor.latest_is_up == False %}
+          <span class="down-symbol">&#10060;</span>
+        {% else %}
+          <span class="no-status-symbol">?</span>
+        {% endif %}
+      </div>
+      <div class="monitor-item-text">
+        <div>
+          <b>{{ monitor }}</b>
+        </div>
+        <div class="status-details">
+          {% if monitor.latest_is_up == True %}
+            Service is working normally
+          {% elif monitor.latest_is_up == False %}
+            Down since {{ monitor.last_change }}
+          {% elif monitor.latest_is_up == None %}
+            No status reported
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="glitchtip-branding">
+    <div>Powered by</div>
+    <a class="logo-link" href="https://glitchtip.com">
+      <span class="logo-span">
+        <object
+        class="logo"
+        data="{% static 'images/logo.png' %}"
+        type="image/png"
+        width="150"
+        height="37"
+        >
+          GlitchTip
+        </object>
+      </span>
+    </a>
+  </div>
+</div>
