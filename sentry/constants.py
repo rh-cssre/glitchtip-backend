@@ -6,17 +6,11 @@ web-server
 
 import logging
 import os.path
-import six
+from collections import OrderedDict, namedtuple
 from datetime import timedelta
 
-from collections import OrderedDict, namedtuple
-from django.conf import settings
+import six
 from django.utils.translation import gettext_lazy as _
-
-# from sentry.utils.integrationdocs import load_doc
-# from sentry.utils.geo import rust_geoip
-
-# import semaphore
 
 
 def get_all_languages():
@@ -80,97 +74,6 @@ ENVIRONMENT_NAME_MAX_LENGTH = 64
 
 SENTRY_APP_SLUG_MAX_LENGTH = 64
 
-# Team slugs which may not be used. Generally these are top level URL patterns
-# which we don't want to worry about conflicts on.
-RESERVED_ORGANIZATION_SLUGS = frozenset(
-    (
-        "admin",
-        "manage",
-        "login",
-        "account",
-        "register",
-        "api",
-        "accept",
-        "organizations",
-        "teams",
-        "projects",
-        "help",
-        "docs",
-        "logout",
-        "404",
-        "500",
-        "_static",
-        "out",
-        "debug",
-        "remote",
-        "get-cli",
-        "blog",
-        "welcome",
-        "features",
-        "customers",
-        "integrations",
-        "signup",
-        "pricing",
-        "subscribe",
-        "enterprise",
-        "about",
-        "jobs",
-        "thanks",
-        "guide",
-        "privacy",
-        "security",
-        "terms",
-        "from",
-        "sponsorship",
-        "for",
-        "at",
-        "platforms",
-        "branding",
-        "vs",
-        "answers",
-        "_admin",
-        "support",
-        "contact",
-        "onboarding",
-        "ext",
-        "extension",
-        "extensions",
-        "plugins",
-        "themonitor",
-        "settings",
-        "legal",
-        "avatar",
-        "organization-avatar",
-        "project-avatar",
-        "team-avatar",
-        "careers",
-        "_experiment",
-        "sentry-apps",
-    )
-)
-
-RESERVED_PROJECT_SLUGS = frozenset(
-    (
-        "api-keys",
-        "audit-log",
-        "auth",
-        "members",
-        "projects",
-        "rate-limits",
-        "repos",
-        "settings",
-        "teams",
-        "billing",
-        "payments",
-        "legal",
-        "subscription",
-        "support",
-        "integrations",
-        "developer-settings",
-        "usage",
-    )
-)
-
 LOG_LEVELS = {
     logging.NOTSET: "sample",
     logging.DEBUG: "debug",
@@ -222,51 +125,6 @@ SENTRY_RULES = (
     "sentry.rules.conditions.event_attribute.EventAttributeCondition",
     "sentry.rules.conditions.level.LevelCondition",
 )
-
-# methods as defined by http://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html + PATCH
-HTTP_METHODS = (
-    "GET",
-    "POST",
-    "PUT",
-    "OPTIONS",
-    "HEAD",
-    "DELETE",
-    "TRACE",
-    "CONNECT",
-    "PATCH",
-)
-
-# See https://github.com/getsentry/semaphore/blob/master/general/src/protocol/constants.rs
-# VALID_PLATFORMS = semaphore.VALID_PLATFORMS
-VALID_PLATFORMS = [
-    "as3",
-    "c",
-    "cfml",
-    "cocoa",
-    "csharp",
-    "elixir",
-    "go",
-    "groovy",
-    "haskell",
-    "java",
-    "javascript",
-    "native",
-    "node",
-    "objc",
-    "other",
-    "perl",
-    "php",
-    "python",
-    "ruby",
-]
-
-OK_PLUGIN_ENABLED = _("The {name} integration has been enabled.")
-
-OK_PLUGIN_DISABLED = _("The {name} integration has been disabled.")
-
-OK_PLUGIN_SAVED = _("Configuration for the {name} integration has been saved.")
-
-WARN_SESSION_EXPIRED = "Your session has expired."  # TODO: translate this
 
 # Maximum length of a symbol
 MAX_SYM = 256
