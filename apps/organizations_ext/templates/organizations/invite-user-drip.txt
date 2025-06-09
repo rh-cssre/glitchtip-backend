@@ -1,0 +1,8 @@
+{% load settings %}You are invited to GlitchTip
+
+{{ organization|striptags }} is using GlitchTip for software error reporting and wants you to be a part of the team.
+
+Follow this link to create your user account.
+
+{% get_domain %}{% url "invitations_register" user.pk token %}
+Visit GlitchTip's homepage at {% get_domain %} if you want to learn more first.
