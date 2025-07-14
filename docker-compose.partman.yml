@@ -1,0 +1,69 @@
+# docker-compose.advanced-partitioning.yml
+#
+# This file extends the base docker-compose.yml to set up an environment
+# for testing advanced partitioning with pg_partman.
+#
+# To use, run:
+# docker-compose -f docker-compose.yml -f docker-compose.advanced-partitioning.yml up --build
+
+# Define anchors that are referenced within this file to make it self-contained.
+# These values will be merged with/override the base compose file's values.
+x-environment: &default-environment
+  DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+  SECRET_KEY: change_me
+  ENABLE_ORGANIZATION_CREATION: "true"
+  ENABLE_TEST_API: "true"
+  DEBUG: "true"
+  EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
+  ENABLE_OBSERVABILITY_API: "true"
+  CELERY_WORKER_CONCURRENCY: 4
+  CELERY_WORKER_PREFETCH_MULTIPLIER: 25
+  CELERY_WORKER_POOL: "threads"
+  CELERY_SKIP_CHECKS: "true"
+
+x-volumes: &default-volumes
+  - .:/code
+
+services:
+  postgres:
+    # 1. Override the base postgres service to use the pg_partman image.
+    image: ghcr.io/dbsystel/postgresql-partman:17
+    environment:
+      # This image requires this environment variable to work without a password.
+      ALLOW_EMPTY_PASSWORD: "yes"
+      # This is inherited from the base compose file but included for clarity.
+      POSTGRES_HOST_AUTH_METHOD: "trust"
+
+  web:
+    # 2. Extend the environment to enable the advanced partitioning feature flag.
+    environment:
+      # This inherits all variables from the &default-environment anchor
+      # and adds our new flag.
+      <<: *default-environment
+      GLITCHTIP_ADVANCED_PARTITIONING: "true"
+
+  worker:
+    # Also extend the worker's environment so it's aware of the setting.
+    environment:
+      <<: *default-environment
+      GLITCHTIP_ADVANCED_PARTITIONING: "true"
+
+  # 3. Add a new helper service to run the one-time pg_partman setup.
+  partman-setup:
+    build: .
+    user: root
+    depends_on:
+      # This dependency ensures migrations (run via the web or manually)
+      # have likely completed before this command runs.
+      web:
+        condition: service_started
+    volumes: *default-volumes
+    environment: *default-environment
+    # This command will wait 15 seconds for migrations to apply, then run your setup command.
+    # In a CI/CD environment, you might use a more robust wait-for-it script.
+    command: >
+      bash -c "echo 'Waiting for migrations to apply...' &&
+               sleep 5 &&
+               echo 'Running pg_partman setup command...' &&
+               python manage.py setup_advanced_partitions"
+
