@@ -1,0 +1,70 @@
+{% extends "email/email_base.html" %}
+{% load humanize static settings %}
+{% block title_text %}
+    {% if product %}
+        Met event quota for {{ organization.name|striptags }}
+    {% else %}
+        Choose a GlitchTip subscription for {{ organization.name|striptags }}
+    {% endif %}
+{% endblock %}
+{% block content %}
+<tr>
+    <td style="background-color: #fefefe;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+            {% if product %}
+                <tr>
+                    <td style="padding: 20px; font-family: Helvetica, Arial, sans-serif; font-size: 16px; line-height: 20px; color: #0a0a0a;">
+                        <p style="margin: 0;">
+                            Hello and thank you for using GlitchTip. We noticed your organization <b>{{ organization.name|striptags }}</b>
+                            has exceeded its monthly event limit on your {{ product.name }} and wanted to give you a heads up.
+                            Your plan allows for {{ event_limit|intcomma }} events, but for the current billing period we have received
+                            {{ organization.total_event_count|intcomma }} events for your organization.
+                            Here are a couple options to avoid this in the future.
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 0 20px 20px 20px; font-family: Helvetica, Arial, sans-serif; font-size: 16px; line-height: 20px; color: #0a0a0a;">
+                        <ul style="padding: 0; margin: 0 0 20px 0; list-style-type: disc;">
+                            <li style="margin:0 0 6px 30px;" class="list-item-first">
+                                <a href="{{ subscription_link }}" style="color: #e94056; text-decoration: none;">Upgrade</a>
+                                to a new plan for more events
+                            </li>
+                            <li style="margin:0 0 0px 30px;">
+                                <a href="{{ faq_link }}" style="color: #e94056; text-decoration: none;">Read about</a>
+                                reducing the number of events your app sends out
+                            </li>
+                        </ul>
+                        <p style="margin: 0;">
+                            In the meantime, we have placed a {{ organization.event_throttle_rate }}% throttle on incoming
+                            events from projects on your organization account for this billing period. If you choose to
+                            upgrade your plan, this throttle will be removed. Otherwise, it will reset at the beginning
+                            of your next billing cycle.
+                        </p>
+                    </td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td style="padding: 20px; font-family: Helvetica, Arial, sans-serif; font-size: 16px; line-height: 20px; color: #0a0a0a;">
+                        <p style="margin: 0;">
+                            Hello and thank you for using GlitchTip. We noticed you recently created an account for your organization
+                            <b>{{ organization.name|striptags }}</b>, but that you haven't yet signed up for a subscription plan.
+                            We invite you to check out our
+                            <a href="{{ subscription_link }}" style="color: #e94056; text-decoration: none;">subscription options</a>
+                            and choose the right one for your organization.
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 0 20px 20px 20px; font-family: Helvetica, Arial, sans-serif; font-size: 16px; line-height: 20px; color: #0a0a0a;">
+                        <p style="margin: 0;">
+                            Your organization won't be able to receive events on GlitchTip until you choose a subscription, so please
+                            do sign up to get started.
+                        </p>
+                    </td>
+                </tr>
+            {% endif %}
+        </table>
+    </td>
+</tr>
+{% endblock %}
