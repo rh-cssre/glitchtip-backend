@@ -1,3 +1,5 @@
+from typing import Optional
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
@@ -47,7 +49,7 @@ class GlitchTipEmail(ContextMixin):
         subject = self.get_subject_content(context)
         msg = EmailMultiAlternatives(subject, self.get_text_content(context), to=to)
         if users:
-            msg.merge_data = {user.email: {"unique_id": user.id} for user in users}
+            msg.merge_metadata = {user.email: {"unique_id": user.id} for user in users}
         msg.attach_alternative(self.get_html_content(context), "text/html")
         msg.send()
 
@@ -65,7 +67,7 @@ class GlitchTipEmail(ContextMixin):
         self._send_email(context, to, users)
 
     def send_email(self, email: str):
-        """ Send just one email """
+        """Send just one email"""
         context = self.get_context_data()
         self._send_email(context, [email])
 
@@ -78,8 +80,8 @@ class DetailEmail(SingleObjectMixin, GlitchTipEmail):
         self.object = self.get_object()
         super().send_users_email(users)
 
-    def send_email(self, email: str = None):
-        """ Send just one email """
+    def send_email(self, email: Optional[str] = None):
+        """Send just one email"""
         self.object = self.get_object()
         context = self.get_context_data()
         if email is None:
