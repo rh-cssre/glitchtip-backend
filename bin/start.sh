@@ -11,7 +11,7 @@ esac
 
 case $SERVER_ROLE in
     web)
-        SCRIPT="./bin/run-uwsgi.sh"
+        SCRIPT="./bin/run-web.sh"
         ;;
     worker)
         SCRIPT="./bin/run-celery.sh"
