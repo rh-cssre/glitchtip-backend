@@ -1,0 +1,18 @@
+version: "3.7"
+services:
+  locust:
+    build: .
+    command: locust --host http://web:8000
+    volumes:
+      - .:/code
+    ports:
+      - "8089:8089"
+    environment:
+      DJANGO_SETTINGS_MODULE: glitchtip.settings
+      SECRET_KEY: nope
+      #IS_LOAD_TEST: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: "5.0"
+          memory: 8000M
