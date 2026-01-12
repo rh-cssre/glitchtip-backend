@@ -1,12 +1,13 @@
 variables:
   PROJECT_NAME: glitchtip
-  IMAGE_NAME: registry.gitlab.com/glitchtip/glitchtip-backend
-  CONTAINER_TEST_IMAGE: registry.gitlab.com/glitchtip/glitchtip-backend:$CI_BUILD_REF_NAME
   PIP_DISABLE_PIP_VERSION_CHECK: "on"
-  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-  POETRY_VIRTUALENVS_CREATE: "false"
-  POETRY_HOME: "/opt/poetry"
   POSTGRES_HOST_AUTH_METHOD: "trust"
+  UV_VERSION: 0.9
+  BASE_LAYER: trixie
+  UV_SYSTEM_PYTHON: "true"
+  UV_PYTHON_DOWNLOADS: "never"
+  UV_PROJECT_ENVIRONMENT: "/usr/local"
+  UV_CACHE_DIR: ".uv-cache"
   DEBUG: "true"
 
 include:
@@ -16,99 +17,109 @@ include:
 
 workflow:
   rules:
-    - when: always
+    # Run pipelines on pushes to default branch.
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    # Run pipelines for merge request events.
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    # Do not run pipelines for branch pushes if an MR exists.
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    # Run pipelines for branches without MR (yet).
+    - if: $CI_COMMIT_BRANCH
+    # Run pipelines for pushed tags, web UI, and schedules.
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == 'web'
+    - if: $CI_PIPELINE_SOURCE == 'schedule'
 
 test:
-  image: python:3.11
+  image: ghcr.io/astral-sh/uv:$UV_VERSION-python$PYTHON_VERSION-$BASE_LAYER
   variables:
     SECRET_KEY: testing
     ENABLE_TEST_API: "true"
     ENABLE_OPEN_USER_REGISTRATION: "true"
   services:
-    - postgres:15
+    - postgres:$POSTGRES_VERSION
   cache:
-    key: ${CI_COMMIT_REF_SLUG}
-    paths:
-      - .cache/pip
+    - key:
+        files:
+          - uv.lock
+      paths:
+        - $UV_CACHE_DIR
   script:
-    - curl -sSL https://install.python-poetry.org | python3 -
-    - $POETRY_HOME/bin/poetry install --no-interaction --no-ansi
-    - ./manage.py test
+    - uv sync --frozen --no-install-project
+    - uv run ./manage.py test
+    - uv cache prune --ci
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
+  parallel:
+    matrix:
+      - PYTHON_VERSION: '3.12'
+        POSTGRES_VERSION: '14'
+      - PYTHON_VERSION: '3.14'
+        POSTGRES_VERSION: '18'
 
 lint:
-  image: python:3.11
+  image: python:3.13-slim
   script:
-    - curl -sSL https://install.python-poetry.org | python3 -
-    - $POETRY_HOME/bin/poetry install --no-interaction --no-ansi
-    # - isort --check glitchtip not compatible with black :(
-    # - pylint --load-plugins=pylint_django --django-settings-module=glitchtip.settings --disable=R glitchtip
+    - pip install ruff
+    - ruff check glitchtip/ apps/
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 
 build:
-  image: docker:20
+  image: docker:29
   rules:
-    # Run only on protected branches that are not tagged and not merge requests
-    - if: '$CI_PIPELINE_SOURCE != "merge_request_event" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_TAG =~ "/^$/"'
-  services:
-    - docker:20-dind
-  script:
-    - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN registry.gitlab.com
-    - docker build -t $CONTAINER_TEST_IMAGE --build-arg IS_CI="True" .
-    - docker push $CONTAINER_TEST_IMAGE
-  rules:
-    - if: $CI_PIPELINE_SOURCE != "schedule"
-
-buildx:
-  image: docker:20-git
-  variables:
-    GIT_STRATEGY: none
-  artifacts:
-    paths:
-      - buildx
-    expire_in: 1 hour
-  services:
-    - docker:20-dind
-  script:
-    - export DOCKER_BUILDKIT=1
-    - git clone https://github.com/docker/buildx.git ./docker-buildx
-    - docker build --platform=local -o . ./docker-buildx
-  rules:
-    - if: $CI_PIPELINE_SOURCE =~ "schedule"
+    # Exclude merge requests and scheduled execution.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "schedule"
       when: never
-    - if: $CI_COMMIT_TAG =~ /^v\d+.\d+.\d+/
+    # Run build only on protected branches and tags (master or v0.0.0).
+    - if: $CI_COMMIT_REF_PROTECTED
+  services:
+    - docker:29-dind
+  script:
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN registry.gitlab.com
+    - docker build -t ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME//\//-} --build-arg IS_CI="True" .
+    - docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME//\//-}
 
 build_arm_x86:
-  image: docker:20
-  needs:
-    - buildx
+  image: docker:29
   services:
-    - docker:20-dind
+    - docker:29-dind
   before_script:
-    - mkdir -p ~/.docker/cli-plugins
-    - mv buildx ~/.docker/cli-plugins/docker-buildx
     - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
   script:
     - wget https://gitlab.com/api/v4/projects/15449363/jobs/artifacts/$CI_COMMIT_TAG/download?job=build-assets -O assets.zip
     - unzip assets.zip
     - rm assets.zip
-    - mv dist/glitchtip-frontend/* dist/
-    - rmdir dist/glitchtip-frontend/
-    - VERSION=${CI_COMMIT_REF_NAME#*v}
-    - echo "Build version $VERSION ci registry image $CI_REGISTRY_IMAGE commit ref $CI_COMMIT_REF_NAME"
+    - mv dist/glitchtip-frontend/browser/* dist/
+    - rmdir dist/glitchtip-frontend/browser/
+
+    # --- Updated Version Parsing ---
+    # Git tag (e.g., v5.0.1)
+    - VERSION_V_FULL=${CI_COMMIT_REF_NAME}
+
+    # No-v versions (e.g., 5.0.1, 5.0, 5)
+    - VERSION_NO_V_FULL=${CI_COMMIT_REF_NAME#*v}
+    - VERSION_NO_V_MINOR=${VERSION_NO_V_FULL%.*}
+    - VERSION_NO_V_MAJOR=${VERSION_NO_V_FULL%%.*}
+
+    # V-prefixed versions (e.g., v5.0, v5)
+    - VERSION_V_MINOR="v${VERSION_NO_V_MINOR}"
+    - VERSION_V_MAJOR="v${VERSION_NO_V_MAJOR}"
+
+    # Quoted to handle colons in echo
+    - 'echo "Building tags: latest, ${VERSION_NO_V_FULL}, ${VERSION_NO_V_MINOR}, ${VERSION_NO_V_MAJOR}, ${VERSION_V_FULL}, ${VERSION_V_MINOR}, ${VERSION_V_MAJOR}"'
+
     - docker login -u ${DOCKER_CI_REGISTRY_USER} -p ${DOCKER_CI_REGISTRY_PASSWORD}
     - docker buildx create --use
-    - docker buildx build --platform linux/arm64/v8,linux/amd64 --push -t ${DOCKER_CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME} -t ${DOCKER_CI_REGISTRY_IMAGE}:latest --build-arg IS_CI="True" --build-arg GLITCHTIP_VERSION=$VERSION --build-arg COLLECT_STATIC="True" .
+    - docker buildx build --platform linux/arm64/v8,linux/amd64 --push -t ${DOCKER_CI_REGISTRY_IMAGE}:latest -t ${DOCKER_CI_REGISTRY_IMAGE}:${VERSION_NO_V_FULL} -t ${DOCKER_CI_REGISTRY_IMAGE}:${VERSION_NO_V_MINOR} -t ${DOCKER_CI_REGISTRY_IMAGE}:${VERSION_NO_V_MAJOR} -t ${DOCKER_CI_REGISTRY_IMAGE}:${VERSION_V_FULL} -t ${DOCKER_CI_REGISTRY_IMAGE}:${VERSION_V_MINOR} -t ${DOCKER_CI_REGISTRY_IMAGE}:${VERSION_V_MAJOR} --build-arg IS_CI="True" --build-arg GLITCHTIP_VERSION=${VERSION_NO_V_FULL} --build-arg COLLECT_STATIC="True" .
   rules:
-    - if: $CI_PIPELINE_SOURCE =~ "schedule"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
       when: never
     - if: '$CI_COMMIT_TAG =~ /^v\d+.\d+.\d+/ && $CI_COMMIT_REF_PROTECTED == "true"'
 
-
 update_deps:
-  image: renovate/renovate:latest
+  image: renovate/renovate:42
   variables:
     RENOVATE_PLATFORM: gitlab
     RENOVATE_ENDPOINT: https://gitlab.com/api/v4
