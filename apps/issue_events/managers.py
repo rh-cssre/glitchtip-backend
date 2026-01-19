@@ -1,0 +1,158 @@
+"""
+Custom managers for issue_events models.
+
+Provides smart event lookup that can target specific partitions
+based on UUID version detection.
+"""
+
+import logging
+from datetime import timedelta
+from typing import TYPE_CHECKING
+from uuid import UUID
+
+from django.db import models
+
+from glitchtip.partition_manager import UUID7Helper
+
+if TYPE_CHECKING:
+    from .models import IssueEvent
+
+logger = logging.getLogger(__name__)
+
+
+class EventManager(models.Manager):
+    """
+    Manager for IssueEvent with smart UUID-based partition targeting.
+
+    This manager provides optimized lookups that leverage UUIDv7's
+    timestamp encoding to target specific partitions, reducing query time.
+    """
+
+    def get_event(self, id_or_event_id: str | UUID) -> "IssueEvent":
+        """
+        Intelligent event lookup with automatic partition targeting.
+
+        Strategy:
+        - UUIDv7 (id): Extract timestamp, add time filter to enable partition pruning
+        - UUIDv4 (event_id): Use event_id column with partial index
+        - Unknown version: Try both lookups
+
+        Args:
+            id_or_event_id: UUID string or UUID object
+
+        Returns:
+            IssueEvent instance
+
+        Raises:
+            ValueError: If UUID is invalid
+            IssueEvent.DoesNotExist: If event not found
+
+        Example:
+            # Server-generated ID (UUIDv7) - uses partition pruning
+            event = IssueEvent.objects.get_event("019d1234-5678-7abc-def0-123456789abc")
+
+            # Client-provided ID (UUIDv4) - uses event_id index
+            event = IssueEvent.objects.get_event("a1b2c3d4-e5f6-4789-abcd-ef0123456789")
+        """
+        # Convert string to UUID if needed
+        if isinstance(id_or_event_id, str):
+            try:
+                uuid_val = UUID(id_or_event_id)
+            except ValueError:
+                raise ValueError(f"Invalid UUID format: {id_or_event_id}")
+        else:
+            uuid_val = id_or_event_id
+
+        # Detect UUID version and optimize query accordingly
+        if uuid_val.version == 7:
+            # UUIDv7: Extract timestamp for partition targeting
+            try:
+                event_time = UUID7Helper.extract_datetime(uuid_val)
+
+                # Add time-based filter to enable PostgreSQL partition pruning
+                # Use a tolerance window to account for clock skew
+                tolerance = timedelta(hours=1)
+                return self.filter(
+                    id=uuid_val,
+                    received__gte=event_time - tolerance,
+                    received__lte=event_time + tolerance,
+                ).get()
+
+            except Exception as e:
+                logger.warning(
+                    f"Failed to extract timestamp from UUIDv7 {uuid_val}, "
+                    f"falling back to standard lookup: {e}"
+                )
+                # Fallback to standard lookup without partition targeting
+                return self.get(id=uuid_val)
+
+        elif uuid_val.version == 4:
+            # UUIDv4: This is a client-provided event_id
+            # Use the partial index on event_id column
+            return self.filter(event_id=uuid_val).get()
+
+        else:
+            # Unknown UUID version - try both approaches
+            logger.debug(
+                f"Unknown UUID version {uuid_val.version}, trying both lookups"
+            )
+
+            # Try as server ID first (most common case going forward)
+            try:
+                return self.get(id=uuid_val)
+            except self.model.DoesNotExist:
+                pass
+
+            # Try as client event_id
+            try:
+                return self.filter(event_id=uuid_val).get()
+            except self.model.DoesNotExist:
+                pass
+
+            # If neither worked, raise the standard DoesNotExist
+            raise self.model.DoesNotExist(
+                f"{self.model._meta.object_name} matching query does not exist: {uuid_val}"
+            )
+
+    def filter_by_time_range(self, start, end):
+        """
+        Optimize time-range queries with UUID boundaries for partition pruning.
+
+        When querying by time range, this method adds UUID range filters
+        that allow PostgreSQL to eliminate irrelevant partitions.
+
+        Args:
+            start: Start datetime (inclusive)
+            end: End datetime (exclusive)
+
+        Returns:
+            Filtered queryset
+
+        Example:
+            # Query last 7 days with partition pruning
+            events = IssueEvent.objects.filter_by_time_range(
+                start=now() - timedelta(days=7),
+                end=now()
+            )
+        """
+        if start and end:
+            try:
+                start_uuid, end_uuid = UUID7Helper.get_range_for_date(start, end)
+                return self.filter(
+                    id__gte=start_uuid,
+                    id__lt=end_uuid,
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to convert time range to UUID range: {e}, "
+                    f"falling back to received column"
+                )
+                # Fallback to standard datetime filtering
+                return self.filter(received__gte=start, received__lt=end)
+
+        elif start:
+            return self.filter(received__gte=start)
+        elif end:
+            return self.filter(received__lt=end)
+
+        return self.all()
