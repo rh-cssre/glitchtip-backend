@@ -6,21 +6,18 @@ HEROKU_DYNO="${DYNO:-no}"
 
 case "$HEROKU_DYNO" in
     web*) ./manage.py migrate ;;
-    worker*) SERVER_ROLE=worker_with_beat ;;
+    worker*) SERVER_ROLE=worker ;;
 esac
 
 case $SERVER_ROLE in
     web)
-        SCRIPT="./bin/run-uwsgi.sh"
+        SCRIPT="./bin/run-web.sh"
         ;;
     worker)
-        SCRIPT="./bin/run-celery.sh"
-        ;;
-    beat)
-        SCRIPT="./bin/run-beat.sh"
+        SCRIPT="./bin/run-worker.sh"
         ;;
     worker_with_beat)
-        SCRIPT="./bin/run-celery-with-beat.sh"
+        SCRIPT="./bin/run-worker.sh"
         ;;
     *)
         echo "Unknown server role provided: $SERVER_ROLE. Should be web|worker|beat."
