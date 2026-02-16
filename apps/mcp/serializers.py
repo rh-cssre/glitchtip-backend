@@ -1,0 +1,133 @@
+from apps.issue_events.models import Issue, IssueEvent
+from apps.issue_events.utils import get_entries
+from apps.organizations_ext.models import Organization
+from apps.projects.models import Project
+
+
+def serialize_organization(org: Organization) -> dict:
+    return {
+        "id": str(org.id),
+        "name": org.name,
+        "slug": org.slug,
+        "dateCreated": org.created.isoformat(),
+        "isAcceptingEvents": org.is_accepting_events,
+    }
+
+
+def serialize_project(project: Project) -> dict:
+    result = {
+        "id": str(project.id),
+        "name": project.name,
+        "slug": project.slug,
+        "platform": project.platform,
+        "dateCreated": project.created.isoformat(),
+    }
+    if hasattr(project, "organization") and project.organization:
+        result["organization"] = {
+            "id": str(project.organization.id),
+            "slug": project.organization.slug,
+            "name": project.organization.name,
+        }
+    return result
+
+
+def serialize_issue(issue: Issue) -> dict:
+    result = {
+        "id": str(issue.id),
+        "title": issue.title,
+        "culprit": issue.culprit or "",
+        "level": issue.get_level_display(),
+        "status": issue.get_status_display(),
+        "type": issue.get_type_display(),
+        "count": issue.count,
+        "firstSeen": issue.first_seen.isoformat(),
+        "lastSeen": issue.last_seen.isoformat(),
+        "metadata": issue.metadata,
+    }
+    if hasattr(issue, "short_id_display"):
+        result["shortId"] = issue.short_id_display
+    if hasattr(issue, "project") and issue.project:
+        result["project"] = {
+            "id": str(issue.project.id),
+            "name": issue.project.name,
+            "slug": issue.project.slug,
+        }
+    if hasattr(issue, "num_comments"):
+        result["numComments"] = issue.num_comments
+    return result
+
+
+def serialize_event(event: IssueEvent) -> dict:
+    result = {
+        "id": event.id.hex,
+        "eventId": event.eventID,
+        "issueId": str(event.issue_id),
+        "title": event.title,
+        "type": event.get_type_display(),
+        "level": event.get_level_display(),
+        "timestamp": event.timestamp.isoformat(),
+        "transaction": event.transaction,
+        "tags": [{"key": k, "value": v} for k, v in event.tags.items()],
+    }
+    if event.data:
+        entries = get_entries(event.data)
+        if entries:
+            result["entries"] = [_serialize_entry(e) for e in entries]
+        if contexts := event.data.get("contexts"):
+            result["contexts"] = contexts
+        if user := event.data.get("user"):
+            result["user"] = user
+        if sdk := event.data.get("sdk"):
+            result["sdk"] = sdk
+    return result
+
+
+def _serialize_entry(entry) -> dict:
+    """Convert entry schema objects to plain dicts."""
+    if hasattr(entry, "model_dump"):
+        return entry.model_dump(by_alias=True)
+    if isinstance(entry, dict):
+        return entry
+    return {"type": str(type(entry).__name__), "data": str(entry)}
+
+
+def serialize_alert(alert) -> dict:
+    result = {
+        "id": alert.id,
+        "name": alert.name,
+        "timespanMinutes": alert.timespan_minutes,
+        "quantity": alert.quantity,
+        "uptime": alert.uptime,
+    }
+    if hasattr(alert, "alertrecipient_set"):
+        recipients = alert.alertrecipient_set.all()
+        result["alertRecipients"] = [
+            {
+                "id": r.id,
+                "recipientType": r.recipient_type,
+                "url": r.url,
+            }
+            for r in recipients
+        ]
+    return result
+
+
+def serialize_monitor(monitor) -> dict:
+    result = {
+        "id": monitor.id,
+        "name": monitor.name,
+        "monitorType": monitor.monitor_type,
+        "url": monitor.url,
+        "interval": monitor.interval,
+        "created": monitor.created.isoformat(),
+        "expectedStatus": monitor.expected_status,
+        "expectedBody": monitor.expected_body,
+        "organizationId": monitor.organization_id,
+    }
+    if monitor.project_id:
+        result["projectId"] = str(monitor.project_id)
+    if hasattr(monitor, "latest_is_up"):
+        result["isUp"] = monitor.latest_is_up
+    if hasattr(monitor, "last_change") and monitor.last_change:
+        result["lastChange"] = monitor.last_change.isoformat()
+    return result
