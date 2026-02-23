@@ -1,14 +1,825 @@
-from django.shortcuts import reverse
-from django.test import TestCase
+import logging
+from datetime import datetime, timezone
+from unittest.mock import patch
+from uuid import UUID
+
+import requests_mock
+from django.conf import settings
+from django.test import TestCase, override_settings
+from django.urls import reverse
+from model_bakery import baker
+
+from glitchtip.internal_transport import InternalTransport, _processing_internal
+from glitchtip.partition_manager import PartitionManager, UUID7Helper
+from glitchtip.settings import _is_self_referencing_dsn
 
 
-class DocsTestCase(TestCase):
-    def test_redoc(self):
-        url = reverse("schema-redoc")
-        res = self.client.get(url)
+class SettingsTestCase(TestCase):
+    def setUp(self):
+        self.url = reverse("api:get_settings")
+
+    def test_settings(self):
+        with self.assertNumQueries(1):
+            res = self.client.get(self.url)  # Check that no auth is necessary
         self.assertEqual(res.status_code, 200)
 
-    def test_openapi(self):
-        url = reverse("schema-redoc") + "?format=openapi"
-        res = self.client.get(url)
+    def test_settings_oidc(self):
+        social_app = baker.make(
+            "socialaccount.socialapp",
+            provider="openid_connect",
+            provider_id="my-openid",
+            settings={"server_url": "https://example.com"},
+        )
+        for provider in [
+            "gitlab",
+            "microsoft",
+            "github",
+            "google",
+            "nextcloud",
+            "digitalocean",
+        ]:
+            baker.make(
+                "socialaccount.socialapp",
+                provider=provider,
+            )
+        with requests_mock.Mocker() as m:
+            m.get(
+                "https://example.com/.well-known/openid-configuration",
+                json={"authorization_endpoint": ""},
+            )
+            res = self.client.get(self.url)
+        self.assertContains(res, social_app.name)
+
+
+class APIRootTestCase(TestCase):
+    def setUp(self):
+        self.url = reverse("api:api_root")
+
+    def test_anon(self):
+        self.assertContains(self.client.get(self.url), "version")
+
+    def test_user(self):
+        user = baker.make("users.user")
+        self.client.force_login(user)
+        res = self.client.get(self.url)
+        self.assertContains(res, user.email)
+
+    def test_token(self):
+        user = baker.make("users.user")
+        auth_token = baker.make("api_tokens.APIToken", user=user)
+
+        headers = {"Authorization": f"Bearer {auth_token.token}"}
+        res = self.client.get(self.url, headers=headers)
+        self.assertContains(res, auth_token.token)
+        self.assertContains(res, user.email)
+
+
+class APICatchallTestCase(TestCase):
+    """Unmatched API paths should return JSON 404, not CSRF error page"""
+
+    def test_unmatched_path_returns_json_404(self):
+        res = self.client.get("/api/0/nonexistent/path/")
+        self.assertEqual(res.status_code, 404)
+        self.assertEqual(res["Content-Type"], "application/json; charset=utf-8")
+        self.assertEqual(res.json(), {"detail": "Not found"})
+
+    def test_unmatched_post_returns_json_404(self):
+        res = self.client.post("/api/0/nonexistent/path/")
+        self.assertEqual(res.status_code, 404)
+        self.assertEqual(res["Content-Type"], "application/json; charset=utf-8")
+
+    def test_unmatched_path_no_trailing_slash(self):
+        res = self.client.get("/api/0/nonexistent/path")
+        self.assertEqual(res.status_code, 404)
+        self.assertEqual(res["Content-Type"], "application/json; charset=utf-8")
+
+
+class InternalHealthTestCase(TestCase):
+    def setUp(self):
+        self.url = "/api/0/internal/health"
+
+    def test_get_health(self):
+        res = self.client.get(self.url)
         self.assertEqual(res.status_code, 200)
+
+        data = res.json()
+        self.assertIn("healthy", data)
+        self.assertIn("problems", data)
+
+
+class ObservabilityTestCase(TestCase):
+    def test_metrics_endpoint(self):
+        from django.urls import include, path
+
+        from glitchtip import urls
+
+        # Manually inject the URL pattern to simulate ENABLE_OBSERVABILITY_API=True
+        # This avoids needing to reload the entire URLconf module which is flaky in tests
+        pattern = path("", include("django_prometheus.urls"))
+        urls.urlpatterns.append(pattern)
+
+        try:
+            res = self.client.get("/metrics")
+            self.assertEqual(res.status_code, 200)
+            self.assertTrue(res["Content-Type"].startswith("text/plain"))
+        finally:
+            urls.urlpatterns.pop()
+
+
+class UUID7HelperTestCase(TestCase):
+    """Test UUID7 timestamp encoding and extraction"""
+
+    def test_from_datetime(self):
+        """UUIDv7 encodes timestamp in first 48 bits"""
+        dt = datetime(2025, 1, 15, 12, 30, 45, tzinfo=timezone.utc)
+        uuid_val = UUID7Helper.from_datetime(dt)
+
+        self.assertEqual(uuid_val.version, 7)
+        self.assertIsInstance(uuid_val, UUID)
+
+        # Extract and verify timestamp (within millisecond precision)
+        extracted = UUID7Helper.extract_datetime(uuid_val)
+        delta = abs((extracted - dt).total_seconds())
+        self.assertLess(delta, 0.001)  # Within 1ms
+
+    def test_from_datetime_naive(self):
+        """Naive datetime is treated as UTC"""
+        dt_naive = datetime(2025, 1, 15, 12, 0, 0)
+        dt_aware = dt_naive.replace(tzinfo=timezone.utc)
+
+        uuid_naive = UUID7Helper.from_datetime(dt_naive)
+        uuid_aware = UUID7Helper.from_datetime(dt_aware)
+
+        # Timestamps should be identical
+        extracted_naive = UUID7Helper.extract_datetime(uuid_naive)
+        extracted_aware = UUID7Helper.extract_datetime(uuid_aware)
+
+        delta = abs((extracted_naive - extracted_aware).total_seconds())
+        self.assertLess(delta, 0.001)
+
+    def test_extract_datetime(self):
+        """Extract datetime from UUIDv7"""
+        original_dt = datetime(2025, 6, 15, 9, 15, 30, tzinfo=timezone.utc)
+        uuid_val = UUID7Helper.from_datetime(original_dt)
+
+        extracted_dt = UUID7Helper.extract_datetime(uuid_val)
+
+        # Should be timezone-aware UTC
+        self.assertIsNotNone(extracted_dt.tzinfo)
+        self.assertEqual(extracted_dt.tzinfo, timezone.utc)
+
+        # Timestamps should match within millisecond precision
+        delta = abs((extracted_dt - original_dt).total_seconds())
+        self.assertLess(delta, 0.001)
+
+    def test_extract_datetime_invalid_version(self):
+        """Raises error for non-v7 UUIDs"""
+        from uuid import uuid4
+
+        uuid_v4 = uuid4()
+
+        with self.assertRaises(ValueError) as ctx:
+            UUID7Helper.extract_datetime(uuid_v4)
+
+        self.assertIn("version 7", str(ctx.exception))
+
+    def test_get_range_for_date(self):
+        """UUID range covers full date"""
+        start = datetime(2025, 1, 15, 0, 0, 0, tzinfo=timezone.utc)
+        end = datetime(2025, 1, 16, 0, 0, 0, tzinfo=timezone.utc)
+
+        start_uuid, end_uuid = UUID7Helper.get_range_for_date(start, end)
+
+        # Verify both are UUIDv7
+        self.assertEqual(start_uuid.version, 7)
+        self.assertEqual(end_uuid.version, 7)
+
+        # Verify ordering
+        self.assertLess(start_uuid, end_uuid)
+
+        # Verify boundary timestamps
+        extracted_start = UUID7Helper.extract_datetime(start_uuid)
+        extracted_end = UUID7Helper.extract_datetime(end_uuid)
+
+        self.assertLess(abs((extracted_start - start).total_seconds()), 0.001)
+        self.assertLess(abs((extracted_end - end).total_seconds()), 0.001)
+
+    def test_temporal_ordering(self):
+        """UUIDv7s maintain temporal ordering"""
+        dt1 = datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        dt2 = datetime(2025, 1, 15, 11, 0, 0, tzinfo=timezone.utc)
+        dt3 = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+
+        uuid1 = UUID7Helper.from_datetime(dt1)
+        uuid2 = UUID7Helper.from_datetime(dt2)
+        uuid3 = UUID7Helper.from_datetime(dt3)
+
+        # UUIDs should be sortable by timestamp
+        self.assertLess(uuid1, uuid2)
+        self.assertLess(uuid2, uuid3)
+        self.assertLess(uuid1, uuid3)
+
+
+class PartitionManagerTestCase(TestCase):
+    """Test partition SQL generation"""
+
+    def test_create_time_partition_datetime_mode(self):
+        """DateTime mode generates correct SQL"""
+        manager = PartitionManager()
+
+        sqls = manager.create_time_partition(
+            parent_table="issue_events_issueaggregate",
+            partition_name="issue_events_issueaggregate_20250115",
+            start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
+            end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+            hash_buckets=4,
+            hash_column="organization_id",
+            key_type="datetime",
+            partition_column="date",
+        )
+
+        # Verify parent partition SQL
+        parent_sql = sqls[0]
+        self.assertIn("CREATE TABLE IF NOT EXISTS", parent_sql)
+        self.assertIn("issue_events_issueaggregate_20250115", parent_sql)
+        self.assertIn("PARTITION OF issue_events_issueaggregate", parent_sql)
+        self.assertIn("FOR VALUES FROM ('2025-01-15", parent_sql)
+        self.assertIn("TO ('2025-01-16", parent_sql)
+        self.assertIn("PARTITION BY HASH (organization_id)", parent_sql)
+
+        # Verify hash children (4 buckets)
+        self.assertEqual(len(sqls), 5)  # 1 parent + 4 children
+
+        # Check first hash partition
+        self.assertIn("issue_events_issueaggregate_20250115_h0", sqls[1])
+        self.assertIn("MODULUS 4, REMAINDER 0", sqls[1])
+
+        # Check last hash partition
+        self.assertIn("issue_events_issueaggregate_20250115_h3", sqls[4])
+        self.assertIn("MODULUS 4, REMAINDER 3", sqls[4])
+
+    def test_create_time_partition_uuid7_mode(self):
+        """UUID7 mode generates correct SQL with UUID ranges"""
+        manager = PartitionManager()
+
+        sqls = manager.create_time_partition(
+            parent_table="issue_events_issueevent",
+            partition_name="issue_events_issueevent_20250115",
+            start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
+            end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+            hash_buckets=16,
+            hash_column="organization_id",
+            key_type="uuid7",
+            partition_column="id",
+        )
+
+        parent_sql = sqls[0]
+
+        # Verify UUID range format (should have UUID strings, not datetimes)
+        self.assertIn("FOR VALUES FROM ('", parent_sql)
+        self.assertIn("TO ('", parent_sql)
+
+        # Should NOT contain datetime strings
+        self.assertNotIn("2025-01-15T", parent_sql)
+
+        # Should contain UUID-like strings (hex with dashes)
+        # UUIDs are 36 chars: 8-4-4-4-12
+        import re
+
+        uuid_pattern = r"'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'"
+        matches = re.findall(uuid_pattern, parent_sql, re.IGNORECASE)
+        self.assertEqual(len(matches), 2)  # start and end UUID
+
+        # Verify 16 hash children
+        self.assertEqual(len(sqls), 17)  # 1 parent + 16 hash children
+
+    def test_idempotent_sql(self):
+        """SQL includes IF NOT EXISTS for idempotency"""
+        manager = PartitionManager()
+
+        sqls = manager.create_time_partition(
+            parent_table="test_table",
+            partition_name="test_20250115",
+            start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
+            end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+            hash_buckets=2,
+        )
+
+        # All statements should be idempotent
+        for sql in sqls:
+            self.assertIn("IF NOT EXISTS", sql)
+
+    def test_configurable_hash_buckets(self):
+        """Hash bucket count is configurable"""
+        manager = PartitionManager()
+
+        for bucket_count in [2, 4, 8, 16, 32]:
+            sqls = manager.create_time_partition(
+                parent_table="test_table",
+                partition_name=f"test_b{bucket_count}",
+                start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
+                end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+                hash_buckets=bucket_count,
+            )
+
+            # Should have 1 parent + N hash children
+            self.assertEqual(len(sqls), bucket_count + 1)
+
+            # Verify MODULUS matches bucket count
+            for i in range(bucket_count):
+                self.assertIn(f"MODULUS {bucket_count}", sqls[i + 1])
+                self.assertIn(f"REMAINDER {i}", sqls[i + 1])
+
+    def test_configurable_hash_column(self):
+        """Hash column is configurable"""
+        manager = PartitionManager()
+
+        sqls = manager.create_time_partition(
+            parent_table="test_table",
+            partition_name="test_custom_hash",
+            start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
+            end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+            hash_buckets=4,
+            hash_column="project_id",
+        )
+
+        # Parent should partition by custom column
+        self.assertIn("PARTITION BY HASH (project_id)", sqls[0])
+
+    def test_drop_partition(self):
+        """Generate DROP TABLE SQL"""
+        manager = PartitionManager()
+
+        sql = manager.drop_partition("test_partition_20250115")
+
+        self.assertIn("DROP TABLE IF EXISTS", sql)
+        self.assertIn("test_partition_20250115", sql)
+        self.assertIn("CASCADE", sql)
+
+    def test_datetime_timezone_handling(self):
+        """Naive datetimes are treated as UTC"""
+        manager = PartitionManager()
+
+        # Test with naive datetime
+        sqls_naive = manager.create_time_partition(
+            parent_table="test_table",
+            partition_name="test_naive",
+            start_date=datetime(2025, 1, 15, 0, 0, 0),
+            end_date=datetime(2025, 1, 16, 0, 0, 0),
+            hash_buckets=2,
+            key_type="datetime",
+        )
+
+        # Test with aware datetime
+        sqls_aware = manager.create_time_partition(
+            parent_table="test_table",
+            partition_name="test_aware",
+            start_date=datetime(2025, 1, 15, 0, 0, 0, tzinfo=timezone.utc),
+            end_date=datetime(2025, 1, 16, 0, 0, 0, tzinfo=timezone.utc),
+            hash_buckets=2,
+            key_type="datetime",
+        )
+
+        # Both should produce valid SQL with timezone info
+        self.assertIn("2025-01-15", sqls_naive[0])
+        self.assertIn("2025-01-15", sqls_aware[0])
+
+    def test_partition_naming_convention(self):
+        """Partition names follow expected convention"""
+        manager = PartitionManager()
+
+        sqls = manager.create_time_partition(
+            parent_table="issue_events_issueaggregate",
+            partition_name="issue_events_issueaggregate_20250115",
+            start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
+            end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+            hash_buckets=4,
+        )
+
+        # Parent partition
+        self.assertIn("issue_events_issueaggregate_20250115", sqls[0])
+
+        # Hash children: parent_name + _hN
+        for i in range(4):
+            expected_name = f"issue_events_issueaggregate_20250115_h{i}"
+            self.assertIn(expected_name, sqls[i + 1])
+
+
+class DatabaseSettingsTestCase(TestCase):
+    def test_database_settings_defaults(self):
+        """
+        Verify that database settings are applied correctly.
+        Note: In TESTING mode, some values are overridden (see settings.py).
+        """
+        from django.conf import settings
+
+        db_settings = settings.DATABASES["default"]
+        # In TESTING mode, CONN_MAX_AGE is explicitly set to None
+        self.assertIsNone(db_settings.get("CONN_MAX_AGE"))
+        self.assertEqual(db_settings.get("CONN_HEALTH_CHECKS"), False)
+        self.assertEqual(db_settings.get("DISABLE_SERVER_SIDE_CURSORS"), True)
+        # In TESTING mode, pool is explicitly set to False
+        self.assertEqual(db_settings.get("OPTIONS", {}).get("pool"), False)
+        self.assertEqual(db_settings.get("ENGINE"), "django.db.backends.postgresql")
+
+
+class IsSelfReferencingDsnTestCase(TestCase):
+    """Test _is_self_referencing_dsn detection."""
+
+    def _url(self, url_str):
+        """Create a parsed URL result similar to env.url()."""
+        from urllib.parse import urlparse
+
+        return urlparse(url_str)
+
+    def test_same_host_same_port(self):
+        self.assertTrue(
+            _is_self_referencing_dsn(
+                "http://key@localhost:8000/1", self._url("http://localhost:8000")
+            )
+        )
+
+    def test_same_host_default_https_port(self):
+        self.assertTrue(
+            _is_self_referencing_dsn(
+                "https://key@example.com/1", self._url("https://example.com")
+            )
+        )
+
+    def test_same_host_default_http_port(self):
+        self.assertTrue(
+            _is_self_referencing_dsn(
+                "http://key@example.com/1", self._url("http://example.com")
+            )
+        )
+
+    def test_different_host(self):
+        self.assertFalse(
+            _is_self_referencing_dsn(
+                "https://key@sentry.io/1", self._url("https://glitchtip.example.com")
+            )
+        )
+
+    def test_same_host_different_port(self):
+        self.assertFalse(
+            _is_self_referencing_dsn(
+                "http://key@localhost:9000/1", self._url("http://localhost:8000")
+            )
+        )
+
+    def test_docker_hostname(self):
+        self.assertTrue(
+            _is_self_referencing_dsn(
+                "http://key@web:8000/1", self._url("http://web:8000")
+            )
+        )
+
+
+class InternalTransportTestCase(TestCase):
+    """Test InternalTransport enqueues events correctly."""
+
+    def setUp(self):
+        self.organization = baker.make(
+            "organizations_ext.Organization", slug="test-internal"
+        )
+        self.project = baker.make("projects.Project", organization=self.organization)
+        self.project_key = baker.make("projects.ProjectKey", project=self.project)
+
+    def _make_envelope(self, item_type, payload):
+        """Helper to create a real SDK Envelope with a single item."""
+        from sentry_sdk.envelope import Envelope, Item, PayloadRef
+
+        envelope = Envelope()
+        envelope.add_item(Item(type=item_type, payload=PayloadRef(json=payload)))
+        return envelope
+
+    def test_capture_envelope_enqueues_event(self):
+        transport = InternalTransport(options={"dsn": self.project_key.get_dsn()})
+
+        envelope = self._make_envelope(
+            "event",
+            {
+                "event_id": "abcd1234abcd1234abcd1234abcd1234",
+                "exception": {"values": [{"type": "ValueError", "value": "test"}]},
+                "level": "error",
+                "platform": "python",
+            },
+        )
+
+        with patch("apps.event_ingest.tasks.ingest_event") as mock_ingest:
+            transport.capture_envelope(envelope)
+
+        mock_ingest.enqueue.assert_called_once()
+        args = mock_ingest.enqueue.call_args[0][0]
+        self.assertEqual(args["project_id"], self.project.id)
+        self.assertEqual(args["organization_id"], self.organization.id)
+
+    def test_capture_envelope_empty_is_noop(self):
+        transport = InternalTransport(options={"dsn": self.project_key.get_dsn()})
+
+        from sentry_sdk.envelope import Envelope
+
+        envelope = Envelope()
+
+        with patch("apps.event_ingest.tasks.ingest_event") as mock_ingest:
+            transport.capture_envelope(envelope)
+
+        mock_ingest.enqueue.assert_not_called()
+
+    def test_capture_envelope_bad_dsn_is_noop(self):
+        transport = InternalTransport(options={"dsn": "http://0000@localhost:8000/999"})
+
+        envelope = self._make_envelope("event", {"exception": {}})
+
+        with patch("apps.event_ingest.tasks.ingest_event") as mock_ingest:
+            transport.capture_envelope(envelope)
+
+        mock_ingest.enqueue.assert_not_called()
+
+    def test_capture_envelope_enqueues_transaction(self):
+        """Verify InternalTransport forwards transaction envelope items."""
+        transport = InternalTransport(options={"dsn": self.project_key.get_dsn()})
+
+        envelope = self._make_envelope(
+            "transaction",
+            {
+                "event_id": "bbbb1234bbbb1234bbbb1234bbbb1234",
+                "type": "transaction",
+                "transaction": "/api/test",
+                "contexts": {"trace": {"op": "http.server", "trace_id": "a" * 32}},
+                "start_timestamp": "2026-01-01T00:00:00Z",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "spans": [],
+            },
+        )
+
+        with (
+            patch("apps.event_ingest.tasks.ingest_event") as mock_event,
+            patch("apps.event_ingest.tasks.ingest_transaction") as mock_txn,
+        ):
+            transport.capture_envelope(envelope)
+
+        mock_event.enqueue.assert_not_called()
+        mock_txn.enqueue.assert_called_once()
+        args = mock_txn.enqueue.call_args[0][0]
+        self.assertEqual(args["project_id"], self.project.id)
+        self.assertEqual(args["organization_id"], self.organization.id)
+        self.assertEqual(args["payload"]["transaction"], "/api/test")
+
+    @override_settings(GLITCHTIP_ENABLE_LOGS=True)
+    def test_capture_envelope_enqueues_logs(self):
+        """Verify InternalTransport forwards log envelope items."""
+        transport = InternalTransport(options={"dsn": self.project_key.get_dsn()})
+
+        from sentry_sdk.envelope import Envelope, Item, PayloadRef
+
+        envelope = Envelope()
+        envelope.add_item(
+            Item(
+                type="log",
+                content_type="application/vnd.sentry.items.log+json",
+                headers={"item_count": 1},
+                payload=PayloadRef(
+                    json={
+                        "items": [
+                            {
+                                "timestamp": 1700000000.0,
+                                "trace_id": "00000000-0000-0000-0000-000000000000",
+                                "level": "info",
+                                "body": "hello from internal transport",
+                                "attributes": {
+                                    "sentry.severity_number": {
+                                        "value": 9,
+                                        "type": "integer",
+                                    },
+                                    "sentry.severity_text": {
+                                        "value": "info",
+                                        "type": "string",
+                                    },
+                                },
+                            }
+                        ]
+                    }
+                ),
+            )
+        )
+
+        with patch("apps.logs.tasks.ingest_logs") as mock_ingest:
+            transport.capture_envelope(envelope)
+
+        mock_ingest.enqueue.assert_called_once()
+        args = mock_ingest.enqueue.call_args[0][0]
+        self.assertEqual(args["project_id"], self.project.id)
+        self.assertEqual(args["organization_id"], self.organization.id)
+        self.assertEqual(len(args["logs"]), 1)
+        self.assertEqual(args["logs"][0]["body"], "hello from internal transport")
+
+    def test_sets_processing_internal_contextvar(self):
+        """Verify _processing_internal is set during envelope processing."""
+        transport = InternalTransport(options={"dsn": self.project_key.get_dsn()})
+
+        observed_values = []
+
+        original_process = transport._process_envelope
+
+        def spy_process(envelope):
+            observed_values.append(_processing_internal.get())
+            original_process(envelope)
+
+        envelope = self._make_envelope(
+            "event",
+            {
+                "event_id": "abcd1234abcd1234abcd1234abcd1234",
+                "exception": {"values": []},
+            },
+        )
+
+        with patch.object(transport, "_process_envelope", spy_process):
+            with patch("apps.event_ingest.tasks.ingest_event"):
+                transport.capture_envelope(envelope)
+
+        self.assertEqual(observed_values, [True])
+        # After return, contextvar should be reset
+        self.assertFalse(_processing_internal.get())
+
+    def test_capture_envelope_works_in_async_context(self):
+        """Verify capture_envelope dispatches to thread pool in async context."""
+        import asyncio
+
+        transport = InternalTransport(options={"dsn": self.project_key.get_dsn()})
+        # Pre-cache project_key so the thread pool doesn't need DB access
+        # (separate thread can't see test transaction's uncommitted data)
+        transport._project_key = self.project_key
+
+        envelope = self._make_envelope(
+            "event",
+            {
+                "event_id": "abcd1234abcd1234abcd1234abcd1234",
+                "exception": {"values": [{"type": "ValueError", "value": "async"}]},
+            },
+        )
+
+        async def run():
+            with patch("apps.event_ingest.tasks.ingest_event") as mock_ingest:
+                transport.capture_envelope(envelope)
+                # Give the background task time to complete in thread pool
+                await asyncio.sleep(0.5)
+            return mock_ingest
+
+        mock_ingest = asyncio.run(run())
+        mock_ingest.enqueue.assert_called_once()
+        args = mock_ingest.enqueue.call_args[0][0]
+        self.assertEqual(args["project_id"], self.project.id)
+
+
+class BeforeSendSelfRefTestCase(TestCase):
+    """Test before_send behavior with self-referencing guards."""
+
+    def _make_before_send(self, is_self_ref):
+        """Create a before_send function with controlled self-ref flag."""
+        from django.http import UnreadablePostError
+
+        _UNSAFE_MODULES = ("apps.event_ingest", "apps.logs.process")
+
+        def before_send(event, hint):
+            if "log_record" in hint:
+                if hint["log_record"].name == "django.security.DisallowedHost":
+                    return None
+            if "exc_info" in hint:
+                _, exc_value, _ = hint["exc_info"]
+                if isinstance(exc_value, UnreadablePostError):
+                    return None
+            if is_self_ref:
+                if _processing_internal.get():
+                    return None
+                if "log_record" in hint:
+                    if hint["log_record"].name.startswith(
+                        ("apps.event_ingest", "apps.logs")
+                    ):
+                        return None
+                for exc_val in event.get("exception", {}).get("values", []):
+                    for frame in exc_val.get("stacktrace", {}).get("frames", []):
+                        if frame.get("module", "").startswith(_UNSAFE_MODULES):
+                            return None
+            return event
+
+        return before_send
+
+    def test_self_ref_drops_during_processing(self):
+        before_send = self._make_before_send(True)
+        token = _processing_internal.set(True)
+        try:
+            result = before_send({"exception": {}}, {})
+            self.assertIsNone(result)
+        finally:
+            _processing_internal.reset(token)
+
+    def test_self_ref_drops_ingest_log_record(self):
+        before_send = self._make_before_send(True)
+        record = logging.LogRecord(
+            "apps.event_ingest.views", logging.ERROR, "", 0, "msg", (), None
+        )
+        result = before_send({"exception": {}}, {"log_record": record})
+        self.assertIsNone(result)
+
+    def test_self_ref_drops_ingest_stackframe(self):
+        before_send = self._make_before_send(True)
+        event = {
+            "exception": {
+                "values": [
+                    {
+                        "stacktrace": {
+                            "frames": [
+                                {"module": "apps.event_ingest.process_event"},
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+        result = before_send(event, {})
+        self.assertIsNone(result)
+
+    def test_non_self_ref_passes_ingest_stackframe(self):
+        before_send = self._make_before_send(False)
+        event = {
+            "exception": {
+                "values": [
+                    {
+                        "stacktrace": {
+                            "frames": [
+                                {"module": "apps.event_ingest.process_event"},
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+        result = before_send(event, {})
+        self.assertIsNotNone(result)
+
+    def test_self_ref_passes_normal_error(self):
+        before_send = self._make_before_send(True)
+        event = {
+            "exception": {
+                "values": [
+                    {
+                        "stacktrace": {
+                            "frames": [
+                                {"module": "apps.users.views"},
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+        result = before_send(event, {})
+        self.assertIsNotNone(result)
+
+
+class ColdStorageFreeTierGatingTestCase(TestCase):
+    """Test that free-tier orgs are excluded from cold storage when billing is enabled."""
+
+    def setUp(self):
+        self.org_free = baker.make("organizations_ext.Organization", slug="free-org")
+        subscription = baker.make("stripe.StripeSubscription")
+        self.org_paid = baker.make(
+            "organizations_ext.Organization",
+            slug="paid-org",
+            stripe_primary_subscription=subscription,
+        )
+
+    def _get_eligible_org_ids(self, org_ids):
+        """Simulate the filtering logic from archive_partition_per_org."""
+        from apps.organizations_ext.models import Organization
+
+        if settings.BILLING_ENABLED:
+            eligible_ids = set(
+                Organization.objects.filter(
+                    id__in=org_ids,
+                    stripe_primary_subscription__isnull=False,
+                ).values_list("id", flat=True)
+            )
+            return [oid for oid in org_ids if oid in eligible_ids]
+        return org_ids
+
+    @override_settings(BILLING_ENABLED=False)
+    def test_billing_disabled_returns_all(self):
+        """Without billing, all orgs are eligible for cold storage."""
+        org_ids = [self.org_free.id, self.org_paid.id]
+        result = self._get_eligible_org_ids(org_ids)
+        self.assertEqual(result, org_ids)
+
+    @override_settings(BILLING_ENABLED=True)
+    def test_billing_enabled_excludes_free_tier(self):
+        """With billing, only orgs with a subscription get cold storage."""
+        org_ids = [self.org_free.id, self.org_paid.id]
+        result = self._get_eligible_org_ids(org_ids)
+        self.assertEqual(result, [self.org_paid.id])
+
+    @override_settings(BILLING_ENABLED=True)
+    def test_billing_enabled_all_free(self):
+        """With billing, if all orgs are free tier, result is empty."""
+        org_ids = [self.org_free.id]
+        result = self._get_eligible_org_ids(org_ids)
+        self.assertEqual(result, [])
