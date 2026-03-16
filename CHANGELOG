@@ -1,0 +1,226 @@
+# 6.0.11
+
+- Fix: Resolve maintenance statement timeouts by routing all cleanup functions through maintenance DB alias
+- Fix: Replace django_valkey imports with django-vcache raw client
+- Fix: Reduce sentry SDK memory overhead by disabling unused integrations
+- Fix: Move MCP OAuth endpoints under /mcp prefix to avoid SPA route conflicts
+- Fix: Migrate span promotion writes from DuckDB to arro3
+- Fix: Detect container memory limit for DuckDB default
+- Feat: Add time/host/environment filters to MCP tools for post-deploy observability
+- Refactor: Remove requests-mock dependency, remove cgroup v1 fallback from DuckDB memory detection
+- Deps: Update django-vcache to v2.0.0 (Rust-based driver, replaces valkey-py)
+
+# 6.0.10
+
+- Feat: Implement Debug Files list endpoint (GET /projects/{org}/{project}/files/dsyms/)
+- Feat: Use arro3 for all Parquet writes, keep DuckDB for reads only
+- Feat: Add org_slug filter and uuid4 cold fallback to MCP get_event
+- Fix: Handle concurrent FK insert during release cleanup
+- Fix: Replace cache_page with selective caching on status page
+- Fix: Clamp UUIDv7 timestamp to valid 48-bit range
+- Fix: Handle unmatched quotes in issue search query
+- Fix: Delete existing S3 file before save to prevent filename collision
+- Fix: Use SOH quote char for CSV archival and retry deadlocked detach
+- Fix: Always set DuckDB memory limit and auto-detect temp directory
+- Fix: Check partition existence via pg_tables instead of catching exception
+- Fix: Add organization_id pruning to latest event query, handle missing partitions
+- Fix: Use cached read connection for parquet rewrites, add malloc_trim
+- Fix: Reduce overhead in cleanup_orphaned_fileblobs
+- Perf: Cold storage robustness improvements
+
+# 6.0.9
+
+- Feat: Add Repository model with list/create API; link to Release and Issue models; add GET /issues/{id}/commits/ endpoint
+- Feat: Convert webhook alert notifications from synchronous to async for improved reliability
+- Feat: Add optional MAINTENANCE_DATABASE_URL for elevated DDL connections
+- Fix: Annual Stripe subscription billing cycle was reset to month 1 on every nightly sync
+- Fix: Annual billing cycle boundaries now anchored to period_start to prevent date drift on month-end subscription dates
+- Fix: Search issues and event detail endpoints now fall back to sentry SDK event_id
+- Fix: Use DETACH PARTITION CONCURRENTLY to avoid partition management deadlocks
+- Fix: Split performance V3 migration to avoid exceeding max_locks_per_transaction
+- Fix: Double slash in base href when BASE_PATH is set
+- Fix: Accept trailing slash on internal health endpoint
+- Fix: Resolve native debug symbols by address without requiring a function name match
+- Perf: Denormalize latest_is_up and last_change onto uptime Monitor to reduce query load
+- Improved stability for experimental features not yet enabled by default (cold storage, MCP server)
+
+# 6.0.8
+
+- Feat: Add minidump ingestion for native crash reporting
+- Feat: Add JVM source context support for Java/Kotlin stack traces
+- Feat: Add SourceMapCache for improved source map resolution
+- Feat: Track first and latest release per issue; support "resolve in next release"
+- Fix: Don't reopen resolved issues when the incoming event has no release
+- Fix: Security hardening — SSRF protection in uptime monitoring, path traversal in artifact assembly
+- Fix: Filter out projects belonging to soft-deleted organizations
+- Fix: Set event_processed flag for transactions in envelope view
+- Fix: Weight transactions at 1:1 parity with issue events for quota accounting
+- Fix: Use per-type retention for hourly stat partition cleanup
+- Fix: Remove misleading CORS_ORIGIN_ALLOW_ALL warning
+- Fix: Various debug information file (DIF) pipeline fixes
+- Improved stability for experimental features not yet enabled by default (logs, cold storage, performance monitoring v2, MCP server)
+
+# 6.0.7
+
+- Feat: Add MCP (Model Context Protocol) server with OAuth 2.0 authorization
+- Feat: Add native alert support for Microsoft Teams, Zulip, and ntfy
+- Feat: Add test alert endpoint with optional recipient filter
+- Feat: Add optional uptime monitoring toggle and enabled_features settings API
+- Feat: Add deploy/commit APIs and fix release file size
+- Feat: Add release retention cleanup (365-day default)
+- Feat: Add InternalTransport to prevent self-DOS when SENTRY_DSN points to self
+- Feat: Add bootstrap_dev management command for dev environment setup
+- Feat: Add `GLITCHTIP_CHUNK_UPLOAD_USE_RELATIVE_URL` setting for sourcemap upload
+- Feat: Logs ingestion support (disabled by default, enable with `ENABLE_LOGS`)
+- Feat: Optional DuckDB cold storage for issue events (disabled by default)
+- Fix: Bump django-vtasks to 1.0.3 (zstd thread-safety SIGSEGV fix)
+- Fix: Coerce non-string fingerprint values to strings during ingest
+- Fix: Handle delete alert preference when no alert exists
+- Fix: Use project_id instead of slug in difs_assemble to avoid MultipleObjectsReturned
+- Fix: Add replay_video to IgnoredItemType for React Native SDK envelopes
+- Fix: Fix AttributeError in IssueEventSchema resolve_tags when tags are not a dict (Fixes #212)
+- Fix: Convert span_id to signed bigint to prevent overflow
+- Fix: Establish is_change baseline when partition retention prunes uptime change records
+- Fix: Don't forward ASGI lifespan to Django in web-only mode
+- Fix: Wire update_subscription_cycles into nightly maintenance
+- Fix: Handle None blob size in assemble
+- Fix: Allow project:write and project:admin scopes to list alerts
+- Refactor: Remove dead code and add vulture CI check
+
+# 6.0.6
+
+- Fix: Debug information file assembly now works with object storage backends (S3, GCS, DigitalOcean Spaces)
+- Fix: Clean up alerts notification M2M table during issue maintenance to prevent ForeignKey violations
+- Fix: Handle ServerDisconnectedError as network error in uptime checks
+- Fix: Silently discard binary-corrupted envelope item headers
+- Perf: Optimize maintenance cleanup queries for partitioned tables (file cleanup, issue cleanup, transaction group cleanup)
+- Perf: Drop unused varchar_pattern_ops index on TagValue.value
+- Refactor: Align ORM model state with actual SQL schema for IssueTag and TransactionEvent
+- Disable WebSocket handling in granian (not used by GlitchTip)
+- Increase default decompressed payload size limit from 2.5 MB to 5 MB
+
+# 6.0.5
+
+- Feat: Ingest Sentry SDK feedback and user_report envelope items, stored as UserReport (fixes #107)
+- Fix: Maintenance cleanup no longer times out on large partitioned tables
+- Fix: Coerce non-string logentry params and strip NUL bytes from event text fields
+- Fix: Correct organization user scopes on organization retrieve
+- Fix: Check for missing chunks in artifact bundle assemble
+- Fix: Allow blank/null options field in User model
+- Fix: Remove stale `received` column reference from `import_legacy_events`
+- Fix: Remove per-organization label from projects metric to reduce cardinality
+- Perf: Add organization_id filter to uptime MonitorCheck queries for partition pruning
+- Add SKIP_INIT env var to all-in-one script
+
+# 6.0.0
+
+- Fix: Truncate oversized stack trace frame `vars` on ingestion to prevent 2MB+ event payloads from recursive error capture
+- Upgrade to Django 6.0
+- Switch Celery to django-vtasks
+- Switch Cache to django-vcache
+- Add optional READ_ONLY_DATABASE_URL
+- Ingest optimizations around bulk queries
+- Use port 8000 more consistently instead of sometimes port 8080
+- Remove gunicorn and uvicorn. Please use granian. uwsgi still included for compatibility.
+- Add TRUSTED_PROXIES env var (defaults to "*") for granian support.
+- Remove unused SetRemoteAddrFromForwardedFor middleware (was never enabled)
+- Optional metrics endpoint is now just "/metrics" and not in openapi schema
+- Improve sourcemap compatibility by fixing an issue where some sentry sdk tools did not follow redirects
+- Add backend support to event threads interface. Notably, this enables stacktraces to show up when using Swift.
+- Switch to uuid7 primary id for events. Maintain existing sentry-sdk sent event id compatibility. This enables faster fetching of events, as partition table is known by uuid7 time.
+- Database column alignment optimizations
+- Unify Postgres Partitioning strategy. Remove support for pg-partman. Remove django-postgres-extras. Custom GlitchTip PartitionManager handles partitions.
+- All-in-one GlitchTip (combined web+worker process) is now considered stable
+
+# v5.2.0
+
+- DISABLE_SERVER_SIDE_CURSORS now defaults to True but setting to False will be respected
+
+# v5.1.0
+
+- Fix: Performance transaction group method no longer nullable, which in rare conditions could lead to duplicate and invalid groups
+- Fix: Reject transaction events that are older than GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS
+
+# v5.0.7
+
+- Fix: Return 400 status instead of 500 when wizard hash is empty
+- Fix: Unhandled RequestDataTooBig exception
+- Increase aiohttp header size allowance to 16380 bytes and handle errors around unexpected header size gracefully
+
+# v5.0.6
+
+- Better tsvector trim
+
+# v5.0.5
+
+- Implement throttling for organization invite by email
+
+# v5.0.0
+
+## Breaking changes
+
+- Require Postgresql 14+, dropping support for Postgresql 13.
+- Squash and delete very old migrations. Upgrades from GlitchTip 3.x and below are not supported. Upgrade to 4.x first.
+
+## Other changes
+
+- Django 5.2
+
+# v4.2.9
+
+- Remove djstripe and stripe module, which use excessive ram. Replaced by our own stripe sync implementation.
+- You may now set env var `GLITCHTIP_INSTANCE_NAME` to set a name that appears at login/register to help identify your server
+- Celery 5.5
+- Django Ninja 1.4
+- Fix [bug](https://gitlab.com/glitchtip/glitchtip-backend/-/merge_requests/1454) in StatsV2Schema
+- Fix several sentry api incompatibility [issues](https://gitlab.com/glitchtip/glitchtip-backend/-/merge_requests/1421).
+- Add more content to issue search index
+- Add OrganizationSocialApp, configurable in django admin, that allows Organizations to be associated to SocialApps and automatically assign users who log in with the associated SocialApp to the Organization. Signals currently disabled.
+
+# v4.2.5
+
+- Fix for event query params not displaying on frontend
+- Adds initial custom stripe webhook integration (not yet used but visible in django admin)
+
+# v4.2.4
+
+- Initial custom stripe integration (not yet used but visible in django admin)
+- Consistency fixes around how api ids are handled
+- openapi spec fixes
+
+# v4.2.1
+
+- Critical fix for static file locations
+
+# v4.2.0 (Broken, do not run)
+
+- Support sentry sdk artifact bundles for source map support, including debug id mappings. Improves source map support for various sentry sdk integrations. Source maps no longer require a release. Users may need to reupload existing source maps.
+- GLITCHTIP_MAX_FILE_LIFE_DAYS now defaults to GLITCHTIP_MAX_EVENT_LIFE_DAYS (instead of 2 x event life).
+- Add organization and projects throttle. Can be set in Django admin.
+
+# v4.1.5
+
+- Upgrade to django-allauth 65.0.0
+- Upgrade Python to 3.13
+- Use connection pooling by default, unless max conn age is set
+
+# v4.1.4
+
+- Fix bug where release names with special chars did not allow release assemble to work
+
+# v4.1.3
+
+- Optimize alert sending logic to only consider recently ingested issues
+- Fixed https://gitlab.com/glitchtip/glitchtip-backend/-/issues/260
+
+# 4.1.2
+
+- Save performance transaction data in bulk, instead of one at a time
+- Fix migration that would fail in Postgres 13, which we still aim to support
+
+# 4.1.0
+
+- Remove event migration tool from 3.x. To migrate event data from 3.x to 4.1, first upgrade to 4.0.12. If event data doesn't need migrated, it's safe to upgrade from 3.x to any 4.x version.
+- Migrate MFA to django-allauth
+- Upgrade to django 5.1
+- Add support for django postgres pooling via env vars DATABASE_POOL, DATABASE_POOL_MIN_SIZE, and DATABASE_POOL_MAX_SIZE
