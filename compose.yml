@@ -1,0 +1,43 @@
+x-environment: &default-environment
+  DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+  VALKEY_URL: redis://valkey:6379  # Set to empty string to disable valkey
+  SECRET_KEY: change_me
+  ENABLE_ORGANIZATION_CREATION: "true"
+  ENABLE_TEST_API: "true"
+  DEBUG: "true"
+  EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
+  ENABLE_OBSERVABILITY_API: "true"
+  #IS_LOAD_TEST: "true"
+  VTASKS_CONCURRENCY: 4
+  LOG_LEVEL: INFO
+  GLITCHTIP_ENABLE_MCP: "true"
+  GLITCHTIP_BOOTSTRAP_DEV: "true"
+  GLITCHTIP_ENABLE_LOGS: "true"
+
+x-depends_on: &default-depends_on
+  - postgres
+  - valkey
+x-volumes: &default-volumes
+  - .:/code
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: "trust"
+  valkey:
+    image: valkey/valkey:9
+  web:
+    # Uncomment for breakpoint
+    #stdin_open: true
+    #tty: true
+    build: .
+    user: root # Allows for usage of ipdb, apt, etc in dev
+    command: ./bin/run-all-in-one.sh --reload --reload-ignore-worker-failure
+    #command: ./bin/run-granian.sh --reload --reload-ignore-worker-failure --access-log
+    #command: python app.py
+    #command: ./manage.py runserver 0.0.0.0:8000
+    depends_on: *default-depends_on
+    volumes: *default-volumes
+    ports:
+      - "8000:8000"
+    environment: *default-environment
