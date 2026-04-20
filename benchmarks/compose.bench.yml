@@ -1,0 +1,67 @@
+x-environment: &bench-environment
+  DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+  VALKEY_URL: redis://valkey:6379
+  SECRET_KEY: change_me
+  ENABLE_ORGANIZATION_CREATION: "true"
+  ENABLE_TEST_API: "true"
+  DEBUG: "false"
+  EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
+  ENABLE_OBSERVABILITY_API: "true"
+  VTASKS_CONCURRENCY: 4
+  LOG_LEVEL: WARNING
+  GLITCHTIP_ENABLE_LOGS: "true"
+  MALLOC_TRIM_INTERVAL: "${MALLOC_TRIM_INTERVAL:-0}"
+  MEMRAY_ENABLED: "${MEMRAY_ENABLED:-0}"
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: "trust"
+  valkey:
+    image: valkey/valkey:9
+  web:
+    build: ..
+    user: root
+    cap_add:
+      - NET_ADMIN
+    command: >
+      bash -c "
+        export MALLOC_ARENA_MAX=$${MALLOC_ARENA_MAX:-4};
+        [ -n \"$${MALLOC_MMAP_THRESHOLD_:-}\" ] && export MALLOC_MMAP_THRESHOLD_=$${MALLOC_MMAP_THRESHOLD_};
+        [ -n \"$${MALLOC_TRIM_THRESHOLD_:-}\" ] && export MALLOC_TRIM_THRESHOLD_=$${MALLOC_TRIM_THRESHOLD_};
+        echo \"malloc: ARENA_MAX=$$MALLOC_ARENA_MAX MMAP_THRESHOLD=$${MALLOC_MMAP_THRESHOLD_:-default} TRIM_THRESHOLD=$${MALLOC_TRIM_THRESHOLD_:-default}\";
+        python manage.py migrate --no-input --skip-checks &&
+        python manage.py maintain_partitions &&
+        DEBUG=true python manage.py bootstrap_dev &&
+        export GLITCHTIP_EMBED_WORKER=true &&
+        if [ \"$${MEMRAY_ENABLED:-}\" = '1' ]; then
+          exec granian --interface asgi benchmarks.memray_asgi_wrapper:application --host 0.0.0.0 --port 8000 --workers 1 --log-level warning --no-ws
+        else
+          exec granian --interface asgi glitchtip.asgi:application --host 0.0.0.0 --port 8000 --workers 1 --log-level warning --no-ws
+        fi
+      "
+    depends_on:
+      - postgres
+      - valkey
+    volumes:
+      - ..:/code
+    ports:
+      - "8001:8000"
+    environment:
+      <<: *bench-environment
+      MALLOC_ARENA_MAX: "${MALLOC_ARENA_MAX:-4}"
+      MALLOC_MMAP_THRESHOLD_: "${MALLOC_MMAP_THRESHOLD_:-}"
+      MALLOC_TRIM_THRESHOLD_: "${MALLOC_TRIM_THRESHOLD_:-}"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+  bench:
+    build: ..
+    user: root
+    depends_on:
+      - web
+    volumes:
+      - ..:/code
+    entrypoint: ["sleep", "infinity"]
