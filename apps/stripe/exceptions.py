@@ -1,0 +1,2 @@
+class StripeResourceNotFound(Exception):
+    pass
