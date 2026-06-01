@@ -1,0 +1,112 @@
+x-environment: &bench-environment
+  DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+  VALKEY_URL: redis://valkey:6379
+  SECRET_KEY: change_me
+  ENABLE_ORGANIZATION_CREATION: "true"
+  ENABLE_TEST_API: "true"
+  # Synthetic async-DB endpoint at /api/_probe/async/. Independent of
+  # DEBUG/ENABLE_TEST_API so realistic benches (DEBUG=False) can use it.
+  ASYNC_PROBE_ENABLED: "true"
+  DEBUG: "false"
+  EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
+  ENABLE_OBSERVABILITY_API: "true"
+  VTASKS_CONCURRENCY: "${VTASKS_CONCURRENCY:-20}"
+  LOG_LEVEL: WARNING
+  GLITCHTIP_ENABLE_LOGS: "true"
+  MALLOC_TRIM_INTERVAL: "${MALLOC_TRIM_INTERVAL:-0}"
+  MEMRAY_ENABLED: "${MEMRAY_ENABLED:-0}"
+  # Backend selector — see run_concurrency_bench.sh.
+  #   async (default) → django-async-backend's postgresql backend
+  BACKEND_VARIANT: "${BACKEND_VARIANT:-async}"
+  # Pool sizing — a realistic prod-size pool per worker. Tune via env.
+  DATABASE_POOL_MIN_SIZE: "${DATABASE_POOL_MIN_SIZE:-5}"
+  DATABASE_POOL_MAX_SIZE: "${DATABASE_POOL_MAX_SIZE:-40}"
+  DATABASE_POOL_TIMEOUT: "${DATABASE_POOL_TIMEOUT:-30}"
+
+# Resource caps across all services simulate a modest VPS where the
+# whole GlitchTip stack has to share ~4 CPUs / 4 GiB RAM. Lets us
+# measure efficiency (throughput / resource consumed) rather than
+# peak throughput on unlimited hardware. Override via env:
+#
+#   WEB_CPUS=2    WEB_MEM=2g    bash benchmarks/run_concurrency_bench.sh ...
+#   PG_CPUS=1     PG_MEM=1g     ...
+#   VALKEY_CPUS   VALKEY_MEM    ...
+#   BENCH_CPUS    BENCH_MEM     load-generator container (default 0.9 / 512m)
+#
+# Thermal-safe preset for laptops where bench load throttles the CPU
+# (Lunar Lake, etc.) — caps every service at 0.9 of a core so the
+# whole stack stays well under the thermal envelope, at the cost of
+# absolute throughput numbers:
+#
+#   WEB_CPUS=0.9 PG_CPUS=0.9 VALKEY_CPUS=0.9 BENCH_CPUS=0.9 \
+#     bash benchmarks/run_concurrency_bench.sh
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: "trust"
+    deploy:
+      resources:
+        limits:
+          cpus: "${PG_CPUS:-1}"
+          memory: "${PG_MEM:-1g}"
+  valkey:
+    image: valkey/valkey:9
+    deploy:
+      resources:
+        limits:
+          cpus: "${VALKEY_CPUS:-0.5}"
+          memory: "${VALKEY_MEM:-256m}"
+  web:
+    build: ..
+    user: root
+    cap_add:
+      - NET_ADMIN
+    command: >
+      bash -c "
+        export MALLOC_ARENA_MAX=$${MALLOC_ARENA_MAX:-4};
+        [ -n \"$${MALLOC_MMAP_THRESHOLD_:-}\" ] && export MALLOC_MMAP_THRESHOLD_=$${MALLOC_MMAP_THRESHOLD_};
+        [ -n \"$${MALLOC_TRIM_THRESHOLD_:-}\" ] && export MALLOC_TRIM_THRESHOLD_=$${MALLOC_TRIM_THRESHOLD_};
+        echo \"malloc: ARENA_MAX=$$MALLOC_ARENA_MAX MMAP_THRESHOLD=$${MALLOC_MMAP_THRESHOLD_:-default} TRIM_THRESHOLD=$${MALLOC_TRIM_THRESHOLD_:-default}\";
+        echo \"backend variant: $${BACKEND_VARIANT:-async}\";
+        export DJANGO_SETTINGS_MODULE=glitchtip.settings;
+        python manage.py migrate --no-input --skip-checks &&
+        python manage.py maintain_partitions &&
+        DEBUG=true python manage.py bootstrap_dev &&
+        export GLITCHTIP_EMBED_WORKER=true &&
+        if [ \"$${MEMRAY_ENABLED:-}\" = '1' ]; then
+          exec granian --interface asgi benchmarks.memray_asgi_wrapper:application --host 0.0.0.0 --port 8000 --workers 1 --log-level warning --no-ws
+        else
+          exec granian --interface asgi glitchtip.asgi:application --host 0.0.0.0 --port 8000 --workers 1 --log-level warning --no-ws
+        fi
+      "
+    depends_on:
+      - postgres
+      - valkey
+    volumes:
+      - ..:/code
+    ports:
+      - "8001:8000"
+    environment:
+      <<: *bench-environment
+      MALLOC_ARENA_MAX: "${MALLOC_ARENA_MAX:-4}"
+      MALLOC_MMAP_THRESHOLD_: "${MALLOC_MMAP_THRESHOLD_:-}"
+      MALLOC_TRIM_THRESHOLD_: "${MALLOC_TRIM_THRESHOLD_:-}"
+    deploy:
+      resources:
+        limits:
+          cpus: "${WEB_CPUS:-2}"
+          memory: "${WEB_MEM:-2g}"
+  bench:
+    build: ..
+    user: root
+    depends_on:
+      - web
+    volumes:
+      - ..:/code
+    entrypoint: ["sleep", "infinity"]
+    deploy:
+      resources:
+        limits:
+          cpus: "${BENCH_CPUS:-0.9}"
+          memory: "${BENCH_MEM:-512m}"
