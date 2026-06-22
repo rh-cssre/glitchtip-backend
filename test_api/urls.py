@@ -1,6 +1,7 @@
 from django.urls import path
-from .views import SeedDataAPIView
+
+from .views import seed_data
 
 urlpatterns = [
-    path("seed/", SeedDataAPIView.as_view(), name="seed_data"),
+    path("seed/", seed_data, name="seed_data"),
 ]
