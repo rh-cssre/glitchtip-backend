@@ -1,0 +1,31 @@
+# Override to disable valkey and use postgres for cache/tasks
+# Usage: docker compose -f compose.e2e.yml -f compose.e2e.no-valkey.yml up
+# Note: valkey service is removed entirely
+
+services:
+  valkey:
+    # Scale to 0 effectively disables this service
+    deploy:
+      replicas: 0
+    # Override healthcheck to always succeed (for depends_on)
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 1s
+      timeout: 1s
+      retries: 1
+
+  glitchtip:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Remove valkey dependency by not including it
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      VALKEY_URL: ""  # Empty string disables valkey
+      SECRET_KEY: change_me
+      ENABLE_ORGANIZATION_CREATION: "true"
+      ENABLE_TEST_API: "true"
+      DEBUG: "true"
+      EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
+      ENABLE_OBSERVABILITY_API: "true"
+      LOG_LEVEL: INFO
