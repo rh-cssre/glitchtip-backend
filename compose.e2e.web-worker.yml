@@ -1,0 +1,59 @@
+# Override to use separate web + worker instead of all-in-one
+# Usage: docker compose -f compose.e2e.yml -f compose.e2e.web-worker.yml up
+
+services:
+  # Run migrations before web/worker start
+  migrate:
+    build: .
+    command: >
+      sh -c "python manage.py migrate --no-input --skip-checks &&
+             python manage.py maintain_partitions &&
+             python -c \"import os, django; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'glitchtip.settings'); django.setup(); from django.conf import settings; from django.core.management import call_command; call_command('createcachetable') if 'django.contrib.sessions' in settings.INSTALLED_APPS else None\""
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      VALKEY_URL: redis://valkey:6379
+      SECRET_KEY: change_me
+
+  glitchtip:
+    command: ./bin/run-granian.sh
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      VALKEY_URL: redis://valkey:6379
+      SECRET_KEY: change_me
+      ENABLE_ORGANIZATION_CREATION: "true"
+      ENABLE_TEST_API: "true"
+      DEBUG: "true"
+      EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
+      ENABLE_OBSERVABILITY_API: "true"
+      LOG_LEVEL: INFO
+      # Explicitly disable embedded worker
+      GLITCHTIP_EMBED_WORKER: "false"
+
+  worker:
+    build: .
+    command: ./bin/run-worker.sh
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      VALKEY_URL: redis://valkey:6379
+      SECRET_KEY: change_me
+      DEBUG: "true"
+      LOG_LEVEL: INFO
