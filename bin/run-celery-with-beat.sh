@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
 set -e
 
-exec celery -A glitchtip worker -l info -B -s /tmp/celerybeat-schedule
+echo "This script is deprecated, use run-worker.sh"
+
+exec bin/run-worker.sh
