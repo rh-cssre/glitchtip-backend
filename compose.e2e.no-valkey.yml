@@ -1,24 +1,22 @@
 # Override to disable valkey and use postgres for cache/tasks
 # Usage: docker compose -f compose.e2e.yml -f compose.e2e.no-valkey.yml up
-# Note: valkey service is removed entirely
+# Note: valkey service is excluded entirely
 
 services:
   valkey:
-    # Scale to 0 effectively disables this service
-    deploy:
-      replicas: 0
-    # Override healthcheck to always succeed (for depends_on)
-    healthcheck:
-      test: ["CMD", "true"]
-      interval: 1s
-      timeout: 1s
-      retries: 1
+    # An inactive profile removes valkey from the project model, so
+    # `up --wait` does not try to wait on a service that is not meant to
+    # run. Scaling to replicas: 0 is not enough — newer Compose (v5.3.x)
+    # reports a still-waited-on 0-replica service as a missing dependency.
+    profiles: ["with-valkey"]
 
   glitchtip:
-    depends_on:
+    # Compose MERGES long-form depends_on maps across files rather than
+    # replacing them, so simply omitting valkey here leaves the base file's
+    # valkey dependency in place. !override replaces the map outright.
+    depends_on: !override
       postgres:
         condition: service_healthy
-      # Remove valkey dependency by not including it
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
       VALKEY_URL: ""  # Empty string disables valkey
