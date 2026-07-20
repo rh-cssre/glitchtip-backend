@@ -1,0 +1,946 @@
+{
+  "empty_body": {
+    "db": {
+      "issue_count": 0,
+      "issue_events": [],
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [],
+    "response": {
+      "body": {
+        "detail": "Invalid envelope header"
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "status": 400
+    }
+  },
+  "header_dsn_only": {
+    "_divergence": "Credential only in the envelope-header 'dsn' (no query/header auth): the Rust arm recovers the public key from the envelope header and ingests the event, so a mis-configured SDK's events are captured; the Python view authenticates from the query string / Authorization / X-Sentry-Auth only (it never reads the body for auth) and denies with 403.",
+    "python": {
+      "db": {
+        "issue_count": 0,
+        "issue_events": [],
+        "logs": [],
+        "transaction_groups": []
+      },
+      "messages": [],
+      "response": {
+        "body": {
+          "detail": "Denied"
+        },
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 403
+      }
+    },
+    "rust": {
+      "db": {
+        "issue_count": 1,
+        "issue_events": [
+          {
+            "event_id": "b6a1c9e2d3f44c5e8a7b9c0d1e2f3a4b",
+            "ip_address": "93.184.216.0",
+            "level": 3,
+            "title": "header dsn only"
+          }
+        ],
+        "logs": [],
+        "transaction_groups": []
+      },
+      "messages": [
+        {
+          "args": [
+            {
+              "organization_id": "<organization_id>",
+              "payload": {
+                "breadcrumbs": null,
+                "contexts": null,
+                "debug_meta": null,
+                "dist": null,
+                "environment": null,
+                "errors": null,
+                "event_id": "b6a1c9e2-d3f4-4c5e-8a7b-9c0d1e2f3a4b",
+                "exception": null,
+                "extra": null,
+                "fingerprint": null,
+                "level": "warning",
+                "logentry": null,
+                "logger": null,
+                "message": "header dsn only",
+                "modules": null,
+                "platform": "python",
+                "release": null,
+                "request": null,
+                "sdk": null,
+                "server_name": null,
+                "tags": null,
+                "template": null,
+                "threads": null,
+                "timestamp": "2026-01-05T12:00:00.100000Z",
+                "transaction": null,
+                "type": 0,
+                "user": {
+                  "data": null,
+                  "email": null,
+                  "geo": null,
+                  "id": null,
+                  "ip_address": "93.184.216.0",
+                  "username": null
+                }
+              },
+              "project_id": "<project_id>",
+              "received": "<received>",
+              "update_first_event": true,
+              "uuid": "<uuid>"
+            }
+          ],
+          "func": "apps.event_ingest.tasks.ingest_event",
+          "kwargs": {}
+        }
+      ],
+      "response": {
+        "body": {
+          "id": "b6a1c9e2d3f44c5e8a7b9c0d1e2f3a4b"
+        },
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    }
+  },
+  "header_only": {
+    "db": {
+      "issue_count": 0,
+      "issue_events": [],
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [],
+    "response": {
+      "body": {
+        "id": "5c9d3b1a2e4f46019a7b8c6d5e4f3a2b"
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "status": 200
+    }
+  },
+  "junk_body": {
+    "db": {
+      "issue_count": 0,
+      "issue_events": [],
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [],
+    "response": {
+      "body": {
+        "detail": "Invalid envelope header"
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "status": 400
+    }
+  },
+  "log_items": {
+    "db": {
+      "issue_count": 0,
+      "issue_events": [],
+      "logs": [
+        {
+          "body": "parity log line",
+          "service": "paritytest"
+        }
+      ],
+      "transaction_groups": []
+    },
+    "messages": [
+      {
+        "args": [
+          {
+            "logs": [
+              {
+                "body": "parity log line",
+                "environment": "",
+                "host": "",
+                "level": "warn",
+                "service": "paritytest",
+                "severity_number": null,
+                "span_id": null,
+                "timestamp": "<timestamp>",
+                "trace_id": null
+              }
+            ],
+            "organization_id": "<organization_id>",
+            "project_id": "<project_id>",
+            "received": "<received>"
+          }
+        ],
+        "func": "apps.logs.tasks.ingest_logs",
+        "kwargs": {}
+      }
+    ],
+    "response": {
+      "body": {},
+      "headers": {
+        "content-type": "application/json"
+      },
+      "status": 200
+    }
+  },
+  "malformed_key": {
+    "db": {
+      "issue_count": 0,
+      "issue_events": [],
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [],
+    "response": {
+      "body": {
+        "detail": "Invalid DSN"
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "status": 403
+    }
+  },
+  "minidump": {
+    "db": {
+      "issue_count": 1,
+      "issue_events": [
+        {
+          "event_id": "<event_id>",
+          "ip_address": null,
+          "level": 5,
+          "title": "<untitled>"
+        }
+      ],
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [
+      {
+        "args": [
+          {
+            "organization_id": "<organization_id>",
+            "payload": {
+              "breadcrumbs": null,
+              "contexts": {
+                "device": {
+                  "arch": "unknown",
+                  "type": "device"
+                },
+                "os": {
+                  "name": "Unknown",
+                  "type": "os"
+                }
+              },
+              "debug_meta": null,
+              "dist": null,
+              "environment": null,
+              "errors": null,
+              "event_id": "<event_id>",
+              "exception": null,
+              "extra": null,
+              "fingerprint": null,
+              "level": "fatal",
+              "logentry": null,
+              "logger": null,
+              "message": null,
+              "modules": null,
+              "platform": "native",
+              "release": null,
+              "request": null,
+              "sdk": null,
+              "server_name": null,
+              "tags": null,
+              "template": null,
+              "threads": null,
+              "timestamp": "<timestamp>",
+              "transaction": null,
+              "type": 0,
+              "user": null
+            },
+            "project_id": "<project_id>",
+            "received": "<received>",
+            "update_first_event": true,
+            "uuid": "<uuid>"
+          }
+        ],
+        "func": "apps.event_ingest.tasks.ingest_event",
+        "kwargs": {}
+      }
+    ],
+    "response": {
+      "body": {},
+      "headers": {
+        "content-type": "application/json"
+      },
+      "status": 200
+    }
+  },
+  "no_auth": {
+    "db": {
+      "issue_count": 0,
+      "issue_events": [],
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [],
+    "response": {
+      "body": {
+        "detail": "Denied"
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "status": 403
+    }
+  },
+  "non_utf8_header": {
+    "db": {
+      "issue_count": 0,
+      "issue_events": [],
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [],
+    "response": {
+      "body": {
+        "detail": "Invalid envelope header"
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "status": 400
+    }
+  },
+  "over_unzipped_cap": {
+    "db": {
+      "issue_count": 0,
+      "issue_events": [],
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [],
+    "response": {
+      "body": {
+        "<text>": "decompressed envelope exceeded the configured size limit"
+      },
+      "headers": {
+        "content-type": "text/html; charset=utf-8"
+      },
+      "status": 413
+    }
+  },
+  "oversize_body": {
+    "db": {
+      "issue_count": 0,
+      "issue_events": [],
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [],
+    "response": {
+      "body": {
+        "<text>": "Request body exceeded settings.DATA_UPLOAD_MAX_MEMORY_SIZE."
+      },
+      "headers": {
+        "content-type": "text/html; charset=utf-8"
+      },
+      "status": 413
+    }
+  },
+  "simple_event": {
+    "db": {
+      "issue_count": 1,
+      "issue_events": [
+        {
+          "event_id": "9c15a1d0f2f04df08a4d35d1cb8e5ec2",
+          "ip_address": "93.184.216.0",
+          "level": 4,
+          "title": "TypeError: unsupported operand type(s) for +: 'int' and 'str'"
+        }
+      ],
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [
+      {
+        "args": [
+          {
+            "organization_id": "<organization_id>",
+            "payload": {
+              "breadcrumbs": null,
+              "contexts": null,
+              "debug_meta": null,
+              "dist": null,
+              "environment": "production",
+              "errors": null,
+              "event_id": "9c15a1d0-f2f0-4df0-8a4d-35d1cb8e5ec2",
+              "exception": {
+                "values": [
+                  {
+                    "mechanism": null,
+                    "module": null,
+                    "raw_stacktrace": null,
+                    "stacktrace": {
+                      "frames": [
+                        {
+                          "abs_path": "app/views.py",
+                          "addr_mode": null,
+                          "colno": null,
+                          "context_line": null,
+                          "filename": "app/views.py",
+                          "function": "render",
+                          "function_id": null,
+                          "image_addr": null,
+                          "in_app": true,
+                          "instruction_addr": null,
+                          "lineno": 42,
+                          "lock": null,
+                          "module": null,
+                          "package": null,
+                          "platform": null,
+                          "post_context": null,
+                          "pre_context": null,
+                          "raw_function": null,
+                          "source_link": null,
+                          "stack_start": null,
+                          "symbol": null,
+                          "symbol_addr": null,
+                          "vars": null
+                        }
+                      ],
+                      "registers": null
+                    },
+                    "thread_id": null,
+                    "type": "TypeError",
+                    "value": "unsupported operand type(s) for +: 'int' and 'str'"
+                  }
+                ]
+              },
+              "extra": {
+                "int": 7,
+                "nested": {
+                  "list": [
+                    1,
+                    2,
+                    3
+                  ]
+                },
+                "str": "value"
+              },
+              "fingerprint": null,
+              "level": "error",
+              "logentry": null,
+              "logger": null,
+              "message": null,
+              "modules": null,
+              "platform": "python",
+              "release": "parity@1.0.0",
+              "request": {
+                "api_target": null,
+                "body_size": null,
+                "cookies": null,
+                "data": null,
+                "env": null,
+                "fragment": null,
+                "headers": [
+                  [
+                    "User-Agent",
+                    "parity-agent/1.0"
+                  ]
+                ],
+                "method": "GET",
+                "protocol": null,
+                "query_string": null,
+                "url": "https://example.com/checkout/"
+              },
+              "sdk": {
+                "integrations": null,
+                "name": "sentry.python",
+                "packages": null,
+                "version": "2.0.0"
+              },
+              "server_name": null,
+              "tags": null,
+              "template": null,
+              "threads": null,
+              "timestamp": "2026-01-05T12:00:00.100000Z",
+              "transaction": null,
+              "type": 1,
+              "user": {
+                "data": null,
+                "email": "user@example.com",
+                "geo": null,
+                "id": "user-123",
+                "ip_address": "93.184.216.0",
+                "username": null
+              }
+            },
+            "project_id": "<project_id>",
+            "received": "<received>",
+            "update_first_event": true,
+            "uuid": "<uuid>"
+          }
+        ],
+        "func": "apps.event_ingest.tasks.ingest_event",
+        "kwargs": {}
+      }
+    ],
+    "response": {
+      "body": {
+        "id": "9c15a1d0f2f04df08a4d35d1cb8e5ec2"
+      },
+      "headers": {
+        "access-control-allow-origin": "*",
+        "content-type": "application/json"
+      },
+      "status": 200
+    }
+  },
+  "simple_event_gzip": {
+    "db": {
+      "issue_count": 1,
+      "issue_events": [
+        {
+          "event_id": "9c15a1d0f2f04df08a4d35d1cb8e5ec2",
+          "ip_address": "93.184.216.0",
+          "level": 4,
+          "title": "TypeError: unsupported operand type(s) for +: 'int' and 'str'"
+        }
+      ],
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [
+      {
+        "args": [
+          {
+            "organization_id": "<organization_id>",
+            "payload": {
+              "breadcrumbs": null,
+              "contexts": null,
+              "debug_meta": null,
+              "dist": null,
+              "environment": "production",
+              "errors": null,
+              "event_id": "9c15a1d0-f2f0-4df0-8a4d-35d1cb8e5ec2",
+              "exception": {
+                "values": [
+                  {
+                    "mechanism": null,
+                    "module": null,
+                    "raw_stacktrace": null,
+                    "stacktrace": {
+                      "frames": [
+                        {
+                          "abs_path": "app/views.py",
+                          "addr_mode": null,
+                          "colno": null,
+                          "context_line": null,
+                          "filename": "app/views.py",
+                          "function": "render",
+                          "function_id": null,
+                          "image_addr": null,
+                          "in_app": true,
+                          "instruction_addr": null,
+                          "lineno": 42,
+                          "lock": null,
+                          "module": null,
+                          "package": null,
+                          "platform": null,
+                          "post_context": null,
+                          "pre_context": null,
+                          "raw_function": null,
+                          "source_link": null,
+                          "stack_start": null,
+                          "symbol": null,
+                          "symbol_addr": null,
+                          "vars": null
+                        }
+                      ],
+                      "registers": null
+                    },
+                    "thread_id": null,
+                    "type": "TypeError",
+                    "value": "unsupported operand type(s) for +: 'int' and 'str'"
+                  }
+                ]
+              },
+              "extra": {
+                "int": 7,
+                "nested": {
+                  "list": [
+                    1,
+                    2,
+                    3
+                  ]
+                },
+                "str": "value"
+              },
+              "fingerprint": null,
+              "level": "error",
+              "logentry": null,
+              "logger": null,
+              "message": null,
+              "modules": null,
+              "platform": "python",
+              "release": "parity@1.0.0",
+              "request": {
+                "api_target": null,
+                "body_size": null,
+                "cookies": null,
+                "data": null,
+                "env": null,
+                "fragment": null,
+                "headers": [
+                  [
+                    "User-Agent",
+                    "parity-agent/1.0"
+                  ]
+                ],
+                "method": "GET",
+                "protocol": null,
+                "query_string": null,
+                "url": "https://example.com/checkout/"
+              },
+              "sdk": {
+                "integrations": null,
+                "name": "sentry.python",
+                "packages": null,
+                "version": "2.0.0"
+              },
+              "server_name": null,
+              "tags": null,
+              "template": null,
+              "threads": null,
+              "timestamp": "2026-01-05T12:00:00.100000Z",
+              "transaction": null,
+              "type": 1,
+              "user": {
+                "data": null,
+                "email": "user@example.com",
+                "geo": null,
+                "id": "user-123",
+                "ip_address": "93.184.216.0",
+                "username": null
+              }
+            },
+            "project_id": "<project_id>",
+            "received": "<received>",
+            "update_first_event": true,
+            "uuid": "<uuid>"
+          }
+        ],
+        "func": "apps.event_ingest.tasks.ingest_event",
+        "kwargs": {}
+      }
+    ],
+    "response": {
+      "body": {
+        "id": "9c15a1d0f2f04df08a4d35d1cb8e5ec2"
+      },
+      "headers": {
+        "access-control-allow-origin": "*",
+        "content-type": "application/json"
+      },
+      "status": 200
+    }
+  },
+  "simple_event_zstd": {
+    "db": {
+      "issue_count": 1,
+      "issue_events": [
+        {
+          "event_id": "9c15a1d0f2f04df08a4d35d1cb8e5ec2",
+          "ip_address": "93.184.216.0",
+          "level": 4,
+          "title": "TypeError: unsupported operand type(s) for +: 'int' and 'str'"
+        }
+      ],
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [
+      {
+        "args": [
+          {
+            "organization_id": "<organization_id>",
+            "payload": {
+              "breadcrumbs": null,
+              "contexts": null,
+              "debug_meta": null,
+              "dist": null,
+              "environment": "production",
+              "errors": null,
+              "event_id": "9c15a1d0-f2f0-4df0-8a4d-35d1cb8e5ec2",
+              "exception": {
+                "values": [
+                  {
+                    "mechanism": null,
+                    "module": null,
+                    "raw_stacktrace": null,
+                    "stacktrace": {
+                      "frames": [
+                        {
+                          "abs_path": "app/views.py",
+                          "addr_mode": null,
+                          "colno": null,
+                          "context_line": null,
+                          "filename": "app/views.py",
+                          "function": "render",
+                          "function_id": null,
+                          "image_addr": null,
+                          "in_app": true,
+                          "instruction_addr": null,
+                          "lineno": 42,
+                          "lock": null,
+                          "module": null,
+                          "package": null,
+                          "platform": null,
+                          "post_context": null,
+                          "pre_context": null,
+                          "raw_function": null,
+                          "source_link": null,
+                          "stack_start": null,
+                          "symbol": null,
+                          "symbol_addr": null,
+                          "vars": null
+                        }
+                      ],
+                      "registers": null
+                    },
+                    "thread_id": null,
+                    "type": "TypeError",
+                    "value": "unsupported operand type(s) for +: 'int' and 'str'"
+                  }
+                ]
+              },
+              "extra": {
+                "int": 7,
+                "nested": {
+                  "list": [
+                    1,
+                    2,
+                    3
+                  ]
+                },
+                "str": "value"
+              },
+              "fingerprint": null,
+              "level": "error",
+              "logentry": null,
+              "logger": null,
+              "message": null,
+              "modules": null,
+              "platform": "python",
+              "release": "parity@1.0.0",
+              "request": {
+                "api_target": null,
+                "body_size": null,
+                "cookies": null,
+                "data": null,
+                "env": null,
+                "fragment": null,
+                "headers": [
+                  [
+                    "User-Agent",
+                    "parity-agent/1.0"
+                  ]
+                ],
+                "method": "GET",
+                "protocol": null,
+                "query_string": null,
+                "url": "https://example.com/checkout/"
+              },
+              "sdk": {
+                "integrations": null,
+                "name": "sentry.python",
+                "packages": null,
+                "version": "2.0.0"
+              },
+              "server_name": null,
+              "tags": null,
+              "template": null,
+              "threads": null,
+              "timestamp": "2026-01-05T12:00:00.100000Z",
+              "transaction": null,
+              "type": 1,
+              "user": {
+                "data": null,
+                "email": "user@example.com",
+                "geo": null,
+                "id": "user-123",
+                "ip_address": "93.184.216.0",
+                "username": null
+              }
+            },
+            "project_id": "<project_id>",
+            "received": "<received>",
+            "update_first_event": true,
+            "uuid": "<uuid>"
+          }
+        ],
+        "func": "apps.event_ingest.tasks.ingest_event",
+        "kwargs": {}
+      }
+    ],
+    "response": {
+      "body": {
+        "id": "9c15a1d0f2f04df08a4d35d1cb8e5ec2"
+      },
+      "headers": {
+        "access-control-allow-origin": "*",
+        "content-type": "application/json"
+      },
+      "status": 200
+    }
+  },
+  "throttled_project": {
+    "db": {
+      "issue_count": 0,
+      "issue_events": [],
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [],
+    "response": {
+      "body": {
+        "<text>": "Too Many Requests"
+      },
+      "headers": {
+        "content-type": "text/html; charset=utf-8",
+        "retry-after": "600"
+      },
+      "status": 429
+    }
+  },
+  "transaction": {
+    "db": {
+      "issue_count": 0,
+      "issue_events": [],
+      "logs": [],
+      "transaction_groups": [
+        {
+          "op": "http.server",
+          "transaction": "GET /parity-test"
+        }
+      ]
+    },
+    "messages": [
+      {
+        "args": [
+          {
+            "organization_id": "<organization_id>",
+            "payload": {
+              "breadcrumbs": null,
+              "contexts": {
+                "trace": {
+                  "op": "http.server",
+                  "span_id": "aaaabbbbccccdddd",
+                  "trace_id": "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+                }
+              },
+              "environment": null,
+              "event_id": "f0e1d2c3-b4a5-9687-8879-6a5b4c3d2e1f",
+              "extra": null,
+              "fingerprint": null,
+              "measurements": null,
+              "platform": "other",
+              "release": null,
+              "request": null,
+              "sdk": null,
+              "server_name": null,
+              "spans": [],
+              "start_timestamp": "<start_timestamp>",
+              "tags": null,
+              "timestamp": "<timestamp>",
+              "transaction": "GET /parity-test",
+              "type": "transaction"
+            },
+            "project_id": "<project_id>",
+            "received": "<received>",
+            "update_first_event": true,
+            "uuid": "<uuid>"
+          }
+        ],
+        "func": "apps.event_ingest.tasks.ingest_transaction",
+        "kwargs": {}
+      }
+    ],
+    "response": {
+      "body": {
+        "id": "f0e1d2c3b4a5968788796a5b4c3d2e1f"
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "status": 200
+    }
+  },
+  "truncated": {
+    "db": {
+      "issue_count": 0,
+      "issue_events": [],
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [],
+    "response": {
+      "body": {
+        "id": "77aa0d6be51c4b8a9f3e2d1c0b9a8f77"
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "status": 200
+    }
+  },
+  "unknown_item": {
+    "db": {
+      "issue_count": 0,
+      "issue_events": [],
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [],
+    "response": {
+      "body": {
+        "id": "3f2b6f0c9d2e4b7aa8b0e6cb7a3d9f11"
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "status": 200
+    }
+  },
+  "unknown_key": {
+    "db": {
+      "issue_count": 0,
+      "issue_events": [],
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [],
+    "response": {
+      "body": {
+        "detail": "Denied"
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "status": 403
+    }
+  }
+}
