@@ -158,8 +158,8 @@ async def list_organization_issue_event(
         raise Http404()
     return (
         get_queryset(request, issue_id=issue_id, organization_slug=organization_slug)
-        .filter(organization_id=org_id)   
-        .order_by("-id")                  
+        .filter(organization_id=org_id)
+        .order_by("-id")     
     )
 
 
