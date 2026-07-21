@@ -249,23 +249,39 @@ class RustEnvelopeHandler:
         return project_id
 
     async def __call__(self, scope, receive, send, project_id: int) -> None:
-        try:
-            await self._handle(scope, receive, send, project_id)
-        except Exception as e:
-            # Same contract as Django's handler: an unexpected failure is a
-            # 500, reported, never a dropped connection.
-            sentry_sdk.capture_exception(e)
-            logger.exception("Rust ingest path failed on %s", scope.get("path", ""))
+        # Fork-and-clear a per-request isolation scope — what Sentry's ASGI
+        # middleware does for Django-handled requests. This raw ASGI path
+        # otherwise captures on the process-ambient scope, whose breadcrumbs
+        # are whatever the embedded worker/scheduler and other requests did
+        # last, not this request's own trail.
+        with sentry_sdk.isolation_scope() as sentry_scope:
+            sentry_scope.clear()
+            sentry_scope.set_tag("rust_ingest.project_id", str(project_id))
+            sentry_scope.set_context(
+                "request",
+                {
+                    "method": scope.get("method"),
+                    "url": scope.get("path"),
+                    "query_string": scope.get("query_string", b"").decode("latin1"),
+                },
+            )
             try:
-                await _send_response(
-                    send,
-                    500,
-                    [("Content-Type", "application/json"), *_cors_headers(scope)],
-                    b'{"detail": "Internal server error"}',
-                )
-            except Exception:
-                # Response already started — nothing more to send.
-                pass
+                await self._handle(scope, receive, send, project_id)
+            except Exception as e:
+                # Same contract as Django's handler: an unexpected failure is a
+                # 500, reported, never a dropped connection.
+                sentry_sdk.capture_exception(e)
+                logger.exception("Rust ingest path failed on %s", scope.get("path", ""))
+                try:
+                    await _send_response(
+                        send,
+                        500,
+                        [("Content-Type", "application/json"), *_cors_headers(scope)],
+                        b'{"detail": "Internal server error"}',
+                    )
+                except Exception:
+                    # Response already started — nothing more to send.
+                    pass
 
     async def _handle(self, scope, receive, send, project_id: int) -> None:
         from django.conf import settings
