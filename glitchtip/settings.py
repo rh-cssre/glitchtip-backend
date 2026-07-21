@@ -14,6 +14,7 @@ import sys
 import warnings
 from datetime import timedelta
 
+import aiohttp
 import environ
 from corsheaders.defaults import default_headers
 from django.conf import global_settings
@@ -35,7 +36,6 @@ env = environ.FileAwareEnv(
     AZURE_ACCOUNT_KEY=(str, None),
     AZURE_CONTAINER=(str, None),
     AZURE_URL_EXPIRATION_SECS=(int, None),
-    IS_LOAD_TEST=(bool, False),
     GS_BUCKET_NAME=(str, None),
     GS_PROJECT_ID=(str, None),
     DEBUG=(bool, False),
@@ -132,6 +132,10 @@ GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE = env.int(
     5 * 1024 * 1024,  # 5 MB
 )
 
+# Mean seconds between in-process gc.collect() + malloc_trim() passes that
+# return freed heap pages to the OS (see glitchtip/memory_trim.py). 0 disables.
+GLITCHTIP_MALLOC_TRIM_INTERVAL = env.int("GLITCHTIP_MALLOC_TRIM_INTERVAL", 3600)
+
 # Raw request body cap before view handling. For ingest endpoints gt_rust
 # enforces GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE on the decompressed bytes, but
 # the *compressed* body Django reads is smaller than that, so this only needs
@@ -210,6 +214,34 @@ GLITCHTIP_THROTTLE_CHECK_INTERVAL = env.int("GLITCHTIP_THROTTLE_CHECK_INTERVAL",
 SEARCH_MAX_LEXEMES = 3800  # Postgres search vectors will truncate after
 
 GLITCHTIP_FREE_TIER_EVENTS = env.int("GLITCHTIP_FREE_TIER_EVENTS", 1000)
+
+# Metered (overage) billing. Opt-in, off by default per organization. When an
+# org enables it, billable events above its plan quota are reported to a Stripe
+# Billing Meter and charged at the graduated rates below, up to a per-org dollar
+# cap. This schedule is the single source of truth: the provisioning command
+# builds the Stripe tiered price from it, and the throttle logic uses it to
+# convert between overage units and cost. Each tier is (up_to_overage_events,
+# per_event_usd_decimal); the final tier uses up_to=None for "and beyond".
+# Name of the Stripe Billing Meter that overage events are reported to. This is
+# the join key between the meter (created by the provisioning command) and the
+# meter events the throttle logic reports — Stripe matches events to a meter by
+# event_name and silently drops events with no matching meter. It is a constant,
+# not env-configurable, on purpose: every instance reporting to the same Stripe
+# account must agree on it, so one shared meter receives all overage. (Stripe
+# routes each event to the right customer by stripe_customer_id, not by which
+# instance sent it.) Re-provisioning a fresh meter is the only reason this would
+# ever change, and Stripe meter event_names are immutable once created.
+GLITCHTIP_OVERAGE_METER_EVENT_NAME = "glitchtip_overage_events"
+# Upper bound on a per-org overage spend cap, in cents. Guards against a
+# fat-fingered or malicious cap; also keeps the value within PositiveIntegerField
+# range. Default $10,000/cycle — a cap this high is effectively a "contact us"
+# case, so raise it per env for the rare very large customer.
+GLITCHTIP_OVERAGE_MAX_CAP_CENTS = env.int("GLITCHTIP_OVERAGE_MAX_CAP_CENTS", 1_000_000)
+GLITCHTIP_OVERAGE_TIERS: list[tuple[int | None, str]] = [
+    (400_000, "0.00015"),  # first 400k overage events: $0.15 / 1k
+    (2_000_000, "0.00010"),  # next, up to 2M total overage: $0.10 / 1k
+    (None, "0.00008"),  # beyond 2M overage: $0.08 / 1k
+]
 
 # Enable/disable logs feature. When False, log events are rejected at ingest.
 GLITCHTIP_ENABLE_LOGS = env.bool("GLITCHTIP_ENABLE_LOGS", True)
@@ -529,6 +561,12 @@ DEBUG_TOOLBAR_PANELS = [
 # Should GlitchTip trust and use proxy settings from environment variables (HTTP_PROXY, HTTPS_PROXY, NO_PROXY)
 PROXY_ENV = env.bool("PROXY_ENV", False)
 AIOHTTP_CONFIG = {
+    # Session-level default for every outbound aiohttp request that doesn't set
+    # its own. aiohttp's built-in default is 5 minutes — long enough for a hung
+    # upstream to tie up a worker — so cap it at a sane 30s. Call sites needing
+    # a different bound pass a per-request timeout, which overrides this: uptime
+    # checks use the per-monitor value and Stripe uses STRIPE_TIMEOUT.
+    "timeout": aiohttp.ClientTimeout(total=30),
     "headers": {"User-Agent": "GlitchTip/" + GLITCHTIP_VERSION},
     "trust_env": PROXY_ENV,
     "max_field_size": 16380,  # 2x default
@@ -632,7 +670,7 @@ MIDDLEWARE += [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "django.middleware.locale.LocaleMiddleware",
-    "allauth.account.middleware.AccountMiddleware",
+    "allauth_async.account.middleware.AsyncAccountMiddleware",
 ]
 
 if "GRANIAN_STATIC_PATH_MOUNT" in os.environ:
@@ -642,10 +680,11 @@ if ENABLE_OBSERVABILITY_API:
     MIDDLEWARE.insert(0, "django_prometheus.middleware.PrometheusBeforeMiddleware")
     MIDDLEWARE.append("django_prometheus.middleware.PrometheusAfterMiddleware")
 
-# DB I/O is routed through django-async-backend (the only DB engine; see
-# the ENGINE assignment in the DATABASES loop below). Inserted at the head
-# of the chain so async cursors are returned to the pool before any other
-# middleware finalises the response.
+# Async DB cursors live in django-async-backend's ``async_connections``
+# store (served by the gt_rust engine; see the ENGINE assignment in the
+# DATABASES loop below). Inserted at the head of the chain so async cursors
+# are returned to the pool before any other middleware finalises the
+# response.
 MIDDLEWARE.insert(0, "django_async_backend.middleware.close_async_connections")
 
 ROOT_URLCONF = "glitchtip.urls"
@@ -686,6 +725,14 @@ STRIPE_WEBHOOK_SECRET = env.str("STRIPE_WEBHOOK_SECRET", None)
 STRIPE_WEBHOOK_SECRET_SUBSCRIPTION = env.str(
     "STRIPE_WEBHOOK_SECRET_SUBSCRIPTION", STRIPE_WEBHOOK_SECRET
 )
+# Signing secret of the v2 event destination that delivers billing-meter
+# error reports (v1.billing.meter.error_report_triggered) to
+# /stripe/webhook/meter/. Event destinations have their own secrets, so unlike
+# STRIPE_WEBHOOK_SECRET_SUBSCRIPTION there is deliberately no fallback to the
+# classic secret — that value can never verify these deliveries, and falling
+# back would turn "unset" into quiet signature failures instead of a loud
+# not-configured error.
+STRIPE_WEBHOOK_SECRET_METER = env.str("STRIPE_WEBHOOK_SECRET_METER", None)
 STRIPE_REGION = env.str("STRIPE_REGION", "")  # Sets stripe customer metadata
 STRIPE_REGION_DOMAINS = env.dict(
     "STRIPE_REGION_DOMAINS", default={}
@@ -780,6 +827,8 @@ ANYMAIL_SETTINGS = [
     "SPARKPOST_API_KEY",
     "SPARKPOST_API_URL",
     "SPARKPOST_TRACK_INITIAL_OPEN_AS_OPENED",
+    "SCALEWAY_SECRET_KEY",
+    "SCALEWAY_PROJECT_ID"
 ]
 
 ANYMAIL = {
@@ -816,19 +865,53 @@ if env.str("DATABASE_HOST", None):
             "PORT": env.str("DATABASE_PORT", "5432"),
         }
     )
-# Database engine. Defaults to the async-backend (psycopg) used in production.
-# Opt-in: set DATABASE_ENGINE=gt_rust.django_backend to run the ORM on the Rust
-# Postgres driver instead — one shared tokio pool serving sync + async, on the
-# same runtime as the valkey driver. Behavior is unchanged unless switched.
-DATABASE_ENGINE = env.str(
-    "DATABASE_ENGINE", "django_async_backend.db.backends.postgresql"
-)
+# Database engine. gt_rust.django_backend is the only supported engine: the
+# ORM (sync + async) runs on the Rust Postgres driver — one shared tokio pool
+# on the same runtime as the valkey driver. psycopg remains installed as a
+# library (SQL composition via psycopg.sql, Jsonb/Json parameter wrappers,
+# and the import Django's stock postgresql backend — which this engine
+# extends — performs at load), but no database I/O flows through it.
+DATABASE_ENGINE = "gt_rust.django_backend"
+# Valkey/Redis connection. VALKEY_URL is the source of truth — supports any scheme
+# that django-vcache understands: redis://, rediss://, valkey://, valkeys://, sentinel://
+# Component env vars (VALKEY_HOST, etc.) are a convenience for simple single-node setups.
+VALKEY_HOST = env.str("VALKEY_HOST", env.str("REDIS_HOST", None))
+if VALKEY_HOST:
+    VALKEY_PORT = env.str("VALKEY_PORT", env.str("REDIS_PORT", "6379"))
+    VALKEY_DATABASE = env.str("VALKEY_DATABASE", env.str("REDIS_DATABASE", "0"))
+    VALKEY_PASSWORD = env.str("VALKEY_PASSWORD", env.str("REDIS_PASSWORD", None))
+    if VALKEY_PASSWORD:
+        VALKEY_URL = (
+            f"redis://:{VALKEY_PASSWORD}@{VALKEY_HOST}:{VALKEY_PORT}/{VALKEY_DATABASE}"
+        )
+    else:
+        VALKEY_URL = f"redis://{VALKEY_HOST}:{VALKEY_PORT}/{VALKEY_DATABASE}"
+else:
+    VALKEY_URL = env.str("VALKEY_URL", env.str("REDIS_URL", "redis://redis:6379/0"))
+
+# Serve POST /api/<project_id>/envelope/ entirely in Rust (gt_rust.ingest):
+# DSN auth, decompression/framing, PII scrubbing, dedupe and vtasks enqueue
+# run on the shared tokio runtime, and the event payload never materializes
+# on the Python heap. The ingest path issues its auth query on the very pool
+# the ORM uses (gt_rust is the only database engine, and the cache already
+# runs gt_rust's valkey driver unconditionally).
+GLITCHTIP_RUST_INGEST = env.bool("GLITCHTIP_RUST_INGEST", False)
+if GLITCHTIP_RUST_INGEST and not VALKEY_URL:
+    # The Rust enqueue path currently speaks only the Valkey task broker.
+    # The crate's postgres-broker arm exists but is not yet exercised (see
+    # the rust-ingest plan); until it is, valkey-less deploys keep the
+    # Python ingest path rather than hard-failing at startup.
+    logging.getLogger(__name__).warning(
+        "GLITCHTIP_RUST_INGEST requires VALKEY_URL until the postgres task "
+        "broker port lands; serving ingest via the Python path."
+    )
+    GLITCHTIP_RUST_INGEST = False
 # Add other settings that apply to both methods.
 for db_config in DATABASES.values():
-    # async-backend's postgresql backend extends Django's stock postgresql
-    # and adds an AsyncDatabaseWrapper that ``async_connections`` discovers
-    # via load_backend. Sync paths (ORM, migrations, admin) still go through
-    # psycopg unchanged. gt_rust.django_backend is the drop-in Rust equivalent.
+    # gt_rust.django_backend extends Django's stock postgresql backend and
+    # adds the AsyncDatabaseWrapper that django-async-backend's
+    # ``async_connections`` discovers via load_backend, so sync paths (ORM,
+    # migrations, admin) and async cursors all run on the Rust driver.
     db_config["ENGINE"] = DATABASE_ENGINE
     db_config.setdefault("CONN_MAX_AGE", env.int("DATABASE_CONN_MAX_AGE", 0))
     db_config.setdefault(
@@ -847,28 +930,16 @@ for db_config in DATABASES.values():
             "max_size": env.int("DATABASE_POOL_MAX_SIZE", 20),
             "timeout": env.int("DATABASE_POOL_TIMEOUT", 30),
         }
+        # Optional pooled-connection recycling horizon. A connection retains
+        # buffer memory sized to the largest message it ever carried;
+        # recycling bounds how long that lasts. Unset keeps the driver's
+        # default lifetime; drivers jitter the deadline to avoid reconnect
+        # stampedes.
+        _pool_max_lifetime = env.int("DATABASE_POOL_MAX_LIFETIME", 0)
+        if _pool_max_lifetime > 0:
+            options["pool"]["max_lifetime"] = _pool_max_lifetime
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-# Valkey/Redis connection. VALKEY_URL is the source of truth — supports any scheme
-# that django-vcache understands: redis://, rediss://, valkey://, valkeys://, sentinel://
-# Component env vars (VALKEY_HOST, etc.) are a convenience for simple single-node setups.
-VALKEY_HOST = env.str("VALKEY_HOST", env.str("REDIS_HOST", None))
-if VALKEY_HOST:
-    VALKEY_PORT = env.str("VALKEY_PORT", env.str("REDIS_PORT", "6379"))
-    VALKEY_DATABASE = env.str("VALKEY_DATABASE", env.str("REDIS_DATABASE", "0"))
-    VALKEY_PASSWORD = env.str("VALKEY_PASSWORD", env.str("REDIS_PASSWORD", None))
-    if VALKEY_PASSWORD:
-        VALKEY_URL = (
-            f"redis://:{VALKEY_PASSWORD}@{VALKEY_HOST}:{VALKEY_PORT}/{VALKEY_DATABASE}"
-        )
-    else:
-        VALKEY_URL = f"redis://{VALKEY_HOST}:{VALKEY_PORT}/{VALKEY_DATABASE}"
-else:
-    VALKEY_URL = env.str("VALKEY_URL", env.str("REDIS_URL", "redis://redis:6379/0"))
-db = DATABASES["default"]
-# Use Specified broker url, valkey url, or fallback to postgresql
-IS_LOAD_TEST = env("IS_LOAD_TEST")
 
 # Time in seconds to debounce some frequently run tasks
 TASK_DEBOUNCE_DELAY = env.int("TASK_DEBOUNCE_DELAY", 30)
@@ -909,13 +980,16 @@ TASKS = {
     }
 }
 
-VTASKS_QUEUES = ["default", "ingest"]
-
-# Batch queues configuration - must be defined before tasks are imported
-VTASKS_BATCH_QUEUES = {
+# Queues this worker consumes, with per-queue options (django-vtasks 3.0
+# consolidated form; batching must be declared here — VTASKS_BATCH_QUEUES
+# is removed).
+VTASKS_QUEUES = {
+    "default": {},
     "ingest": {
-        "count": 100,
-        "timeout": 2.0,
+        "batch": {
+            "count": 100,
+            "timeout": 2.0,
+        },
     },
 }
 
@@ -939,7 +1013,8 @@ USE_ASYNC_SERVER = env.bool("USE_ASYNC_SERVER", True)
 # VALKEY_SSL_CA_CERTS, VALKEY_SSL_CERTFILE, VALKEY_SSL_KEYFILE env vars.
 # Set VALKEY_SSL_CERT_REQS=none to skip certificate verification.
 if VALKEY_URL:
-    _valkey_options = {}
+    # Route the cache (django-vtasks) through single gt-rust tokio pool
+    _valkey_options = {"DRIVER_CLASS": "gt_rust.valkey.RustValkeyDriver"}
     if _ssl_ca := env.str("VALKEY_SSL_CA_CERTS", None):
         _valkey_options["ssl_ca_certs"] = _ssl_ca
     if _ssl_cert := env.str("VALKEY_SSL_CERTFILE", None):
@@ -1127,6 +1202,8 @@ HEADLESS_FRONTEND_URLS = {
 }
 HEADLESS_CLIENTS = ("browser",)
 HEADLESS_SERVE_SPECIFICATION = True
+MFA_ADAPTER = "allauth_async.mfa.adapter.AsyncDefaultMFAAdapter"
+HEADLESS_ADAPTER = "allauth_async.headless.adapter.AsyncDefaultHeadlessAdapter"
 MFA_TOTP_ISSUER = GLITCHTIP_URL.hostname
 MFA_TOTP_TOLERANCE = 1
 MFA_SUPPORTED_TYPES = ["totp", "webauthn", "recovery_codes"]
@@ -1153,10 +1230,13 @@ ENABLE_ORGANIZATION_CREATION = env.bool(
 )
 
 AUTHENTICATION_BACKENDS = (
-    # Needed to login by username in Django admin, regardless of `allauth`
-    "django.contrib.auth.backends.ModelBackend",
-    # `allauth` specific authentication methods, such as login by e-mail
-    "allauth.account.auth_backends.AuthenticationBackend",
+    # Needed to login by username in Django admin, regardless of `allauth`.
+    # Subclassed to keep the unknown-user dummy hash off the event loop;
+    # revert to django.contrib.auth.backends.ModelBackend on Django 6.1+.
+    "apps.users.auth_backends.ModelBackend",
+    # `allauth` authentication methods (login by e-mail), with a native
+    # aauthenticate() so async login paths never fall back to thread offload
+    "allauth_async.account.auth_backends.AsyncAuthenticationBackend",
 )
 
 NINJA_PAGINATION_CLASS = "glitchtip.api.pagination.AsyncLinkHeaderPagination"
