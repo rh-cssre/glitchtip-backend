@@ -161,15 +161,17 @@ def _estimate_image_base(sym_cache, instruction_addrs):
     threshold = max(len(instruction_addrs) // 2, 1)
 
     for elf_offset in range(0, 0x500000, 0x1000):
-        if next(sym_cache.lookup(elf_offset), None) is None:
+        # lookup() returns a list, not an iterator; don't call next() on it
+        if not sym_cache.lookup(elf_offset):
             continue
         candidate_base = probe - elf_offset
         if candidate_base < 0:
             continue
+        # skip negative offsets; symbolic rejects them
         score = sum(
             1
             for addr in instruction_addrs
-            if next(sym_cache.lookup(addr - candidate_base), None) is not None
+            if addr - candidate_base >= 0 and sym_cache.lookup(addr - candidate_base)
         )
         if score > best_score:
             best_score = score
@@ -216,8 +218,30 @@ class StacktraceProcessor:
         if is_android and not native_frames:
             return cls.resolve_proguard_stacktrace(stacktrace, symbol_file)
 
+        # Use the SDK's image_addr from debug_meta if present; it's more
+        # reliable than guessing the base.
+        image_addr_from_meta = None
+        if debug_id:
+            try:
+                norm_debug_id = normalize_debug_id(str(debug_id))
+                images = (event.get("debug_meta") or {}).get("images") or []
+                for image in images:
+                    img_id = image.get("debug_id")
+                    if img_id and normalize_debug_id(str(img_id)) == norm_debug_id:
+                        image_addr_from_meta = image.get("image_addr")
+                        break
+            except Exception as e:
+                getLogger().warning(
+                    f"StacktraceProcessor: debug_meta lookup failed: {e}"
+                )
+
         return cls.resolve_native_stacktrace(
-            stacktrace, symbol_file, arch=arch, project_id=project_id, debug_id=debug_id
+            stacktrace,
+            symbol_file,
+            arch=arch,
+            project_id=project_id,
+            debug_id=debug_id,
+            image_addr_from_meta=image_addr_from_meta,
         )
 
     @classmethod
@@ -260,7 +284,13 @@ class StacktraceProcessor:
 
     @classmethod
     def resolve_native_stacktrace(
-        cls, stacktrace, symbol_file, arch=None, project_id=None, debug_id=None
+        cls,
+        stacktrace,
+        symbol_file,
+        arch=None,
+        project_id=None,
+        debug_id=None,
+        image_addr_from_meta=None,
     ):
         # Open symbol file
         try:
@@ -278,11 +308,17 @@ class StacktraceProcessor:
             score = 0
             resolved_frames = []
 
-            # When frames lack image_addr (e.g. Flutter Android without
-            # debug_meta), estimate the image base so relative offsets
-            # land inside the symbol cache.
+            # Image base priority: debug_meta image_addr, then per-frame
+            # image_addr, then heuristic estimation as a last resort.
             estimated_base = 0
-            if frames and not any(f.get("image_addr") for f in frames if f):
+            if image_addr_from_meta is not None:
+                estimated_base = parse_addr(image_addr_from_meta)
+                getLogger().info(
+                    f"StacktraceProcessor: using debug_meta image_addr "
+                    f"{image_addr_from_meta} for debug_id {debug_id}"
+                )
+            elif frames and not any(f.get("image_addr") for f in frames if f):
+                # Flutter Android without debug_meta: guess the base.
                 addrs = [
                     parse_addr(f.get("instruction_addr"))
                     for f in frames
@@ -304,7 +340,8 @@ class StacktraceProcessor:
                 )
                 instruction_addr = parse_addr(frame.get("instruction_addr"))
                 addr = instruction_addr - image_addr
-                symbol = sym_cache.lookup(addr)
+                # skip negative offsets; symbolic rejects them
+                symbol = sym_cache.lookup(addr) if addr >= 0 else None
                 digested_symbol = digest_symbol(symbol)
 
                 if digested_symbol is not None:
