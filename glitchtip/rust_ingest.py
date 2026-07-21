@@ -30,6 +30,11 @@ logger = logging.getLogger(__name__)
 
 _ENVELOPE_PATH_RE = re.compile(r"^/api/(\d+)/envelope/$")
 
+# SDKs authenticate envelope POSTs via ?sentry_key=<secret> (glitchtip_key
+# also accepted). Redacted before the query string is attached to any
+# capture: a customer's DSN secret must not land in the operator's tracker.
+_KEY_QS_RE = re.compile(r"((?:sentry|glitchtip)_key=)[^&]*")
+
 # Project ids are BIGINT; the Rust IngestSession takes an i64. A larger id
 # can't name a real project, so it must not overflow the session argument.
 _MAX_PROJECT_ID = 9223372036854775807
@@ -249,23 +254,29 @@ class RustEnvelopeHandler:
         return project_id
 
     async def __call__(self, scope, receive, send, project_id: int) -> None:
-        # Fork-and-clear a per-request isolation scope — what Sentry's ASGI
-        # middleware does for Django-handled requests. This raw ASGI path
-        # otherwise captures on the process-ambient scope, whose breadcrumbs
-        # are whatever the embedded worker/scheduler and other requests did
-        # last, not this request's own trail.
+        # Fork a per-request isolation scope: this raw ASGI path otherwise
+        # captures on the process-ambient scope, whose breadcrumbs are
+        # whatever the embedded worker/scheduler and other requests did
+        # last, not this request's own trail. The full clear() is
+        # deliberately stricter than Sentry's ASGI middleware (which clears
+        # only breadcrumbs): it also drops ambient user/tags/contexts, so
+        # anything set on the global scope at startup won't appear on
+        # ingest-path events.
         with sentry_sdk.isolation_scope() as sentry_scope:
             sentry_scope.clear()
-            sentry_scope.set_tag("rust_ingest.project_id", str(project_id))
-            sentry_scope.set_context(
-                "request",
-                {
-                    "method": scope.get("method"),
-                    "url": scope.get("path"),
-                    "query_string": scope.get("query_string", b"").decode("latin1"),
-                },
-            )
             try:
+                sentry_scope.set_tag("rust_ingest.project_id", str(project_id))
+                sentry_scope.set_context(
+                    "request",
+                    {
+                        "method": scope.get("method"),
+                        "url": scope.get("path"),
+                        "query_string": _KEY_QS_RE.sub(
+                            r"\1[Filtered]",
+                            scope.get("query_string", b"").decode("latin1"),
+                        ),
+                    },
+                )
                 await self._handle(scope, receive, send, project_id)
             except Exception as e:
                 # Same contract as Django's handler: an unexpected failure is a
