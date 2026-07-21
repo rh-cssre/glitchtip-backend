@@ -83,11 +83,8 @@ async def event_store(
         update_first_event=request.auth.first_event is None,
         uuid=primary_id.hex,
     )
-    task_result = await ingest_event.aenqueue(serialize_for_vtasks(asdict(issue_event)))
-    result = {"event_id": payload.event_id.hex}
-    if settings.IS_LOAD_TEST:
-        result["task_id"] = task_result.task_id
-    return result
+    await ingest_event.aenqueue(serialize_for_vtasks(asdict(issue_event)))
+    return {"event_id": payload.event_id.hex}
 
 
 @router.post("/{project_id}/security/")

@@ -32,15 +32,6 @@ lint:
 lint-check:
 	$(COMPOSE_RUN) ruff check glitchtip/ apps/
 
-# TODO: needs to add `IS_LOAD_TEST=true` env var
-locust-start:			# Start all containers in background (Locust mode)
-	$(COMPOSE) -f compose.locust.yml up
-
-locust-stop:			# Stop all containers (Locust mode)
-	$(COMPOSE) -f compose.locust.yml down
-
-locust-restart: locust-stop locust-start		# Stop all containers and start all containers in background (Locust mode)
-
 logs:					# Show all containers' logs (follow)
 	$(COMPOSE) logs -tf
 
@@ -56,7 +47,7 @@ partman-start:			# Start all containers in background (partman mode)
 partman-stop:			# Stop all containers (partman mode)
 	$(COMPOSE) -f compose.part.yml down
 
-partman-restart: locust-stop locust-start		# Stop all containers and start all containers in background (partman mode)
+partman-restart: partman-stop partman-start		# Stop all containers and start all containers in background (partman mode)
 
 restart: stop start		# Stop all containers and start all containers in background
 
@@ -72,4 +63,4 @@ stop:					# Stop all containers
 test:					# Execute `pytest` and coverage report inside `web` container
 	$(COMPOSE_RUN) web python manage.py test
 
-.PHONY: bash build build-no-cache clean dbshell help kill lint lint-check locust-start locust-stop locust-restart logs migrate migrations partman-start partman-stop partman-restart restart shell start stop test
+.PHONY: bash build build-no-cache clean dbshell help kill lint lint-check logs migrate migrations partman-start partman-stop partman-restart restart shell start stop test

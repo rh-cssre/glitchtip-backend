@@ -80,6 +80,21 @@ class StripeAPITestCase(TestCase):
         )
         self.assertEqual(res.status_code, 200)
 
+    async def test_create_stripe_session_rejects_metered_price(self):
+        # The metered overage price is attached via configure_overage, never
+        # sold through checkout.
+        overage_product = await baker.amake(
+            "stripe.StripeProduct", events=0, is_overage=True
+        )
+        metered_price = await baker.amake(
+            "stripe.StripePrice", product=overage_product, price=0, is_metered=True
+        )
+        url = reverse("api:create_stripe_session", args=[self.organization.slug])
+        res = await self.async_client.post(
+            url, {"price": metered_price.stripe_id}, content_type="application/json"
+        )
+        self.assertEqual(res.status_code, 404)
+
     @patch("apps.stripe.api.create_portal_session", new_callable=AsyncMock)
     async def test_manage_billing(self, mock_create_portal_session):
         mock_create_portal_session.return_value = {"url": "test"}
@@ -114,6 +129,27 @@ class StripeAPITestCase(TestCase):
         sub = await StripeSubscription.objects.aget(stripe_id="test")
         self.assertEqual(sub.subscription_cycle_start, unix_to_datetime(period_start))
         self.assertEqual(sub.subscription_cycle_end, unix_to_datetime(period_end))
+
+    async def test_stripe_create_subscription_rejects_metered_price(self):
+        # The metered overage price also stores price=0 (its cost lives in
+        # tiers), but it is not a base plan and must not be selectable here.
+        overage_product = await baker.amake(
+            "stripe.StripeProduct", events=0, is_overage=True
+        )
+        metered_price = await baker.amake(
+            "stripe.StripePrice", product=overage_product, price=0, is_metered=True
+        )
+        url = reverse("api:stripe_create_subscription")
+        res = await self.async_client.post(
+            url,
+            {
+                "organization": str(self.organization.id),
+                "price": metered_price.stripe_id,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 404)
+        self.assertFalse(await StripeSubscription.objects.aexists())
 
     async def test_subscription_events_count_for_period_current(self):
         project = await baker.amake("projects.Project", organization=self.organization)

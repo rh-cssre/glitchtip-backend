@@ -73,18 +73,9 @@ partitions managed by `pg_partman`.
 
 ### Load testing
 
-We use [Locust](https://locust.io/) to load test. It's built into the dev dependencies.
-
-First, set the env var `IS_LOAD_TEST` to true in `compose.yml`, then run:
-
-```shell
-docker compose -f compose.yml -f compose.locust.yml up
-# or: make locust-start
-```
-
-Now go to [localhost:8089](http://localhost:8089/) to run the test.
-
-> Note: Locust will not be installed to production docker images and cannot be run from them.
+Load and A/B benchmarks live in [benchmarks/](./benchmarks/README.md) — see
+`run_ingest_bench.sh` (memory growth under sustained load) and
+`run_ingest_ab.sh` (Python vs Rust ingest A/B).
 
 
 ### Memory profiling

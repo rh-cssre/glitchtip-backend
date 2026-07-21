@@ -7,8 +7,8 @@ license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "django~=6.0",
-    "django-vtasks[valkey]~=2.1.2",
-    "django-allauth[mfa,socialaccount]~=65.0",
+    "django-vtasks[valkey]~=3.0.0",
+    "django-allauth-async[mfa,socialaccount]==65.16.1.7",
     "django-cors-headers~=4.0",
     "django-environ~=0.11",
     "django-extensions~=4.0",
@@ -22,13 +22,20 @@ dependencies = [
     "user-agents~=2.1",
     "django-ipware~=7.0",
     "anonymizeip~=1.0",
-    "symbolic~=13.8.0",
+    "symbolic~=13.9.0",
     "aiohttp~=3.7",
     "google-cloud-logging~=3.0",
     "django-prometheus~=2.2",
     "uwsgi-chunked~=0.1",
     "django-import-export~=4.1",
-    "psycopg[c,pool]~=3.1",
+    # Library-only: psycopg.sql composition and Jsonb/Json parameter
+    # wrappers, plus the import Django's stock postgresql backend performs.
+    # No database I/O flows through psycopg (gt_rust.django_backend is the
+    # only engine), so no extras here — the pure-Python impl over the
+    # image's libpq5 is sufficient. NB: django-async-backend currently
+    # pins psycopg[binary], so the C impl still installs transitively;
+    # if that pin ever relaxes, nothing here needs it.
+    "psycopg~=3.1",
     "django-ninja~=1.5",
     "boto3~=1.34",
     "orjson~=3.9",
@@ -37,8 +44,8 @@ dependencies = [
     "django-postgres-partition>=0.1.4",
     "pyyaml>=6.0.2", # allauth openapi spec
     "granian[reload,uvloop]>=2.6.0",
-    "django-vcache>=2.2.0",
-    "glitchtip-rust>=0.3.1",
+    "django-vcache>=3.0.0",
+    "glitchtip-rust>=0.6.1",
     "uuid6>=2024.1.12",
     "mcp[cli]>=1.9",
     "duckdb>=1.2.0",
@@ -51,7 +58,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "locust~=2.10",
     "freezegun~=1.1",
     "model-bakery-async~=1.23",
     "django-debug-toolbar~=7.0",

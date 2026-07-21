@@ -7,11 +7,15 @@ For more information on this file, see
 https://docs.djangoproject.com/en/dev/howto/deployment/asgi/
 """
 
+import asyncio
+import logging
 import os
 
 from django.core.asgi import get_asgi_application
 
 from glitchtip.startup import print_startup_banner
+
+logger = logging.getLogger(__name__)
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "glitchtip.settings")
 
@@ -22,6 +26,7 @@ print_startup_banner()
 
 # Route ingest paths to a lightweight handler with minimal middleware
 from glitchtip.ingest_asgi import IngestDispatcher  # noqa: E402
+from glitchtip.memory_trim import PeriodicMemoryTrim  # noqa: E402
 
 application = IngestDispatcher(application)
 
@@ -111,8 +116,6 @@ class MCPDjangoDispatcher:
             await self.mcp_app(scope, receive, send)
             return
 
-        import asyncio
-
         django_queue: asyncio.Queue = asyncio.Queue()
         mcp_queue: asyncio.Queue = asyncio.Queue()
         django_ok = asyncio.Event()
@@ -141,11 +144,42 @@ class MCPDjangoDispatcher:
             elif msg["type"] == "lifespan.shutdown.complete":
                 mcp_done.set()
 
+        async def run_subapp(app, queue, subapp_send, ok, done, name):
+            """Run one sub-app's lifespan, never outliving its own events.
+
+            The waits below are on events only this sub-app sets. A sub-app that
+            dies -- raising, or returning without completing the protocol --
+            would otherwise leave the handler waiting on a message that can
+            never arrive, and a server does not exit a worker until lifespan
+            shutdown completes. Settling both events on the way out degrades a
+            broken sub-app to a logged failure rather than a wedged worker.
+            """
+            nonlocal failed
+            try:
+                await app(scope, queue.get, subapp_send)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("ASGI lifespan sub-app %r crashed", name)
+            finally:
+                if not ok.is_set():
+                    # Gone before reporting startup: that is a startup failure.
+                    failed = True
+                    ok.set()
+                done.set()
+
         async def run_django():
-            await self.django_app(scope, django_queue.get, django_send)
+            await run_subapp(
+                self.django_app,
+                django_queue,
+                django_send,
+                django_ok,
+                django_done,
+                "django",
+            )
 
         async def run_mcp():
-            await self.mcp_app(scope, mcp_queue.get, mcp_send)
+            await run_subapp(self.mcp_app, mcp_queue, mcp_send, mcp_ok, mcp_done, "mcp")
 
         tasks = [
             asyncio.create_task(run_django()),
@@ -178,7 +212,86 @@ class MCPDjangoDispatcher:
             await asyncio.gather(*tasks, return_exceptions=True)
 
 
+from asgiref.sync import sync_to_async  # noqa: E402
 from django.conf import settings  # noqa: E402
+from django.db import close_old_connections  # noqa: E402
+from django_async_backend.db import close_old_async_connections  # noqa: E402
+
+
+class RecycleConnectionsMiddleware:
+    """Recycle stale Django DB connections around a mounted ASGI sub-app.
+
+    The MCP Starlette app is mounted directly in the ASGI callable, so its
+    requests never pass through Django's ``BaseHandler`` nor the configured
+    ``MIDDLEWARE`` — so neither of the hooks that normally return DB
+    connections to the pool each request fires for it:
+
+    * ``close_old_connections`` on the ``request_started`` /
+      ``request_finished`` signals ``BaseHandler`` emits (the sync,
+      thread-local ``django.db.connections`` store); and
+    * the ``close_async_connections`` middleware (django-async-backend's
+      per-task ``async_connections`` store).
+
+    A connection that dies while held (Postgres failover, pgbouncer restart,
+    ``pg_terminate_backend``, a network blip) is therefore never returned to
+    the pool: the sub-app pins one dead connection indefinitely and every
+    later MCP DB query raises ``OperationalError: the connection is closed``
+    until the worker is restarted — while the rest of GlitchTip self-heals,
+    because its request path returns connections each request and the pool
+    refills with live ones.
+
+    This wrapper restores that per-request recycle for the sub-app. Every MCP
+    query — OAuth/token auth and the tool handlers alike — reaches the DB via
+    Django's native async ORM (``aget`` / ``async for``), which runs its sync
+    work through ``sync_to_async`` on the process-wide thread-sensitive
+    executor thread; the connection wrapper therefore lives in the *sync*,
+    thread-local store on that one thread. Running ``close_old_connections``
+    through ``sync_to_async`` lands it on that same thread, so it recycles the
+    exact wrapper those queries use — including the queries the MCP SDK
+    dispatches in its stateless child task, which shares the same executor
+    thread (no ``ThreadSensitiveContext`` splits the MCP path). MCP does not
+    currently touch the ``async_connections`` store, but ``close_old_async_-
+    connections`` is called too for parity with the normal request path. On a
+    healthy connection both calls are no-ops, so steady-state cost is
+    negligible.
+
+    Recovery matches the rest of GlitchTip: a request in flight during the
+    switchover may still see a transient error, but the sub-app no longer
+    stays wedged afterwards.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        # Only HTTP requests touch the ORM; forward lifespan/websocket as-is.
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        # Recycle before the request too, so a connection that died while the
+        # wrapper sat idle between requests is returned to the pool up front.
+        await _recycle_db_connections()
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            # shield so a client disconnect mid-response can't cancel cleanup
+            # and leak the connection into the next request (mirrors
+            # django_async_backend.middleware.close_async_connections).
+            await asyncio.shield(_recycle_db_connections())
+
+
+async def _recycle_db_connections():
+    # Guard like glitchtip.task_signals._close_async_connections: returning a
+    # broken connection can itself raise (e.g. putconn under
+    # wrap_database_errors during a failover), and an unhandled raise here
+    # would 500 the request (pre-call) or mask the response's own exception
+    # (post-call). Log and move on; the next query reconnects on demand.
+    try:
+        await sync_to_async(close_old_connections)()
+        await close_old_async_connections()
+    except Exception:
+        logger.exception("Failed to recycle DB connections for MCP request")
+
 
 if settings.GLITCHTIP_ENABLE_MCP:
     from apps.mcp.server import mcp as _mcp_server
@@ -186,7 +299,7 @@ if settings.GLITCHTIP_ENABLE_MCP:
     _mcp_app = _mcp_server.streamable_http_app()
     application = MCPDjangoDispatcher(
         django_app=application,
-        mcp_app=_mcp_app,
+        mcp_app=RecycleConnectionsMiddleware(_mcp_app),
         django_lifespan=_embed_worker,
     )
 
@@ -211,3 +324,10 @@ except ImportError:
     # Graceful fallback if granian can't be imported (custom installations, etc.)
     # The wrapper is safe to use with uwsgi but this provides defensive error handling
     pass
+
+# Outermost so lifespan startup reaches it even in embed-worker mode (the
+# vtasks wrapper consumes lifespan without forwarding it inward): a pod
+# receiving no HTTP traffic still starts its trim timer. Periodically
+# returns freed memory to the OS in every ASGI process — the scheduled
+# maintenance task only trims the one pod that runs it.
+application = PeriodicMemoryTrim(application)

@@ -7,7 +7,6 @@ x-environment: &default-environment
   DEBUG: "true"
   EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
   ENABLE_OBSERVABILITY_API: "true"
-  #IS_LOAD_TEST: "true"
   VTASKS_CONCURRENCY: 4
   LOG_LEVEL: INFO
   GLITCHTIP_ENABLE_MCP: "true"

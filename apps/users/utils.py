@@ -13,3 +13,10 @@ async def ais_user_registration_open() -> bool:
 
 def is_social_apps_user_registration_open() -> bool:
     return settings.ENABLE_SOCIAL_APPS_USER_REGISTRATION or not User.objects.exists()
+
+
+async def ais_social_apps_user_registration_open() -> bool:
+    return (
+        settings.ENABLE_SOCIAL_APPS_USER_REGISTRATION
+        or not await User.objects.aexists()
+    )

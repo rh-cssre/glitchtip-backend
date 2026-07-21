@@ -3,6 +3,7 @@ from uuid import UUID
 
 from asgiref.sync import sync_to_async
 from django.db import connection
+from django.db.models import Prefetch
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Status
@@ -39,6 +40,27 @@ class MonitorPagination(AsyncLinkHeaderPagination):
         )
         # Fetch checks for just the paginated monitors using efficient LATERAL JOIN
         await attach_checks_to_monitors(page)
+        return page
+
+
+class StatusPagePagination(AsyncLinkHeaderPagination):
+    """Attach checks to the monitors nested within each paginated status page.
+
+    MonitorSchema reads each monitor's checks (a reverse relation); without
+    this the async serializer would trigger a synchronous ORM query per
+    monitor and raise SynchronousOnlyOperation.
+    """
+
+    async def apaginate_queryset(
+        self, queryset, pagination, request, response, **params
+    ):
+        page = await super().apaginate_queryset(
+            queryset, pagination, request, response, **params
+        )
+        monitors = [
+            monitor for status_page in page for monitor in status_page.monitors.all()
+        ]
+        await attach_checks_to_monitors(monitors)
         return page
 
 
@@ -124,9 +146,14 @@ async def attach_checks_to_monitors(
     """Fetch and attach checks to a list of monitors using LATERAL JOIN."""
     if not monitors:
         return monitors
-    monitor_ids = [m.id for m in monitors]
-    organization_ids = [m.organization_id for m in monitors]
-    checks_by_monitor = await fetch_checks_lateral(monitor_ids, organization_ids, limit)
+    # Fetch once per distinct monitor: the same monitor can appear multiple
+    # times (e.g. shared across status pages), and duplicate ids in the
+    # unnest() would run the LATERAL subquery once per copy and double the
+    # returned checks. Attach the result to every instance below.
+    org_by_monitor = {m.id: m.organization_id for m in monitors}
+    checks_by_monitor = await fetch_checks_lateral(
+        list(org_by_monitor), list(org_by_monitor.values()), limit
+    )
     for monitor in monitors:
         # Use Django's prefetch cache so serializers see the checks
         monitor._prefetched_objects_cache = {
@@ -309,14 +336,24 @@ async def list_monitor_checks(
     response=list[StatusPageSchema],
     by_alias=True,
 )
-@paginate
+@paginate(StatusPagePagination)
 async def list_status_pages(
     request: AuthHttpRequest, response: HttpResponse, organization_slug: str
 ):
     """List status pages, used for showing the current status of an uptime monitor"""
     return StatusPage.objects.filter(
         organization__users=request.auth.user_id
-    ).prefetch_related("monitors")
+    ).prefetch_related(
+        # MonitorSchema reads the check annotations (is_up/last_change) and the
+        # organization (heartbeat URL) and project (project_name); load them
+        # eagerly so async serialization does not fall back to sync queries.
+        Prefetch(
+            "monitors",
+            queryset=Monitor.objects.with_check_annotations().select_related(
+                "organization", "project"
+            ),
+        )
+    )
 
 
 @router.post(

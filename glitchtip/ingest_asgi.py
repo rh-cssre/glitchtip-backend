@@ -44,6 +44,7 @@ class IngestDispatcher:
     def __init__(self, full_app):
         self._full_app = full_app
         self._ingest_app = None
+        self._rust_handler = None
 
     def _get_ingest_app(self):
         """Lazily build the ingest ASGI handler with minimal middleware."""
@@ -78,8 +79,25 @@ class IngestDispatcher:
             self._ingest_app = IngestASGIHandler()
         return self._ingest_app
 
+    def _get_rust_handler(self):
+        """Lazily build the Rust envelope handler (GLITCHTIP_RUST_INGEST)."""
+        if self._rust_handler is None:
+            from glitchtip.rust_ingest import RustEnvelopeHandler
+
+            self._rust_handler = RustEnvelopeHandler(self._get_ingest_app())
+        return self._rust_handler
+
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and _INGEST_PATH_RE.match(scope.get("path", "")):
+            from django.conf import settings
+
+            if settings.GLITCHTIP_RUST_INGEST:
+                from glitchtip.rust_ingest import RustEnvelopeHandler
+
+                project_id = RustEnvelopeHandler.match(scope)
+                if project_id is not None:
+                    await self._get_rust_handler()(scope, receive, send, project_id)
+                    return
             ingest_app = self._get_ingest_app()
             await ingest_app(scope, receive, send)
         else:

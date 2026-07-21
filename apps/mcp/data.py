@@ -137,7 +137,9 @@ async def get_event(
 
     qs = IssueEvent.objects.filter(
         organization__users=user_id,
-    ).select_related("issue", "issue__project")
+    ).select_related(
+        "issue", "issue__project", "issue__index", "issue__resolved_in_release"
+    )
     if organization_slug:
         qs = qs.filter(organization__slug=organization_slug)
     qs = _apply_compliance_filter(qs)
@@ -203,7 +205,7 @@ async def _attach_issue(cold_event, user_id: int):
             id=cold_event.issue_id,
             project__organization__users=user_id,
         )
-        .select_related("project")
+        .select_related("project", "index", "resolved_in_release")
         .afirst()
     )
     if not issue:

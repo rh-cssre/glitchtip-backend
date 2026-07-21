@@ -60,8 +60,8 @@ urlpatterns += [
     path("oauth/authorize/", include("apps.oauth.urls")),
     path("", include("apps.uptime.urls")),
     path("api/test/", include("test_api.urls")),
-    path("accounts/", include("allauth.urls")),
-    path("_allauth/", include("allauth.headless.urls")),
+    path("accounts/", include("allauth_async.urls")),
+    path("_allauth/", include("allauth_async.headless.urls")),
     # These routes belong to the Angular single page app
     re_path(r"^$", index),
     re_path(

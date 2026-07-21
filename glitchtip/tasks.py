@@ -1,4 +1,3 @@
-import ctypes
 import gc
 import logging
 
@@ -13,22 +12,9 @@ from apps.performance.maintenance import cleanup_old_transaction_events
 from apps.releases.maintenance import cleanup_old_releases
 from apps.sourcecode.maintenance import cleanup_old_debug_symbol_bundles
 from apps.stripe.maintenance import sync_stripe_models, update_subscription_cycles
+from glitchtip.memory_trim import malloc_trim
 
 logger = logging.getLogger(__name__)
-
-
-def _malloc_trim():
-    """Ask glibc to return freed memory to the OS.
-
-    Long-running Python processes accumulate fragmented heap pages that
-    glibc's malloc never returns automatically. Calling malloc_trim(0)
-    after memory-intensive steps (archival, bulk deletes) releases those
-    pages so the worker's RSS stays close to its actual working set.
-    """
-    try:
-        ctypes.CDLL("libc.so.6").malloc_trim(0)
-    except Exception:
-        pass
 
 
 async def _run_step(name: str, coro, *args):
@@ -38,7 +24,7 @@ async def _run_step(name: str, coro, *args):
     except Exception:
         logger.error("Maintenance step '%s' failed", name, exc_info=True)
     gc.collect()
-    _malloc_trim()
+    malloc_trim()
 
 
 @task
@@ -51,7 +37,7 @@ async def perform_maintenance():
     memory to the OS, keeping RSS bounded for the next step.
     """
     gc.collect()
-    _malloc_trim()
+    malloc_trim()
     await _run_step(
         "maintain_partitions", sync_to_async(call_command), "maintain_partitions"
     )

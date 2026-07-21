@@ -57,6 +57,39 @@ test-min:
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 
+# Rust ingest lane: the same stack as test-latest with GLITCHTIP_RUST_INGEST
+# on, so POST /api/<id>/envelope/ is served by gt_rust.ingest. (The gt_rust
+# database engine and valkey driver run unconditionally in every lane; this
+# lane's only delta is the ingest dispatch.) Runs the ingest-adjacent module
+# subset. Requires glitchtip-rust >= 0.5.0 in uv.lock (first release
+# shipping gt_rust.ingest).
+test-rust-ingest:
+  image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.14-$BASE_LAYER
+  variables:
+    SECRET_KEY: testing
+    DATABASE_URL: "postgres://postgres:postgres@postgres:5432/postgres"
+    ENABLE_TEST_API: "true"
+    ENABLE_OPEN_USER_REGISTRATION: "true"
+    VALKEY_URL: "redis://redis:6379"
+    GLITCHTIP_RUST_INGEST: "true"
+  services:
+    - name: postgres:18
+      alias: postgres
+    - name: valkey/valkey:9
+      alias: redis
+  cache:
+    - key:
+        files:
+          - uv.lock
+      paths:
+        - $UV_CACHE_DIR
+  script:
+    - uv sync --frozen --no-install-project
+    - uv run ./manage.py test apps.event_ingest apps.logs apps.performance glitchtip
+    - uv cache prune --ci
+  rules:
+    - if: $CI_PIPELINE_SOURCE != "schedule"
+
 # Latest stack: Python 3.14, PostgreSQL 18, Valkey, S3 cold storage
 test-latest:
   image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.14-$BASE_LAYER

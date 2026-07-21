@@ -4,3 +4,7 @@
 # API query parameter accepted for sentry-cli compatibility (read by Django Ninja
 # from the query string, not used in view logic).
 sortBy = None  # noqa: F841
+
+# Django management command handle(self, *args, **options) — some commands take
+# no options and don't read the dict.
+options = None  # noqa: F841

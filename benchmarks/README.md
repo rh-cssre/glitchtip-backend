@@ -1,5 +1,51 @@
 # Benchmarks
 
+## Ingest A/B: Python vs Rust (`bench_ingest_ab.py`)
+
+Measures the `GLITCHTIP_RUST_INGEST` flag's effect on the metrics the
+rust-ingest plan gates on: **CPU per 10k accepted events**, **RSS growth
+per 10k events**, and **post-burst settled RSS** (throughput last). Two
+production-shaped servers from the same image — booted through
+`bin/run-all-in-one.sh` (tune-malloc, embedded worker, granian), each with
+its own postgres database and its own valkey instance — take byte-identical
+workloads in interleaved A/B/A/B segments. A segment only ends once the
+embedded worker has drained (detected via `/metrics` CPU going idle), so
+enqueue *and* processing cost land in the segment that caused them.
+
+Two deliberate departures from production shape, for measurement
+determinism: the 1s uptime-dispatch schedule and the hourly jittered
+gc+malloc_trim pass are disabled (both otherwise land in random segments'
+CPU/RSS windows).
+
+```bash
+# Full run (all workloads, 4 interleaved segment pairs)
+bash benchmarks/run_ingest_ab.sh
+
+# Quick pass
+bash benchmarks/run_ingest_ab.sh --segments 2 -n 500 --workloads prodmix
+
+# Tear down
+docker compose -f benchmarks/compose.ingest_ab.yml down -v
+```
+
+Workloads: `prodmix` (55% error events / 20% transactions / 10% logs / 15%
+ignored items; log-normal sizes, median 25 KB, 2 MiB tail, gzip like real
+SDKs), `junk` (fast-reject flood), `burst` (idle → burst → idle RSS
+settling), `oversized` (6 MiB → 413), `header_dsn` (DSN only in the
+envelope header — known divergence: Rust 200, Python 403). They run in that
+order so the two workloads with by-design asymmetric RSS history come after
+the burst comparison.
+
+The stack stays up between runs for fast iteration (a per-run nonce keeps
+rerun event ids out of the server's dedupe window). For a *recorded*
+baseline, start from a fresh stack (`down -v` first) so accumulated DB
+state — the Rust arm ingests header_dsn events the Python arm rejects —
+doesn't skew the arms.
+
+Results land in `benchmarks/ingest_ab_results/<stamp>.json` (written
+incrementally after every segment, untracked); recorded baselines live in
+[INGEST_AB_FINDINGS.md](./INGEST_AB_FINDINGS.md).
+
 ## Memory Growth Benchmark (`bench_ingest_memory.py`)
 
 Measures web server memory growth under sustained load with artificial database

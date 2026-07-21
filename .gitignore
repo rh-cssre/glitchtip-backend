@@ -235,3 +235,4 @@ __marimo__/
 STORAGE_V2.md
 bin/sentry-cli
 .ai_memory.md
+benchmarks/ingest_ab_results/

@@ -29,6 +29,30 @@ def get_stripe_link(stripe_id: str) -> str:
     return f"{base}{path}{stripe_id}"
 
 
+def is_metered_price(price) -> bool:
+    """True if a Stripe Price schema object is usage-based (meter-backed)."""
+    recurring = getattr(price, "recurring", None) or {}
+    return recurring.get("usage_type") == "metered" or bool(recurring.get("meter"))
+
+
+def select_subscription_items(items):
+    """Split a subscription's items into (base_item, metered_item).
+
+    The base licensed plan drives quota and billing-cycle dates; the metered
+    item (if present) is the overage price. Stripe doesn't guarantee item order,
+    so callers must not assume ``items.data[0]`` is the base plan.
+    """
+    base = metered = None
+    for item in items.data:
+        if is_metered_price(item.price):
+            metered = metered or item
+        else:
+            base = base or item
+    if base is None and items.data:
+        base = items.data[0]
+    return base, metered
+
+
 def unix_to_datetime(timestamp: int) -> datetime:
     """Convert a POSIX timestamp from Stripe into an aware UTC datetime.
 

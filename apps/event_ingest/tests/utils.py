@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import json
 import time
@@ -5,6 +6,7 @@ import uuid
 from typing import Union
 
 from asgiref.sync import async_to_sync
+from django.db.utils import IntegrityError
 from django.test import TransactionTestCase
 from django.utils import timezone
 from django_async_backend.db import async_connections
@@ -18,6 +20,93 @@ from ..schema import (
     IssueEventSchema,
     IssueTaskMessage,
 )
+
+# A globally-routable client address (TEST-NETs are non-global and would be
+# discarded by the ipware port, exactly like the Python path).
+CLIENT_IP = "93.184.216.34"
+
+
+class AsgiIngestTestMixin:
+    """Drive envelope requests at the ASGI seam — ``IngestDispatcher`` — the
+    exact layer production traffic enters, for BOTH ingest arms: with
+    ``GLITCHTIP_RUST_INGEST`` off the dispatcher routes to the
+    minimal-middleware Django ingest handler (the Python view); with it on,
+    matching envelope POSTs are served by the Rust handler."""
+
+    def _dispatcher(self):
+        from django.core.asgi import get_asgi_application
+
+        from glitchtip.ingest_asgi import IngestDispatcher
+
+        return IngestDispatcher(get_asgi_application())
+
+    async def _post(
+        self,
+        body: bytes,
+        extra_headers: list | None = None,
+        path: str | None = None,
+        method: str = "POST",
+        query: str | None = None,
+    ):
+        scope = {
+            "type": "http",
+            "method": method,
+            "path": path or f"/api/{self.project.id}/envelope/",
+            "query_string": (
+                query
+                if query is not None
+                else f"sentry_key={self.projectkey.public_key}"
+            ).encode(),
+            "headers": [
+                (b"content-type", b"application/x-sentry-envelope"),
+                # Real servers (granian) always pass Content-Length through;
+                # Django's DATA_UPLOAD_MAX_MEMORY_SIZE check reads it.
+                (b"content-length", str(len(body)).encode()),
+            ]
+            + (extra_headers or []),
+            "client": (CLIENT_IP, 4242),
+        }
+        messages = []
+        body_sent = False
+
+        async def receive():
+            nonlocal body_sent
+            if not body_sent:
+                body_sent = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            # Idle like a healthy keep-alive connection; a disconnect
+            # listener parked here is cancelled when the response ends.
+            await asyncio.Event().wait()
+
+        async def send(message):
+            messages.append(message)
+
+        await self._dispatcher()(scope, receive, send)
+        status = next(
+            m["status"] for m in messages if m["type"] == "http.response.start"
+        )
+        headers = {
+            name.decode(): value.decode()
+            for m in messages
+            if m["type"] == "http.response.start"
+            for name, value in m.get("headers", [])
+        }
+        response_body = b"".join(
+            m.get("body", b"") for m in messages if m["type"] == "http.response.body"
+        )
+        return status, headers, response_body
+
+
+def fake_integrity_error(sqlstate: str) -> IntegrityError:
+    """An IntegrityError chained the way Django raises it: ``__cause__``
+    is the driver exception carrying the psycopg-shaped ``sqlstate``
+    (gt_rust's dbapi mirrors psycopg's diagnostics). For faking copy_rows
+    failures."""
+    cause = Exception(f"[{sqlstate}] integrity constraint violation")
+    cause.sqlstate = sqlstate
+    error = IntegrityError("integrity constraint violation")
+    error.__cause__ = cause
+    return error
 
 
 def list_to_envelope(data: list[dict]) -> str:

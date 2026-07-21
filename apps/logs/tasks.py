@@ -26,14 +26,19 @@ async def ingest_logs(tasks: list):
 
     messages = []
     for task_data in tasks:
-        args = task_data["args"][0]
-        messages.append(
-            LogTaskMessage(
-                project_id=args["project_id"],
-                organization_id=args["organization_id"],
-                received=datetime.fromisoformat(args["received"]),
-                logs=args["logs"],
+        # A single malformed message must not fail the other messages
+        # batched with it.
+        try:
+            args = task_data["args"][0]
+            messages.append(
+                LogTaskMessage(
+                    project_id=args["project_id"],
+                    organization_id=args["organization_id"],
+                    received=datetime.fromisoformat(args["received"]),
+                    logs=args["logs"],
+                )
             )
-        )
+        except (KeyError, IndexError, TypeError, ValueError) as e:
+            logger.warning("Dropped invalid log ingest message", exc_info=e)
 
     await process_log_events(messages)

@@ -129,7 +129,6 @@ class EventTemplate(LaxIngestSchema):
     post_context: list[str] | None = None
 
 
-
 def _normalize_native_debug_id(v):
     if v is None or isinstance(v, uuid.UUID):
         return v

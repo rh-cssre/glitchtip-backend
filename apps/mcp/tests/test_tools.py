@@ -29,7 +29,8 @@ from apps.mcp.serializers import (
     serialize_project,
 )
 from apps.mcp.server import _check_scopes, _parse_datetime
-from glitchtip.test_utils.issue import make_issue
+from glitchtip.partition_manager import UUID7Helper
+from glitchtip.test_utils.issue import amake_issue, make_issue
 
 
 class ValidateTokenTest(TestCase):
@@ -202,6 +203,81 @@ class DataLayerTest(TestCase):
         self.assertEqual(result.id, event.id)
         # Verify issue is prefetched
         self.assertEqual(result.issue.id, issue.id)
+
+    async def test_get_event_prefetches_issue_index_for_async_serialization(self):
+        """Event lookups can serialize the parent issue without a sync ORM query."""
+        issue = await amake_issue(project=self.project)
+        event = await baker.amake(
+            "issue_events.IssueEvent",
+            issue=issue,
+            organization=self.organization,
+            data={},
+            tags={},
+        )
+
+        result = await get_event(self.user.id, str(event.id))
+
+        self.assertIsNotNone(result)
+        self.assertEqual(serialize_issue(result.issue)["id"], str(issue.id))
+
+    async def test_get_event_prefetches_resolved_release_for_async_serialization(self):
+        """Resolved event issues serialize without a lazy release query."""
+        release = await baker.amake("releases.Release", organization=self.organization)
+        issue = await amake_issue(
+            project=self.project,
+            status=EventStatus.RESOLVED,
+            resolved_in_release=release,
+        )
+        event = await baker.amake(
+            "issue_events.IssueEvent",
+            issue=issue,
+            organization=self.organization,
+            data={},
+            tags={},
+        )
+
+        result = await get_event(self.user.id, str(event.id))
+
+        self.assertIsNotNone(result)
+        self.assertEqual(
+            serialize_issue(result.issue)["statusDetails"]["inRelease"], release.version
+        )
+
+    async def test_get_event_cold_fallback_prefetches_issue_for_async_serialization(
+        self,
+    ):
+        """Cold events attach an issue that can be serialized asynchronously."""
+        release = await baker.amake("releases.Release", organization=self.organization)
+        issue = await amake_issue(
+            project=self.project,
+            status=EventStatus.RESOLVED,
+            resolved_in_release=release,
+        )
+        event_uuid = UUID7Helper._uuid7_for_timestamp(timezone.now())
+        cold_event = await baker.aprepare(
+            "issue_events.IssueEvent",
+            id=event_uuid,
+            issue=issue,
+            organization=self.organization,
+            data={},
+            tags={},
+        )
+
+        with (
+            patch(
+                "apps.issue_events.cold_storage.is_duckdb_available", return_value=True
+            ),
+            patch(
+                "apps.issue_events.cold_storage.get_event_from_cold",
+                return_value=cold_event,
+            ),
+        ):
+            result = await get_event(self.user.id, str(event_uuid))
+
+        self.assertIsNotNone(result)
+        self.assertEqual(
+            serialize_issue(result.issue)["statusDetails"]["inRelease"], release.version
+        )
 
     def test_get_event_by_event_id(self):
         """Look up event by client-provided Sentry SDK event_id."""

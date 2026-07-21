@@ -1,6 +1,43 @@
-# Unreleased
+# 6.2.2
 
+- Change: The Rust PostgreSQL driver (`gt_rust.django_backend`) is now the only database engine (the internal `DATABASE_ENGINE` opt-in flag is removed). psycopg remains installed as a library (SQL composition, JSON parameter wrappers) but no database I/O flows through it. Operator-facing difference from the psycopg engine: `DATABASE_CONN_MAX_AGE > 0` no longer yields unpooled persistent connections — the Rust driver always pools internally. (Empty database HOST means the local unix socket, matching psycopg, as of glitchtip-rust 0.6.1.)
+- Feat: django-vtasks 3.0 — `run_after` delayed tasks are honored, orphan rescue is safe with multiple workers per host (liveness markers), unique-task keys are stable across processes, and the embedded worker stops on SIGTERM even when the server's request drain hangs.
+- Fix: granian 2.7.9 — fixes an upstream memory leak in async application calls (2.7.7) and a WSGI threadpool starvation bug (2.7.9).
+- Fix: Default `GRANIAN_WORKERS_KILL_TIMEOUT` to 60s (still overridable) so a worker that ignores SIGTERM is force-killed instead of staying resident at full RSS alongside its replacement — which, with the RSS recycler set to 50% of the cgroup limit, could park an all-in-one container at ~2x the threshold until the cgroup OOM killer intervened.
+- Fix: Don't wedge ASGI lifespan shutdown when a mounted sub-app's lifespan task crashes or exits early; a broken sub-app now degrades to a reported startup failure instead of a worker that never exits (which would keep two workers pinned at ~2x RSS).
+- Fix: Preload the parent issue's search-index and resolved-release relations when serializing events for MCP, so `get_event` doesn't trigger a lazy synchronous ORM query on the async path.
+- Deps: glitchtip-rust 0.6.1 (DB-API `Binary` constructor, libpq-parity empty-host default, warnings for dropped connection OPTIONS), django-vtasks 3.0.0, granian 2.7.9.
+
+# 6.2.1
+
+- Feat: Optional server-side PII scrubbing at ingest — a last-line-of-defense scrubber that redacts secrets and sensitive data from events and logs before they are enqueued or persisted, for operators who cannot rely on every client SDK being configured to scrub.
+- Feat: Serve the whole envelope ingest endpoint (auth through enqueue) in Rust behind the `GLITCHTIP_RUST_INGEST` flag.
+- Feat: Opt-in Rust PostgreSQL driver via the `DATABASE_ENGINE` env var (default unchanged); set `DATABASE_ENGINE=gt_rust.django_backend` to run the ORM on gt_rust's driver, sharing one Tokio pool for sync and async.
+- Feat: Run the Django cache and django-vtasks through the gt_rust Valkey driver so cache, tasks, Postgres, and ingest share a single Tokio runtime and one multiplexed Valkey connection.
+- Feat: Opt-in metered overage billing on top of subscription plans, with a configurable overage cap and webhook surfacing of async meter-ingestion failures.
+- Feat: Switch to django-allauth-async for native-asyncio authentication flows.
+- Feat: Add async organization ownership transfer (`achange_owner`) and use it in the set-owner endpoint.
+- Feat: Periodically clean up orphaned FileBlobs.
+- Feat: Support Mattermost webhook alert recipients.
+- Feat: Accept Breakpad-format debug IDs in NativeDebugImage.
 - Perf: Parse each JavaScript sourcemap once per event instead of once per stack frame, eliminating worker CPU spikes when ingesting events with large sourcemaps.
+- Perf: Stream event and log batches to Postgres with COPY on both database drivers, batch-encoding rows via the driver's writer.
+- Perf: Recycle pooled database connections with a configurable `max_lifetime` to bound per-connection memory growth.
+- Perf: Periodically return freed memory to the OS (malloc_trim) in every server process.
+- Perf: Fan out alert notification recipients concurrently.
+- Perf: Reduce Sentry SDK memory overhead under ASGI and Python 3.14, and drop deprecated `.dict()` and per-request `asyncio.iscoroutinefunction` churn on hot paths.
+- Perf: Keep the MCP SDK off the default web boot path and keep the unknown-user login dummy hash off the event loop.
+- Fix: Stop a duplicate `timeout` kwarg from breaking social login.
+- Fix: Drop poison messages from batched ingest tasks instead of failing the whole batch.
+- Fix: Concatenate multi-chunk blobs in order during file assembly.
+- Fix: Strip NUL bytes from the transaction group key before lookup.
+- Fix: Bucket transaction usage by received (ingestion) time rather than client-supplied time.
+- Fix: Skip hash-child partition creation when the existing modulus differs, and bail on non-hash children.
+- Fix: Recycle stale database connections for the mounted MCP sub-app.
+- Fix: Cap the aiohttp default request timeout at 30s (Stripe at 10s).
+- Fix: Harden FileBlob cleanup deletes and cap them at 10k per run.
+- Security: Warn MCP agents that returned event data is untrusted, DSN-submitted input.
+- Deps: symbolic 13.9.0, glitchtip-rust 0.5.0, django-allauth-async 65.16.1.7, django-organizations 2.7, django-vcache 3.0, model-bakery-async 1.23.
 
 # 6.2.0
 

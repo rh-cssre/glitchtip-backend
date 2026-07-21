@@ -488,3 +488,25 @@ class OrganizationUsersTestCase(TestCase):
         res = await self.async_client.post(url)
         self.assertTrue(res.json()["isOwner"], "Owner role may set org member as owner")
         self.assertEqual(await self.organization.owners.acount(), 1)
+
+    async def test_organization_members_set_owner_as_designated_owner(self):
+        """
+        The designated OrganizationOwner may transfer ownership even without
+        the owner role; set_owner moves the owner record, not the role.
+        """
+        other_user = await baker.amake("users.user")
+        other_org_user = await self.organization.aadd_user(other_user)
+        await self.organization.achange_owner(other_org_user)
+        other_org_user.role = OrganizationUserRole.MANAGER
+        await other_org_user.asave()
+        await self.async_client.aforce_login(other_user)
+
+        url = (
+            self.get_org_member_detail_url(self.organization.slug, self.org_user.pk)
+            + "set_owner/"
+        )
+        res = await self.async_client.post(url)
+        self.assertTrue(
+            res.json()["isOwner"],
+            "Designated owner may transfer ownership without the owner role",
+        )

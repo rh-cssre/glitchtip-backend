@@ -1,10 +1,12 @@
 import logging
 from urllib.parse import urlencode
 
+import aiohttp
 from allauth.socialaccount.models import SocialApp
 from allauth.socialaccount.providers.openid_connect.views import (
     OpenIDConnectOAuth2Adapter,
 )
+from allauth_async.socialaccount.providers.openid_connect import aget_authorize_url
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.contrib.auth import aget_user
@@ -38,7 +40,6 @@ from apps.users.models import User
 from apps.users.schema import UserSchema
 from apps.wizard.api import router as wizard_router
 from glitchtip.constants import SOCIAL_ADAPTER_MAP
-from glitchtip.oidc_discovery import get_authorize_url
 
 from ..schema import CamelSchema
 from .authentication import SessionAuth, TokenAuth
@@ -162,10 +163,23 @@ async def get_settings(request: HttpRequest):
             # OIDC adapters resolve authorize_url by fetching the provider's
             # discovery document. Use the async cached helper so the public
             # /api/settings/ endpoint never blocks on a synchronous outbound
-            # request to the IdP.
-            social_app.authorize_url = await get_authorize_url(
-                social_app.settings.get("server_url", "")
-            )
+            # request to the IdP -- and degrade to None rather than failing
+            # the whole settings payload when the IdP is unreachable (the
+            # OAuth flow itself surfaces a clearer error on login attempts).
+            # provider.server_url is the normalized .well-known URL, matching
+            # what the login flow fetches (and its cache key).
+            try:
+                server_url = provider.server_url
+                social_app.authorize_url = await aget_authorize_url(server_url)
+            except (
+                TimeoutError,
+                aiohttp.ClientError,
+                ValueError,
+                KeyError,
+                TypeError,
+            ) as exc:
+                logger.warning("OIDC discovery failed for %s: %s", social_app.name, exc)
+                social_app.authorize_url = None
         elif adapter_cls:
             adapter = adapter_cls(request)
             social_app.authorize_url = await sync_to_async(

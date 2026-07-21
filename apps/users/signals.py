@@ -13,10 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 @receiver(user_logged_in)
-def add_user_to_socialapp_organization(request, user, **kwargs):
+async def add_user_to_socialapp_organization(request, user, **kwargs):
     """
     Add user to organization if organization-social app exists
     """
+    # Lazy queryset: composes into the SocialApp filter as a SQL subquery,
+    # so no standalone query runs here (async-safe either way).
     user_providers = SocialAccount.objects.filter(user=user).values_list(
         "provider", flat=True
     )
@@ -43,9 +45,9 @@ def add_user_to_socialapp_organization(request, user, **kwargs):
         )
         .all()
     )
-    for social_app in social_apps:
+    async for social_app in social_apps:
         if not social_app.organizationsocialapp.organization.matched_user:  # type: ignore
-            social_app.organizationsocialapp.organization.add_user(user)  # type: ignore
+            await social_app.organizationsocialapp.organization.aadd_user(user)  # type: ignore
             logger.info(
                 f"Added {social_app.organizationsocialapp.organization} to {user}"
             )  # type: ignore

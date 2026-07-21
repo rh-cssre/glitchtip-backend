@@ -149,7 +149,10 @@ async def get_project(request: HttpRequest) -> ProjectAuthInfo | None:
     project_id: int = request.resolver_match.captured_kwargs.get("project_id")
     try:
         sentry_key = UUID(auth_from_request(request))
-    except ValueError as err:
+    except (ValueError, TypeError) as err:
+        # ValueError: key present but not valid hex. TypeError: auth_from_request
+        # returned None (header parsed but carried no sentry_key/glitchtip_key),
+        # so UUID(None) is raised. Both mean "no usable DSN key" -> reject.
         raise ValidationError(
             [{"message": "dsn key badly formed hexadecimal UUID string"}]
         ) from err
@@ -254,7 +257,9 @@ async def get_project_by_key(request: HttpRequest) -> ProjectAuthInfo:
         )
     try:
         sentry_key = UUID(auth_from_request(request))
-    except ValueError as err:
+    except (ValueError, TypeError) as err:
+        # See get_project: TypeError guards UUID(None) when the header carried
+        # no sentry_key/glitchtip_key.
         raise AuthenticationError(
             message="dsn key badly formed hexadecimal UUID string"
         ) from err

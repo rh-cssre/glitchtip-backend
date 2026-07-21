@@ -22,9 +22,34 @@ from .constants import (
     SubscriptionStatus,
 )
 from .exceptions import StripeResourceNotFound
-from .utils import compute_cycle, unix_to_datetime
+from .utils import (
+    compute_cycle,
+    is_metered_price,
+    select_subscription_items,
+    unix_to_datetime,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _price_kwargs(price) -> dict:
+    """Map a Stripe Price (schema object) to StripePrice field values.
+
+    Shared by both sync paths. Tiered/metered prices have ``unit_amount=None``
+    (the per-unit cost lives in tiers, not on the price), so ``price`` is stored
+    as 0 and the graduated schedule in settings is the source of truth for cost.
+    """
+    meta = price.metadata or {}
+    recurring = price.recurring or {}
+    return {
+        "price": price.unit_amount / 100 if price.unit_amount is not None else 0,
+        "nickname": price.nickname or "",
+        "no_throttle": meta.get("no_throttle", "").lower() == "true",
+        "is_public": meta.get("is_public", "").lower() == "true",
+        "is_metered": is_metered_price(price),
+        "meter_id": recurring.get("meter") or "",
+        "interval": recurring.get("interval", "month"),
+    }
 
 
 def _warn_duplicate_public_prices(prices):
@@ -64,6 +89,10 @@ class StripeProduct(StripeModel):
     )
     events = models.PositiveBigIntegerField()
     is_public = models.BooleanField()
+    is_overage = models.BooleanField(
+        default=False,
+        help_text="Metered overage product (Stripe metadata product_type=overage).",
+    )
     marketing_features = models.JSONField(default=list, blank=True)
 
     def __str__(self):
@@ -74,19 +103,27 @@ class StripeProduct(StripeModel):
         stripe_ids = set()
         async for products_page in list_products():
             logger.info(f"Found {len(products_page)} products in Stripe")
+            # Hosted plans carry an `events` quota; the metered overage product
+            # (product_type=overage) has no quota but must be synced so its
+            # tiered price can be attached as a second subscription item.
             products_page = [
                 product
                 for product in products_page
-                if "events" in product.metadata
-                and product.metadata.get("product_type", "").lower() == "hosted"
+                if (
+                    "events" in product.metadata
+                    and product.metadata.get("product_type", "").lower() == "hosted"
+                )
+                or product.metadata.get("product_type", "").lower() == "overage"
             ]
             products = [
                 StripeProduct(
                     stripe_id=product.id,
                     name=product.name,
                     description=product.description if product.description else "",
-                    events=product.metadata["events"],
+                    events=int(product.metadata.get("events", 0)),
                     is_public=product.metadata.get("is_public", "").lower() == "true",
+                    is_overage=product.metadata.get("product_type", "").lower()
+                    == "overage",
                     marketing_features=[
                         f["name"] for f in product.marketing_features if f.get("name")
                     ],
@@ -96,28 +133,11 @@ class StripeProduct(StripeModel):
             prices = [
                 StripePrice(
                     stripe_id=product.default_price.id,
-                    price=product.default_price.unit_amount / 100,
-                    nickname=product.default_price.nickname or "",
                     product_id=product.id,
-                    no_throttle=product.default_price.metadata.get(
-                        "no_throttle", ""
-                    ).lower()
-                    == "true"
-                    if product.default_price.metadata
-                    else False,
-                    is_public=product.default_price.metadata.get(
-                        "is_public", ""
-                    ).lower()
-                    == "true"
-                    if product.default_price.metadata
-                    else False,
-                    interval=product.default_price.recurring.get("interval", "month")
-                    if product.default_price.recurring
-                    else "month",
+                    **_price_kwargs(product.default_price),
                 )
                 for product in products_page
                 if product.default_price
-                and product.default_price.unit_amount is not None
             ]
             product_updated = await StripeProduct.objects.abulk_create(
                 products,
@@ -127,6 +147,7 @@ class StripeProduct(StripeModel):
                     "description",
                     "events",
                     "is_public",
+                    "is_overage",
                     "marketing_features",
                 ],
                 unique_fields=["stripe_id"],
@@ -141,6 +162,8 @@ class StripeProduct(StripeModel):
                     "product_id",
                     "no_throttle",
                     "is_public",
+                    "is_metered",
+                    "meter_id",
                     "interval",
                 ],
                 unique_fields=["stripe_id"],
@@ -183,6 +206,11 @@ class StripePrice(StripeModel):
     product = models.ForeignKey(StripeProduct, on_delete=models.CASCADE)
     no_throttle = models.BooleanField(default=False)
     is_public = models.BooleanField(default=False)
+    is_metered = models.BooleanField(
+        default=False,
+        help_text="Usage-based price backed by a Stripe Billing Meter (tiered).",
+    )
+    meter_id = models.CharField(max_length=255, blank=True, default="")
     interval = models.CharField(max_length=20, default="month")
 
     def __str__(self):
@@ -200,21 +228,11 @@ class StripePrice(StripeModel):
             prices = [
                 StripePrice(
                     stripe_id=price.id,
-                    price=price.unit_amount / 100,
-                    nickname=price.nickname or "",
                     product_id=price.product,
-                    no_throttle=price.metadata.get("no_throttle", "").lower() == "true"
-                    if price.metadata
-                    else False,
-                    is_public=price.metadata.get("is_public", "").lower() == "true"
-                    if price.metadata
-                    else False,
-                    interval=price.recurring.get("interval", "month")
-                    if price.recurring
-                    else "month",
+                    **_price_kwargs(price),
                 )
                 for price in prices_page
-                if price.unit_amount is not None and price.product in known_product_ids
+                if price.product in known_product_ids
             ]
             await StripePrice.objects.abulk_create(
                 prices,
@@ -225,6 +243,8 @@ class StripePrice(StripeModel):
                     "product_id",
                     "no_throttle",
                     "is_public",
+                    "is_metered",
+                    "meter_id",
                     "interval",
                 ],
                 unique_fields=["stripe_id"],
@@ -254,6 +274,23 @@ class StripeSubscription(StripeModel):
     start_date = models.DateTimeField()
     subscription_cycle_start = models.DateTimeField(null=True, blank=True)
     subscription_cycle_end = models.DateTimeField(null=True, blank=True)
+    metered_item_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Stripe subscription item id for the metered overage price.",
+    )
+    overage_units_reported = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Cumulative billable overage events reported to the meter "
+        "this cycle. Meter events are additive, so we report deltas.",
+    )
+    overage_period_start = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Cycle anchor for overage_units_reported; counter resets when "
+        "the current cycle start moves past this.",
+    )
 
     def __str__(self):
         return f"{self.stripe_id}"
@@ -320,20 +357,24 @@ class StripeSubscription(StripeModel):
                     f"Stripe did not return subscription for {subscription.stripe_id}"
                 )
                 continue
+            base_item, metered_item = select_subscription_items(fetched_sub.items)
+            if base_item is None:
+                continue
             subscription.status = fetched_sub.status
             subscription.created = unix_to_datetime(fetched_sub.created)
             subscription.current_period_start = unix_to_datetime(
-                fetched_sub.items.data[0].current_period_start
+                base_item.current_period_start
             )
             subscription.current_period_end = unix_to_datetime(
-                fetched_sub.items.data[0].current_period_end
+                base_item.current_period_end
             )
             subscription.start_date = unix_to_datetime(fetched_sub.start_date)
             subscription.collection_method = fetched_sub.collection_method
+            subscription.metered_item_id = metered_item.id if metered_item else ""
 
             is_annual = subscription.price.interval == "year" or bool(
-                fetched_sub.items.data[0].price.recurring
-                and fetched_sub.items.data[0].price.recurring.get("interval") == "year"
+                base_item.price.recurring
+                and base_item.price.recurring.get("interval") == "year"
             )
             (
                 subscription.subscription_cycle_start,
@@ -353,6 +394,7 @@ class StripeSubscription(StripeModel):
                     "collection_method",
                     "subscription_cycle_start",
                     "subscription_cycle_end",
+                    "metered_item_id",
                 ]
             )
 
@@ -391,12 +433,13 @@ class StripeSubscription(StripeModel):
                 except (ValueError, TypeError):
                     continue  # Skip if no organization ID in metadata
 
-                items = subscription.items.data
-                if not items or not items[0].price:
+                base_item, metered_item = select_subscription_items(subscription.items)
+                if base_item is None or not base_item.price:
                     continue  # Skip
 
-                price = items[0].price
+                price = base_item.price
                 price_id = price.id
+                metered_item_id = metered_item.id if metered_item else ""
 
                 # If unseen organization id, check if it exists
                 if organization_id not in organization_ids:
@@ -421,7 +464,9 @@ class StripeSubscription(StripeModel):
                                 defaults={
                                     "product_id": price.product,
                                     "nickname": price.nickname or "",
-                                    "price": price.unit_amount / 100,
+                                    "price": price.unit_amount / 100
+                                    if price.unit_amount is not None
+                                    else 0,
                                 },
                             )
                             known_price_ids.add(price_id)
@@ -435,12 +480,8 @@ class StripeSubscription(StripeModel):
                             )
                             continue
 
-                    period_start = unix_to_datetime(
-                        subscription.items.data[0].current_period_start
-                    )
-                    period_end = unix_to_datetime(
-                        subscription.items.data[0].current_period_end
-                    )
+                    period_start = unix_to_datetime(base_item.current_period_start)
+                    period_end = unix_to_datetime(base_item.current_period_end)
                     is_annual = bool(
                         price.recurring and price.recurring.get("interval") == "year"
                     )
@@ -461,6 +502,7 @@ class StripeSubscription(StripeModel):
                             collection_method=subscription.collection_method,
                             subscription_cycle_start=cycle_start,
                             subscription_cycle_end=cycle_end,
+                            metered_item_id=metered_item_id,
                         )
                     )
 
@@ -478,6 +520,7 @@ class StripeSubscription(StripeModel):
                     "collection_method",
                     "subscription_cycle_start",
                     "subscription_cycle_end",
+                    "metered_item_id",
                 ],
                 unique_fields=["stripe_id"],
             )

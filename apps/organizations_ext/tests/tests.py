@@ -47,6 +47,26 @@ class OrganizationModelTestCase(TestCase):
         self.assertEqual(await organization.users.acount(), 2)
         self.assertEqual(await organization.owners.acount(), 1)
 
+    async def test_achange_owner(self):
+        user = await baker.amake("users.user")
+        organization = await baker.amake("organizations_ext.Organization")
+        org_user = await organization.aadd_user(user)
+
+        user2 = await baker.amake("users.user")
+        org_user2 = await organization.aadd_user(user2)
+
+        owner = await OrganizationOwner.objects.aget(organization=organization)
+        self.assertEqual(owner.organization_user_id, org_user.pk)
+
+        await organization.achange_owner(org_user2)
+
+        # The existing owner row is updated in place, not replaced
+        new_owner = await OrganizationOwner.objects.select_related(
+            "organization_user"
+        ).aget(organization=organization)
+        self.assertEqual(new_owner.pk, owner.pk)
+        self.assertEqual(new_owner.organization_user, org_user2)
+
     def test_email_missing_organization_owner_fallback(self):
         """
         When OrganizationOwner record is missing, email property should
