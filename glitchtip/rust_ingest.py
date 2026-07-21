@@ -30,9 +30,10 @@ logger = logging.getLogger(__name__)
 
 _ENVELOPE_PATH_RE = re.compile(r"^/api/(\d+)/envelope/$")
 
-# SDKs authenticate envelope POSTs via ?sentry_key=<secret> (glitchtip_key
-# also accepted). Redacted before the query string is attached to any
-# capture: a customer's DSN secret must not land in the operator's tracker.
+# SDKs authenticate envelope POSTs via ?sentry_key=<key> (glitchtip_key
+# also accepted). The key is public in Sentry's model (it ships in browser
+# bundles), but there's still no reason to copy customers' keys into the
+# operator's tracker — the project id in the URL identifies the project.
 _KEY_QS_RE = re.compile(r"((?:sentry|glitchtip)_key=)[^&]*")
 
 # Project ids are BIGINT; the Rust IngestSession takes an i64. A larger id
