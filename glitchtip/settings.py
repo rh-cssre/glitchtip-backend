@@ -1293,6 +1293,15 @@ elif TESTING:
     BILLING_ENABLED = True
     logging.disable(logging.WARNING)
 
+# Refuse social-auth outbound HTTP (OIDC discovery, token/userinfo calls) to
+# private/internal addresses. Organization-managed OIDC providers make these
+# URLs partially user-controlled, so this closes the SSRF vector. Defaults on
+# when billing is enabled, where org admins are not instance admins; self-host
+# installs keep private IdPs (e.g. an intranet Keycloak) working by default.
+SOCIAL_AUTH_BLOCK_PRIVATE_IPS = env.bool(
+    "SOCIAL_AUTH_BLOCK_PRIVATE_IPS", default=BILLING_ENABLED
+)
+
 
 if TESTING:
     TEST_RUNNER = "glitchtip.test_runner.TimedTestRunner"

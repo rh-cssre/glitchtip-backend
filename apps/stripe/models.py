@@ -93,6 +93,11 @@ class StripeProduct(StripeModel):
         default=False,
         help_text="Metered overage product (Stripe metadata product_type=overage).",
     )
+    allow_sso = models.BooleanField(
+        default=False,
+        help_text="Plan includes custom per-organization SSO "
+        "(Stripe metadata sso=true).",
+    )
     marketing_features = models.JSONField(default=list, blank=True)
 
     def __str__(self):
@@ -124,6 +129,7 @@ class StripeProduct(StripeModel):
                     is_public=product.metadata.get("is_public", "").lower() == "true",
                     is_overage=product.metadata.get("product_type", "").lower()
                     == "overage",
+                    allow_sso=product.metadata.get("sso", "").lower() == "true",
                     marketing_features=[
                         f["name"] for f in product.marketing_features if f.get("name")
                     ],
@@ -148,6 +154,7 @@ class StripeProduct(StripeModel):
                     "events",
                     "is_public",
                     "is_overage",
+                    "allow_sso",
                     "marketing_features",
                 ],
                 unique_fields=["stripe_id"],

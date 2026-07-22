@@ -1,3 +1,6 @@
+import ipaddress
+import socket
+
 import aiohttp
 from allauth.account.internal.flows.login import record_authentication
 from allauth.socialaccount import app_settings as socialaccount_app_settings
@@ -9,18 +12,54 @@ from django.conf import settings
 from apps.users.utils import (
     ais_social_apps_user_registration_open,
     ais_user_registration_open,
+    aorg_social_app_exists,
     is_social_apps_user_registration_open,
     is_user_registration_open,
+    org_social_app_exists,
 )
 from glitchtip.email import GlitchTipEmail
 
 
-class CustomSocialAccountAdapter(AsyncDefaultSocialAccountAdapter):
-    def is_open_for_signup(self, request, _sociallogin):
-        return is_social_apps_user_registration_open()
+class PublicOnlyResolver(aiohttp.abc.AbstractResolver):
+    """
+    DNS resolver that refuses to yield private/internal addresses.
 
-    async def ais_open_for_signup(self, request, _sociallogin):
-        return await ais_social_apps_user_registration_open()
+    Organization-managed OIDC providers make social-auth URLs partially
+    user-controlled. Filtering at resolution time (rather than validating the
+    URL string) is what also defeats DNS tricks such as rebinding a public
+    hostname to 169.254.169.254.
+    """
+
+    def __init__(self):
+        self._resolver = aiohttp.DefaultResolver()
+
+    async def resolve(self, host, port=0, family=socket.AF_INET):
+        infos = await self._resolver.resolve(host, port, family)
+        for info in infos:
+            if not ipaddress.ip_address(info["host"]).is_global:
+                raise aiohttp.ClientConnectionError(
+                    f"Refusing to connect to non-public address for {host}"
+                )
+        return infos
+
+    async def close(self):
+        await self._resolver.close()
+
+
+class CustomSocialAccountAdapter(AsyncDefaultSocialAccountAdapter):
+    # An organization-linked social app is an implicit invitation: proving
+    # identity at the organization's IdP is what grants membership (see
+    # apps.users.signals.add_user_to_socialapp_organization), so account
+    # creation stays possible even when open social signup is disabled.
+    def is_open_for_signup(self, request, sociallogin):
+        return is_social_apps_user_registration_open() or org_social_app_exists(
+            sociallogin.account.provider
+        )
+
+    async def ais_open_for_signup(self, request, sociallogin):
+        return await ais_social_apps_user_registration_open() or (
+            await aorg_social_app_exists(sociallogin.account.provider)
+        )
 
     def open_http_session(self):
         # Match the outbound-HTTP behavior the sync stack got from `requests`
@@ -29,14 +68,15 @@ class CustomSocialAccountAdapter(AsyncDefaultSocialAccountAdapter):
         # calls override it with allauth's own REQUESTS_TIMEOUT, the same bound
         # the sync `requests` path used. Spread the shared config first so this
         # timeout wins the key rather than colliding with it.
-        return aiohttp.ClientSession(
-            **{
-                **settings.AIOHTTP_CONFIG,
-                "timeout": aiohttp.ClientTimeout(
-                    total=socialaccount_app_settings.REQUESTS_TIMEOUT
-                ),
-            },
-        )
+        kwargs = {
+            **settings.AIOHTTP_CONFIG,
+            "timeout": aiohttp.ClientTimeout(
+                total=socialaccount_app_settings.REQUESTS_TIMEOUT
+            ),
+        }
+        if settings.SOCIAL_AUTH_BLOCK_PRIVATE_IPS:
+            kwargs["connector"] = aiohttp.TCPConnector(resolver=PublicOnlyResolver())
+        return aiohttp.ClientSession(**kwargs)
 
 
 class CustomDefaultAccountAdapter(AsyncDefaultAccountAdapter):
