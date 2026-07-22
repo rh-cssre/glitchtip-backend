@@ -36,6 +36,12 @@ router = Router()
 
 MAX_SOCIAL_APPS_PER_ORGANIZATION = 10
 
+# Preconfigured brands: identity providers that speak OIDC and have a fixed,
+# well-known issuer, so org managers only supply a client id and secret.
+PRECONFIGURED_SERVER_URLS = {
+    "google": "https://accounts.google.com",
+}
+
 """
 GET /api/0/organizations/{organization_slug}/social-apps/
 POST /api/0/organizations/{organization_slug}/social-apps/
@@ -139,14 +145,21 @@ async def create_organization_social_app(
         >= MAX_SOCIAL_APPS_PER_ORGANIZATION
     ):
         raise HttpError(400, "Maximum number of SSO providers reached")
-    server_url = validate_server_url(payload.server_url)
+    app_settings = {}
+    if preconfigured_url := PRECONFIGURED_SERVER_URLS.get(payload.provider):
+        app_settings["server_url"] = preconfigured_url
+        app_settings["brand"] = payload.provider
+    elif payload.server_url:
+        app_settings["server_url"] = validate_server_url(payload.server_url)
+    else:
+        raise HttpError(400, "Server URL is required")
     social_app = await SocialApp.objects.acreate(
         provider="openid_connect",
         provider_id=await generate_provider_id(organization),
         name=payload.name,
         client_id=payload.client_id,
         secret=payload.client_secret,
-        settings={"server_url": server_url},
+        settings=app_settings,
     )
     await OrganizationSocialApp.objects.acreate(
         organization=organization,
@@ -178,10 +191,15 @@ async def update_organization_social_app(
         raise HttpError(400, "Only OpenID Connect apps can be edited with this API")
     social_app.name = payload.name
     social_app.client_id = payload.client_id
-    social_app.settings = {
-        **social_app.settings,
-        "server_url": validate_server_url(payload.server_url),
-    }
+    if (social_app.settings or {}).get("brand") in PRECONFIGURED_SERVER_URLS:
+        pass  # The issuer of a preconfigured brand is fixed
+    elif payload.server_url:
+        social_app.settings = {
+            **(social_app.settings or {}),
+            "server_url": validate_server_url(payload.server_url),
+        }
+    else:
+        raise HttpError(400, "Server URL is required")
     if payload.client_secret:
         social_app.secret = payload.client_secret
     await social_app.asave()

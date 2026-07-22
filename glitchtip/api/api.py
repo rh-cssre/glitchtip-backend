@@ -130,6 +130,10 @@ def request_too_big(request: HttpRequest, exc: RequestDataTooBig):
 class SocialAppSchema(ModelSchema):
     scopes: list[str]
     authorize_url: str | None
+    brand: str
+    """Identity provider brand for display (e.g. picking a logo). Unlike
+    `provider`, which is overridden with provider_id for multi-instance
+    providers, this always names the underlying identity provider."""
 
     class Meta:
         model = SocialApp
@@ -190,6 +194,7 @@ async def _serialize_social_app(request: HttpRequest, social_app: SocialApp):
     else:
         social_app.authorize_url = None
 
+    social_app.brand = (social_app.settings or {}).get("brand") or social_app.provider
     social_app.provider = social_app.provider_id or social_app.provider
     return social_app
 

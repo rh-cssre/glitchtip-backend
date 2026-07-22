@@ -132,11 +132,20 @@ class OrganizationUserInviteSchema(OrganizationUserSchema):
 
 
 class OrganizationSocialAppIn(CamelSchema):
-    """Create an organization-managed OpenID Connect social app."""
+    """Create an organization-managed social app.
+
+    Every choice runs on the OpenID Connect machinery — each app gets its own
+    provider_id-scoped callback URL, which is what makes several apps of the
+    same brand (one per organization) coexist. Non-OIDC providers share one
+    callback URL per provider and cannot be disambiguated per organization.
+    """
 
     name: str = Field(min_length=1, max_length=40)
-    server_url: str = Field(max_length=500)
-    """OIDC issuer or discovery document URL."""
+    provider: Literal["openid_connect", "google"] = "openid_connect"
+    """"google" preconfigures the issuer; "openid_connect" is bring-your-own."""
+    server_url: str | None = Field(default=None, max_length=500)
+    """OIDC issuer or discovery document URL. Required for provider
+    openid_connect; ignored for preconfigured providers."""
     client_id: str = Field(min_length=1, max_length=191)
     client_secret: str = Field(min_length=1, max_length=191)
     is_public: bool = False
@@ -151,6 +160,9 @@ class OrganizationSocialAppUpdateIn(OrganizationSocialAppIn):
 
 class OrganizationSocialAppSchema(CamelSchema, ModelSchema):
     server_url: str | None
+    brand: str
+    """Identity provider brand for display (e.g. "google"); falls back to the
+    allauth provider name."""
     is_public: bool
     callback_url: str | None
     """Redirect URI to register with the identity provider."""
@@ -163,7 +175,11 @@ class OrganizationSocialAppSchema(CamelSchema, ModelSchema):
 
     @staticmethod
     def resolve_server_url(obj):
-        return obj.settings.get("server_url")
+        return (obj.settings or {}).get("server_url")
+
+    @staticmethod
+    def resolve_brand(obj):
+        return (obj.settings or {}).get("brand") or obj.provider
 
     @staticmethod
     def resolve_is_public(obj):

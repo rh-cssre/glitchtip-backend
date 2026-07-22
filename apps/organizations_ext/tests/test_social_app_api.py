@@ -75,6 +75,63 @@ class OrganizationSocialAppAPITestCase(TestCase):
             ).aexists()
         )
 
+    async def test_create_google(self):
+        """Google preset: no server URL needed, OIDC under the hood."""
+        await make_sso_subscription(self.organization)
+        payload = {
+            "name": "Google",
+            "provider": "google",
+            "clientID": "gcp-client",
+            "clientSecret": "gcp-secret",
+        }
+        res = await self.async_client.post(self.list_url, payload, "application/json")
+        self.assertEqual(res.status_code, 201)
+        data = res.json()
+        # Runs on the OIDC machinery so each app has its own callback URL
+        self.assertEqual(data["provider"], "openid_connect")
+        self.assertEqual(data["brand"], "google")
+        self.assertEqual(data["serverUrl"], "https://accounts.google.com")
+        self.assertIn(data["providerID"], data["callbackUrl"])
+
+    async def test_create_custom_requires_server_url(self):
+        await make_sso_subscription(self.organization)
+        res = await self.async_client.post(
+            self.list_url,
+            {k: v for k, v in VALID_PAYLOAD.items() if k != "serverUrl"},
+            "application/json",
+        )
+        self.assertEqual(res.status_code, 400)
+
+    async def test_update_google_keeps_issuer(self):
+        await make_sso_subscription(self.organization)
+        res = await self.async_client.post(
+            self.list_url,
+            {
+                "name": "Google",
+                "provider": "google",
+                "clientID": "gcp-client",
+                "clientSecret": "gcp-secret",
+            },
+            "application/json",
+        )
+        app_id = res.json()["id"]
+        url = reverse(
+            "api:update_organization_social_app",
+            args=[self.organization.slug, app_id],
+        )
+        res = await self.async_client.put(
+            url,
+            {
+                "name": "Google",
+                "clientID": "new-client",
+                "serverUrl": "https://evil.example.com",
+            },
+            "application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["serverUrl"], "https://accounts.google.com")
+        self.assertEqual(res.json()["clientID"], "new-client")
+
     async def test_create_requires_sso_plan(self):
         res = await self.async_client.post(
             self.list_url, VALID_PAYLOAD, "application/json"
