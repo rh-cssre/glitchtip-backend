@@ -25,9 +25,10 @@ class PublicOnlyResolver(aiohttp.abc.AbstractResolver):
     DNS resolver that refuses to yield private/internal addresses.
 
     Organization-managed OIDC providers make social-auth URLs partially
-    user-controlled. Filtering at resolution time (rather than validating the
-    URL string) is what also defeats DNS tricks such as rebinding a public
-    hostname to 169.254.169.254.
+    user-controlled — not just the issuer an org manager types, but every
+    endpoint listed in the discovery document it serves. Filtering at
+    resolution time (rather than validating URL strings) is what also defeats
+    DNS tricks such as rebinding a public hostname to 169.254.169.254.
     """
 
     def __init__(self):
@@ -44,6 +45,36 @@ class PublicOnlyResolver(aiohttp.abc.AbstractResolver):
 
     async def close(self):
         await self._resolver.close()
+
+
+class PublicOnlyConnector(aiohttp.TCPConnector):
+    """
+    TCPConnector that refuses private/internal destinations.
+
+    The resolver alone is not enough: TCPConnector._resolve_host short-circuits
+    IP-literal hosts without ever consulting the resolver, so a discovery
+    document (or redirect) pointing at https://169.254.169.254/ would connect.
+    Literal IPs are checked here; hostnames still resolve through
+    PublicOnlyResolver, which validates every resolved address.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(resolver=PublicOnlyResolver(), **kwargs)
+        # TCPConnector treats a passed-in resolver as externally owned and
+        # never closes it; this one is ours, so close it with the connector.
+        self._resolver_owner = True
+
+    async def _resolve_host(self, host, port, traces=None):
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            pass  # Hostname: PublicOnlyResolver vets the resolved addresses
+        else:
+            if not ip.is_global:
+                raise aiohttp.ClientConnectionError(
+                    f"Refusing to connect to non-public address {host}"
+                )
+        return await super()._resolve_host(host, port, traces)
 
 
 class CustomSocialAccountAdapter(AsyncDefaultSocialAccountAdapter):
@@ -75,7 +106,7 @@ class CustomSocialAccountAdapter(AsyncDefaultSocialAccountAdapter):
             ),
         }
         if settings.SOCIAL_AUTH_BLOCK_PRIVATE_IPS:
-            kwargs["connector"] = aiohttp.TCPConnector(resolver=PublicOnlyResolver())
+            kwargs["connector"] = PublicOnlyConnector()
         return aiohttp.ClientSession(**kwargs)
 
 

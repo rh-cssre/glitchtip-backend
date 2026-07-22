@@ -196,12 +196,12 @@ class OrganizationSocialAppSchema(CamelSchema, ModelSchema):
                 path = reverse(f"{obj.provider}_callback")
         except NoReverseMatch:
             return None
-        return settings.GLITCHTIP_URL.geturl() + path
+        return settings.GLITCHTIP_URL.geturl().rstrip("/") + path
 
     @staticmethod
     def resolve_login_url(obj):
         return (
-            settings.GLITCHTIP_URL.geturl()
+            settings.GLITCHTIP_URL.geturl().rstrip("/")
             + "/login/"
             + obj.organizationsocialapp.organization.slug
         )

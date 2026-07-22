@@ -1,5 +1,8 @@
+import hashlib
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
+import aiohttp
 from allauth.socialaccount.models import SocialApp
 from allauth_async.socialaccount.providers.openid_connect import (
     _openid_config_cache_key,
@@ -15,7 +18,11 @@ from apps.organizations_ext.models import OrganizationSocialApp
 from apps.organizations_ext.social_app_api import validate_server_url
 from apps.stripe.constants import SubscriptionStatus
 from apps.users.utils import aorg_social_app_exists
-from glitchtip.adapters import CustomSocialAccountAdapter
+from glitchtip.adapters import (
+    CustomSocialAccountAdapter,
+    PublicOnlyConnector,
+    PublicOnlyResolver,
+)
 
 VALID_PAYLOAD = {
     "name": "Corp Okta",
@@ -149,8 +156,9 @@ class OrganizationSocialAppAPITestCase(TestCase):
         )
         self.assertEqual(res.status_code, 403)
 
-    @override_settings(BILLING_ENABLED=False)
+    @override_settings(BILLING_ENABLED=False, ENABLE_ORGANIZATION_CREATION=False)
     async def test_create_self_hosted(self):
+        """Single-tenant self-host: ungated, and the public toggle works."""
         res = await self.async_client.post(
             self.list_url, {**VALID_PAYLOAD, "isPublic": True}, "application/json"
         )
@@ -164,6 +172,44 @@ class OrganizationSocialAppAPITestCase(TestCase):
             self.list_url, VALID_PAYLOAD, "application/json"
         )
         self.assertEqual(res.status_code, 403)
+
+    async def test_create_as_manager_role(self):
+        """The permission floor is manager, not owner."""
+        await make_sso_subscription(self.organization)
+        manager = await baker.amake("users.user")
+        await self.organization.aadd_user(manager, role=OrganizationUserRole.MANAGER)
+        await self.async_client.aforce_login(manager)
+        res = await self.async_client.post(
+            self.list_url, VALID_PAYLOAD, "application/json"
+        )
+        self.assertEqual(res.status_code, 201)
+
+    async def test_update_preserves_admin_set_is_public(self):
+        """On billing installs the toggle isn't offered, so a PUT must not
+        clobber an instance admin's Django-admin is_public override."""
+        await make_sso_subscription(self.organization)
+        res = await self.async_client.post(
+            self.list_url, VALID_PAYLOAD, "application/json"
+        )
+        app_id = res.json()["id"]
+        await OrganizationSocialApp.objects.aupdate(is_public=True)
+        url = reverse(
+            "api:update_organization_social_app",
+            args=[self.organization.slug, app_id],
+        )
+        res = await self.async_client.put(url, VALID_PAYLOAD, "application/json")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.json()["isPublic"])
+
+    @override_settings(BILLING_ENABLED=False, ENABLE_ORGANIZATION_CREATION=True)
+    async def test_is_public_denied_on_multi_tenant_self_host(self):
+        """With open org creation, untrusted managers must not be able to
+        plant sign-in buttons on the instance-wide login page."""
+        res = await self.async_client.post(
+            self.list_url, {**VALID_PAYLOAD, "isPublic": True}, "application/json"
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertFalse(res.json()["isPublic"])
 
     async def test_create_rejects_unsafe_server_urls(self):
         await make_sso_subscription(self.organization)
@@ -413,3 +459,81 @@ class ValidateServerUrlTestCase(TestCase):
     def test_rejects_link_local(self):
         with self.assertRaises(HttpError):
             validate_server_url("https://169.254.169.254/latest")
+
+
+class PublicOnlyHttpTestCase(TestCase):
+    """The connection-time SSRF guard for org-supplied IdP URLs."""
+
+    async def test_connector_rejects_private_ip_literals(self):
+        # TCPConnector never consults the resolver for IP-literal hosts, so
+        # the connector itself must reject them (e.g. a discovery document
+        # pointing its token_endpoint at cloud metadata).
+        connector = PublicOnlyConnector()
+        try:
+            for host in ["169.254.169.254", "127.0.0.1", "10.0.0.5", "::1"]:
+                with self.assertRaises(aiohttp.ClientConnectionError, msg=host):
+                    await connector._resolve_host(host, 443)
+        finally:
+            await connector.close()
+
+    async def test_resolver_rejects_private_resolution(self):
+        # A public hostname resolving (or rebinding) to a private address
+        resolver = PublicOnlyResolver()
+        resolver._resolver = AsyncMock()
+        resolver._resolver.resolve.return_value = [
+            {"hostname": "evil.example.com", "host": "169.254.169.254", "port": 443}
+        ]
+        with self.assertRaises(aiohttp.ClientConnectionError):
+            await resolver.resolve("evil.example.com", 443)
+
+    async def test_resolver_allows_public_resolution(self):
+        resolver = PublicOnlyResolver()
+        resolver._resolver = AsyncMock()
+        resolver._resolver.resolve.return_value = [
+            {"hostname": "idp.example.com", "host": "93.184.216.34", "port": 443}
+        ]
+        infos = await resolver.resolve("idp.example.com", 443)
+        self.assertEqual(infos[0]["host"], "93.184.216.34")
+
+
+class DiscoveryNegativeCacheTestCase(TestCase):
+    """Failed OIDC discovery must not be retried on every settings request."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.organization = baker.make("organizations_ext.Organization")
+        app = baker.make(
+            "socialaccount.socialapp",
+            provider="openid_connect",
+            provider_id="down-oidc",
+            settings={"server_url": "https://down-idp.example.com"},
+        )
+        baker.make(
+            "organizations_ext.OrganizationSocialApp",
+            organization=cls.organization,
+            social_app=app,
+            is_public=False,
+        )
+
+    async def test_discovery_failure_is_negative_cached(self):
+        fail_key = (
+            "oidc-discovery-fail."
+            + hashlib.md5(
+                b"https://down-idp.example.com/.well-known/openid-configuration",
+                usedforsecurity=False,
+            ).hexdigest()
+        )
+        self.addCleanup(cache.delete, fail_key)
+        url = reverse(
+            "api:get_organization_login_settings", args=[self.organization.slug]
+        )
+        with patch(
+            "glitchtip.api.api.aget_authorize_url",
+            new=AsyncMock(side_effect=aiohttp.ClientError("boom")),
+        ) as mock_get:
+            res = await self.async_client.get(url)
+            self.assertEqual(res.status_code, 200)
+            self.assertIsNone(res.json()["socialApps"][0]["authorize_url"])
+            res = await self.async_client.get(url)
+            self.assertEqual(res.status_code, 200)
+        self.assertEqual(mock_get.await_count, 1)

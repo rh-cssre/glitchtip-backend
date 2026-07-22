@@ -50,14 +50,29 @@ DELETE /api/0/organizations/{organization_slug}/social-apps/{social_app_id}/
 """
 
 
+def is_public_login_page_allowed() -> bool:
+    """
+    Whether org-managed apps may appear on the instance-wide login page.
+
+    Only on effectively single-tenant self-host installs. Anywhere untrusted
+    org managers can exist (billing, or open organization creation) a manager
+    could otherwise plant a convincingly-named sign-in button on the global
+    login page that authenticates victims at the manager's own IdP and
+    auto-joins them to the manager's organization. Instance admins can still
+    set is_public in Django admin.
+    """
+    return not settings.BILLING_ENABLED and not settings.ENABLE_ORGANIZATION_CREATION
+
+
 def validate_server_url(url: str) -> str:
     """
-    Validate an org-supplied OIDC issuer / discovery URL.
+    Sanity-check an org-supplied OIDC issuer / discovery URL.
 
-    The server fetches this URL (and endpoints listed in the document it
-    returns), so obviously-internal targets are rejected here for fast
-    feedback. Hostnames that resolve to private addresses are additionally
-    blocked at request time (SOCIAL_AUTH_BLOCK_PRIVATE_IPS).
+    Fast feedback only, NOT the SSRF control: a public hostname may still
+    resolve to a private address, and the discovery document's endpoints are
+    attacker-chosen. The real enforcement is connection-time blocking of
+    non-public destinations (SOCIAL_AUTH_BLOCK_PRIVATE_IPS, on by default
+    whenever non-admin org managers can exist).
     """
     url = url.strip()
     while url.endswith("/"):
@@ -133,7 +148,7 @@ async def list_organization_social_apps(
     response={201: OrganizationSocialAppSchema},
     by_alias=True,
 )
-@has_permission(["org:admin"])
+@has_permission(["org:write", "org:admin"])
 async def create_organization_social_app(
     request: AuthHttpRequest, organization_slug: str, payload: OrganizationSocialAppIn
 ):
@@ -164,9 +179,7 @@ async def create_organization_social_app(
     await OrganizationSocialApp.objects.acreate(
         organization=organization,
         social_app=social_app,
-        # On billing-enabled installs org apps never join the instance-wide
-        # login page; there is one login page per org instead.
-        is_public=payload.is_public and not settings.BILLING_ENABLED,
+        is_public=payload.is_public and is_public_login_page_allowed(),
     )
     return 201, await get_social_apps_queryset(organization).aget(id=social_app.id)
 
@@ -176,7 +189,7 @@ async def create_organization_social_app(
     response=OrganizationSocialAppSchema,
     by_alias=True,
 )
-@has_permission(["org:admin"])
+@has_permission(["org:write", "org:admin"])
 async def update_organization_social_app(
     request: AuthHttpRequest,
     organization_slug: str,
@@ -202,13 +215,15 @@ async def update_organization_social_app(
         raise HttpError(400, "Server URL is required")
     if payload.client_secret:
         social_app.secret = payload.client_secret
-    await social_app.asave()
+    await social_app.asave(update_fields=["name", "client_id", "secret", "settings"])
 
-    organization_social_app = social_app.organizationsocialapp
-    is_public = payload.is_public and not settings.BILLING_ENABLED
-    if organization_social_app.is_public != is_public:
-        organization_social_app.is_public = is_public
-        await organization_social_app.asave(update_fields=["is_public"])
+    # Where the toggle isn't offered, leave is_public alone so an instance
+    # admin's deliberate Django-admin override survives org-side edits.
+    if is_public_login_page_allowed():
+        organization_social_app = social_app.organizationsocialapp
+        if organization_social_app.is_public != payload.is_public:
+            organization_social_app.is_public = payload.is_public
+            await organization_social_app.asave(update_fields=["is_public"])
     return social_app
 
 
@@ -216,7 +231,7 @@ async def update_organization_social_app(
     "organizations/{slug:organization_slug}/social-apps/{int:social_app_id}/",
     response={204: None},
 )
-@has_permission(["org:admin"])
+@has_permission(["org:write", "org:admin"])
 async def delete_organization_social_app(
     request: AuthHttpRequest, organization_slug: str, social_app_id: int
 ):

@@ -1,3 +1,5 @@
+import asyncio
+import hashlib
 import logging
 from urllib.parse import urlencode
 
@@ -10,6 +12,7 @@ from allauth_async.socialaccount.providers.openid_connect import aget_authorize_
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.contrib.auth import aget_user
+from django.core.cache import cache
 from django.core.exceptions import RequestDataTooBig
 from django.db.models import Q
 from django.http import HttpRequest, HttpResponse
@@ -175,19 +178,34 @@ async def _serialize_social_app(request: HttpRequest, social_app: SocialApp):
         # the whole settings payload when the IdP is unreachable (the
         # OAuth flow itself surfaces a clearer error on login attempts).
         # provider.server_url is the normalized .well-known URL, matching
-        # what the login flow fetches (and its cache key).
+        # what the login flow fetches (and its cache key). The helper only
+        # caches successes, so failures are negative-cached here -- otherwise
+        # an unreachable IdP would make every unauthenticated settings
+        # request repeat a slow outbound fetch.
+        social_app.authorize_url = None
         try:
             server_url = provider.server_url
-            social_app.authorize_url = await aget_authorize_url(server_url)
-        except (
-            TimeoutError,
-            aiohttp.ClientError,
-            ValueError,
-            KeyError,
-            TypeError,
-        ) as exc:
-            logger.warning("OIDC discovery failed for %s: %s", social_app.name, exc)
-            social_app.authorize_url = None
+        except (ValueError, KeyError, TypeError):
+            server_url = None
+        if server_url:
+            fail_key = (
+                "oidc-discovery-fail."
+                + hashlib.md5(server_url.encode(), usedforsecurity=False).hexdigest()
+            )
+            if not await cache.aget(fail_key):
+                try:
+                    social_app.authorize_url = await aget_authorize_url(server_url)
+                except (
+                    TimeoutError,
+                    aiohttp.ClientError,
+                    ValueError,
+                    KeyError,
+                    TypeError,
+                ) as exc:
+                    logger.warning(
+                        "OIDC discovery failed for %s: %s", social_app.name, exc
+                    )
+                    await cache.aset(fail_key, True, 60)
     elif adapter_cls:
         adapter = adapter_cls(request)
         social_app.authorize_url = await sync_to_async(lambda: adapter.authorize_url)()
@@ -201,13 +219,19 @@ async def _serialize_social_app(request: HttpRequest, social_app: SocialApp):
 
 @api.get("settings/", response=SettingsOut, by_alias=True, auth=None)
 async def get_settings(request: HttpRequest):
-    social_apps: list[SocialApp] = []
     # Organization-linked social apps marked non-public (SaaS per-org SSO)
     # only appear on that organization's own login page, never here.
-    async for social_app in SocialApp.objects.filter(
-        Q(organizationsocialapp__isnull=True) | Q(organizationsocialapp__is_public=True)
-    ).order_by("name"):
-        social_apps.append(await _serialize_social_app(request, social_app))
+    social_apps: list[SocialApp] = [
+        social_app
+        async for social_app in SocialApp.objects.filter(
+            Q(organizationsocialapp__isnull=True)
+            | Q(organizationsocialapp__is_public=True)
+        ).order_by("name")
+    ]
+    # Concurrently: OIDC apps may each need a discovery fetch
+    await asyncio.gather(
+        *(_serialize_social_app(request, social_app) for social_app in social_apps)
+    )
 
     billing_enabled = settings.BILLING_ENABLED
 
@@ -278,12 +302,16 @@ async def get_organization_login_settings(request: HttpRequest, organization_slu
     200 with an empty list for unknown slugs so anonymous requests cannot
     enumerate which organizations exist.
     """
-    social_apps: list[SocialApp] = []
-    async for social_app in SocialApp.objects.filter(
-        organizationsocialapp__organization__slug=organization_slug,
-        organizationsocialapp__organization__is_deleted=False,
-    ).order_by("name"):
-        social_apps.append(await _serialize_social_app(request, social_app))
+    social_apps: list[SocialApp] = [
+        social_app
+        async for social_app in SocialApp.objects.filter(
+            organizationsocialapp__organization__slug=organization_slug,
+            organizationsocialapp__organization__is_deleted=False,
+        ).order_by("name")
+    ]
+    await asyncio.gather(
+        *(_serialize_social_app(request, social_app) for social_app in social_apps)
+    )
     return {"social_apps": social_apps}
 
 
