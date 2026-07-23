@@ -160,8 +160,6 @@ def extract_proguard_metadata(content: bytes):
 async def create_dif_from_read_only_file(proguard_file, project, proguard_id, filename):
     with tempfile.NamedTemporaryFile("br+") as tmp:
         content = proguard_file.read()
-        tmp.write(content)
-        tmp.flush()
         metadata = extract_proguard_metadata(content)
         if metadata is None:
             return None
@@ -171,6 +169,8 @@ async def create_dif_from_read_only_file(proguard_file, project, proguard_id, fi
         blob = await FileBlob.objects.filter(checksum=checksum).afirst()
 
         if blob is None:
+            tmp.write(content)
+            tmp.flush()
             blob = FileBlob(checksum=checksum, size=size)
             await sync_to_async(blob.blob.save)(filename, DjangoFile(tmp))
             await blob.asave()
