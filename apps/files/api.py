@@ -1,10 +1,14 @@
 """Port of sentry.api.endpoints.chunk.ChunkUploadEndpoint"""
 
+import asyncio
 import logging
-from gzip import GzipFile
-from io import BytesIO
+import zlib
+from gzip import BadGzipFile, GzipFile
+from hashlib import sha1
+from tempfile import SpooledTemporaryFile
 
 from django.conf import settings
+from django.core.files.base import File as FileObj
 from django.shortcuts import aget_object_or_404
 from django.urls import reverse
 from ninja import File, Router
@@ -23,6 +27,10 @@ MAX_CHUNKS_PER_REQUEST = 1
 MAX_REQUEST_SIZE = CHUNK_UPLOAD_BLOB_SIZE
 MAX_CONCURRENCY = 1
 HASH_ALGORITHM = "sha1"
+# Decompressed chunk bytes stream to disk past this point so a chunk never
+# occupies more than this much process heap.
+CHUNK_SPOOL_MAX_SIZE = 1024 * 1024
+CHUNK_READ_SIZE = 64 * 1024
 
 CHUNK_UPLOAD_ACCEPT = (
     "debug_files",  # DIF assemble
@@ -34,12 +42,41 @@ CHUNK_UPLOAD_ACCEPT = (
 )
 
 
-class GzipChunk(BytesIO):
-    def __init__(self, file):
-        data = GzipFile(fileobj=file, mode="rb").read()
-        self.size = len(data)
-        self.name = file.name
-        super().__init__(data)
+class InvalidChunk(Exception):
+    """A chunk that must be rejected with a 400 rather than stored."""
+
+
+def decompress_chunk(upload) -> FileObj:
+    """
+    Stream-decompress one gzipped chunk into a spooled temp file.
+
+    The decompressed size is enforced while inflating, so a gzip bomb
+    (deliberate or an accidentally huge file) aborts at the cap instead of
+    expanding fully into memory. The SHA-1 of the decompressed content is
+    computed in the same pass and verified against the client-supplied chunk
+    name: that name becomes the FileBlob checksum, a global deduplication
+    key, so accepting it unverified would let one organization poison the
+    content another organization's assemble resolves to.
+    """
+    spooled = SpooledTemporaryFile(max_size=CHUNK_SPOOL_MAX_SIZE)
+    digest = sha1()
+    size = 0
+    try:
+        with GzipFile(fileobj=upload, mode="rb") as gz:
+            while data := gz.read(CHUNK_READ_SIZE):
+                size += len(data)
+                if size > CHUNK_UPLOAD_BLOB_SIZE:
+                    raise InvalidChunk("Chunk size too large")
+                digest.update(data)
+                spooled.write(data)
+    except (BadGzipFile, EOFError, zlib.error) as err:
+        raise InvalidChunk("Invalid gzip chunk") from err
+    if digest.hexdigest() != upload.name:
+        raise InvalidChunk("Chunk checksum mismatch")
+    spooled.seek(0)
+    file = FileObj(spooled, name=upload.name)
+    file.size = size
+    return file
 
 
 router = Router()
@@ -82,32 +119,32 @@ async def chunk_upload(
         Organization, slug=organization_slug.lower(), users=request.auth.user_id
     )
 
-    files = [GzipChunk(chunk) for chunk in file_gzip]
-
-    if len(files) == 0:
+    if len(file_gzip) == 0:
         # No files uploaded is ok
         logger.info("chunkupload.end", extra={"status": 200})
         return
 
-    logger.info("chunkupload.post.files", extra={"len": len(files)})
+    logger.info("chunkupload.post.files", extra={"len": len(file_gzip)})
 
-    # Validate file size
-    checksums = []
-    size = 0
-    for chunk in files:
-        size += chunk.size
-        if chunk.size > CHUNK_UPLOAD_BLOB_SIZE:
-            logger.info("chunkupload.end", extra={"status": 400})
-            raise HttpError(400, "Chunk size too large")
-        checksums.append(chunk.name)
+    if len(file_gzip) > MAX_CHUNKS_PER_REQUEST:
+        logger.info("chunkupload.end", extra={"status": 400})
+        raise HttpError(400, "Too many chunks")
 
-    if size > MAX_REQUEST_SIZE:
+    try:
+        # Decompression is streaming but CPU-bound; a thread keeps the event
+        # loop free and lets zlib run on released-GIL time.
+        files = await asyncio.to_thread(
+            lambda: [decompress_chunk(chunk) for chunk in file_gzip]
+        )
+    except InvalidChunk as err:
+        logger.info("chunkupload.end", extra={"status": 400})
+        raise HttpError(400, str(err)) from err
+
+    if sum(file.size for file in files) > MAX_REQUEST_SIZE:
         logger.info("chunkupload.end", extra={"status": 400})
         raise HttpError(400, "Request too large")
 
-    if len(files) > MAX_CHUNKS_PER_REQUEST:
-        logger.info("chunkupload.end", extra={"status": 400})
-        raise HttpError(400, "Too many chunks")
+    checksums = [file.name for file in files]
 
     try:
         await FileBlob.from_files(
