@@ -4,7 +4,6 @@ import time
 from datetime import timedelta
 from ssl import SSLError
 
-import aiohttp
 from aiohttp import ClientTimeout
 from aiohttp.client_exceptions import (
     ClientConnectorError,
@@ -15,6 +14,11 @@ from django.conf import settings
 from django.utils import timezone
 
 from glitchtip.partition_manager import UUID7Helper
+from glitchtip.ssrf_protection import (
+    BlockedRedirectError,
+    request_with_validated_redirects,
+    safe_session,
+)
 from glitchtip.url_validation import check_url_safe as _check_url_safe
 from glitchtip.url_validation import is_ip_blocked  # re-exported for uptime.schema
 
@@ -107,14 +111,33 @@ async def fetch(session, monitor):
             monitor["is_up"] = True
         else:
             client_timeout = ClientTimeout(total=monitor["timeout"] or DEFAULT_TIMEOUT)
+            allow_private = settings.GLITCHTIP_UPTIME_ALLOW_PRIVATE_IPS
             if monitor["monitor_type"] == MonitorType.PING:
-                async with session.head(url, timeout=client_timeout):
+                async with await request_with_validated_redirects(
+                    session,
+                    "HEAD",
+                    url,
+                    allow_private=allow_private,
+                    timeout=client_timeout,
+                ):
                     monitor["is_up"] = True
             elif monitor["monitor_type"] == MonitorType.GET:
-                async with session.get(url, timeout=client_timeout) as response:
+                async with await request_with_validated_redirects(
+                    session,
+                    "GET",
+                    url,
+                    allow_private=allow_private,
+                    timeout=client_timeout,
+                ) as response:
                     await process_response(monitor, response)
             elif monitor["monitor_type"] == MonitorType.POST:
-                async with session.post(url, timeout=client_timeout) as response:
+                async with await request_with_validated_redirects(
+                    session,
+                    "POST",
+                    url,
+                    allow_private=allow_private,
+                    timeout=client_timeout,
+                ) as response:
                     await process_response(monitor, response)
         monitor["response_time"] = (
             timedelta(seconds=time.monotonic() - start).total_seconds() * 1000
@@ -123,6 +146,12 @@ async def fetch(session, monitor):
         monitor["reason"] = MonitorCheckReason.SSL
     except asyncio.TimeoutError:
         monitor["reason"] = MonitorCheckReason.TIMEOUT
+    except BlockedRedirectError:
+        logger.warning(
+            "Monitor %s blocked: redirect target is a private/reserved IP",
+            monitor["id"],
+        )
+        monitor["reason"] = MonitorCheckReason.NETWORK
     except (ClientConnectorError, ServerConnectionError):
         monitor["reason"] = MonitorCheckReason.NETWORK
     except (OSError, ClientResponseError) as e:
@@ -135,7 +164,7 @@ async def fetch(session, monitor):
 
 
 async def fetch_all(monitors):
-    async with aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session:
+    async with safe_session(settings.GLITCHTIP_UPTIME_ALLOW_PRIVATE_IPS) as session:
         results = await asyncio.gather(
             *[fetch(session, monitor) for monitor in monitors], return_exceptions=True
         )
