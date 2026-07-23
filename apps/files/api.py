@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import zlib
+from concurrent.futures import ThreadPoolExecutor
 from gzip import BadGzipFile, GzipFile
 from hashlib import sha1
 from tempfile import SpooledTemporaryFile
@@ -27,10 +28,16 @@ MAX_CHUNKS_PER_REQUEST = 1
 MAX_REQUEST_SIZE = CHUNK_UPLOAD_BLOB_SIZE
 MAX_CONCURRENCY = 1
 HASH_ALGORITHM = "sha1"
-# Decompressed chunk bytes stream to disk past this point so a chunk never
-# occupies more than this much process heap.
+# Decompressed chunk bytes stream to disk past this point, bounding heap
+# usage during decompression.
 CHUNK_SPOOL_MAX_SIZE = 1024 * 1024
 CHUNK_READ_SIZE = 64 * 1024
+# gzip framing can slightly exceed the decompressed size for incompressible
+# data, hence the slack over CHUNK_UPLOAD_BLOB_SIZE. Bounding the compressed
+# input bounds decompression work: output-only caps never fire on gzip
+# streams built from empty members, which cost CPU per member while
+# producing zero bytes.
+MAX_COMPRESSED_CHUNK_SIZE = CHUNK_UPLOAD_BLOB_SIZE + CHUNK_READ_SIZE
 
 CHUNK_UPLOAD_ACCEPT = (
     "debug_files",  # DIF assemble
@@ -46,6 +53,14 @@ class InvalidChunk(Exception):
     """A chunk that must be rejected with a 400 rather than stored."""
 
 
+# Enforces the MAX_CONCURRENCY advertised to clients server-side, and keeps
+# chunk decompression off the loop's default executor so an upload burst
+# queues here instead of starving cold-storage reads (and vice versa).
+_decompress_executor = ThreadPoolExecutor(
+    max_workers=MAX_CONCURRENCY, thread_name_prefix="chunk-decompress"
+)
+
+
 def decompress_chunk(upload) -> FileObj:
     """
     Stream-decompress one gzipped chunk into a spooled temp file.
@@ -58,6 +73,8 @@ def decompress_chunk(upload) -> FileObj:
     key, so accepting it unverified would let one organization poison the
     content another organization's assemble resolves to.
     """
+    if upload.size and upload.size > MAX_COMPRESSED_CHUNK_SIZE:
+        raise InvalidChunk("Chunk size too large")
     spooled = SpooledTemporaryFile(max_size=CHUNK_SPOOL_MAX_SIZE)
     digest = sha1()
     size = 0
@@ -69,10 +86,16 @@ def decompress_chunk(upload) -> FileObj:
                     raise InvalidChunk("Chunk size too large")
                 digest.update(data)
                 spooled.write(data)
+        if digest.hexdigest() != upload.name:
+            raise InvalidChunk("Chunk checksum mismatch")
     except (BadGzipFile, EOFError, zlib.error) as err:
+        spooled.close()
         raise InvalidChunk("Invalid gzip chunk") from err
-    if digest.hexdigest() != upload.name:
-        raise InvalidChunk("Chunk checksum mismatch")
+    except BaseException:
+        # Close deterministically on rejection; a spool past the threshold
+        # holds an open fd and disk space until garbage collection otherwise.
+        spooled.close()
+        raise
     spooled.seek(0)
     file = FileObj(spooled, name=upload.name)
     file.size = size
@@ -111,18 +134,14 @@ async def chunk_upload(
     organization_slug: str,
     file_gzip: list[UploadedFile] = File(...),
 ):
-    """Upload one more more gzipped files to save"""
+    """Upload one or more gzipped files to save"""
     logger = logging.getLogger("glitchtip.files")
     logger.info("chunkupload.start")
 
-    organization = await aget_object_or_404(
+    # Membership check; the organization itself is not otherwise needed.
+    await aget_object_or_404(
         Organization, slug=organization_slug.lower(), users=request.auth.user_id
     )
-
-    if len(file_gzip) == 0:
-        # No files uploaded is ok
-        logger.info("chunkupload.end", extra={"status": 200})
-        return
 
     logger.info("chunkupload.post.files", extra={"len": len(file_gzip)})
 
@@ -131,27 +150,27 @@ async def chunk_upload(
         raise HttpError(400, "Too many chunks")
 
     try:
-        # Decompression is streaming but CPU-bound; a thread keeps the event
-        # loop free and lets zlib run on released-GIL time.
-        files = await asyncio.to_thread(
-            lambda: [decompress_chunk(chunk) for chunk in file_gzip]
+        # Decompression is streaming but CPU-bound; the dedicated executor
+        # keeps the event loop free and lets zlib run on released-GIL time.
+        files = await asyncio.get_running_loop().run_in_executor(
+            _decompress_executor,
+            lambda: [decompress_chunk(chunk) for chunk in file_gzip],
         )
     except InvalidChunk as err:
-        logger.info("chunkupload.end", extra={"status": 400})
+        logger.info("chunkupload.end", extra={"status": 400, "reason": str(err)})
         raise HttpError(400, str(err)) from err
 
-    if sum(file.size for file in files) > MAX_REQUEST_SIZE:
-        logger.info("chunkupload.end", extra={"status": 400})
-        raise HttpError(400, "Request too large")
-
-    checksums = [file.name for file in files]
-
+    # Request size needs no separate check: each chunk is capped mid-inflate
+    # at CHUNK_UPLOAD_BLOB_SIZE and the chunk count is capped above. If
+    # MAX_CHUNKS_PER_REQUEST is ever raised above 1, move a request-wide
+    # byte budget into decompress_chunk instead of summing after the fact.
     try:
-        await FileBlob.from_files(
-            zip(files, checksums), organization=organization, logger=logger
-        )
+        await FileBlob.from_files([(file, file.name) for file in files], logger=logger)
     except OSError as err:
-        logger.info("chunkupload.end", extra={"status": 400})
+        logger.info("chunkupload.end", extra={"status": 400, "reason": str(err)})
         raise HttpError(400, str(err)) from err
+    finally:
+        for file in files:
+            file.close()
 
     logger.info("chunkupload.end", extra={"status": 200})

@@ -13,7 +13,7 @@ from model_bakery import baker
 from apps.sourcecode.models import DebugSymbolBundle
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
-from ..api import CHUNK_UPLOAD_BLOB_SIZE
+from ..api import CHUNK_UPLOAD_BLOB_SIZE, MAX_COMPRESSED_CHUNK_SIZE
 from ..models import File, FileBlob
 
 
@@ -97,6 +97,33 @@ class ChunkUploadAPITestCase(GlitchTipTestCaseMixin, TestCase):
         res = await self.async_client.post(self.url, {"file_gzip": chunk})
         self.assertEqual(res.status_code, 400)
         self.assertIn("gzip", res.json()["detail"])
+        self.assertEqual(await FileBlob.objects.acount(), 0)
+
+    async def test_post_accepts_empty_content_chunk(self):
+        res = await self.async_client.post(self.url, {"file_gzip": generate_file(b"")})
+        self.assertEqual(res.status_code, 200)
+        blob = await FileBlob.objects.aget()
+        self.assertEqual(blob.size, 0)
+        self.assertEqual(blob.checksum, sha1(b"").hexdigest())
+
+    async def test_post_rejects_too_many_chunks(self):
+        res = await self.async_client.post(
+            self.url, {"file_gzip": [generate_file(b"aaa"), generate_file(b"bbb")]}
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("chunks", res.json()["detail"])
+        self.assertEqual(await FileBlob.objects.acount(), 0)
+
+    async def test_post_rejects_oversized_compressed_chunk(self):
+        # Compressed input over the cap is rejected before any inflation;
+        # an output-size cap alone never fires on gzip streams of empty
+        # members, which burn CPU while producing zero bytes.
+        chunk = SimpleUploadedFile(
+            sha1(b"x").hexdigest(), b"\0" * (MAX_COMPRESSED_CHUNK_SIZE + 1)
+        )
+        res = await self.async_client.post(self.url, {"file_gzip": chunk})
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("size", res.json()["detail"])
         self.assertEqual(await FileBlob.objects.acount(), 0)
 
     async def test_post_rejects_decompression_bomb(self):

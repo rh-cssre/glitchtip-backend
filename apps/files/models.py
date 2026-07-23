@@ -36,7 +36,7 @@ class FileBlob(CreatedModel):
     checksum = models.CharField(max_length=40, unique=True)
 
     @classmethod
-    async def from_files(cls, files, organization=None, logger=None):
+    async def from_files(cls, files, logger=None):
         if logger:
             logger.debug("FileBlob.from_files.start")
 
