@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.db.utils import IntegrityError
 
 from apps.organizations_ext.models import Organization
 
@@ -30,3 +31,13 @@ async def organization_can_customize_sso(organization: Organization) -> bool:
         status__in=ACTIVE_SUBSCRIPTION_STATUSES,
         price__product__allow_sso=True,
     ).aexists()
+
+
+def is_member_guard_violation(exc: IntegrityError) -> bool:
+    """
+    True when the database rejected a delete via the organization_has_members
+    constraint trigger, i.e. the transaction would have left a live
+    organization with no members.
+    """
+    diag = getattr(exc.__cause__, "diag", None)
+    return getattr(diag, "constraint_name", None) == "organization_has_members"

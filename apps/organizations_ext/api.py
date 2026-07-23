@@ -2,6 +2,7 @@ from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.contrib.auth import aget_user
 from django.core.cache import cache
+from django.db.utils import IntegrityError
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Status
@@ -31,7 +32,7 @@ from .schema import (
     OrganizationUserSchema,
     OrganizationUserUpdateSchema,
 )
-from .utils import is_organization_creation_open
+from .utils import is_member_guard_violation, is_organization_creation_open
 
 router = Router()
 
@@ -299,7 +300,16 @@ async def delete_organization_member(
         org_user.user and org_user.user.id == user_id
     ):
         raise HttpError(403, "Forbidden")
-    await org_user.adelete()
+    try:
+        await org_user.adelete()
+    except IntegrityError as err:
+        if is_member_guard_violation(err):
+            raise HttpError(
+                400,
+                "Cannot remove the last member of an organization. "
+                "Delete the organization instead.",
+            )
+        raise
 
     return Status(204, None)
 
