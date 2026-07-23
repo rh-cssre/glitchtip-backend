@@ -5,6 +5,8 @@ validation is steered to an internal address via an HTTP redirect or DNS
 rebinding. See :mod:`glitchtip.ssrf_protection`.
 """
 
+from unittest import mock
+
 from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase
 
@@ -12,6 +14,7 @@ from glitchtip.ssrf_protection import (
     BlockedRedirectError,
     ValidatingResolver,
     request_with_validated_redirects,
+    resolve_validated_ip,
 )
 
 
@@ -165,10 +168,60 @@ class RequestWithValidatedRedirectsTests(SimpleTestCase):
 
     def test_caps_redirect_chain(self):
         responses = [
-            FakeResponse(302, {"Location": f"https://h{i}.example/"})
-            for i in range(20)
+            FakeResponse(302, {"Location": f"https://h{i}.example/"}) for i in range(20)
         ]
         session = FakeSession(responses)
         with self.assertRaises(BlockedRedirectError):
             self._run(session, "GET", "https://start.example/", max_redirects=3)
         self.assertEqual(len(session.requested), 4)  # initial + 3 follows
+
+
+class ResolveValidatedIPTests(SimpleTestCase):
+    def _run(self, host, allow_private=False):
+        return async_to_sync(resolve_validated_ip)(host, allow_private)
+
+    def test_public_literal_returned(self):
+        self.assertEqual(self._run("8.8.8.8"), "8.8.8.8")
+
+    def test_internal_literal_blocked(self):
+        with self.assertRaises(BlockedRedirectError):
+            self._run("169.254.169.254")
+        with self.assertRaises(BlockedRedirectError):
+            self._run("127.0.0.1")
+
+    def test_allow_private_returns_internal_literal(self):
+        self.assertEqual(self._run("10.0.0.1", allow_private=True), "10.0.0.1")
+
+    def test_hostname_resolving_to_internal_is_blocked(self):
+        async def fake_getaddrinfo(*_, **__):
+            return [(0, 0, 0, "", ("10.0.0.5", 0))]
+
+        with mock.patch(
+            "asyncio.BaseEventLoop.getaddrinfo", fake_getaddrinfo, create=True
+        ):
+            with self.assertRaises(BlockedRedirectError):
+                self._run("rebind.example")
+
+    def test_hostname_pins_first_public_ip(self):
+        async def fake_getaddrinfo(*_, **__):
+            return [
+                (0, 0, 0, "", ("10.0.0.5", 0)),  # internal, must be skipped
+                (0, 0, 0, "", ("93.184.216.34", 0)),
+            ]
+
+        with mock.patch(
+            "asyncio.BaseEventLoop.getaddrinfo", fake_getaddrinfo, create=True
+        ):
+            self.assertEqual(self._run("mixed.example"), "93.184.216.34")
+
+    def test_unresolvable_host_blocked(self):
+        import socket
+
+        async def fake_getaddrinfo(*_, **__):
+            raise socket.gaierror("nope")
+
+        with mock.patch(
+            "asyncio.BaseEventLoop.getaddrinfo", fake_getaddrinfo, create=True
+        ):
+            with self.assertRaises(BlockedRedirectError):
+                self._run("no-such-host.invalid")

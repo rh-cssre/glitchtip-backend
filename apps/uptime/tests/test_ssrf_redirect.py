@@ -4,6 +4,8 @@ A monitor whose (validated, public) URL redirects to an internal address must
 report the check as failed and must never dial the internal target.
 """
 
+from unittest import mock
+
 from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase
 
@@ -78,3 +80,17 @@ class UptimeRedirectSSRFTests(SimpleTestCase):
         self.assertEqual(
             session.requested, ["http://start.example/", "http://final.example/"]
         )
+
+
+class PortMonitorSSRFTests(SimpleTestCase):
+    def test_port_check_to_internal_literal_never_connects(self):
+        monitor = _monitor("169.254.169.254:80")
+        monitor["monitor_type"] = MonitorType.PORT
+
+        async def boom(*_, **__):
+            raise AssertionError("open_connection must not be called for a blocked IP")
+
+        with mock.patch("apps.uptime.utils.asyncio.open_connection", boom):
+            result = async_to_sync(fetch)(object(), monitor)
+        self.assertFalse(result["is_up"])
+        self.assertEqual(result["reason"], MonitorCheckReason.NETWORK)

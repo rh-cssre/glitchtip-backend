@@ -25,6 +25,9 @@ resolver; callers that do (uptime monitoring of URLs that 301 http->https) use
 :func:`request_with_validated_redirects`.
 """
 
+import asyncio
+import contextlib
+import ipaddress
 import logging
 import socket
 
@@ -52,6 +55,40 @@ def _address_blocked(ip_str: str) -> bool:
     except ValueError:
         # Not an IP literal (shouldn't happen for a resolver result); be safe.
         return False
+
+
+def _is_ip_literal(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        return False
+
+
+async def resolve_validated_ip(host: str, allow_private: bool = False) -> str:
+    """Resolve `host` and return a single validated IP to connect to.
+
+    For non-aiohttp connects (raw TCP, e.g. uptime PORT checks) that would
+    otherwise re-resolve DNS at connect time and reopen the rebinding window.
+    Pin the returned literal IP as the connect target so validation and connect
+    see the same address. Raises BlockedRedirectError if the host cannot be
+    resolved or resolves only to blocked addresses.
+    """
+    if _is_ip_literal(host):
+        if allow_private or not _address_blocked(host):
+            return host
+        raise BlockedRedirectError(f"blocked internal address: {host}")
+
+    try:
+        infos = await asyncio.get_event_loop().getaddrinfo(host, None)
+    except OSError as exc:
+        raise BlockedRedirectError(f"cannot resolve host: {host}") from exc
+
+    for info in infos:
+        ip = info[4][0]
+        if allow_private or not _address_blocked(ip):
+            return ip
+    raise BlockedRedirectError(f"host resolves only to internal addresses: {host}")
 
 
 class ValidatingResolver(AbstractResolver):
@@ -120,27 +157,33 @@ async def request_with_validated_redirects(
     re-validated with :func:`check_url_safe` (which rejects both blocked
     hostnames and raw IP literals) before it is dialed. Returns the final
     (non-redirect) response, which the caller owns and must release/close.
+
+    The `timeout` (a ClientTimeout) bounds the whole redirect chain, matching
+    aiohttp's built-in auto-follow semantics, rather than resetting per hop.
     """
     kwargs.pop("allow_redirects", None)
-    current = URL(url)
+    timeout = kwargs.get("timeout")
+    overall = timeout.total if isinstance(timeout, aiohttp.ClientTimeout) else None
+    deadline = asyncio.timeout(overall) if overall else contextlib.nullcontext()
 
-    for _ in range(max_redirects + 1):
-        if not await check_url_safe(str(current), allow_private):
-            raise BlockedRedirectError(
-                f"blocked SSRF target (private/internal IP): {current}"
+    async with deadline:
+        current = URL(url)
+        for _ in range(max_redirects + 1):
+            if not await check_url_safe(str(current), allow_private):
+                raise BlockedRedirectError(
+                    f"blocked SSRF target (private/internal IP): {current}"
+                )
+            response = await session.request(
+                method, current, allow_redirects=False, **kwargs
             )
-        response = await session.request(
-            method, current, allow_redirects=False, **kwargs
-        )
-        if response.status in REDIRECT_STATUSES and "Location" in response.headers:
-            location = response.headers["Location"]
-            status = response.status
-            await response.release()
-            current = current.join(URL(location))
-            # Per RFC 7231, 301/302/303 turn a non-GET/HEAD into GET on follow.
-            if status in (301, 302, 303) and method.upper() not in ("GET", "HEAD"):
-                method = "GET"
-            continue
-        return response
-
-    raise BlockedRedirectError(f"too many redirects following {url}")
+            if response.status in REDIRECT_STATUSES and "Location" in response.headers:
+                location = response.headers["Location"]
+                status = response.status
+                await response.release()
+                current = current.join(URL(location))
+                # Per RFC 7231, 301/302/303 turn a non-GET/HEAD into GET.
+                if status in (301, 302, 303) and method.upper() not in ("GET", "HEAD"):
+                    method = "GET"
+                continue
+            return response
+        raise BlockedRedirectError(f"too many redirects following {url}")

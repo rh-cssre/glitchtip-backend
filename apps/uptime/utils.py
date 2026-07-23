@@ -17,9 +17,9 @@ from glitchtip.partition_manager import UUID7Helper
 from glitchtip.ssrf_protection import (
     BlockedRedirectError,
     request_with_validated_redirects,
+    resolve_validated_ip,
     safe_session,
 )
-from glitchtip.url_validation import check_url_safe as _check_url_safe
 from glitchtip.url_validation import is_ip_blocked  # re-exported for uptime.schema
 
 from .constants import MonitorCheckReason, MonitorType
@@ -31,7 +31,6 @@ __all__ = [
     "DEFAULT_TIMEOUT",
     "PAYLOAD_LIMIT",
     "PAYLOAD_SAVE_LIMIT",
-    "check_url_safe",
     "fetch",
     "fetch_all",
     "is_ip_blocked",
@@ -41,13 +40,6 @@ __all__ = [
 DEFAULT_TIMEOUT = 20  # Seconds
 PAYLOAD_LIMIT = 2_000_000  # 2mb
 PAYLOAD_SAVE_LIMIT = 500_000  # pseudo 500kb
-
-
-async def check_url_safe(url: str) -> bool:
-    """Uptime-scoped wrapper: honors GLITCHTIP_UPTIME_ALLOW_PRIVATE_IPS."""
-    return await _check_url_safe(
-        url, allow_private=settings.GLITCHTIP_UPTIME_ALLOW_PRIVATE_IPS
-    )
 
 
 async def process_response(monitor, response):
@@ -95,23 +87,20 @@ async def fetch(session, monitor):
 
     url = monitor["url"]
     timeout = monitor["timeout"] or DEFAULT_TIMEOUT
-
-    if not await check_url_safe(url):
-        logger.warning(
-            "Monitor %s blocked: URL targets a private/reserved IP", monitor["id"]
-        )
-        monitor["reason"] = MonitorCheckReason.NETWORK
-        return monitor
+    allow_private = settings.GLITCHTIP_UPTIME_ALLOW_PRIVATE_IPS
 
     try:
         start = time.monotonic()
         if monitor["monitor_type"] == MonitorType.PORT:
-            fut = asyncio.open_connection(*url.split(":"))
+            # Resolve and validate once, then connect to the pinned IP so the
+            # address checked is the address dialed (no DNS-rebind window).
+            host, port = url.split(":")
+            ip = await resolve_validated_ip(host, allow_private)
+            fut = asyncio.open_connection(ip, port)
             await asyncio.wait_for(fut, timeout=timeout)
             monitor["is_up"] = True
         else:
             client_timeout = ClientTimeout(total=monitor["timeout"] or DEFAULT_TIMEOUT)
-            allow_private = settings.GLITCHTIP_UPTIME_ALLOW_PRIVATE_IPS
             if monitor["monitor_type"] == MonitorType.PING:
                 async with await request_with_validated_redirects(
                     session,
@@ -148,7 +137,7 @@ async def fetch(session, monitor):
         monitor["reason"] = MonitorCheckReason.TIMEOUT
     except BlockedRedirectError:
         logger.warning(
-            "Monitor %s blocked: redirect target is a private/reserved IP",
+            "Monitor %s blocked: target (or redirect/DNS) is a private/reserved IP",
             monitor["id"],
         )
         monitor["reason"] = MonitorCheckReason.NETWORK
