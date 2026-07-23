@@ -11,6 +11,7 @@ from django.urls import reverse
 from model_bakery import baker
 from pydantic import ValidationError
 
+from apps.difs.api import extract_proguard_metadata
 from apps.difs.stacktrace_processor import (
     MAX_SCORED_ADDRS,
     StacktraceProcessor,
@@ -35,6 +36,22 @@ class DebugInformationFileModelTestCase(GlitchTestCase):
 
         dif = baker.make("difs.DebugInformationFile", data={"symbol_type": "proguard"})
         self.assertEqual(dif.is_proguard_mapping(), True)
+
+
+class ExtractProguardMetadataTestCase(GlitchTestCase):
+    def test_accepts_utf8_mapping_content(self):
+        metadata = extract_proguard_metadata(b"com.example.Foo -> a.b.c:\n")
+        self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
+
+    def test_accepts_empty_content(self):
+        # Matches the pre-existing, already-permissive behavior of
+        # ProguardMapper.open(), which does not error on an empty mapping.
+        metadata = extract_proguard_metadata(b"")
+        self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
+
+    def test_rejects_non_utf8_binary(self):
+        metadata = extract_proguard_metadata(b"\xff\xfe\x00\x01")
+        self.assertIsNone(metadata)
 
 
 class DifsAssembleAPITestCase(GlitchTestCase):
@@ -220,6 +237,32 @@ class DsymsAPIViewTestCase(GlitchTestCase):
 
         self.assertEqual(response.json(), expected_response)
         self.assertEqual(response.status_code, 400)
+
+    async def test_post_invalid_proguard_content(self):
+        """Non-UTF8 binary content inside proguard/<uuid>.txt should be rejected."""
+        proguard_file = MagicMock()
+        proguard_file.read.return_value = b"\xff\xfe\x00\x01"
+
+        uploaded_zip_file = MagicMock()
+        uploaded_zip_file.namelist.return_value = iter([f"proguard/{self.uuid}.txt"])
+        uploaded_zip_file.open.return_value.__enter__.return_value = proguard_file
+
+        upload_file = SimpleUploadedFile(
+            "example.zip", b"random_content", content_type="multipart/form-data"
+        )
+        data = {"file": upload_file}
+
+        with (
+            patch("zipfile.is_zipfile", return_value=True),
+            patch("zipfile.ZipFile") as ZipFile,
+        ):
+            ZipFile.return_value.__enter__.return_value = uploaded_zip_file
+            response = await self.async_client.post(self.url, data)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json(), {"detail": "Invalid proguard mapping file uploaded"}
+        )
 
     async def test_get(self):
         """

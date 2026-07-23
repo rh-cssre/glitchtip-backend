@@ -10,7 +10,7 @@ from asgiref.sync import sync_to_async
 from django.core.files import File as DjangoFile
 from django.http import HttpResponse
 from django.shortcuts import aget_object_or_404
-from gt_rust.symbolic import ProguardMapper, normalize_debug_id
+from gt_rust.symbolic import normalize_debug_id
 from ninja import File as NinjaFile
 from ninja import Router
 from ninja.errors import HttpError
@@ -122,19 +122,22 @@ def extract_proguard_id(name: str):
     return match.group(1)
 
 
-def extract_proguard_metadata(proguard_file):
+def extract_proguard_metadata(content: bytes):
+    """Cheaply sniff-check that this looks like a ProGuard mapping file.
+
+    This intentionally avoids ProguardMapper.open(), which eagerly builds a
+    full in-memory class/method index over the entire file just to answer
+    yes/no here — for a mapping file in the tens of MBs that index build can
+    itself use several hundred MB of RAM, which is wasted work since nothing
+    below actually uses the parsed mapper. Real deobfuscation still goes
+    through ProguardMapper in StacktraceProcessor.resolve_proguard_stacktrace.
+    """
     try:
-        mapper = ProguardMapper.open(proguard_file)
+        content.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
 
-        if mapper is None:
-            return
-
-        metadata = {"arch": "any", "feature": "mapping"}
-
-        return metadata
-
-    except Exception:
-        pass
+    return {"arch": "any", "feature": "mapping"}
 
 
 async def create_dif_from_read_only_file(proguard_file, project, proguard_id, filename):
@@ -142,7 +145,7 @@ async def create_dif_from_read_only_file(proguard_file, project, proguard_id, fi
         content = proguard_file.read()
         tmp.write(content)
         tmp.flush()
-        metadata = extract_proguard_metadata(tmp.name)
+        metadata = extract_proguard_metadata(content)
         if metadata is None:
             return None
         checksum = sha1(content).hexdigest()
