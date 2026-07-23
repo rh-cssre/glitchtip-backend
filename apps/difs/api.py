@@ -122,6 +122,15 @@ def extract_proguard_id(name: str):
     return match.group(1)
 
 
+# A ProGuard/R8 mapping file's class records always look like
+# `originalClassName -> obfuscatedClassName:` at column 0; member records
+# (fields/methods) are indented under a class record and never appear before
+# one. So the first non-comment, non-blank line of a real mapping is always
+# a class record — checking just that line is enough to tell a mapping file
+# apart from arbitrary text, without parsing the rest of the file.
+_PROGUARD_CLASS_RECORD_RE = re.compile(r"^\S+ -> \S+:$")
+
+
 def extract_proguard_metadata(content: bytes):
     """Cheaply sniff-check that this looks like a ProGuard mapping file.
 
@@ -133,9 +142,17 @@ def extract_proguard_metadata(content: bytes):
     through ProguardMapper in StacktraceProcessor.resolve_proguard_stacktrace.
     """
     try:
-        content.decode("utf-8")
+        text = content.decode("utf-8")
     except UnicodeDecodeError:
         return None
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if _PROGUARD_CLASS_RECORD_RE.match(stripped) is None:
+            return None
+        break
 
     return {"arch": "any", "feature": "mapping"}
 

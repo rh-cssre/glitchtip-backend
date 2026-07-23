@@ -43,14 +43,51 @@ class ExtractProguardMetadataTestCase(GlitchTestCase):
         metadata = extract_proguard_metadata(b"com.example.Foo -> a.b.c:\n")
         self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
 
+    def test_accepts_mapping_with_header_comments(self):
+        content = (
+            b"# compiler: R8\n"
+            b"# compiler_version: 8.0.40\n"
+            b"# min_api: 21\n"
+            b"com.example.Foo -> a.b.c:\n"
+            b"    int field -> a\n"
+        )
+        metadata = extract_proguard_metadata(content)
+        self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
+
     def test_accepts_empty_content(self):
         # Matches the pre-existing, already-permissive behavior of
         # ProguardMapper.open(), which does not error on an empty mapping.
         metadata = extract_proguard_metadata(b"")
         self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
 
+    def test_accepts_only_header_comments(self):
+        # No class records at all -- same "nothing to reject" situation as
+        # empty content.
+        metadata = extract_proguard_metadata(b"# compiler: R8\n# min_api: 21\n")
+        self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
+
     def test_rejects_non_utf8_binary(self):
         metadata = extract_proguard_metadata(b"\xff\xfe\x00\x01")
+        self.assertIsNone(metadata)
+
+    def test_rejects_plain_text(self):
+        # ProguardMapper.open() from `symbolic` accepts this too (verified
+        # locally against both 10.1.1 and 13.9.0 -- its line parser silently
+        # skips anything it can't parse as a mapping record rather than
+        # erroring), so this is a deliberate tightening, not a preserved
+        # behavior.
+        metadata = extract_proguard_metadata(
+            b"hello world, this is not a proguard mapping at all\njust some prose.\n"
+        )
+        self.assertIsNone(metadata)
+
+    def test_rejects_csv_like_content(self):
+        metadata = extract_proguard_metadata(b"a,b,c\n1,2,3\n")
+        self.assertIsNone(metadata)
+
+    def test_rejects_member_line_without_class_header(self):
+        # A member record can never legally appear before its class record.
+        metadata = extract_proguard_metadata(b"    int field -> a\n")
         self.assertIsNone(metadata)
 
 
