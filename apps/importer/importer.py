@@ -1,4 +1,3 @@
-import aiohttp
 import tablib
 from asgiref.sync import sync_to_async
 from django.conf import settings
@@ -16,6 +15,10 @@ from apps.projects.resources import ProjectKeyResource, ProjectResource
 from apps.teams.resources import TeamResource
 from apps.users.models import User
 from apps.users.resources import UserResource
+from glitchtip.ssrf_protection import (
+    request_with_validated_redirects,
+    safe_session,
+)
 
 from .exceptions import ImporterException
 
@@ -64,8 +67,11 @@ class GlitchTipImporter:
         await self.import_teams()
 
     async def get(self, url: str):
-        async with aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session:
-            async with session.get(url, headers=self.headers) as res:
+        allow_private = settings.GLITCHTIP_ALLOW_PRIVATE_IPS
+        async with safe_session(allow_private) as session:
+            async with await request_with_validated_redirects(
+                session, "GET", url, headers=self.headers, allow_private=allow_private
+            ) as res:
                 return await res.json()
 
     async def import_organization(self):
@@ -188,8 +194,15 @@ class GlitchTipImporter:
         await sync_to_async(resource.import_data)(dataset, raise_errors=True)
 
     async def check_auth(self):
-        async with aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session:
-            async with session.get(self.url + "/api/0/", headers=self.headers) as res:
+        allow_private = settings.GLITCHTIP_ALLOW_PRIVATE_IPS
+        async with safe_session(allow_private) as session:
+            async with await request_with_validated_redirects(
+                session,
+                "GET",
+                self.url + "/api/0/",
+                headers=self.headers,
+                allow_private=allow_private,
+            ) as res:
                 data = await res.json()
                 if res.status != 200 or not data["user"]:
                     raise ImporterException("Bad auth token")
