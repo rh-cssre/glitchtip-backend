@@ -14,6 +14,9 @@ include:
   - template: SAST.gitlab-ci.yml
   - template: Dependency-Scanning.gitlab-ci.yml
   - template: Secret-Detection.gitlab-ci.yml
+  # Shared AI-policy check (fork MRs must disclose AI usage). See AI_POLICY.md.
+  - project: 'glitchtip/glitchtip'
+    file: '/ci/ai-policy-check.yml'
 
 workflow:
   rules:

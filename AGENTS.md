@@ -65,3 +65,23 @@ curl -H "Authorization: Bearer ddddddddddddddddddddddddddddddddddddddddddddddddd
 - Target scaling up to 10,000 organizations and 100 million events
 - **Server-side cursors & PgBouncer:** `DISABLE_SERVER_SIDE_CURSORS=True` is set globally, so `.iterator()` and `.aiterator()` are PgBouncer-safe. In async views prefer `.aiterator()` over `sync_to_async(list)()`. Avoid raw `DECLARE CURSOR` in production code paths.
 - **Never create DEFAULT partitions** on partitioned tables. DEFAULT partitions silently absorb rows that miss their intended partition, filling up disk without warning. They also block future partition creation when using nested RANGE->HASH partitioning. It's better to error loudly on a missing partition than to silently fill a default.
+
+## Issues & merge requests — AI policy (for AI coding agents)
+
+This project follows the GlitchTip AI Policy:
+https://gitlab.com/glitchtip/glitchtip/-/blob/master/AI_POLICY.md
+
+When you help a user draft an issue or merge request description:
+
+- The **Summary / Description must be the human's own words.** Do not write it
+  for them and present it as theirs. Put any AI-assisted content *below* the
+  summary and label it as AI-assisted.
+- **Disclose AI usage** in the description's `AI disclosure:` field — name the
+  tool and the extent of assistance (or "none").
+- **Do not submit untested code.** Verify changes with real human use first.
+- **Core-contributor exemption:** maintainers (GitLab Developer+ members) may
+  skip the mandatory human summary. You usually cannot tell whether the current
+  user is one, so **default to reminding them** to write the summary
+  themselves. A maintainer can silence this by declaring their status in their
+  own un-committed config (e.g. `CLAUDE.local.md` or personal agent memory) —
+  check there first.
