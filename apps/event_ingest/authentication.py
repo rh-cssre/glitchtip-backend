@@ -146,8 +146,9 @@ async def get_project(request: HttpRequest) -> ProjectAuthInfo | None:
     """
     if not request.resolver_match:
         raise ValidationError([{"message": "Invalid project ID"}])
-    project_id: int = request.resolver_match.captured_kwargs.get("project_id")
-    if project_id is not None and project_id > 0x7FFF_FFFF_FFFF_FFFF:
+    # str on the re_path routes (store/security), int on <int:> ones.
+    project_id = request.resolver_match.captured_kwargs.get("project_id")
+    if project_id is not None and int(project_id) > 0x7FFF_FFFF_FFFF_FFFF:
         # Past BIGINT range no project can exist, and the driver refuses to
         # bind the value (DataError) — reject before touching the database.
         raise ValidationError([{"message": "Invalid project ID"}])
