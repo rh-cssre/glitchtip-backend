@@ -991,9 +991,9 @@ VTASKS_QUEUES = {
     },
 }
 
-# Per-task Sentry scope isolation (django-vtasks >= 3.1; older versions
-# ignore this). Without it, embedded workers share the ambient isolation
-# scope with HTTP requests and each other, cross-polluting breadcrumbs.
+# Per-task sentry-sdk scope isolation. Without it, embedded workers share the
+# ambient isolation scope with HTTP requests and each other, cross-polluting
+# breadcrumbs.
 VTASKS_TASK_CONTEXT = "glitchtip.vtasks_context.sentry_task_scope"
 
 # Maximum number of issues send in a single alert payload

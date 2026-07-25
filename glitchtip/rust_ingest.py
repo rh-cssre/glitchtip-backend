@@ -31,9 +31,10 @@ logger = logging.getLogger(__name__)
 _ENVELOPE_PATH_RE = re.compile(r"^/api/(\d+)/envelope/$")
 
 # SDKs authenticate envelope POSTs via ?sentry_key=<key> (glitchtip_key
-# also accepted). The key is public in Sentry's model (it ships in browser
-# bundles), but there's still no reason to copy customers' keys into the
-# operator's tracker — the project id in the URL identifies the project.
+# also accepted). The key is a public ingest credential by design (it ships
+# in browser bundles), but there's still no reason to copy customers' keys
+# into the operator's tracker — the project id in the URL identifies the
+# project.
 _KEY_QS_RE = re.compile(r"((?:sentry|glitchtip)_key=)[^&]*")
 
 # Project ids are BIGINT; the Rust IngestSession takes an i64. A larger id
@@ -259,10 +260,10 @@ class RustEnvelopeHandler:
         # captures on the process-ambient scope, whose breadcrumbs are
         # whatever the embedded worker/scheduler and other requests did
         # last, not this request's own trail. The full clear() is
-        # deliberately stricter than Sentry's ASGI middleware (which clears
-        # only breadcrumbs): it also drops ambient user/tags/contexts, so
-        # anything set on the global scope at startup won't appear on
-        # ingest-path events.
+        # deliberately stricter than the sentry SDK's own ASGI middleware
+        # (which clears only breadcrumbs): it also drops ambient
+        # user/tags/contexts, so anything set on the global scope at startup
+        # won't appear on ingest-path events.
         with sentry_sdk.isolation_scope() as sentry_scope:
             sentry_scope.clear()
             try:
