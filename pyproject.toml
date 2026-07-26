@@ -65,7 +65,7 @@ dev = [
     "django-sslserver~=0.22",
     "aioresponses~=0.7",
     "memray~=1.9",
-    "ruff~=0.6",
+    "ruff~=0.16",
     "tblib~=3.0",                         # Needed for test --parallel
     "ipython>=8.32.0",
     "vulture>=2.14",
@@ -74,9 +74,41 @@ dev = [
 
 [tool.ruff.lint]
 extend-select = ["I"]
+ignore = [
+    # Django's declarative style is built on mutable class attributes
+    # (`Meta.ordering`, `fields`, `list_display`, serializer/schema config).
+    # Annotating every one with `ClassVar` adds noise without catching bugs.
+    "RUF012",
+    # Ingest, alert delivery and maintenance tasks deliberately swallow broad
+    # exceptions so one bad payload or one unreachable endpoint cannot take
+    # down a batch. Each site is a considered choice, not an oversight.
+    "BLE001",
+    "S110",
+    # Naive datetimes are used on purpose for date-bucket keys, partition
+    # boundaries and test fixtures. Django's `USE_TZ` handling covers the
+    # stored values; blanket-flagging every `datetime(...)` is noise.
+    "DTZ001",
+    "DTZ005",
+    "DTZ007",
+    # Long-lived file handles (cold storage writers, streaming uploads) are
+    # closed explicitly rather than scoped to a `with` block.
+    "SIM115",
+    # File-mode rules depend on the checkout's permission bits, which git does
+    # not track for these files; they fire differently per developer machine.
+    "EXE001",
+    "EXE002",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "*/migrations/*.py" = ["I"]
+# The module name is the management command name (`manage.py import`), so it
+# cannot avoid shadowing the keyword.
+"apps/importer/management/commands/import.py" = ["N999"]
+
+[tool.ruff.lint.flake8-bugbear]
+# django-ninja declares request parsing in argument defaults; that is the
+# framework's API, not an accidental shared mutable default.
+extend-immutable-calls = ["ninja.File", "ninja.Form", "ninja.Query"]
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main"]

@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 
 class ThrottleException(Exception):
@@ -10,8 +9,8 @@ class ThrottleException(Exception):
     https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429
     """
 
-    retry_after: Optional[int | datetime]
+    retry_after: int | datetime | None
 
-    def __init__(self, retry_after: Optional[int | datetime] = None) -> None:
+    def __init__(self, retry_after: int | datetime | None = None) -> None:
         self.retry_after = retry_after
         super().__init__(retry_after)

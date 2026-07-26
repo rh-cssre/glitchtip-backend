@@ -7,7 +7,7 @@
 # partitions, so the DROP TABLE CASCADE statements here only touch the
 # empty parent tables — well within max_locks_per_transaction.
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 
 import apps.performance.models
 from django.conf import settings
@@ -34,9 +34,7 @@ def create_initial_span_partitions(apps, schema_editor):
 
     manager = PartitionManager(db_connection=schema_editor.connection.alias)
 
-    start_date = datetime.now(timezone.utc).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    start_date = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     end_date = start_date + timedelta(days=7)
 
     manager.create_partitions_for_date_range(

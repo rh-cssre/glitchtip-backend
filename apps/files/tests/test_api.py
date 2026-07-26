@@ -1,7 +1,7 @@
-import os
 import tempfile
 from hashlib import sha1
 from io import BytesIO
+from pathlib import Path
 from urllib.parse import urlparse
 
 from django.core.files.base import File as DjangoFile
@@ -88,7 +88,7 @@ class ReleaseAssembleAPITests(GlitchTipTestCaseMixin, TestCase):
         map_filename = filename + ".map"
         zip_file = SimpleUploadedFile(
             checksum,
-            open(os.path.dirname(__file__) + "/test_zip/" + checksum, "rb").read(),
+            (Path(__file__).parent / "test_zip" / checksum).read_bytes(),
         )
         await FileBlob.objects.acreate(blob=zip_file, size=3635, checksum=checksum)
         res = await self.async_client.post(

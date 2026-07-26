@@ -1,6 +1,6 @@
 # Generated manually for UptimeCheckHourlyStatistic
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 
 from django.db import migrations, models
 from django.db.migrations import RunSQL, SeparateDatabaseAndState
@@ -13,7 +13,7 @@ def create_initial_partitions(apps, schema_editor):
     from glitchtip.partition_manager import PartitionManager
 
     manager = PartitionManager(db_connection=schema_editor.connection.alias)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     start_of_week = now.replace(hour=0, minute=0, second=0, microsecond=0)
     start_of_week -= timedelta(days=start_of_week.weekday())

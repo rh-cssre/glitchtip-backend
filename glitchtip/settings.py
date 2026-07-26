@@ -459,9 +459,11 @@ if SENTRY_DSN:
 
     def before_send(event, hint):
         """Don't log useless, inactionable errors in Sentry."""
-        if "log_record" in hint:
-            if hint["log_record"].name == "django.security.DisallowedHost":
-                return None
+        if (
+            "log_record" in hint
+            and hint["log_record"].name == "django.security.DisallowedHost"
+        ):
+            return None
         if "exc_info" in hint:
             _, exc_value, _ = hint["exc_info"]
             if isinstance(exc_value, UnreadablePostError):
@@ -828,7 +830,7 @@ ANYMAIL_SETTINGS = [
     "SPARKPOST_API_URL",
     "SPARKPOST_TRACK_INITIAL_OPEN_AS_OPENED",
     "SCALEWAY_SECRET_KEY",
-    "SCALEWAY_PROJECT_ID"
+    "SCALEWAY_PROJECT_ID",
 ]
 
 ANYMAIL = {
@@ -1114,9 +1116,7 @@ GS_BUCKET_NAME = env("GS_BUCKET_NAME")
 GS_PROJECT_ID = env("GS_PROJECT_ID")
 
 if AWS_S3_ENDPOINT_URL:
-    MEDIA_URL = env.str(
-        "MEDIA_URL", "https://%s/%s/" % (AWS_S3_ENDPOINT_URL, AWS_LOCATION)
-    )
+    MEDIA_URL = env.str("MEDIA_URL", f"https://{AWS_S3_ENDPOINT_URL}/{AWS_LOCATION}/")
     STORAGES["default"] = {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage"}
 else:
     MEDIA_URL = "media/"

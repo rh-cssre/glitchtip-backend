@@ -22,7 +22,7 @@ async def _run_step(name: str, coro, *args):
     try:
         await coro(*args)
     except Exception:
-        logger.error("Maintenance step '%s' failed", name, exc_info=True)
+        logger.exception("Maintenance step '%s' failed", name)
     gc.collect()
     malloc_trim()
 

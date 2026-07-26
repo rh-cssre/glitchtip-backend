@@ -1,5 +1,3 @@
-from typing import Optional
-
 from django.db.models import Count, Exists, OuterRef, Prefetch
 from django.http import Http404, HttpResponse
 from django.shortcuts import aget_object_or_404
@@ -40,10 +38,10 @@ DELETE /api/0/projects/{organization_slug}/{project_slug}/teams/{team_slug}/
 
 def get_team_queryset(
     organization_slug: str,
-    team_slug: Optional[str] = None,
-    project_slug: Optional[str] = None,
-    user_id: Optional[int] = None,
-    id: Optional[int] = None,
+    team_slug: str | None = None,
+    project_slug: str | None = None,
+    user_id: int | None = None,
+    id: int | None = None,
     add_details=False,
     add_projects=False,
 ):

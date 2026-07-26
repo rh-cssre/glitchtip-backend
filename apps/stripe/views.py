@@ -168,9 +168,7 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
         # handled (welcome email) without an org; otherwise it's a real anomaly.
         if await handle_support_subscription(subscription, customer_obj):
             return
-        logger.warning(
-            f"Customer {customer_obj.id} has no organization_id", exc_info=True
-        )
+        logger.warning("Customer %s has no organization_id", customer_obj.id)
         return
 
     # Check region, is it this region or should it be forwarded
@@ -188,11 +186,13 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
                 "Content-Type": "application/json",
                 "From-Region": settings.STRIPE_REGION,
             }
-            async with aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session:
-                async with session.post(
+            async with (
+                aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session,
+                session.post(
                     forward_url, data=request.body, headers=headers, ssl=True
-                ) as response:
-                    await response.read()
+                ) as response,
+            ):
+                await response.read()
         return
 
     organization = await Organization.objects.filter(id=organization_id).afirst()
@@ -214,7 +214,7 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
         current_period_start, current_period_end, is_annual
     )
 
-    stripe_subscription, created = await StripeSubscription.objects.aupdate_or_create(
+    stripe_subscription, _created = await StripeSubscription.objects.aupdate_or_create(
         stripe_id=subscription.id,
         defaults={
             "created": unix_to_datetime(subscription.created),
@@ -326,10 +326,9 @@ async def stripe_webhook_view(request: HttpRequest, event_type: str | None = Non
     except ValueError as e:
         logger.error(f"Error during signature verification: {e}")
         return HttpResponseForbidden("Invalid payload")
-    except Exception as e:
-        logger.exception(
-            f"Unexpected error verifying signature: {e}"
-        )  # Catch unexpected exceptions
+    except Exception:
+        # Catch unexpected exceptions
+        logger.exception("Unexpected error verifying signature")
         return HttpResponseServerError("Internal Server Error")
 
     if event_type == "meter":
@@ -433,6 +432,6 @@ def verify_stripe_signature(payload, sig_header, event_type: str):
 
     except ValueError:
         raise
-    except Exception as e:
-        logger.exception(f"Error in verify_stripe_signature: {e}")
+    except Exception:
+        logger.exception("Error in verify_stripe_signature")
         return False

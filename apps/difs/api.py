@@ -112,7 +112,7 @@ async def project_reprocessing(
     """
     Not implemented. It is a dummy API to keep `sentry-cli upload-dif` happy
     """
-    return None
+    return
 
 
 def extract_proguard_id(name: str):
@@ -151,7 +151,7 @@ async def create_dif_from_read_only_file(proguard_file, project, proguard_id, fi
         blob = await FileBlob.objects.filter(checksum=checksum).afirst()
 
         if blob is None:
-            blob = FileBlob(checksum=checksum, size=size)  # noqa
+            blob = FileBlob(checksum=checksum, size=size)
             await sync_to_async(blob.blob.save)(filename, DjangoFile(tmp))
             await blob.asave()
 

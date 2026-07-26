@@ -573,7 +573,7 @@ class TestStripeWebhookView(TestCase):
             mock_stripe_get.side_effect = Exception(
                 "Stripe API Error: 429 - lock_timeout"
             )
-            with self.assertRaises(Exception):
+            with self.assertRaisesRegex(Exception, "lock_timeout"):
                 await stripe_webhook_view(first_request)
 
         # The retry of the same event must not be silently deduped.
@@ -691,12 +691,14 @@ class TestStripeMeterWebhookView(TestCase):
 
     async def test_fetch_failure_releases_dedup_for_retry(self):
         thin = {k: v for k, v in METER_ERROR_EVENT.items() if k != "data"}
-        with patch(
-            "apps.stripe.views.fetch_v2_event",
-            new=AsyncMock(side_effect=StripeError("boom", status=503)),
+        with (
+            patch(
+                "apps.stripe.views.fetch_v2_event",
+                new=AsyncMock(side_effect=StripeError("boom", status=503)),
+            ),
+            self.assertRaises(StripeError),
         ):
-            with self.assertRaises(StripeError):
-                await stripe_webhook_view(self._request(thin), event_type="meter")
+            await stripe_webhook_view(self._request(thin), event_type="meter")
 
         # The dedup key was released, so Stripe's retry processes the event.
         full = ThinEvent.model_validate(METER_ERROR_EVENT)

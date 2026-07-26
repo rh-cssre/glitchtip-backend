@@ -113,7 +113,7 @@ async def chunk_upload(
         await FileBlob.from_files(
             zip(files, checksums), organization=organization, logger=logger
         )
-    except IOError as err:
+    except OSError as err:
         logger.info("chunkupload.end", extra={"status": 400})
         raise HttpError(400, str(err)) from err
 

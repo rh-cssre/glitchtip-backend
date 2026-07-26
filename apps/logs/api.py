@@ -2,7 +2,7 @@ import asyncio
 import logging
 from base64 import b64decode, b64encode
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from urllib import parse
 from uuid import UUID
 
@@ -507,21 +507,21 @@ async def query_logs_combined(
     Cursor pagination uses UUIDv7 timestamps to skip tiers that can't
     contain older data, preventing duplicates across pages.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     hot_cutoff = now - timedelta(days=HOT_STORAGE_DAYS)
 
-    kwargs = dict(
-        organization_id=organization_id,
-        project_ids=project_ids,
-        level_values=level_values,
-        service=service,
-        environment=environment,
-        host=host,
-        trace_id=trace_id,
-        query=query,
-        limit=limit,
-        cursor_position=cursor_position,
-    )
+    kwargs = {
+        "organization_id": organization_id,
+        "project_ids": project_ids,
+        "level_values": level_values,
+        "service": service,
+        "environment": environment,
+        "host": host,
+        "trace_id": trace_id,
+        "query": query,
+        "limit": limit,
+        "cursor_position": cursor_position,
+    }
 
     needs_hot = end_dt > hot_cutoff
     needs_cold = start_dt < hot_cutoff
@@ -656,7 +656,7 @@ async def get_log_by_id(organization_id: int, log_id: UUID) -> LogEventRow | Non
     Uses UUIDv7 timestamp to determine which storage tier to query.
     """
     log_time = UUID7Helper.extract_datetime(log_id)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     hot_cutoff = now - timedelta(days=HOT_STORAGE_DAYS)
 
     # PG: sync_to_async (Django connection management)
@@ -706,7 +706,7 @@ async def list_logs(
     )
 
     # Determine time range (default to last 7 days)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start_dt = filters.start or (now - timedelta(days=DEFAULT_LOOKBACK_DAYS))
     end_dt = filters.end or now
 
@@ -716,18 +716,18 @@ async def list_logs(
     cursor_position = decode_cursor(filters.cursor)
     limit = filters.limit
 
-    query_kwargs = dict(
-        organization_id=organization.id,
-        start_dt=start_dt,
-        end_dt=end_dt,
-        project_ids=filters.project,
-        level_values=level_values,
-        service=filters.service,
-        environment=filters.environment,
-        host=filters.host,
-        trace_id=filters.trace_id,
-        query=filters.query,
-    )
+    query_kwargs = {
+        "organization_id": organization.id,
+        "start_dt": start_dt,
+        "end_dt": end_dt,
+        "project_ids": filters.project,
+        "level_values": level_values,
+        "service": filters.service,
+        "environment": filters.environment,
+        "host": filters.host,
+        "trace_id": filters.trace_id,
+        "query": filters.query,
+    }
 
     # Fetch limit + 1 to detect if there's a next page
     results = await query_logs_combined(
@@ -880,7 +880,7 @@ async def get_log_stats(
     )
 
     # Determine time range (default to last 7 days, max 90 days)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start_dt = filters.start or (now - timedelta(days=DEFAULT_LOOKBACK_DAYS))
     end_dt = filters.end or now
 

@@ -46,11 +46,11 @@ from gt_rust.envelope import (
 
 __all__ = [
     "EnvelopeTooBig",
-    "request_content_encoding",
-    "frame_envelope",
     "decompress_body",
-    "sentry_key_from_envelope_body",
     "envelope_error_response",
+    "frame_envelope",
+    "request_content_encoding",
+    "sentry_key_from_envelope_body",
 ]
 
 # Content-Encoding values gt_rust can decode. Anything else (absent,
