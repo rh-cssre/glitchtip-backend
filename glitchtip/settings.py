@@ -993,6 +993,11 @@ VTASKS_QUEUES = {
     },
 }
 
+# Per-task sentry-sdk scope isolation. Without it, embedded workers share the
+# ambient isolation scope with HTTP requests and each other, cross-polluting
+# breadcrumbs.
+VTASKS_TASK_CONTEXT = "glitchtip.vtasks_context.sentry_task_scope"
+
 # Maximum number of issues send in a single alert payload
 MAX_ISSUES_PER_ALERT = env.int("MAX_ISSUES_PER_ALERT", 3)
 

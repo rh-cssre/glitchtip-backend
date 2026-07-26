@@ -30,6 +30,13 @@ logger = logging.getLogger(__name__)
 
 _ENVELOPE_PATH_RE = re.compile(r"^/api/(\d+)/envelope/$")
 
+# SDKs authenticate envelope POSTs via ?sentry_key=<key> (glitchtip_key
+# also accepted). The key is a public ingest credential by design (it ships
+# in browser bundles), but there's still no reason to copy customers' keys
+# into the operator's tracker — the project id in the URL identifies the
+# project.
+_KEY_QS_RE = re.compile(r"((?:sentry|glitchtip)_key=)[^&]*")
+
 # Project ids are BIGINT; the Rust IngestSession takes an i64. A larger id
 # can't name a real project, so it must not overflow the session argument.
 _MAX_PROJECT_ID = 9223372036854775807
@@ -249,23 +256,45 @@ class RustEnvelopeHandler:
         return project_id
 
     async def __call__(self, scope, receive, send, project_id: int) -> None:
-        try:
-            await self._handle(scope, receive, send, project_id)
-        except Exception as e:
-            # Same contract as Django's handler: an unexpected failure is a
-            # 500, reported, never a dropped connection.
-            sentry_sdk.capture_exception(e)
-            logger.exception("Rust ingest path failed on %s", scope.get("path", ""))
+        # Fork a per-request isolation scope: this raw ASGI path otherwise
+        # captures on the process-ambient scope, whose breadcrumbs are
+        # whatever the embedded worker/scheduler and other requests did
+        # last, not this request's own trail. The full clear() is
+        # deliberately stricter than the sentry SDK's own ASGI middleware
+        # (which clears only breadcrumbs): it also drops ambient
+        # user/tags/contexts, so anything set on the global scope at startup
+        # won't appear on ingest-path events.
+        with sentry_sdk.isolation_scope() as sentry_scope:
+            sentry_scope.clear()
             try:
-                await _send_response(
-                    send,
-                    500,
-                    [("Content-Type", "application/json"), *_cors_headers(scope)],
-                    b'{"detail": "Internal server error"}',
+                sentry_scope.set_tag("rust_ingest.project_id", str(project_id))
+                sentry_scope.set_context(
+                    "request",
+                    {
+                        "method": scope.get("method"),
+                        "url": scope.get("path"),
+                        "query_string": _KEY_QS_RE.sub(
+                            r"\1[Filtered]",
+                            scope.get("query_string", b"").decode("latin1"),
+                        ),
+                    },
                 )
-            except Exception:
-                # Response already started — nothing more to send.
-                pass
+                await self._handle(scope, receive, send, project_id)
+            except Exception as e:
+                # Same contract as Django's handler: an unexpected failure is a
+                # 500, reported, never a dropped connection.
+                sentry_sdk.capture_exception(e)
+                logger.exception("Rust ingest path failed on %s", scope.get("path", ""))
+                try:
+                    await _send_response(
+                        send,
+                        500,
+                        [("Content-Type", "application/json"), *_cors_headers(scope)],
+                        b'{"detail": "Internal server error"}',
+                    )
+                except Exception:
+                    # Response already started — nothing more to send.
+                    pass
 
     async def _handle(self, scope, receive, send, project_id: int) -> None:
         from django.conf import settings
