@@ -133,7 +133,7 @@ async def fetch(session, monitor):
         )
     except SSLError:
         monitor["reason"] = MonitorCheckReason.SSL
-    except asyncio.TimeoutError:
+    except TimeoutError:
         monitor["reason"] = MonitorCheckReason.TIMEOUT
     except BlockedRedirectError:
         logger.warning(

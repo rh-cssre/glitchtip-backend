@@ -43,9 +43,11 @@ async def _post(url: str, **kwargs):
         return None
     kwargs.setdefault("timeout", aiohttp.ClientTimeout(total=10))
     try:
-        async with safe_session(settings.GLITCHTIP_ALLOW_PRIVATE_IPS) as session:
-            async with session.post(url, allow_redirects=False, **kwargs) as resp:
-                return resp
+        async with (
+            safe_session(settings.GLITCHTIP_ALLOW_PRIVATE_IPS) as session,
+            session.post(url, allow_redirects=False, **kwargs) as resp,
+        ):
+            return resp
     except (TimeoutError, aiohttp.ClientError):
         return None
 

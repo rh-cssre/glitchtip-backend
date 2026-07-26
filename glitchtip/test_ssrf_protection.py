@@ -5,6 +5,7 @@ validation is steered to an internal address via an HTTP redirect or DNS
 rebinding. See :mod:`glitchtip.ssrf_protection`.
 """
 
+import socket
 from unittest import mock
 
 from asgiref.sync import async_to_sync
@@ -196,11 +197,13 @@ class ResolveValidatedIPTests(SimpleTestCase):
         async def fake_getaddrinfo(*_, **__):
             return [(0, 0, 0, "", ("10.0.0.5", 0))]
 
-        with mock.patch(
-            "asyncio.BaseEventLoop.getaddrinfo", fake_getaddrinfo, create=True
+        with (
+            mock.patch(
+                "asyncio.BaseEventLoop.getaddrinfo", fake_getaddrinfo, create=True
+            ),
+            self.assertRaises(BlockedRedirectError),
         ):
-            with self.assertRaises(BlockedRedirectError):
-                self._run("rebind.example")
+            self._run("rebind.example")
 
     def test_hostname_pins_first_public_ip(self):
         async def fake_getaddrinfo(*_, **__):
@@ -215,13 +218,13 @@ class ResolveValidatedIPTests(SimpleTestCase):
             self.assertEqual(self._run("mixed.example"), "93.184.216.34")
 
     def test_unresolvable_host_blocked(self):
-        import socket
-
         async def fake_getaddrinfo(*_, **__):
             raise socket.gaierror("nope")
 
-        with mock.patch(
-            "asyncio.BaseEventLoop.getaddrinfo", fake_getaddrinfo, create=True
+        with (
+            mock.patch(
+                "asyncio.BaseEventLoop.getaddrinfo", fake_getaddrinfo, create=True
+            ),
+            self.assertRaises(BlockedRedirectError),
         ):
-            with self.assertRaises(BlockedRedirectError):
-                self._run("no-such-host.invalid")
+            self._run("no-such-host.invalid")

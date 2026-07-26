@@ -53,12 +53,14 @@ class ValidatePublicURLTests(SimpleTestCase):
         validate_public_url("http://127.0.0.1/", allow_private=True)
 
     def test_blocks_hostname_resolving_to_loopback(self):
-        with mock.patch(
-            "glitchtip.url_validation.socket.getaddrinfo",
-            return_value=[(0, 0, 0, "", ("127.0.0.1", 0))],
+        with (
+            mock.patch(
+                "glitchtip.url_validation.socket.getaddrinfo",
+                return_value=[(0, 0, 0, "", ("127.0.0.1", 0))],
+            ),
+            self.assertRaises(ValueError),
         ):
-            with self.assertRaises(ValueError):
-                validate_public_url("http://localhost.evil.example/")
+            validate_public_url("http://localhost.evil.example/")
 
     def test_dns_failure_is_permissive(self):
         # DNS failure defers to the runtime async check so that typos don't

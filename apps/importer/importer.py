@@ -68,11 +68,13 @@ class GlitchTipImporter:
 
     async def get(self, url: str):
         allow_private = settings.GLITCHTIP_ALLOW_PRIVATE_IPS
-        async with safe_session(allow_private) as session:
-            async with await request_with_validated_redirects(
+        async with (
+            safe_session(allow_private) as session,
+            await request_with_validated_redirects(
                 session, "GET", url, headers=self.headers, allow_private=allow_private
-            ) as res:
-                return await res.json()
+            ) as res,
+        ):
+            return await res.json()
 
     async def import_organization(self):
         resource = OrganizationResource()
@@ -195,14 +197,16 @@ class GlitchTipImporter:
 
     async def check_auth(self):
         allow_private = settings.GLITCHTIP_ALLOW_PRIVATE_IPS
-        async with safe_session(allow_private) as session:
-            async with await request_with_validated_redirects(
+        async with (
+            safe_session(allow_private) as session,
+            await request_with_validated_redirects(
                 session,
                 "GET",
                 self.url + "/api/0/",
                 headers=self.headers,
                 allow_private=allow_private,
-            ) as res:
-                data = await res.json()
-                if res.status != 200 or not data["user"]:
-                    raise ImporterException("Bad auth token")
+            ) as res,
+        ):
+            data = await res.json()
+            if res.status != 200 or not data["user"]:
+                raise ImporterException("Bad auth token")
