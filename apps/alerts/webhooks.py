@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 import aiohttp
 from django.conf import settings
 
+from glitchtip.ssrf_protection import safe_session
 from glitchtip.url_validation import check_url_safe
 
 from .constants import RecipientType
@@ -26,6 +27,29 @@ async def _is_url_allowed(url: str) -> bool:
         return True
     logger.warning("webhook delivery blocked: URL resolves to a private/internal IP")
     return False
+
+
+async def _post(url: str, **kwargs):
+    """POST to a validated webhook URL with SSRF protections.
+
+    Rejects blocked URLs up front, then connects only to a validated
+    (non-internal) address -- so DNS rebinding can't redirect the dial -- and
+    does not follow redirects, so a 3xx response can't be used to reach an
+    internal target. Returns the response, or None if the URL is disallowed or
+    the request errors. `kwargs` are forwarded to `session.post` (json/data/
+    headers/auth/timeout).
+    """
+    if not await _is_url_allowed(url):
+        return None
+    kwargs.setdefault("timeout", aiohttp.ClientTimeout(total=10))
+    try:
+        async with (
+            safe_session(settings.GLITCHTIP_ALLOW_PRIVATE_IPS) as session,
+            session.post(url, allow_redirects=False, **kwargs) as resp,
+        ):
+            return resp
+    except (TimeoutError, aiohttp.ClientError):
+        return None
 
 
 @dataclass
@@ -111,18 +135,8 @@ async def send_webhook(
     message: str,
     attachments: list[WebhookAttachment] | None = None,
 ):
-    if not await _is_url_allowed(url):
-        return None
     payload = WebhookPayload(text=message, attachments=attachments)
-    timeout = aiohttp.ClientTimeout(total=10)
-    try:
-        async with aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session:
-            async with session.post(
-                url, json=payload.to_dict(), timeout=timeout
-            ) as resp:
-                return resp
-    except (TimeoutError, aiohttp.ClientError):
-        return None
+    return await _post(url, json=payload.to_dict())
 
 
 async def send_issue_as_webhook(
@@ -242,16 +256,8 @@ async def send_issue_as_discord_webhook(
 
 
 async def send_discord_webhook(url: str, message: str, embeds: list[DiscordEmbed]):
-    if not await _is_url_allowed(url):
-        return None
     payload = DiscordWebhookPayload(content=message, embeds=embeds)
-    timeout = aiohttp.ClientTimeout(total=10)
-    try:
-        async with aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session:
-            async with session.post(url, json=asdict(payload), timeout=timeout) as resp:
-                return resp
-    except (TimeoutError, aiohttp.ClientError):
-        return None
+    return await _post(url, json=asdict(payload))
 
 
 @dataclass
@@ -320,17 +326,9 @@ async def send_googlechat_webhook(url: str, cards: list[GoogleChatCard]):
     Send Google Chat compatible message as documented in
     https://developers.google.com/chat/messages-overview
     """
-    if not await _is_url_allowed(url):
-        return None
     payload = GoogleChatWebhookPayload()
     [payload.add_card(card) for card in cards]
-    timeout = aiohttp.ClientTimeout(total=10)
-    try:
-        async with aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session:
-            async with session.post(url, json=asdict(payload), timeout=timeout) as resp:
-                return resp
-    except (TimeoutError, aiohttp.ClientError):
-        return None
+    return await _post(url, json=asdict(payload))
 
 
 async def send_issue_as_googlechat_webhook(
@@ -360,8 +358,6 @@ async def send_ntfy(
     tags: list[str] | None = None,
 ):
     """Send a notification via ntfy (https://ntfy.sh)."""
-    if not await _is_url_allowed(url):
-        return None
     headers = {
         "Title": title,
         "Markdown": "yes",
@@ -370,15 +366,7 @@ async def send_ntfy(
         headers["Click"] = click_url
     if tags:
         headers["Tags"] = ",".join(tags)
-    timeout = aiohttp.ClientTimeout(total=10)
-    try:
-        async with aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session:
-            async with session.post(
-                url, data=message.encode("utf-8"), headers=headers, timeout=timeout
-            ) as resp:
-                return resp
-    except (TimeoutError, aiohttp.ClientError):
-        return None
+    return await _post(url, data=message.encode("utf-8"), headers=headers)
 
 
 async def send_issue_as_ntfy(
@@ -415,8 +403,6 @@ async def send_teams_webhook(
     url: str, card_body: list[dict], actions: list[dict] | None = None
 ):
     """Send an Adaptive Card to a Microsoft Teams Workflows webhook."""
-    if not await _is_url_allowed(url):
-        return None
     payload = {
         "type": "message",
         "attachments": [
@@ -433,13 +419,7 @@ async def send_teams_webhook(
             }
         ],
     }
-    timeout = aiohttp.ClientTimeout(total=10)
-    try:
-        async with aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session:
-            async with session.post(url, json=payload, timeout=timeout) as resp:
-                return resp
-    except (TimeoutError, aiohttp.ClientError):
-        return None
+    return await _post(url, json=payload)
 
 
 async def send_issue_as_teams_webhook(
@@ -489,22 +469,9 @@ async def send_issue_as_teams_webhook(
 
 async def send_zulip_message(server_url, bot_email, api_key, channel, topic, content):
     """Send a message to a Zulip channel via the native API."""
-    if not await _is_url_allowed(server_url):
-        return None
     url = f"{server_url.rstrip('/')}/api/v1/messages"
     data = {"type": "channel", "to": channel, "topic": topic, "content": content}
-    timeout = aiohttp.ClientTimeout(total=10)
-    try:
-        async with aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session:
-            async with session.post(
-                url,
-                data=data,
-                auth=aiohttp.BasicAuth(bot_email, api_key),
-                timeout=timeout,
-            ) as resp:
-                return resp
-    except (TimeoutError, aiohttp.ClientError):
-        return None
+    return await _post(url, data=data, auth=aiohttp.BasicAuth(bot_email, api_key))
 
 
 async def send_issue_as_zulip(
@@ -543,15 +510,7 @@ async def send_issue_as_zulip(
 
 
 async def send_feishu_webhook(url: str, payload: dict) -> None:
-    if not await _is_url_allowed(url):
-        return None
-    timeout = aiohttp.ClientTimeout(total=10)
-    try:
-        async with aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session:
-            async with session.post(url, json=payload, timeout=timeout) as resp:
-                return resp
-    except (TimeoutError, aiohttp.ClientError):
-        return None
+    return await _post(url, json=payload)
 
 
 async def send_issue_as_feishu_webhook(
