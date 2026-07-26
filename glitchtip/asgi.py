@@ -25,8 +25,8 @@ application = get_asgi_application()
 print_startup_banner()
 
 # Route ingest paths to a lightweight handler with minimal middleware
-from glitchtip.ingest_asgi import IngestDispatcher  # noqa: E402
-from glitchtip.memory_trim import PeriodicMemoryTrim  # noqa: E402
+from glitchtip.ingest_asgi import IngestDispatcher
+from glitchtip.memory_trim import PeriodicMemoryTrim
 
 application = IngestDispatcher(application)
 
@@ -212,10 +212,10 @@ class MCPDjangoDispatcher:
             await asyncio.gather(*tasks, return_exceptions=True)
 
 
-from asgiref.sync import sync_to_async  # noqa: E402
-from django.conf import settings  # noqa: E402
-from django.db import close_old_connections  # noqa: E402
-from django_async_backend.db import close_old_async_connections  # noqa: E402
+from asgiref.sync import sync_to_async
+from django.conf import settings
+from django.db import close_old_connections
+from django_async_backend.db import close_old_async_connections
 
 
 class RecycleConnectionsMiddleware:

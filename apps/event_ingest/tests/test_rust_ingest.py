@@ -78,7 +78,7 @@ class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
 
     async def test_event_envelope(self):
         data, envelope = self._envelope()
-        status, headers, body = await self._post(envelope.encode())
+        status, _headers, body = await self._post(envelope.encode())
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["id"], data[0]["event_id"])
         await self._drain_rust_queue()

@@ -1,5 +1,3 @@
-from typing import List
-
 from django.http import HttpResponse
 from ninja.pagination import paginate
 
@@ -13,7 +11,7 @@ from . import router
 
 @router.get(
     "/issues/{int:issue_id}/user-reports/",
-    response=List[UserReportSchema],
+    response=list[UserReportSchema],
     by_alias=True,
 )
 @paginate

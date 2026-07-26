@@ -11,7 +11,7 @@ import shutil
 import tempfile
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest import mock
 
 from asgiref.sync import async_to_sync
@@ -55,7 +55,7 @@ def _make_span_staging_row(
     transaction_id: str = "txn001",
 ):
     if timestamp is None:
-        timestamp = datetime.now(timezone.utc) - timedelta(minutes=10)
+        timestamp = datetime.now(UTC) - timedelta(minutes=10)
     return SpanStaging(
         id=UUID7Helper.from_datetime(timestamp),
         organization_id=org_id,
@@ -143,7 +143,7 @@ class PromoteSpansTestCase(ColdStorageTestMixin, TestCase):
 
     async def test_promote_writes_hour_bucketed_chunk(self):
         """Promotion writes chunks under {date}/{HH}/ and clears staging."""
-        ts = datetime.now(timezone.utc) - timedelta(minutes=10)
+        ts = datetime.now(UTC) - timedelta(minutes=10)
         await SpanStaging.objects.abulk_create(
             [
                 _make_span_staging_row(
@@ -172,7 +172,7 @@ class PromoteSpansTestCase(ColdStorageTestMixin, TestCase):
 
     @freeze_time("2026-02-23 12:00:00")
     async def test_promote_skips_recent_rows(self):
-        recent = datetime(2026, 2, 23, 11, 59, 0, tzinfo=timezone.utc)
+        recent = datetime(2026, 2, 23, 11, 59, 0, tzinfo=UTC)
         await SpanStaging.objects.abulk_create(
             [_make_span_staging_row(self.org.id, self.project.id, timestamp=recent)]
         )
@@ -182,10 +182,10 @@ class PromoteSpansTestCase(ColdStorageTestMixin, TestCase):
 
     async def test_promote_drops_and_consumes_garbage(self):
         """Far-future spans are dropped but still consumed from staging."""
-        ts_ok = datetime.now(timezone.utc) - timedelta(minutes=10)
+        ts_ok = datetime.now(UTC) - timedelta(minutes=10)
         # Older than raw retention — selected by promotion (old UUID7 id),
         # then dropped by the garbage guard.
-        ts_old = datetime.now(timezone.utc) - timedelta(days=365)
+        ts_old = datetime.now(UTC) - timedelta(days=365)
         await SpanStaging.objects.abulk_create(
             [
                 _make_span_staging_row(self.org.id, self.project.id, timestamp=ts_ok),
@@ -208,7 +208,7 @@ class CompactSpansTestCase(ColdStorageTestMixin, TestCase):
         )
         self.org = self.project.organization
         # A fixed hour well in the past.
-        self.hour = datetime(2026, 5, 10, 2, 0, 0, tzinfo=timezone.utc)
+        self.hour = datetime(2026, 5, 10, 2, 0, 0, tzinfo=UTC)
 
     def _seed_hour(self, n_chunks=3, rows_per=3):
         for c in range(n_chunks):
@@ -358,9 +358,9 @@ class EnumerateSpanFilesTestCase(ColdStorageTestMixin, TestCase):
             "projects.Project", organization__scrub_ip_addresses=False
         )
         self.org = self.project.organization
-        self.hour = datetime(2026, 5, 10, 2, 0, 0, tzinfo=timezone.utc)
-        self.start = datetime(2026, 5, 10, tzinfo=timezone.utc)
-        self.end = datetime(2026, 5, 11, tzinfo=timezone.utc)
+        self.hour = datetime(2026, 5, 10, 2, 0, 0, tzinfo=UTC)
+        self.start = datetime(2026, 5, 10, tzinfo=UTC)
+        self.end = datetime(2026, 5, 11, tzinfo=UTC)
 
     def _enum(self):
         return enumerate_span_files(self.storage, self.org.id, self.start, self.end)
@@ -449,7 +449,7 @@ class QueryColdStorageTestCase(ColdStorageTestMixin, TestCase):
             "projects.Project", organization__scrub_ip_addresses=False
         )
         self.org = self.project.organization
-        self.ts = datetime(2026, 2, 20, 12, 0, 0, tzinfo=timezone.utc)
+        self.ts = datetime(2026, 2, 20, 12, 0, 0, tzinfo=UTC)
 
     def _write(self, rows):
         self._write_chunk(self.org.id, self.ts, rows)
@@ -467,8 +467,8 @@ class QueryColdStorageTestCase(ColdStorageTestMixin, TestCase):
                 for i in range(5)
             ]
         )
-        start = datetime(2026, 2, 20, tzinfo=timezone.utc)
-        end = datetime(2026, 2, 21, tzinfo=timezone.utc)
+        start = datetime(2026, 2, 20, tzinfo=UTC)
+        end = datetime(2026, 2, 21, tzinfo=UTC)
         results = query_span_groups_for_transaction(
             self.org.id, "/api/test/", start, end
         )
@@ -490,8 +490,8 @@ class QueryColdStorageTestCase(ColdStorageTestMixin, TestCase):
                 for i in range(5)
             ]
         )
-        start = datetime(2026, 2, 20, tzinfo=timezone.utc)
-        end = datetime(2026, 2, 21, tzinfo=timezone.utc)
+        start = datetime(2026, 2, 20, tzinfo=UTC)
+        end = datetime(2026, 2, 21, tzinfo=UTC)
         results = query_span_groups(self.org.id, None, start, end)
         self.assertEqual({r["op"] for r in results}, {"db", "http.client"})
 
@@ -510,8 +510,8 @@ class QueryColdStorageTestCase(ColdStorageTestMixin, TestCase):
                     )
                 )
         self._write(rows)
-        start = datetime(2026, 2, 20, tzinfo=timezone.utc)
-        end = datetime(2026, 2, 21, tzinfo=timezone.utc)
+        start = datetime(2026, 2, 20, tzinfo=UTC)
+        end = datetime(2026, 2, 21, tzinfo=UTC)
         results = query_n_plus_one_patterns(
             self.org.id, None, start, end, threshold=5.0
         )
@@ -521,8 +521,8 @@ class QueryColdStorageTestCase(ColdStorageTestMixin, TestCase):
 
     def test_query_transaction_trend_reads_rollup(self):
         """Trend reads the rollup tier produced by compaction."""
-        day1 = datetime(2026, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
-        day2 = datetime(2026, 5, 2, 12, 0, 0, tzinfo=timezone.utc)
+        day1 = datetime(2026, 5, 1, 12, 0, 0, tzinfo=UTC)
+        day2 = datetime(2026, 5, 2, 12, 0, 0, tzinfo=UTC)
         self._write_chunk(
             self.org.id,
             day1,
@@ -558,8 +558,8 @@ class QueryColdStorageTestCase(ColdStorageTestMixin, TestCase):
         results = query_transaction_trend(
             self.org.id,
             "/api/test/",
-            datetime(2026, 5, 1, tzinfo=timezone.utc),
-            datetime(2026, 5, 3, tzinfo=timezone.utc),
+            datetime(2026, 5, 1, tzinfo=UTC),
+            datetime(2026, 5, 3, tzinfo=UTC),
         )
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0]["count"], 3)
@@ -568,8 +568,8 @@ class QueryColdStorageTestCase(ColdStorageTestMixin, TestCase):
         self.assertAlmostEqual(results[1]["avg_duration"], 20.0, places=0)
 
     def test_query_empty_org(self):
-        start = datetime(2026, 2, 20, tzinfo=timezone.utc)
-        end = datetime(2026, 2, 21, tzinfo=timezone.utc)
+        start = datetime(2026, 2, 20, tzinfo=UTC)
+        end = datetime(2026, 2, 21, tzinfo=UTC)
         self.assertEqual(query_span_groups(self.org.id, None, start, end), [])
 
 
@@ -649,8 +649,8 @@ class DeletionTestCase(ColdStorageTestMixin, TestCase):
         )
         self._p1.start()
         self._p2.start()
-        self.hour = datetime(2026, 5, 10, 2, 0, 0, tzinfo=timezone.utc)
-        self.open_hour = datetime(2026, 5, 10, 5, 0, 0, tzinfo=timezone.utc)
+        self.hour = datetime(2026, 5, 10, 2, 0, 0, tzinfo=UTC)
+        self.open_hour = datetime(2026, 5, 10, 5, 0, 0, tzinfo=UTC)
 
     def tearDown(self):
         self._p1.stop()

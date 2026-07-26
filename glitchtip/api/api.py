@@ -183,7 +183,7 @@ async def get_settings(request: HttpRequest):
         elif adapter_cls:
             adapter = adapter_cls(request)
             social_app.authorize_url = await sync_to_async(
-                lambda: adapter.authorize_url
+                lambda adapter=adapter: adapter.authorize_url
             )()
         else:
             social_app.authorize_url = None

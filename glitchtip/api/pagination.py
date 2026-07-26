@@ -207,12 +207,10 @@ class AsyncLinkHeaderPagination(CursorPagination):
                 parsed = parse.urlparse(url)
                 cursor = parse.parse_qs(parsed.query).get("cursor", [""])[0]
                 links.append(
-                    '<{}>; rel="{}"; results="true"; cursor="{}"'.format(
-                        url, label, cursor
-                    )
+                    f'<{url}>; rel="{label}"; results="true"; cursor="{cursor}"'
                 )
             else:
-                links.append('<{}>; rel="{}"; results="false"'.format(base_url, label))
+                links.append(f'<{base_url}>; rel="{label}"; results="false"')
 
         response["Link"] = {", ".join(links)} if links else {}
         response["X-Max-Hits"] = self.max_hits

@@ -27,9 +27,9 @@ CLEAN_MODULE_RE = re.compile(
 )/)+|
 (?:[-\.][a-f0-9]{7,}$)  # Ending in a commitish
 """,
-    re.X | re.I,
+    re.VERBOSE | re.IGNORECASE,
 )
-VERSION_RE = re.compile(r"^[a-f0-9]{32}|[a-f0-9]{40}$", re.I)
+VERSION_RE = re.compile(r"^[a-f0-9]{32}|[a-f0-9]{40}$", re.IGNORECASE)
 NODE_MODULES_RE = re.compile(r"\bnode_modules/")
 
 
@@ -47,8 +47,7 @@ def generate_module(src):
         return UNKNOWN_MODULE
 
     filename, _ = splitext(urlsplit(src).path)
-    if filename.endswith(".min"):
-        filename = filename[:-4]
+    filename = filename.removesuffix(".min")
 
     tokens = filename.split("/")
     for idx, token in enumerate(tokens):

@@ -1,3 +1,3 @@
-from typing import Literal, Union
+from typing import Literal
 
-MeID = Union[Literal["me"], int]
+MeID = Literal["me"] | int

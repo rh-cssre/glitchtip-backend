@@ -1,7 +1,7 @@
 import re
 import shlex
 from datetime import datetime, timedelta
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from django.db.models import Count, F, FloatField, Q, Value
@@ -12,7 +12,6 @@ from django.shortcuts import aget_object_or_404
 from django.utils import timezone
 from ninja import Field, Schema
 from pydantic.functional_validators import BeforeValidator
-from typing_extensions import Annotated
 
 from apps.organizations_ext.models import Organization
 

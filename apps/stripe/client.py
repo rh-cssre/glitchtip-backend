@@ -2,8 +2,9 @@ import asyncio
 import json
 import random
 import re
+from collections.abc import AsyncGenerator
 from decimal import Decimal
-from typing import Any, AsyncGenerator, Type, TypeAlias, TypeVar
+from typing import Any
 
 import aiohttp
 from django.conf import settings
@@ -49,9 +50,8 @@ BASE_RETRY_DELAY = 0.5
 # per attempt; _stripe_request retries up to MAX_RETRIES on 429/5xx.
 STRIPE_TIMEOUT = aiohttp.ClientTimeout(total=10)
 
-AIOTupleParams: TypeAlias = list[tuple[str, str]]
-AIODictParams: TypeAlias = dict[str, int | str | list[int | str]]
-T = TypeVar("T", bound=BaseModel)
+type AIOTupleParams = list[tuple[str, str]]
+type AIODictParams = dict[str, int | str | list[int | str]]
 
 
 def param_helper(data: AIODictParams) -> AIOTupleParams:
@@ -76,30 +76,32 @@ async def _stripe_request(
     reusing a connection that may have been poisoned by the prior failure.
     """
     for attempt in range(max_retries + 1):
-        async with aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session:
-            async with session.request(
+        async with (
+            aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session,
+            session.request(
                 method, url, headers=HEADERS, timeout=STRIPE_TIMEOUT, **kwargs
-            ) as response:
-                if response.status == 200:
-                    return await response.text()
-                if response.status == 404:
-                    raise StripeResourceNotFound()
+            ) as response,
+        ):
+            if response.status == 200:
+                return await response.text()
+            if response.status == 404:
+                raise StripeResourceNotFound()
 
-                error = (await response.json()).get("error", {})
+            error = (await response.json()).get("error", {})
 
-                should_retry_header = response.headers.get("Stripe-Should-Retry")
-                if should_retry_header is not None:
-                    should_retry = should_retry_header.lower() == "true"
-                else:
-                    should_retry = response.status in RETRY_STATUSES
+            should_retry_header = response.headers.get("Stripe-Should-Retry")
+            if should_retry_header is not None:
+                should_retry = should_retry_header.lower() == "true"
+            else:
+                should_retry = response.status in RETRY_STATUSES
 
-                if not should_retry or attempt >= max_retries:
-                    raise StripeError(
-                        error.get("message", "Unknown error"),
-                        status=response.status,
-                        type=error.get("type", ""),
-                        code=error.get("code", ""),
-                    )
+            if not should_retry or attempt >= max_retries:
+                raise StripeError(
+                    error.get("message", "Unknown error"),
+                    status=response.status,
+                    type=error.get("type", ""),
+                    code=error.get("code", ""),
+                )
 
         delay = BASE_RETRY_DELAY * (2**attempt) + random.uniform(0, BASE_RETRY_DELAY)
         await asyncio.sleep(delay)
@@ -127,9 +129,9 @@ async def stripe_delete(endpoint: str) -> str:
     return await _stripe_request("DELETE", f"{STRIPE_URL}/{endpoint}")
 
 
-async def _paginated_stripe_get(
+async def _paginated_stripe_get[T: BaseModel](
     endpoint: str,
-    response_model: Type[StripeListResponse[T]],  # Use the generic type here
+    response_model: type[StripeListResponse[T]],  # Use the generic type here
     params: dict[str, AIODictParams] | None = None,
 ) -> AsyncGenerator[list[T], None]:
     """

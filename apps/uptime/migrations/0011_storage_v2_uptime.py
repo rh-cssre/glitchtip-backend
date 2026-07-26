@@ -2,7 +2,7 @@
 # Replaces Uptime tables with V2 schema and migrates recent data
 
 import apps.uptime.models
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from django.db import migrations, models
 from django.db.migrations import RunSQL, SeparateDatabaseAndState
 from apps.shared.migration_utils import get_sql_content
@@ -16,7 +16,7 @@ def create_initial_partitions(apps, schema_editor):
     from glitchtip.partition_manager import PartitionManager
 
     manager = PartitionManager(db_connection=schema_editor.connection.alias)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Default start date is today
     start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -50,7 +50,7 @@ def create_initial_partitions(apps, schema_editor):
                 min_start = cursor.fetchone()[0]
                 if min_start:
                     if min_start.tzinfo is None:
-                        min_start = min_start.replace(tzinfo=timezone.utc)
+                        min_start = min_start.replace(tzinfo=UTC)
                     # Subtract 1 day as a safety buffer to ensure all 10k rows are covered
                     min_date = (min_start - timedelta(days=1)).replace(
                         hour=0, minute=0, second=0, microsecond=0
@@ -123,7 +123,7 @@ def migrate_legacy_data(apps, schema_editor):
             print("No legacy uptime checks found.")
         else:
             # Determine valid date range for partitions we just created
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
             # Find min date from rows to match create_initial_partitions logic
@@ -131,12 +131,11 @@ def migrate_legacy_data(apps, schema_editor):
 
             if min_start:
                 if min_start.tzinfo is None:
-                    min_start = min_start.replace(tzinfo=timezone.utc)
+                    min_start = min_start.replace(tzinfo=UTC)
                 min_date = (min_start - timedelta(days=1)).replace(
                     hour=0, minute=0, second=0, microsecond=0
                 )
-                if min_date < start_date:
-                    start_date = min_date
+                start_date = min(start_date, min_date)
 
             target_end = now.replace(
                 hour=0, minute=0, second=0, microsecond=0
@@ -164,7 +163,7 @@ def migrate_legacy_data(apps, schema_editor):
 
                 # Filter out-of-range checks
                 if start_check.tzinfo is None:
-                    start_check = start_check.replace(tzinfo=timezone.utc)
+                    start_check = start_check.replace(tzinfo=UTC)
 
                 if start_check < start_date or start_check >= end_date:
                     skipped_count += 1

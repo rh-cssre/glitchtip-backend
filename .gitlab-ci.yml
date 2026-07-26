@@ -171,9 +171,8 @@ e2e:
 lint:
   image: python:3.14-slim
   script:
-    # Pinned: ruff 0.16.0 added rules that fail the current tree (~900
-    # findings). Sweep the tree, then move the pin.
-    - pip install ruff==0.15.22 vulture==2.16
+    # Keep in sync with the `ruff` pin in pyproject.toml's dev group.
+    - pip install ruff==0.16.0 vulture==2.16
     - ruff check glitchtip/ apps/
     - vulture apps/ glitchtip/ vulture_whitelist.py --min-confidence 100 --exclude "*/migrations/*,glitchtip/test_runner.py,apps/organizations_ext/api.py"
   rules:

@@ -4,7 +4,7 @@ Tests for log ingestion pipeline.
 
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest import mock
 
 from django.core.cache import cache
@@ -165,7 +165,7 @@ class LogIngestProcessingTestCase(TransactionTestCase):
     ]
 
     def _log_message(self, body: str) -> LogTaskMessage:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return LogTaskMessage(
             project_id=self.project.id,
             organization_id=self.organization.id,
@@ -187,12 +187,14 @@ class LogIngestProcessingTestCase(TransactionTestCase):
     def test_copy_non_unique_integrity_error_propagates(self):
         """A non-conflict IntegrityError (e.g. a missing partition, 23514)
         must not retry through the INSERT — it would fail identically."""
-        with mock.patch(
-            "apps.logs.process_logs.copy_rows",
-            side_effect=fake_integrity_error("23514"),
+        with (
+            mock.patch(
+                "apps.logs.process_logs.copy_rows",
+                side_effect=fake_integrity_error("23514"),
+            ),
+            self.assertRaises(IntegrityError),
         ):
-            with self.assertRaises(IntegrityError):
-                process_log_events([self._log_message("gap")])
+            process_log_events([self._log_message("gap")])
         self.assertEqual(LogEvent.objects.count(), 0)
 
     def test_copy_rows_with_debug_cursor(self):
@@ -272,7 +274,7 @@ class LogIngestProcessingTestCase(TransactionTestCase):
 
     def test_process_single_log(self):
         """Test processing a single log event"""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         timestamp = now.timestamp()
 
         message = LogTaskMessage(
@@ -307,7 +309,7 @@ class LogIngestProcessingTestCase(TransactionTestCase):
 
     def test_process_multiple_logs(self):
         """Test processing multiple log events in one batch"""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         timestamp = now.timestamp()
 
         message = LogTaskMessage(
@@ -328,7 +330,7 @@ class LogIngestProcessingTestCase(TransactionTestCase):
 
     def test_process_log_with_trace_id(self):
         """Test processing log with trace ID"""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         timestamp = now.timestamp()
         trace_id = "550e8400-e29b-41d4-a716-446655440000"
 
@@ -364,7 +366,7 @@ class LogIngestProcessingTestCase(TransactionTestCase):
 
     def test_process_log_with_severity_number(self):
         """Test processing log with OpenTelemetry severity number"""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         timestamp = now.timestamp()
 
         message = LogTaskMessage(
@@ -398,7 +400,7 @@ class LogIngestProcessingTestCase(TransactionTestCase):
 
     def test_process_log_with_high_bit_span_id(self):
         """Logs with high-bit span_id should insert without overflow."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         message = LogTaskMessage(
             project_id=self.project.id,
             organization_id=self.organization.id,
@@ -421,7 +423,7 @@ class LogIngestProcessingTestCase(TransactionTestCase):
 
     def test_process_log_preserves_extra_data(self):
         """Test that extra fields are preserved in data"""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         timestamp = now.timestamp()
 
         message = LogTaskMessage(

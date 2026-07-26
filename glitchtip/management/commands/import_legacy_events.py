@@ -10,8 +10,8 @@ Usage:
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Iterator
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 
 from django.core.management.base import BaseCommand
 from django.db import connection, transaction
@@ -78,9 +78,9 @@ class Command(BaseCommand):
         start_dt = None
         end_dt = None
         if start_date:
-            start_dt = datetime.fromisoformat(start_date).replace(tzinfo=timezone.utc)
+            start_dt = datetime.fromisoformat(start_date).replace(tzinfo=UTC)
         if end_date:
-            end_dt = datetime.fromisoformat(end_date).replace(tzinfo=timezone.utc)
+            end_dt = datetime.fromisoformat(end_date).replace(tzinfo=UTC)
 
         self.stdout.write(self.style.WARNING("=" * 70))
         self.stdout.write(self.style.WARNING("Legacy Event Import"))
@@ -217,7 +217,9 @@ class Command(BaseCommand):
             )
             return cursor.fetchone()[0]
 
-    def count_events(self, start_dt: datetime = None, end_dt: datetime = None) -> int:
+    def count_events(
+        self, start_dt: datetime | None = None, end_dt: datetime | None = None
+    ) -> int:
         """Count events in archive table."""
         where_clauses = []
         params = []
@@ -239,7 +241,10 @@ class Command(BaseCommand):
             return cursor.fetchone()[0]
 
     def preview_migration(
-        self, batch_size: int, start_dt: datetime = None, end_dt: datetime = None
+        self,
+        batch_size: int,
+        start_dt: datetime | None = None,
+        end_dt: datetime | None = None,
     ):
         """Show preview of what would be migrated."""
         self.stdout.write("\nPreview of first batch:")
@@ -281,9 +286,9 @@ class Command(BaseCommand):
     def fetch_events_batches(
         self,
         batch_size: int,
-        limit: int = None,
-        start_dt: datetime = None,
-        end_dt: datetime = None,
+        limit: int | None = None,
+        start_dt: datetime | None = None,
+        end_dt: datetime | None = None,
     ) -> Iterator[list]:
         """
         Fetch events from archive table in batches.
@@ -420,7 +425,7 @@ class Command(BaseCommand):
             return cursor.rowcount
 
     def get_date_range(
-        self, start_dt: datetime = None, end_dt: datetime = None
+        self, start_dt: datetime | None = None, end_dt: datetime | None = None
     ) -> tuple[datetime, datetime]:
         """Get the min and max received dates for events to be imported."""
         if start_dt and end_dt:

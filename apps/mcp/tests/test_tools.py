@@ -86,15 +86,19 @@ class CheckScopesTest(TestCase):
         user = baker.make("users.user", is_active=True)
         token = self._mock_access_token(user.id, [])
 
-        with patch("apps.mcp.server.get_access_token", return_value=token):
-            with self.assertRaises(ValueError):
-                _check_scopes(["project:read"])
+        with (
+            patch("apps.mcp.server.get_access_token", return_value=token),
+            self.assertRaises(ValueError),
+        ):
+            _check_scopes(["project:read"])
 
     def test_not_authenticated(self):
         """Missing auth context should raise ValueError."""
-        with patch("apps.mcp.server.get_access_token", return_value=None):
-            with self.assertRaises(ValueError):
-                _check_scopes(["project:read"])
+        with (
+            patch("apps.mcp.server.get_access_token", return_value=None),
+            self.assertRaises(ValueError),
+        ):
+            _check_scopes(["project:read"])
 
 
 class DataLayerTest(TestCase):

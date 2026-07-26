@@ -182,12 +182,8 @@ class ProjectKey(CreatedModel):
         if not urlparts.netloc or not urlparts.scheme:
             return ""
 
-        return "%s://%s@%s/%s" % (
-            urlparts.scheme,
-            self.public_key_hex,
-            urlparts.netloc + urlparts.path,
-            self.project_id,
-        )
+        host = urlparts.netloc + urlparts.path
+        return f"{urlparts.scheme}://{self.public_key_hex}@{host}/{self.project_id}"
 
     def get_dsn_security(self):
         urlparts = settings.GLITCHTIP_URL
@@ -195,11 +191,10 @@ class ProjectKey(CreatedModel):
         if not urlparts.netloc or not urlparts.scheme:
             return ""
 
-        return "%s://%s/api/%s/security/?glitchtip_key=%s" % (
-            urlparts.scheme,
-            urlparts.netloc + urlparts.path,
-            self.project_id,
-            self.public_key_hex,
+        host = urlparts.netloc + urlparts.path
+        return (
+            f"{urlparts.scheme}://{host}/api/{self.project_id}/security/"
+            f"?glitchtip_key={self.public_key_hex}"
         )
 
 

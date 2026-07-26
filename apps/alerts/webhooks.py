@@ -266,50 +266,53 @@ class GoogleChatCard:
     sections: list[dict] | None = None
 
     def construct_uptime_card(self, title: str, subtitle: str, text: str, url: str):
-        self.header = dict(
-            title=title,
-            subtitle=subtitle,
-        )
+        self.header = {
+            "title": title,
+            "subtitle": subtitle,
+        }
         self.sections = [
-            dict(
-                widgets=[
-                    dict(
-                        decoratedText=dict(
-                            text=text,
-                            button=dict(
-                                text="View", onClick=dict(openLink=dict(url=url))
-                            ),
-                        )
-                    )
+            {
+                "widgets": [
+                    {
+                        "decoratedText": {
+                            "text": text,
+                            "button": {
+                                "text": "View",
+                                "onClick": {"openLink": {"url": url}},
+                            },
+                        }
+                    }
                 ]
-            )
+            }
         ]
         return self
 
     def construct_issue_card(
         self, title: str, issue, tags: list[TagData] | None = None
     ):
-        self.header = dict(title=title, subtitle=issue.project.name)
-        section_header = "<font color='{}'>{}</font>".format(
-            issue.get_hex_color(), str(issue)
-        )
+        self.header = {"title": title, "subtitle": issue.project.name}
+        section_header = f"<font color='{issue.get_hex_color()}'>{issue!s}</font>"
         widgets = []
-        widgets.append(dict(decoratedText=dict(topLabel="Culprit", text=issue.culprit)))
-        for tag in tags or []:
-            widgets.append(dict(decoratedText=dict(topLabel=tag.label, text=tag.value)))
         widgets.append(
-            dict(
-                buttonList=dict(
-                    buttons=[
-                        dict(
-                            text="View Issue {}".format(issue.short_id_display),
-                            onClick=dict(openLink=dict(url=issue.get_detail_url())),
-                        )
-                    ]
-                )
-            )
+            {"decoratedText": {"topLabel": "Culprit", "text": issue.culprit}}
         )
-        self.sections = [dict(header=section_header, widgets=widgets)]
+        for tag in tags or []:
+            widgets.append(
+                {"decoratedText": {"topLabel": tag.label, "text": tag.value}}
+            )
+        widgets.append(
+            {
+                "buttonList": {
+                    "buttons": [
+                        {
+                            "text": f"View Issue {issue.short_id_display}",
+                            "onClick": {"openLink": {"url": issue.get_detail_url()}},
+                        }
+                    ]
+                }
+            }
+        )
+        self.sections = [{"header": section_header, "widgets": widgets}]
         return self
 
 
@@ -318,7 +321,7 @@ class GoogleChatWebhookPayload:
     cardsV2: list[dict[str, GoogleChatCard]] = field(default_factory=list)
 
     def add_card(self, card):
-        return self.cardsV2.append(dict(cardId="createCardMessage", card=card))
+        return self.cardsV2.append({"cardId": "createCardMessage", "card": card})
 
 
 async def send_googlechat_webhook(url: str, cards: list[GoogleChatCard]):
@@ -662,8 +665,8 @@ async def send_test_notification(
         return await send_feishu_webhook(url, payload)
     elif recipient_type == RecipientType.GOOGLE_CHAT:
         card = GoogleChatCard()
-        card.header = dict(title=title, subtitle=project.name)
-        card.sections = [dict(widgets=[dict(decoratedText=dict(text=message))])]
+        card.header = {"title": title, "subtitle": project.name}
+        card.sections = [{"widgets": [{"decoratedText": {"text": message}}]}]
         return await send_googlechat_webhook(url, [card])
     else:
         attachment = WebhookAttachment(title=title, title_link="", text=message)

@@ -173,12 +173,11 @@ async def promote_spans() -> tuple[int, bool]:
                     storage, org_id, date_str, hour_str, group_rows
                 )
             except Exception:
-                logger.error(
+                logger.exception(
                     "Failed to write parquet chunk for org %d %s/%s",
                     org_id,
                     date_str,
                     hour_str,
-                    exc_info=True,
                 )
                 continue
 
@@ -190,13 +189,12 @@ async def promote_spans() -> tuple[int, bool]:
             except Exception:
                 # DELETE failed after chunk was written — remove the chunk
                 # to prevent duplicate data on the next promotion run.
-                logger.error(
+                logger.exception(
                     "Failed to delete promoted rows for org %d %s/%s, "
                     "removing chunk to prevent duplicates",
                     org_id,
                     date_str,
                     hour_str,
-                    exc_info=True,
                 )
                 try:
                     await sync_to_async(storage.delete)(chunk_path)
@@ -497,9 +495,7 @@ def compact_span_chunks() -> int:
                     storage, raw_org, rollup_org, date_dir, day_start, now
                 )
             except Exception:
-                logger.error(
-                    "Failed compacting %s/%s", raw_org, date_dir, exc_info=True
-                )
+                logger.exception("Failed compacting %s/%s", raw_org, date_dir)
 
     if compacted:
         logger.info("Compacted %d span chunk files", compacted)
@@ -534,7 +530,7 @@ def _compact_org_date(
         try:
             _write_hour_rollup(storage, f"{date_path}/{hf}", rollup_file, hour_start)
         except Exception:
-            logger.error("Failed recovery rollup %s/%s", date_dir, hh, exc_info=True)
+            logger.exception("Failed recovery rollup %s/%s", date_dir, hh)
 
     compacted = 0
     for hh in hour_dirs:
@@ -571,7 +567,7 @@ def _compact_org_date(
         except Exception:
             # Rollup will be recomputed on the next compaction tick by the
             # recovery loop above.
-            logger.error("Failed hour rollup %s/%s", date_dir, hh, exc_info=True)
+            logger.exception("Failed hour rollup %s/%s", date_dir, hh)
         _delete_subtree(storage, chunk_dir)
         compacted += len(chunks)
 

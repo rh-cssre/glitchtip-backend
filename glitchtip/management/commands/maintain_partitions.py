@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
@@ -14,7 +14,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         manager = PartitionManager(db_connection=settings.MAINTENANCE_DATABASE_ALIAS)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # 1. Daily UUIDv7 partitions (Events + SpanStaging)
         daily_v7_models = [

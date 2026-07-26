@@ -34,4 +34,3 @@ async def delete_api_token(request: AuthHttpRequest, token_id: int):
     result = await get_queryset(request).filter(id=token_id).adelete()
     if not result[0]:
         raise Http404()
-    return
