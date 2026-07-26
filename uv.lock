@@ -1321,6 +1321,10 @@ dev = [
     { name = "tblib" },
     { name = "vulture" },
 ]
+lint = [
+    { name = "ruff" },
+    { name = "vulture" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -1378,9 +1382,13 @@ dev = [
     { name = "ipython", specifier = ">=8.32.0" },
     { name = "memray", specifier = "~=1.9" },
     { name = "model-bakery-async", specifier = "~=1.23" },
-    { name = "ruff", specifier = "~=0.16" },
+    { name = "ruff", specifier = "~=0.16.0" },
     { name = "tblib", specifier = "~=3.0" },
-    { name = "vulture", specifier = ">=2.14" },
+    { name = "vulture", specifier = "~=2.16" },
+]
+lint = [
+    { name = "ruff", specifier = "~=0.16.0" },
+    { name = "vulture", specifier = "~=2.16" },
 ]
 
 [[package]]

@@ -57,7 +57,18 @@ dependencies = [
 ]
 
 [dependency-groups]
+# CI's lint job installs only this group, so the linters it runs are the ones
+# pinned in uv.lock — there is no second version to keep in sync by hand.
+# ruff is pinned to a patch range on purpose: pre-1.0 it changes its *default*
+# rule selection across minor versions, so `~=0.16` would let a routine
+# `uv lock --upgrade` drop hundreds of new findings into an unrelated
+# dependency MR. Widening this is a deliberate edit plus a tree sweep.
+lint = [
+    "ruff~=0.16.0",
+    "vulture~=2.16",
+]
 dev = [
+    {include-group = "lint"},
     "freezegun~=1.1",
     "model-bakery-async~=1.23",
     "django-debug-toolbar~=7.0",
@@ -65,10 +76,8 @@ dev = [
     "django-sslserver~=0.22",
     "aioresponses~=0.7",
     "memray~=1.9",
-    "ruff~=0.16",
     "tblib~=3.0",                         # Needed for test --parallel
     "ipython>=8.32.0",
-    "vulture>=2.14",
     "coverage>=7.13.4",
 ]
 
