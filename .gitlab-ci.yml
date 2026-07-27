@@ -171,10 +171,7 @@ e2e:
 lint:
   image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.14-$BASE_LAYER
   script:
-    # Install the linters from the lockfile so CI runs exactly the versions the
-    # `lint` dependency group pins — one source of truth, no second pin here to
-    # drift. `--only-group lint` installs just ruff and vulture (two wheels, no
-    # Django), so the job stays as fast as a bare pip install.
+    # Install linters from the lockfile via `lint` dependency group
     - uv sync --only-group lint --frozen --no-install-project
     - uv run --no-sync ruff check glitchtip/ apps/
     - uv run --no-sync vulture apps/ glitchtip/ vulture_whitelist.py --min-confidence 100 --exclude "*/migrations/*,glitchtip/test_runner.py,apps/organizations_ext/api.py"
