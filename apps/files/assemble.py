@@ -46,12 +46,10 @@ def _get_cache_key(task, scope, checksum):
     ``checksum`` should be the SHA1 hash of the main file that is being
     assembled.
     """
-    return (
-        "assemble-status:%s"
-        % hashlib.sha1(
-            ("%s|%s|%s" % (scope, checksum.encode("ascii"), task)).encode()
-        ).hexdigest()
-    )
+    digest = hashlib.sha1(
+        f"{scope}|{checksum.encode('ascii')}|{task}".encode()
+    ).hexdigest()
+    return f"assemble-status:{digest}"
 
 
 def set_assemble_status(
@@ -297,7 +295,7 @@ def assemble_file(
 
     # Sanity check.  In case not all blobs exist at this point we have a
     # race condition.
-    if set(x[1] for x in file_blobs) != set(chunks):
+    if {x[1] for x in file_blobs} != set(chunks):
         set_assemble_status(
             task,
             organization.id,

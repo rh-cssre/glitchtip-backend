@@ -1,5 +1,5 @@
 import json
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 from urllib.parse import urlparse
 
 from pydantic import WrapValidator, field_validator, model_validator
@@ -97,7 +97,7 @@ class StackTraceFrame(LaxIngestSchema):
     in_app: bool | None = None
     stack_start: bool | None = None
     lock: LockReason | None = None
-    vars: dict[str, Union[str, dict, list]] | None = None
+    vars: dict[str, str | dict | list] | None = None
     instruction_addr: str | None = None
     addr_mode: str | None = None
     symbol_addr: str | None = None

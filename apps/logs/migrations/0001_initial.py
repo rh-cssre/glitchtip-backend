@@ -4,7 +4,7 @@
 # Implements UUIDv7 partitioning with nested HASH by organization_id,
 # search indexes (trigram + service/environment/host), and LogResource lookup table.
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 
 import django.db.models.deletion
 from django.contrib.postgres.operations import TrigramExtension
@@ -22,7 +22,7 @@ def create_initial_partitions(apps, schema_editor):
     from glitchtip.partition_manager import PartitionManager
 
     manager = PartitionManager(db_connection=schema_editor.connection.alias)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Start date is today
     start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -47,9 +47,7 @@ def drop_initial_partitions(apps, schema_editor):
     """
     Reverse migration: drop the partitions we created.
     """
-    start_date = datetime.now(timezone.utc).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    start_date = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
     with schema_editor.connection.cursor() as cursor:
         for day in range(7):

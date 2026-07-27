@@ -1,5 +1,4 @@
-from datetime import datetime, timedelta
-from datetime import timezone as dt_timezone
+from datetime import UTC, datetime, timedelta
 from unittest import mock
 
 from aioresponses import aioresponses
@@ -31,7 +30,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
 
         # Create partitions for 2020-01-01 to 2020-01-07 to cover test data
         manager = PartitionManager()
-        start_date = datetime(2020, 1, 1, tzinfo=dt_timezone.utc)
+        start_date = datetime(2020, 1, 1, tzinfo=UTC)
         end_date = start_date + timedelta(days=7)
         manager.create_partitions_for_date_range(
             parent_table="uptime_monitorcheck",
@@ -409,7 +408,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         self.assertIsNone(mon.cached_is_up)
         self.assertIsNone(mon.cached_last_change)
 
-        now = datetime(2020, 1, 1, 12, 0, tzinfo=dt_timezone.utc)
+        now = datetime(2020, 1, 1, 12, 0, tzinfo=UTC)
         result = {
             "id": mon.id,
             "organization_id": mon.organization_id,
@@ -432,7 +431,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
                 Monitor, url="https://example.com", monitor_type=MonitorType.GET
             )
 
-        first_now = datetime(2020, 1, 1, 12, 0, tzinfo=dt_timezone.utc)
+        first_now = datetime(2020, 1, 1, 12, 0, tzinfo=UTC)
         result = {
             "id": mon.id,
             "organization_id": mon.organization_id,
@@ -449,7 +448,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         self.assertEqual(mon.cached_last_change, first_now)
 
         # Now simulate going down
-        second_now = datetime(2020, 1, 2, 12, 0, tzinfo=dt_timezone.utc)
+        second_now = datetime(2020, 1, 2, 12, 0, tzinfo=UTC)
         result2 = {
             "id": mon.id,
             "organization_id": mon.organization_id,
@@ -472,7 +471,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
                 Monitor, url="https://example.com", monitor_type=MonitorType.GET
             )
 
-        first_now = datetime(2020, 1, 1, 12, 0, tzinfo=dt_timezone.utc)
+        first_now = datetime(2020, 1, 1, 12, 0, tzinfo=UTC)
         result = {
             "id": mon.id,
             "organization_id": mon.organization_id,
@@ -485,7 +484,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
             async_to_sync(save_monitor_checks)([result], first_now)
 
         # Same state, no change
-        second_now = datetime(2020, 1, 2, 12, 0, tzinfo=dt_timezone.utc)
+        second_now = datetime(2020, 1, 2, 12, 0, tzinfo=UTC)
         result2 = {
             "id": mon.id,
             "organization_id": mon.organization_id,
@@ -520,7 +519,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
             "organization_id": mon.organization_id,
             "is_up": False,
             "latest_is_up": True,
-            "last_change": datetime(2020, 1, 1, tzinfo=dt_timezone.utc),
+            "last_change": datetime(2020, 1, 1, tzinfo=UTC),
             "cached_consecutive_down": consecutive_down,
             "confirmation_threshold": threshold,
             "monitor_type": MonitorType.GET,
@@ -536,7 +535,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
                 monitor_type=MonitorType.GET,
                 confirmation_threshold=2,
             )
-        now = datetime(2020, 1, 1, 12, 0, tzinfo=dt_timezone.utc)
+        now = datetime(2020, 1, 1, 12, 0, tzinfo=UTC)
         with freeze_time("2020-01-01"):
             async_to_sync(save_monitor_checks)([self._down_result(mon, 0, 2)], now)
 
@@ -557,7 +556,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
                 monitor_type=MonitorType.GET,
                 confirmation_threshold=2,
             )
-        now = datetime(2020, 1, 2, 12, 0, tzinfo=dt_timezone.utc)
+        now = datetime(2020, 1, 2, 12, 0, tzinfo=UTC)
         with freeze_time("2020-01-02"):
             async_to_sync(save_monitor_checks)([self._down_result(mon, 1, 2)], now)
 
@@ -580,13 +579,13 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
                 cached_is_up=True,
                 cached_consecutive_down=1,
             )
-        now = datetime(2020, 1, 2, 12, 0, tzinfo=dt_timezone.utc)
+        now = datetime(2020, 1, 2, 12, 0, tzinfo=UTC)
         result = {
             "id": mon.id,
             "organization_id": mon.organization_id,
             "is_up": True,
             "latest_is_up": True,
-            "last_change": datetime(2020, 1, 1, tzinfo=dt_timezone.utc),
+            "last_change": datetime(2020, 1, 1, tzinfo=UTC),
             "cached_consecutive_down": 1,
             "confirmation_threshold": 2,
             "monitor_type": MonitorType.GET,
@@ -609,7 +608,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
                 confirmation_threshold=2,
                 cached_is_up=False,
             )
-        now = datetime(2020, 1, 2, 12, 0, tzinfo=dt_timezone.utc)
+        now = datetime(2020, 1, 2, 12, 0, tzinfo=UTC)
         # Already at the threshold and confirmed down; another failure must not
         # push the counter past the threshold.
         result = self._down_result(mon, 2, 2)

@@ -71,4 +71,4 @@ class Command(MakeSampleCommand):
         if checks:
             MonitorCheck.objects.bulk_create(checks)
 
-        self.success_message('Successfully created "%s" monitors' % monitor_quantity)
+        self.success_message(f'Successfully created "{monitor_quantity}" monitors')

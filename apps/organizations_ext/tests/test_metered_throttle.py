@@ -110,7 +110,7 @@ class MeteredThrottleTestCase(TestCase):
         self.assertEqual(self._throttle(org), 100)
 
     def test_report_is_idempotent_across_checks(self):
-        org, sub = self._make_org()
+        org, _sub = self._make_org()
         self._run(org, 150_000)
         mock_meter = self._run(org, 150_000)
         # Second check sees no increase, so it reports nothing new.

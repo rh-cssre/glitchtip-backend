@@ -1,6 +1,5 @@
 import logging
-from datetime import datetime
-from datetime import timezone as dt_timezone
+from datetime import UTC, datetime
 
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
@@ -59,7 +58,7 @@ def unix_to_datetime(timestamp: int) -> datetime:
     Uses an explicit UTC tzinfo so the result does not depend on the
     process's local timezone (``$TZ``).
     """
-    return datetime.fromtimestamp(timestamp, tz=dt_timezone.utc)
+    return datetime.fromtimestamp(timestamp, tz=UTC)
 
 
 def compute_cycle(period_start: datetime, period_end: datetime, is_annual: bool):

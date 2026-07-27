@@ -111,7 +111,7 @@ class DsymsAPIViewTestCase(GlitchTestCase):
     def setUpTestData(cls):
         cls.create_user()
         cls.url = (
-            f"/api/0/projects/{cls.organization.slug}/{cls.project.slug}/files/dsyms/"  # noqa
+            f"/api/0/projects/{cls.organization.slug}/{cls.project.slug}/files/dsyms/"
         )
         cls.uuid = "afb116cf-efec-49af-a7fe-281ac680d8a0"
         cls.checksum = "da39a3ee5e6b4b0d3255bfef95601890afd80709"
@@ -127,7 +127,7 @@ class DsymsAPIViewTestCase(GlitchTestCase):
 
         uploaded_zip_file = MagicMock()
         uploaded_zip_file.namelist.return_value = iter([f"proguard/{self.uuid}.txt"])
-        uploaded_zip_file.open.return_value.__enter__.return_value = proguard_file  # noqa
+        uploaded_zip_file.open.return_value.__enter__.return_value = proguard_file
 
         with (
             patch("zipfile.is_zipfile", return_value=True),

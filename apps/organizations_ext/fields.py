@@ -19,6 +19,6 @@ class OrganizationSlugField(AutoSlugField):
                 + "".join(random.choices(string.ascii_lowercase + string.digits, k=i))
             )
         raise RuntimeError(
-            "max slug attempts for %s exceeded (%s)"
-            % (original_slug, self.max_unique_query_attempts)
+            f"max slug attempts for {original_slug} exceeded "
+            f"({self.max_unique_query_attempts})"
         )

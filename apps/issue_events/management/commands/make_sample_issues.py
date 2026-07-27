@@ -83,9 +83,7 @@ class Command(MakeSampleCommand):
         flat_events = [x for xs in issue_events for x in xs]
         IssueEvent.objects.bulk_create(flat_events)
 
-        keys = {
-            key for issue_event in issue_events for key in issue_event[0].tags.keys()
-        }
+        keys = {key for issue_event in issue_events for key in issue_event[0].tags}
         values = {
             value
             for issue_event in issue_events
@@ -270,4 +268,4 @@ class Command(MakeSampleCommand):
             "projects_issueeventprojecthourlystatistic", all_event_timestamps
         )
 
-        self.success_message('Successfully created "%s" issues' % issue_quantity)
+        self.success_message(f'Successfully created "{issue_quantity}" issues')

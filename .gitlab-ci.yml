@@ -14,6 +14,9 @@ include:
   - template: SAST.gitlab-ci.yml
   - template: Dependency-Scanning.gitlab-ci.yml
   - template: Secret-Detection.gitlab-ci.yml
+  # Shared AI-policy check (fork MRs must disclose AI usage). See AI_POLICY.md.
+  - project: 'glitchtip/glitchtip'
+    file: '/ci/ai-policy-check.yml'
 
 workflow:
   rules:
@@ -166,11 +169,12 @@ e2e:
       - COMPOSE_FILES: "-f compose.e2e.yml -f compose.e2e.web-worker.yml"
 
 lint:
-  image: python:3.14-slim
+  image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.14-$BASE_LAYER
   script:
-    - pip install ruff vulture
-    - ruff check glitchtip/ apps/
-    - vulture apps/ glitchtip/ vulture_whitelist.py --min-confidence 100 --exclude "*/migrations/*,glitchtip/test_runner.py,apps/organizations_ext/api.py"
+    # Install linters from the lockfile via `lint` dependency group
+    - uv sync --only-group lint --frozen --no-install-project
+    - uv run --no-sync ruff check glitchtip/ apps/
+    - uv run --no-sync vulture apps/ glitchtip/ vulture_whitelist.py --min-confidence 100 --exclude "*/migrations/*,glitchtip/test_runner.py,apps/organizations_ext/api.py"
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 

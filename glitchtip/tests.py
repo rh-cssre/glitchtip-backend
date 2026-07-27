@@ -5,7 +5,7 @@ import re
 import subprocess
 import sys
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import patch
 from uuid import UUID
 
@@ -236,7 +236,7 @@ class UUID7HelperTestCase(TestCase):
 
     def test_from_datetime(self):
         """UUIDv7 encodes timestamp in first 48 bits"""
-        dt = datetime(2025, 1, 15, 12, 30, 45, tzinfo=timezone.utc)
+        dt = datetime(2025, 1, 15, 12, 30, 45, tzinfo=UTC)
         uuid_val = UUID7Helper.from_datetime(dt)
 
         self.assertEqual(uuid_val.version, 7)
@@ -250,7 +250,7 @@ class UUID7HelperTestCase(TestCase):
     def test_from_datetime_naive(self):
         """Naive datetime is treated as UTC"""
         dt_naive = datetime(2025, 1, 15, 12, 0, 0)
-        dt_aware = dt_naive.replace(tzinfo=timezone.utc)
+        dt_aware = dt_naive.replace(tzinfo=UTC)
 
         uuid_naive = UUID7Helper.from_datetime(dt_naive)
         uuid_aware = UUID7Helper.from_datetime(dt_aware)
@@ -264,14 +264,14 @@ class UUID7HelperTestCase(TestCase):
 
     def test_extract_datetime(self):
         """Extract datetime from UUIDv7"""
-        original_dt = datetime(2025, 6, 15, 9, 15, 30, tzinfo=timezone.utc)
+        original_dt = datetime(2025, 6, 15, 9, 15, 30, tzinfo=UTC)
         uuid_val = UUID7Helper.from_datetime(original_dt)
 
         extracted_dt = UUID7Helper.extract_datetime(uuid_val)
 
         # Should be timezone-aware UTC
         self.assertIsNotNone(extracted_dt.tzinfo)
-        self.assertEqual(extracted_dt.tzinfo, timezone.utc)
+        self.assertEqual(extracted_dt.tzinfo, UTC)
 
         # Timestamps should match within millisecond precision
         delta = abs((extracted_dt - original_dt).total_seconds())
@@ -290,8 +290,8 @@ class UUID7HelperTestCase(TestCase):
 
     def test_get_range_for_date(self):
         """UUID range covers full date"""
-        start = datetime(2025, 1, 15, 0, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2025, 1, 16, 0, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2025, 1, 15, 0, 0, 0, tzinfo=UTC)
+        end = datetime(2025, 1, 16, 0, 0, 0, tzinfo=UTC)
 
         start_uuid, end_uuid = UUID7Helper.get_range_for_date(start, end)
 
@@ -311,9 +311,9 @@ class UUID7HelperTestCase(TestCase):
 
     def test_temporal_ordering(self):
         """UUIDv7s maintain temporal ordering"""
-        dt1 = datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
-        dt2 = datetime(2025, 1, 15, 11, 0, 0, tzinfo=timezone.utc)
-        dt3 = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        dt1 = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
+        dt2 = datetime(2025, 1, 15, 11, 0, 0, tzinfo=UTC)
+        dt3 = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
 
         uuid1 = UUID7Helper.from_datetime(dt1)
         uuid2 = UUID7Helper.from_datetime(dt2)
@@ -326,9 +326,9 @@ class UUID7HelperTestCase(TestCase):
 
     def test_pre_epoch_date_clamped(self):
         """Dates before Unix epoch produce valid UUIDs (clamped to epoch)"""
-        pre_epoch = datetime.min.replace(tzinfo=timezone.utc)
+        pre_epoch = datetime.min.replace(tzinfo=UTC)
         start_uuid, end_uuid = UUID7Helper.get_range_for_date(
-            pre_epoch, datetime(2025, 1, 1, tzinfo=timezone.utc)
+            pre_epoch, datetime(2025, 1, 1, tzinfo=UTC)
         )
         self.assertEqual(start_uuid.version, 7)
         self.assertEqual(end_uuid.version, 7)
@@ -345,8 +345,8 @@ class PartitionManagerTestCase(TestCase):
         sqls = manager.create_time_partition(
             parent_table="issue_events_issueaggregate",
             partition_name="issue_events_issueaggregate_20250115",
-            start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
-            end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+            start_date=datetime(2025, 1, 15, tzinfo=UTC),
+            end_date=datetime(2025, 1, 16, tzinfo=UTC),
             hash_buckets=4,
             hash_column="organization_id",
             key_type="datetime",
@@ -380,8 +380,8 @@ class PartitionManagerTestCase(TestCase):
         sqls = manager.create_time_partition(
             parent_table="issue_events_issueevent",
             partition_name="issue_events_issueevent_20250115",
-            start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
-            end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+            start_date=datetime(2025, 1, 15, tzinfo=UTC),
+            end_date=datetime(2025, 1, 16, tzinfo=UTC),
             hash_buckets=16,
             hash_column="organization_id",
             key_type="uuid7",
@@ -415,8 +415,8 @@ class PartitionManagerTestCase(TestCase):
         sqls = manager.create_time_partition(
             parent_table="test_table",
             partition_name="test_20250115",
-            start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
-            end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+            start_date=datetime(2025, 1, 15, tzinfo=UTC),
+            end_date=datetime(2025, 1, 16, tzinfo=UTC),
             hash_buckets=2,
         )
 
@@ -432,8 +432,8 @@ class PartitionManagerTestCase(TestCase):
             sqls = manager.create_time_partition(
                 parent_table="test_table",
                 partition_name=f"test_b{bucket_count}",
-                start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
-                end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+                start_date=datetime(2025, 1, 15, tzinfo=UTC),
+                end_date=datetime(2025, 1, 16, tzinfo=UTC),
                 hash_buckets=bucket_count,
             )
 
@@ -452,8 +452,8 @@ class PartitionManagerTestCase(TestCase):
         sqls = manager.create_time_partition(
             parent_table="test_table",
             partition_name="test_custom_hash",
-            start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
-            end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+            start_date=datetime(2025, 1, 15, tzinfo=UTC),
+            end_date=datetime(2025, 1, 16, tzinfo=UTC),
             hash_buckets=4,
             hash_column="project_id",
         )
@@ -489,8 +489,8 @@ class PartitionManagerTestCase(TestCase):
         sqls_aware = manager.create_time_partition(
             parent_table="test_table",
             partition_name="test_aware",
-            start_date=datetime(2025, 1, 15, 0, 0, 0, tzinfo=timezone.utc),
-            end_date=datetime(2025, 1, 16, 0, 0, 0, tzinfo=timezone.utc),
+            start_date=datetime(2025, 1, 15, 0, 0, 0, tzinfo=UTC),
+            end_date=datetime(2025, 1, 16, 0, 0, 0, tzinfo=UTC),
             hash_buckets=2,
             key_type="datetime",
         )
@@ -506,8 +506,8 @@ class PartitionManagerTestCase(TestCase):
         sqls = manager.create_time_partition(
             parent_table="issue_events_issueaggregate",
             partition_name="issue_events_issueaggregate_20250115",
-            start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
-            end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+            start_date=datetime(2025, 1, 15, tzinfo=UTC),
+            end_date=datetime(2025, 1, 16, tzinfo=UTC),
             hash_buckets=4,
         )
 
@@ -591,8 +591,8 @@ class PartitionCreationDDLTestCase(TransactionTestCase):
         set is already complete and must be left intact.
         """
         partition_name = f"{self.PARENT}_20260629"
-        start = datetime(2026, 6, 29, tzinfo=timezone.utc)
-        end = datetime(2026, 6, 30, tzinfo=timezone.utc)
+        start = datetime(2026, 6, 29, tzinfo=UTC)
+        end = datetime(2026, 6, 30, tzinfo=UTC)
 
         # Pre-create the range partition with 4 hash buckets (old bucket count).
         created = self.manager.execute_partition_creation(
@@ -633,8 +633,8 @@ class PartitionCreationDDLTestCase(TransactionTestCase):
         missing bucket is created.
         """
         partition_name = f"{self.PARENT}_20260630"
-        start = datetime(2026, 6, 30, tzinfo=timezone.utc)
-        end = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        start = datetime(2026, 6, 30, tzinfo=UTC)
+        end = datetime(2026, 7, 1, tzinfo=UTC)
 
         # Create the range partition plus 3 of the 4 hash children, leaving
         # remainder 3 missing.
@@ -675,8 +675,8 @@ class PartitionCreationDDLTestCase(TransactionTestCase):
     def test_matching_modulus_complete_set_is_noop(self):
         """A complete set at the configured modulus creates nothing."""
         partition_name = f"{self.PARENT}_20260701"
-        start = datetime(2026, 7, 1, tzinfo=timezone.utc)
-        end = datetime(2026, 7, 2, tzinfo=timezone.utc)
+        start = datetime(2026, 7, 1, tzinfo=UTC)
+        end = datetime(2026, 7, 2, tzinfo=UTC)
 
         self.manager.execute_partition_creation(
             parent_table=self.PARENT,
@@ -705,8 +705,8 @@ class PartitionCreationDDLTestCase(TransactionTestCase):
         left untouched rather than have hash children forced onto it.
         """
         partition_name = f"{self.PARENT}_20260702"
-        start = datetime(2026, 7, 2, tzinfo=timezone.utc)
-        end = datetime(2026, 7, 3, tzinfo=timezone.utc)
+        start = datetime(2026, 7, 2, tzinfo=UTC)
+        end = datetime(2026, 7, 3, tzinfo=UTC)
 
         # Build a range partition that is itself sub-partitioned by LIST, with
         # one list child — so its children carry no hash "modulus" bound.
@@ -976,9 +976,11 @@ class InternalTransportTestCase(TestCase):
             },
         )
 
-        with patch.object(transport, "_process_envelope", spy_process):
-            with patch("apps.event_ingest.tasks.ingest_event"):
-                transport.capture_envelope(envelope)
+        with (
+            patch.object(transport, "_process_envelope", spy_process),
+            patch("apps.event_ingest.tasks.ingest_event"),
+        ):
+            transport.capture_envelope(envelope)
 
         self.assertEqual(observed_values, [True])
         # After return, contextvar should be reset
@@ -1024,9 +1026,11 @@ class BeforeSendSelfRefTestCase(TestCase):
         _UNSAFE_MODULES = ("apps.event_ingest", "apps.logs.process")
 
         def before_send(event, hint):
-            if "log_record" in hint:
-                if hint["log_record"].name == "django.security.DisallowedHost":
-                    return None
+            if (
+                "log_record" in hint
+                and hint["log_record"].name == "django.security.DisallowedHost"
+            ):
+                return None
             if "exc_info" in hint:
                 _, exc_value, _ = hint["exc_info"]
                 if isinstance(exc_value, UnreadablePostError):
@@ -1034,11 +1038,10 @@ class BeforeSendSelfRefTestCase(TestCase):
             if is_self_ref:
                 if _processing_internal.get():
                     return None
-                if "log_record" in hint:
-                    if hint["log_record"].name.startswith(
-                        ("apps.event_ingest", "apps.logs")
-                    ):
-                        return None
+                if "log_record" in hint and hint["log_record"].name.startswith(
+                    ("apps.event_ingest", "apps.logs")
+                ):
+                    return None
                 for exc_val in event.get("exception", {}).get("values", []):
                     for frame in exc_val.get("stacktrace", {}).get("frames", []):
                         if frame.get("module", "").startswith(_UNSAFE_MODULES):
@@ -1217,6 +1220,7 @@ class CacheConfigTestCase(TestCase):
             text=True,
             env=env,
             timeout=30,
+            check=False,
         )
         self.assertEqual(
             result.returncode,
@@ -1379,6 +1383,7 @@ class CacheConfigTestCase(TestCase):
             text=True,
             env=env,
             timeout=30,
+            check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         lines = result.stdout.strip().splitlines()
@@ -1427,6 +1432,7 @@ def _load_deploy_settings(
         capture_output=True,
         text=True,
         timeout=60,
+        check=False,
     )
 
 

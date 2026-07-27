@@ -459,9 +459,11 @@ if SENTRY_DSN:
 
     def before_send(event, hint):
         """Don't log useless, inactionable errors in Sentry."""
-        if "log_record" in hint:
-            if hint["log_record"].name == "django.security.DisallowedHost":
-                return None
+        if (
+            "log_record" in hint
+            and hint["log_record"].name == "django.security.DisallowedHost"
+        ):
+            return None
         if "exc_info" in hint:
             _, exc_value, _ = hint["exc_info"]
             if isinstance(exc_value, UnreadablePostError):
@@ -827,6 +829,8 @@ ANYMAIL_SETTINGS = [
     "SPARKPOST_API_KEY",
     "SPARKPOST_API_URL",
     "SPARKPOST_TRACK_INITIAL_OPEN_AS_OPENED",
+    "SCALEWAY_SECRET_KEY",
+    "SCALEWAY_PROJECT_ID",
 ]
 
 ANYMAIL = {
@@ -991,6 +995,11 @@ VTASKS_QUEUES = {
     },
 }
 
+# Per-task sentry-sdk scope isolation. Without it, embedded workers share the
+# ambient isolation scope with HTTP requests and each other, cross-polluting
+# breadcrumbs.
+VTASKS_TASK_CONTEXT = "glitchtip.vtasks_context.sentry_task_scope"
+
 # Maximum number of issues send in a single alert payload
 MAX_ISSUES_PER_ALERT = env.int("MAX_ISSUES_PER_ALERT", 3)
 
@@ -1107,9 +1116,7 @@ GS_BUCKET_NAME = env("GS_BUCKET_NAME")
 GS_PROJECT_ID = env("GS_PROJECT_ID")
 
 if AWS_S3_ENDPOINT_URL:
-    MEDIA_URL = env.str(
-        "MEDIA_URL", "https://%s/%s/" % (AWS_S3_ENDPOINT_URL, AWS_LOCATION)
-    )
+    MEDIA_URL = env.str("MEDIA_URL", f"https://{AWS_S3_ENDPOINT_URL}/{AWS_LOCATION}/")
     STORAGES["default"] = {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage"}
 else:
     MEDIA_URL = "media/"

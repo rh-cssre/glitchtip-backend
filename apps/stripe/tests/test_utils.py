@@ -1,8 +1,7 @@
 import os
 import time
 import unittest
-from datetime import datetime
-from datetime import timezone as dt_timezone
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 from dateutil.relativedelta import relativedelta
@@ -41,7 +40,7 @@ class UnixToDatetimeTests(SimpleTestCase):
         time.tzset()
 
     def _expected(self, timestamp: int) -> datetime:
-        return datetime.fromtimestamp(timestamp, tz=dt_timezone.utc)
+        return datetime.fromtimestamp(timestamp, tz=UTC)
 
     def test_returns_correct_utc_under_utc_local(self):
         os.environ["TZ"] = "UTC"
@@ -149,7 +148,7 @@ class ComputeCycleTests(SimpleTestCase):
             patch("apps.stripe.utils.timezone.now", return_value=now),
             patch("apps.stripe.utils.logger") as mock_logger,
         ):
-            cycle_start, cycle_end = compute_cycle(start, end, is_annual=True)
+            cycle_start, _cycle_end = compute_cycle(start, end, is_annual=True)
         # Should have stopped at the cap, not looped to 2026
         self.assertEqual(
             cycle_start,

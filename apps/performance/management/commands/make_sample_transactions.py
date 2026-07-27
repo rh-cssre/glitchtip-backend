@@ -31,4 +31,4 @@ class Command(MakeSampleCommand):
             [now] * total_count,
         )
 
-        self.success_message('Successfully created "%s" transaction groups' % quantity)
+        self.success_message(f'Successfully created "{quantity}" transaction groups')

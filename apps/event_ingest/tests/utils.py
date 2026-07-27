@@ -3,7 +3,6 @@ import datetime
 import json
 import time
 import uuid
-from typing import Union
 
 from asgiref.sync import async_to_sync
 from django.db.utils import IntegrityError
@@ -226,7 +225,7 @@ def run_async_closing(coro_func, *args, **kwargs):
         try:
             return await coro_func(*args, **kwargs)
         finally:
-            for alias in async_connections.settings.keys():
+            for alias in async_connections.settings:
                 if hasattr(async_connections._connections, alias):
                     await async_connections[alias].close()
 
@@ -266,7 +265,7 @@ class EventIngestTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         self.project = baker.make("projects.Project", organization=self.organization)
         self.project.teams.add(self.team)
 
-    def process_events(self, data: Union[dict, list[dict]]) -> list:
+    def process_events(self, data: dict | list[dict]) -> list:
         if isinstance(data, dict):
             data = [data]
 

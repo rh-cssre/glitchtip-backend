@@ -1,7 +1,7 @@
 import logging
 import typing
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 from urllib.parse import parse_qs
 
@@ -192,9 +192,11 @@ class DebugMeta(LaxIngestSchema):
     @model_validator(mode="after")
     def _warn_unknown_image_types(self):
         for image in self.images:
-            if isinstance(image, OtherDebugImage):
-                if image.type not in KNOWN_IGNORED_IMAGE_TYPES:
-                    logger.warning("Unknown debug image type: %s", image.type)
+            if (
+                isinstance(image, OtherDebugImage)
+                and image.type not in KNOWN_IGNORED_IMAGE_TYPES
+            ):
+                logger.warning("Unknown debug image type: %s", image.type)
         return self
 
 
@@ -442,7 +444,7 @@ class TransactionEventSchema(LaxIngestSchema):
         pollute hour bucketing) or backfill beyond retention.
         """
         if v.tzinfo is None:
-            v = v.replace(tzinfo=timezone.utc)
+            v = v.replace(tzinfo=UTC)
         current = now()
         if v < current - timedelta(days=settings.GLITCHTIP_TRANSACTION_RETENTION_DAYS):
             raise ValueError("Event time too old.")
@@ -511,7 +513,7 @@ class FeedbackPayload(LaxIngestSchema):
     contexts: dict[str, Any]
 
     def to_user_report_data(self) -> dict[str, Any]:
-        fb = FeedbackContext.model_validate((self.contexts.get("feedback") or {}))
+        fb = FeedbackContext.model_validate(self.contexts.get("feedback") or {})
         return {
             "event_id": fb.associated_event_id,
             "name": fb.name[:128],
@@ -733,9 +735,7 @@ class LogItemSchema(BaseModel):
         ts = values.get("timestamp")
         if isinstance(ts, str):
             try:
-                values["timestamp"] = datetime.fromisoformat(
-                    ts.replace("Z", "+00:00")
-                ).timestamp()
+                values["timestamp"] = datetime.fromisoformat(ts).timestamp()
             except ValueError:
                 pass  # let pydantic surface the float_parsing error
 
@@ -801,7 +801,7 @@ def _otel_severity_to_level(
     return "info"
 
 
-def _extract_otel_value(val: dict | str | int | float | bool | None) -> Any:
+def _extract_otel_value(val: dict | str | float | bool | None) -> Any:
     """Extract a plain value from an OTel AnyValue wrapper.
 
     OTel uses typed wrappers like ``{"string_value": "..."}`` or

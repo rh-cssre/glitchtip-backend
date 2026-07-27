@@ -1,11 +1,9 @@
-from typing import Generic, Literal, TypeVar
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
-T = TypeVar("T")
 
-
-class StripeListResponse(BaseModel, Generic[T]):
+class StripeListResponse[T](BaseModel):
     object: Literal["list"]
     url: str
     has_more: bool

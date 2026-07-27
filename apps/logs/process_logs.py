@@ -1,6 +1,6 @@
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from operator import itemgetter
 from uuid import UUID
 
@@ -151,7 +151,7 @@ async def process_log_events(messages: list) -> int:
     if not messages:
         return 0
 
-    server_time = datetime.now(timezone.utc)
+    server_time = datetime.now(UTC)
 
     # Collect all log events to insert
     log_rows = []
@@ -174,12 +174,10 @@ async def process_log_events(messages: list) -> int:
             timestamp_val = log_item.get("timestamp")
             if isinstance(timestamp_val, (int, float)):
                 # Unix timestamp with fractional seconds
-                log_timestamp = datetime.fromtimestamp(timestamp_val, tz=timezone.utc)
+                log_timestamp = datetime.fromtimestamp(timestamp_val, tz=UTC)
             elif isinstance(timestamp_val, str):
                 # ISO format string
-                log_timestamp = datetime.fromisoformat(
-                    timestamp_val.replace("Z", "+00:00")
-                )
+                log_timestamp = datetime.fromisoformat(timestamp_val)
             else:
                 # No timestamp provided - use server time
                 log_timestamp = server_time

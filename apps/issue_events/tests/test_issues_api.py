@@ -1111,14 +1111,13 @@ class IssueAPITestCase(GlitchTestCase):
     def test_db_constraint_rejects_both_user_and_team(self):
         from django.db import IntegrityError, transaction
 
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                baker.make(
-                    "issue_events.Issue",
-                    project=self.project,
-                    assigned_to_org_user=self.org_user,
-                    assigned_to_team=self.team,
-                )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            baker.make(
+                "issue_events.Issue",
+                project=self.project,
+                assigned_to_org_user=self.org_user,
+                assigned_to_team=self.team,
+            )
 
     @freeze_time("2025-06-19T17:47:00Z")
     async def test_issue_stats_endpoint(self):

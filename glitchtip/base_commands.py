@@ -27,9 +27,9 @@ class MakeSampleCommand(BaseCommand):
 
         # Align to midnight to avoid overlapping with existing partitions
         start_date = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_date = end_time.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(
-            days=1
-        )
+        end_date = end_time.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) + timedelta(days=1)
 
         if daily_tables:
             for table in daily_tables:
@@ -93,9 +93,7 @@ class MakeSampleCommand(BaseCommand):
     def success_message(self, message: str):
         self.stdout.write(self.style.SUCCESS(message))
 
-    def upsert_hourly_project_stats(
-        self, table_name: str, timestamps: list[datetime]
-    ):
+    def upsert_hourly_project_stats(self, table_name: str, timestamps: list[datetime]):
         """
         Upsert hourly project statistics from a list of event timestamps.
         Works for IssueEventProjectHourlyStatistic,

@@ -7,7 +7,7 @@ license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "django~=6.0",
-    "django-vtasks[valkey]~=3.0.0",
+    "django-vtasks[valkey]~=3.1.0",
     "django-allauth-async[mfa,socialaccount]==65.16.1.7",
     "django-cors-headers~=4.0",
     "django-environ~=0.11",
@@ -45,7 +45,7 @@ dependencies = [
     "pyyaml>=6.0.2", # allauth openapi spec
     "granian[reload,uvloop]>=2.6.0",
     "django-vcache>=3.0.0",
-    "glitchtip-rust>=0.6.1",
+    "glitchtip-rust>=0.7.0",
     "uuid6>=2024.1.12",
     "mcp[cli]>=1.9",
     "duckdb>=1.2.0",
@@ -57,7 +57,18 @@ dependencies = [
 ]
 
 [dependency-groups]
+# CI's lint job installs only this group, so the linters it runs are the ones
+# pinned in uv.lock — there is no second version to keep in sync by hand.
+# ruff is pinned to a patch range on purpose: pre-1.0 it changes its *default*
+# rule selection across minor versions, so `~=0.16` would let a routine
+# `uv lock --upgrade` drop hundreds of new findings into an unrelated
+# dependency MR. Widening this is a deliberate edit plus a tree sweep.
+lint = [
+    "ruff~=0.16.0",
+    "vulture~=2.16",
+]
 dev = [
+    {include-group = "lint"},
     "freezegun~=1.1",
     "model-bakery-async~=1.23",
     "django-debug-toolbar~=7.0",
@@ -65,18 +76,48 @@ dev = [
     "django-sslserver~=0.22",
     "aioresponses~=0.7",
     "memray~=1.9",
-    "ruff~=0.6",
     "tblib~=3.0",                         # Needed for test --parallel
     "ipython>=8.32.0",
-    "vulture>=2.14",
     "coverage>=7.13.4",
 ]
 
 [tool.ruff.lint]
 extend-select = ["I"]
+ignore = [
+    # Django's declarative style is built on mutable class attributes
+    # (`Meta.ordering`, `fields`, `list_display`, serializer/schema config).
+    # Annotating every one with `ClassVar` adds noise without catching bugs.
+    "RUF012",
+    # Ingest, alert delivery and maintenance tasks deliberately swallow broad
+    # exceptions so one bad payload or one unreachable endpoint cannot take
+    # down a batch. Each site is a considered choice, not an oversight.
+    "BLE001",
+    "S110",
+    # Naive datetimes are used on purpose for date-bucket keys, partition
+    # boundaries and test fixtures. Django's `USE_TZ` handling covers the
+    # stored values; blanket-flagging every `datetime(...)` is noise.
+    "DTZ001",
+    "DTZ005",
+    "DTZ007",
+    # Long-lived file handles (cold storage writers, streaming uploads) are
+    # closed explicitly rather than scoped to a `with` block.
+    "SIM115",
+    # File-mode rules depend on the checkout's permission bits, which git does
+    # not track for these files; they fire differently per developer machine.
+    "EXE001",
+    "EXE002",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "*/migrations/*.py" = ["I"]
+# The module name is the management command name (`manage.py import`), so it
+# cannot avoid shadowing the keyword.
+"apps/importer/management/commands/import.py" = ["N999"]
+
+[tool.ruff.lint.flake8-bugbear]
+# django-ninja declares request parsing in argument defaults; that is the
+# framework's API, not an accidental shared mutable default.
+extend-immutable-calls = ["ninja.File", "ninja.Form", "ninja.Query"]
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main"]
