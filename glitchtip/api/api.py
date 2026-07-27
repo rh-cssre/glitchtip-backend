@@ -1,18 +1,9 @@
-import asyncio
-import hashlib
 import logging
 from urllib.parse import urlencode
 
-import aiohttp
 from allauth.socialaccount.models import SocialApp
-from allauth.socialaccount.providers.openid_connect.views import (
-    OpenIDConnectOAuth2Adapter,
-)
-from allauth_async.socialaccount.providers.openid_connect import aget_authorize_url
-from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.contrib.auth import aget_user
-from django.core.cache import cache
 from django.core.exceptions import RequestDataTooBig
 from django.db.models import Q
 from django.http import HttpRequest, HttpResponse
@@ -46,7 +37,6 @@ from apps.users.api import router as users_router
 from apps.users.models import User
 from apps.users.schema import UserSchema
 from apps.wizard.api import router as wizard_router
-from glitchtip.constants import SOCIAL_ADAPTER_MAP
 
 from ..schema import CamelSchema
 from .authentication import SessionAuth, TokenAuth
@@ -132,7 +122,6 @@ def request_too_big(request: HttpRequest, exc: RequestDataTooBig):
 
 class SocialAppSchema(ModelSchema):
     scopes: list[str]
-    authorize_url: str | None
     brand: str
     """Identity provider brand for display (e.g. picking a logo). Unlike
     `provider`, which is overridden with provider_id for multi-instance
@@ -163,55 +152,20 @@ class SettingsOut(CamelSchema):
     enabled_features: list[str]
 
 
-async def _serialize_social_app(request: HttpRequest, social_app: SocialApp):
-    """Annotate a SocialApp with the scopes/authorize_url/provider fields the
-    login page needs. Mutates and returns the instance for SocialAppSchema."""
-    provider = social_app.get_provider(request)
-    social_app.scopes = provider.get_scope()
+def _serialize_social_app(request: HttpRequest, social_app: SocialApp):
+    """
+    Annotate a SocialApp with the fields the login page needs. Mutates and
+    returns the instance for SocialAppSchema.
 
-    adapter_cls = SOCIAL_ADAPTER_MAP.get(social_app.provider)
-    if adapter_cls == OpenIDConnectOAuth2Adapter:
-        # OIDC adapters resolve authorize_url by fetching the provider's
-        # discovery document. Use the async cached helper so the public
-        # /api/settings/ endpoint never blocks on a synchronous outbound
-        # request to the IdP -- and degrade to None rather than failing
-        # the whole settings payload when the IdP is unreachable (the
-        # OAuth flow itself surfaces a clearer error on login attempts).
-        # provider.server_url is the normalized .well-known URL, matching
-        # what the login flow fetches (and its cache key). The helper only
-        # caches successes, so failures are negative-cached here -- otherwise
-        # an unreachable IdP would make every unauthenticated settings
-        # request repeat a slow outbound fetch.
-        social_app.authorize_url = None
-        try:
-            server_url = provider.server_url
-        except (ValueError, KeyError, TypeError):
-            server_url = None
-        if server_url:
-            fail_key = (
-                "oidc-discovery-fail."
-                + hashlib.md5(server_url.encode(), usedforsecurity=False).hexdigest()
-            )
-            if not await cache.aget(fail_key):
-                try:
-                    social_app.authorize_url = await aget_authorize_url(server_url)
-                except (
-                    TimeoutError,
-                    aiohttp.ClientError,
-                    ValueError,
-                    KeyError,
-                    TypeError,
-                ) as exc:
-                    logger.warning(
-                        "OIDC discovery failed for %s: %s", social_app.name, exc
-                    )
-                    await cache.aset(fail_key, True, 60)
-    elif adapter_cls:
-        adapter = adapter_cls(request)
-        social_app.authorize_url = await sync_to_async(lambda: adapter.authorize_url)()
-    else:
-        social_app.authorize_url = None
-
+    Deliberately makes no outbound request. Resolving an OIDC authorize_url
+    means fetching the provider's discovery document, and both callers are
+    unauthenticated endpoints that list every app for an instance or an
+    organization -- so one anonymous request would fan out into one fetch per
+    app, against hosts the app's owner chose. Nothing consumes an authorize
+    URL: sign-in posts to allauth's headless endpoint and the server issues
+    the redirect.
+    """
+    social_app.scopes = social_app.get_provider(request).get_scope()
     social_app.brand = (social_app.settings or {}).get("brand") or social_app.provider
     social_app.provider = social_app.provider_id or social_app.provider
     return social_app
@@ -228,10 +182,8 @@ async def get_settings(request: HttpRequest):
             | Q(organizationsocialapp__is_public=True)
         ).order_by("name")
     ]
-    # Concurrently: OIDC apps may each need a discovery fetch
-    await asyncio.gather(
-        *(_serialize_social_app(request, social_app) for social_app in social_apps)
-    )
+    for social_app in social_apps:
+        _serialize_social_app(request, social_app)
 
     billing_enabled = settings.BILLING_ENABLED
 
@@ -309,9 +261,8 @@ async def get_organization_login_settings(request: HttpRequest, organization_slu
             organizationsocialapp__organization__is_deleted=False,
         ).order_by("name")
     ]
-    await asyncio.gather(
-        *(_serialize_social_app(request, social_app) for social_app in social_apps)
-    )
+    for social_app in social_apps:
+        _serialize_social_app(request, social_app)
     return {"social_apps": social_apps}
 
 

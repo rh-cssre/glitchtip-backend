@@ -1,13 +1,8 @@
-import hashlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import aiohttp
 from allauth.socialaccount.models import SocialApp
-from allauth_async.socialaccount.providers.openid_connect import (
-    _openid_config_cache_key,
-)
-from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from model_bakery import baker
@@ -378,16 +373,6 @@ class LoginSettingsTestCase(TestCase):
         )
         cls.public_app = baker.make("socialaccount.socialapp", provider="github")
 
-    async def prime_oidc_cache(self):
-        cache_key = _openid_config_cache_key(
-            "https://idp.example.com/.well-known/openid-configuration"
-        )
-        await cache.aset(
-            cache_key,
-            {"authorization_endpoint": "https://idp.example.com/authorize"},
-        )
-        self.addCleanup(cache.delete, cache_key)
-
     async def test_global_settings_hides_private_apps(self):
         res = await self.async_client.get(reverse("api:get_settings"))
         social_apps = res.json()["socialApps"]
@@ -396,12 +381,10 @@ class LoginSettingsTestCase(TestCase):
 
     async def test_global_settings_shows_public_org_apps(self):
         await OrganizationSocialApp.objects.aupdate(is_public=True)
-        await self.prime_oidc_cache()
         res = await self.async_client.get(reverse("api:get_settings"))
         self.assertEqual(len(res.json()["socialApps"]), 2)
 
     async def test_organization_login_settings(self):
-        await self.prime_oidc_cache()
         url = reverse(
             "api:get_organization_login_settings", args=[self.organization.slug]
         )
@@ -412,9 +395,6 @@ class LoginSettingsTestCase(TestCase):
         self.assertEqual(social_apps[0]["name"], "Private Okta")
         # The headless provider redirect expects provider_id for OIDC apps
         self.assertEqual(social_apps[0]["provider"], "private-oidc")
-        self.assertEqual(
-            social_apps[0]["authorize_url"], "https://idp.example.com/authorize"
-        )
 
     async def test_organization_login_settings_unknown_slug(self):
         """Unknown slugs return an empty list, not 404 (no org enumeration)."""
@@ -519,46 +499,3 @@ class PublicOnlyHttpTestCase(TestCase):
         ]
         infos = await resolver.resolve("idp.example.com", 443)
         self.assertEqual(infos[0]["host"], "93.184.216.34")
-
-
-class DiscoveryNegativeCacheTestCase(TestCase):
-    """Failed OIDC discovery must not be retried on every settings request."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.organization = baker.make("organizations_ext.Organization")
-        app = baker.make(
-            "socialaccount.socialapp",
-            provider="openid_connect",
-            provider_id="down-oidc",
-            settings={"server_url": "https://down-idp.example.com"},
-        )
-        baker.make(
-            "organizations_ext.OrganizationSocialApp",
-            organization=cls.organization,
-            social_app=app,
-            is_public=False,
-        )
-
-    async def test_discovery_failure_is_negative_cached(self):
-        fail_key = (
-            "oidc-discovery-fail."
-            + hashlib.md5(
-                b"https://down-idp.example.com/.well-known/openid-configuration",
-                usedforsecurity=False,
-            ).hexdigest()
-        )
-        self.addCleanup(cache.delete, fail_key)
-        url = reverse(
-            "api:get_organization_login_settings", args=[self.organization.slug]
-        )
-        with patch(
-            "glitchtip.api.api.aget_authorize_url",
-            new=AsyncMock(side_effect=aiohttp.ClientError("boom")),
-        ) as mock_get:
-            res = await self.async_client.get(url)
-            self.assertEqual(res.status_code, 200)
-            self.assertIsNone(res.json()["socialApps"][0]["authorize_url"])
-            res = await self.async_client.get(url)
-            self.assertEqual(res.status_code, 200)
-        self.assertEqual(mock_get.await_count, 1)
