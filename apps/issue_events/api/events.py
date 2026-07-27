@@ -294,22 +294,23 @@ async def get_organization_issue_event(
         next=Subquery(qs.filter(id__gt=OuterRef("id")).order_by("id").values("id")[:1]),
     )
 
-    if is_uuid7(event_id):
-        event = await qs.filter(id=event_id).afirst()
-    else:
-        # Client-provided sentry SDK event_id (typically UUIDv4).
-        # Include organization_id to prune hash sub-partitions.
-        org_id = await (
-            Issue.objects.filter(
-                id=issue_id,
-                project__organization__users=request.auth.user_id,
-                project__organization__slug=organization_slug,
-            )
-            .values_list("project__organization_id", flat=True)
-            .afirst()
+    # Client-provided sentry SDK event_id (typically UUIDv4).
+    # Include organization_id to prune hash sub-partitions.
+    org_id = await (
+        Issue.objects.filter(
+            id=issue_id,
+            project__organization__users=request.auth.user_id,
+            project__organization__slug=organization_slug,
         )
-        if not org_id:
-            raise Http404()
+        .values_list("project__organization_id", flat=True)
+        .afirst()
+    )
+    if not org_id:
+        raise Http404()
+
+    if is_uuid7(event_id):
+        event = await qs.filter(id=event_id, organization_id=org_id).afirst()
+    else:
         event = await qs.filter(event_id=event_id, organization_id=org_id).afirst()
 
     if event:
