@@ -185,7 +185,7 @@ class OrganizationScopedCommentsApiTestCase(GlitchTipTestCase):
             data,
             content_type="application/json",
         )
-        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.status_code, 404)
         self.assertEqual(await Comment.objects.acount(), 0)
 
     async def test_update(self):
@@ -207,7 +207,7 @@ class OrganizationScopedCommentsApiTestCase(GlitchTipTestCase):
             data,
             content_type="application/json",
         )
-        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.status_code, 404)
         await comment.arefresh_from_db()
         self.assertNotEqual(comment.text, "Updated")
 
@@ -224,5 +224,5 @@ class OrganizationScopedCommentsApiTestCase(GlitchTipTestCase):
         res = await self.async_client.delete(
             self.delete_url(self.other_organization.slug, self.issue.id, comment.id)
         )
-        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.status_code, 404)
         self.assertEqual(await Comment.objects.acount(), 1)
