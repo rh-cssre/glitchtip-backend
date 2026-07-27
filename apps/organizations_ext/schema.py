@@ -131,7 +131,15 @@ class OrganizationUserInviteSchema(OrganizationUserSchema):
         )
 
 
-class OrganizationSocialAppIn(CamelSchema):
+class OrganizationSocialAppBase(CamelSchema):
+    name: str = Field(min_length=1, max_length=40)
+    server_url: str | None = Field(default=None, max_length=500)
+    """OIDC issuer or discovery document URL. Required for provider
+    openid_connect; ignored for preconfigured providers."""
+    client_id: str = Field(min_length=1, max_length=191)
+
+
+class OrganizationSocialAppIn(OrganizationSocialAppBase):
     """Create an organization-managed social app.
 
     Every choice runs on the OpenID Connect machinery — each app gets its own
@@ -140,17 +148,19 @@ class OrganizationSocialAppIn(CamelSchema):
     callback URL per provider and cannot be disambiguated per organization.
     """
 
-    name: str = Field(min_length=1, max_length=40)
     provider: Literal["openid_connect", "google"] = "openid_connect"
     """"google" preconfigures the issuer; "openid_connect" is bring-your-own."""
-    server_url: str | None = Field(default=None, max_length=500)
-    """OIDC issuer or discovery document URL. Required for provider
-    openid_connect; ignored for preconfigured providers."""
-    client_id: str = Field(min_length=1, max_length=191)
     client_secret: str = Field(min_length=1, max_length=191)
 
 
-class OrganizationSocialAppUpdateIn(OrganizationSocialAppIn):
+class OrganizationSocialAppUpdateIn(OrganizationSocialAppBase):
+    """Update an organization-managed social app.
+
+    provider is absent deliberately: it fixes the callback URL, which is
+    already registered at the identity provider, so it cannot change after
+    creation.
+    """
+
     client_secret: str | None = Field(default=None, min_length=1, max_length=191)
     """Omit to keep the existing secret."""
 
