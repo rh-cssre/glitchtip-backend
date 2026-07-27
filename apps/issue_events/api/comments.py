@@ -1,6 +1,6 @@
 from typing import Literal
 
-from django.http import HttpResponse
+from django.http import HttpResponse, Http404
 from ninja import Schema, Status
 from ninja.errors import HttpError
 from ninja.pagination import paginate
@@ -102,7 +102,7 @@ async def organization_add_comment(
             project__organization__slug=organization_slug,
         )
     except Issue.DoesNotExist:
-        raise HttpError(400, "Issue does not exist")
+        raise Http404()
 
     user_id = request.auth.user_id
     comment = await Comment.objects.acreate(
@@ -155,7 +155,7 @@ async def organization_update_comment(
             id=comment_id
         )
     except Comment.DoesNotExist:
-        raise HttpError(400, "Comment does not exist")
+        raise Http404()
 
     comment.text = payload.data["text"]
     await comment.asave()
@@ -200,7 +200,7 @@ async def organization_delete_comment(
             id=comment_id
         )
     except Comment.DoesNotExist:
-        raise HttpError(400, "Comment does not exist")
+        raise Http404()
     await comment.adelete()
 
     return Status(204, None)
