@@ -161,7 +161,7 @@ async def get_issue(request: AuthHttpRequest, issue_id: int):
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/issues/{int:issue_id}/",
+    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/",
     response=IssueDetailSchema,
     by_alias=True,
 )
@@ -198,7 +198,7 @@ async def list_issue_commits(request: AuthHttpRequest, issue_id: int):
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/issues/{int:issue_id}/commits/",
+    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/commits/",
     response=list[CommitSchema],
     by_alias=True,
 )
@@ -243,7 +243,7 @@ async def delete_issue(request: AuthHttpRequest, issue_id: int):
 
 
 @router.delete(
-    "organizations/{slug:organization_slug}/issues/{int:issue_id}/",
+    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/",
     response={204: None},
 )
 @has_permission(["event:write", "event:admin"])
@@ -259,7 +259,7 @@ async def delete_organization_issue(
 
 
 @router.put(
-    "organizations/{slug:organization_slug}/issues/{int:issue_id}/",
+    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/",
     response=IssueDetailSchema,
     by_alias=True,
 )
@@ -561,7 +561,7 @@ async def list_issue_tags(
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/issues/{int:issue_id}/tags/",
+    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/tags/",
     response=list[IssueTagSchema],
     by_alias=True,
 )

@@ -26,7 +26,7 @@ async def list_user_reports(
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/issues/{int:issue_id}/user-reports/",
+    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/user-reports/",
     response=list[UserReportSchema],
     by_alias=True,
 )

@@ -212,7 +212,7 @@ async def list_issue_event(
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/issues/{int:issue_id}/events/",
+    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/events/",
     response=list[IssueEventSchema],
 )
 @paginate
@@ -254,7 +254,7 @@ async def get_latest_issue_event(request: AuthHttpRequest, issue_id: int):
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/issues/{int:issue_id}/events/latest/",
+    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/events/latest/",
     response=IssueEventDetailSchema,
     by_alias=True,
 )
@@ -279,7 +279,7 @@ async def get_issue_event(request: AuthHttpRequest, issue_id: int, event_id: uui
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/issues/{int:issue_id}/events/{event_id}/",
+    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/events/{event_id}/",
     response=IssueEventDetailSchema,
     by_alias=True,
 )

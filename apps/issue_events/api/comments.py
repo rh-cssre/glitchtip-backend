@@ -13,7 +13,9 @@ from ..schema import CommentSchema
 from . import router
 
 
-def get_queryset(request: AuthHttpRequest, issue_id: int, organization_slug: str | None = None):
+def get_queryset(
+    request: AuthHttpRequest, issue_id: int, organization_slug: str | None = None
+):
     qs = Comment.objects.select_related("user").filter(
         issue__project__organization__users=request.auth.user_id, issue__id=issue_id
     )
@@ -36,7 +38,7 @@ async def list_comments(
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/issues/{int:issue_id}/comments/",
+    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/comments/",
     response=list[CommentSchema],
     by_alias=True,
 )
@@ -84,7 +86,7 @@ async def add_comment(
 
 
 @router.post(
-    "organizations/{slug:organization_slug}/issues/{int:issue_id}/comments/",
+    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/comments/",
     response={201: CommentSchema},
     by_alias=True,
 )
@@ -138,7 +140,7 @@ async def update_comment(
 
 
 @router.put(
-    "organizations/{slug:organization_slug}/issues/{int:issue_id}/comments/{int:comment_id}/",
+    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/comments/{int:comment_id}/",
     response=CommentSchema,
     by_alias=True,
 )
@@ -184,7 +186,7 @@ async def delete_comment(
 
 
 @router.delete(
-    "organizations/{slug:organization_slug}/issues/{int:issue_id}/comments/{int:comment_id}/",
+    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/comments/{int:comment_id}/",
     response={204: None},
     by_alias=True,
 )
