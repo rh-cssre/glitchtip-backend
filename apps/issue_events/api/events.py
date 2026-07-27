@@ -42,18 +42,18 @@ async def _get_latest_event_for_issue(
     request: AuthHttpRequest,
     issue: Issue,
     issue_id: int,
-    organization_slug: str | None = None,
 ):
     """Return the latest IssueEvent for an already-resolved issue.
 
     Shared by the bare and organization-scoped ``.../events/latest/`` routes so the
     hash-partition pruning, the ``previous`` subquery, and the cold-storage fallback
-    live in one place. ``organization_slug`` (when set) further scopes the hot
-    queryset; the caller is responsible for resolving ``issue``.
+    live in one place. The caller is responsible for resolving ``issue``, which
+    already pins the organization - so the hot queryset is scoped by
+    ``organization_id`` alone, never by slug.
     """
     # Filter by organization_id to enable hash sub-partition pruning
     qs = (
-        get_queryset(request, issue_id, organization_slug=organization_slug)
+        get_queryset(request, issue_id)
         .filter(organization_id=issue.project.organization_id)
         .order_by("-id")
     )
@@ -163,8 +163,11 @@ async def list_organization_issue_event(
     )
     if not org_id:
         raise Http404()
+    # The Organization lookup above already established membership, so scope the
+    # hot table by organization_id alone - it prunes the hash sub-partitions
+    # without joining issue -> project -> organization.
     return (
-        get_queryset(request, issue_id=issue_id, organization_slug=organization_slug)
+        get_queryset(request, issue_id=issue_id)
         .filter(organization_id=org_id)
         .order_by("-id")
     )
@@ -211,9 +214,7 @@ async def get_organization_latest_issue_event(
     )
     if not issue:
         raise Http404()
-    return await _get_latest_event_for_issue(
-        request, issue, issue_id, organization_slug=organization_slug
-    )
+    return await _get_latest_event_for_issue(request, issue, issue_id)
 
 
 @router.get(
@@ -285,7 +286,7 @@ async def get_issue_event(request: AuthHttpRequest, issue_id: int, event_id: uui
 async def get_organization_issue_event(
     request: AuthHttpRequest, organization_slug: str, issue_id: int, event_id: uuid.UUID
 ):
-    qs = get_queryset(request, issue_id, organization_slug=organization_slug)
+    qs = get_queryset(request, issue_id)
     # Use id (UUIDv7) for prev/next navigation - enables partition pruning
     qs = qs.annotate(
         previous=Subquery(
@@ -294,8 +295,9 @@ async def get_organization_issue_event(
         next=Subquery(qs.filter(id__gt=OuterRef("id")).order_by("id").values("id")[:1]),
     )
 
-    # Client-provided sentry SDK event_id (typically UUIDv4).
-    # Include organization_id to prune hash sub-partitions.
+    # Resolving the issue by slug 404s a wrong-org request and yields the
+    # organization_id used to prune hash sub-partitions below - so neither the
+    # queryset nor the prev/next subqueries need to join on the slug.
     org_id = await (
         Issue.objects.filter(
             id=issue_id,
