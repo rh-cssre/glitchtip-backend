@@ -37,13 +37,16 @@ async def list_comments(
 
 @router.get(
     "organizations/{slug:organization_slug}/issues/{int:issue_id}/comments/",
-    response=List[CommentSchema],
+    response=list[CommentSchema],
     by_alias=True,
 )
 @has_permission(["event:read", "event:admin"])
 @paginate
 async def organizations_list_comments(
-    request: AuthHttpRequest, response: HttpResponse, issue_id: int, organization_slug: str
+    request: AuthHttpRequest,
+    response: HttpResponse,
+    issue_id: int,
+    organization_slug: str,
 ):
     return get_queryset(request, issue_id, organization_slug)
 
@@ -90,11 +93,13 @@ async def organization_add_comment(
     request: AuthHttpRequest,
     organization_slug: str,
     issue_id: int,
-    payload: PostCommentSchema
+    payload: PostCommentSchema,
 ):
     try:
         issue = await Issue.objects.aget(
-            id=issue_id, project__organization__users=request.auth.user_id, project__organization__slug=organization_slug
+            id=issue_id,
+            project__organization__users=request.auth.user_id,
+            project__organization__slug=organization_slug,
         )
     except Issue.DoesNotExist:
         raise HttpError(400, "Issue does not exist")
@@ -143,10 +148,12 @@ async def organization_update_comment(
     organization_slug: str,
     issue_id: int,
     comment_id: int,
-    payload: PostCommentSchema
+    payload: PostCommentSchema,
 ):
     try:
-        comment = await get_queryset(request, issue_id, organization_slug).aget(id=comment_id)
+        comment = await get_queryset(request, issue_id, organization_slug).aget(
+            id=comment_id
+        )
     except Comment.DoesNotExist:
         raise HttpError(400, "Comment does not exist")
 
@@ -175,6 +182,7 @@ async def delete_comment(
 
     return Status(204, None)
 
+
 @router.delete(
     "organizations/{slug:organization_slug}/issues/{int:issue_id}/comments/{int:comment_id}/",
     response={204: None},
@@ -188,7 +196,9 @@ async def organization_delete_comment(
     comment_id: int,
 ):
     try:
-        comment = await get_queryset(request, issue_id, organization_slug).aget(id=comment_id)
+        comment = await get_queryset(request, issue_id, organization_slug).aget(
+            id=comment_id
+        )
     except Comment.DoesNotExist:
         raise HttpError(400, "Comment does not exist")
     await comment.adelete()

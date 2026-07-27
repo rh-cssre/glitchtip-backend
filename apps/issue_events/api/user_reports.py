@@ -27,15 +27,20 @@ async def list_user_reports(
 
 @router.get(
     "organizations/{slug:organization_slug}/issues/{int:issue_id}/user-reports/",
-    response=List[UserReportSchema],
+    response=list[UserReportSchema],
     by_alias=True,
 )
 @paginate
 @has_permission(["event:read", "event:write", "event:admin"])
 async def list_organization_user_reports(
-    request: AuthHttpRequest, response: HttpResponse, organization_slug: str, issue_id: int
+    request: AuthHttpRequest,
+    response: HttpResponse,
+    organization_slug: str,
+    issue_id: int,
 ):
     user_id = request.auth.user_id
     return UserReport.objects.filter(
-        project__organization__users=user_id, project__organization__slug=organization_slug, issue__id=issue_id
+        project__organization__users=user_id,
+        project__organization__slug=organization_slug,
+        issue__id=issue_id,
     )

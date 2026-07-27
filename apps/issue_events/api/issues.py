@@ -124,13 +124,16 @@ async def get_issue(request: AuthHttpRequest, issue_id: int):
     except Issue.DoesNotExist:
         raise Http404()
 
+
 @router.get(
     "organizations/{slug:organization_slug}/issues/{int:issue_id}/",
     response=IssueDetailSchema,
     by_alias=True,
 )
 @has_permission(["event:read", "event:write", "event:admin"])
-async def organization_get_issue(request: AuthHttpRequest, organization_slug: str, issue_id: int):
+async def organization_get_issue(
+    request: AuthHttpRequest, organization_slug: str, issue_id: int
+):
     qs = await get_queryset(request.auth.user_id, organization_slug=organization_slug)
     qs = qs.annotate(
         user_report_count=Count("userreport", distinct=True),
@@ -158,13 +161,16 @@ async def list_issue_commits(request: AuthHttpRequest, issue_id: int):
         return []
     return issue.first_release.data.get("commits", [])
 
+
 @router.get(
     "organizations/{slug:organization_slug}/issues/{int:issue_id}/commits/",
     response=list[CommitSchema],
     by_alias=True,
 )
 @has_permission(["event:read", "event:write", "event:admin"])
-async def list_org_issue_commits(request: AuthHttpRequest, organization_slug: str, issue_id: int):
+async def list_org_issue_commits(
+    request: AuthHttpRequest, organization_slug: str, issue_id: int
+):
     qs = await get_queryset(request.auth.user_id, organization_slug=organization_slug)
     try:
         issue = await qs.select_related("first_release").filter(id=issue_id).aget()
@@ -201,9 +207,14 @@ async def delete_issue(request: AuthHttpRequest, issue_id: int):
     return Status(204, None)
 
 
-@router.delete("organizations/{slug:organization_slug}/issues/{int:issue_id}/", response={204: None})
+@router.delete(
+    "organizations/{slug:organization_slug}/issues/{int:issue_id}/",
+    response={204: None},
+)
 @has_permission(["event:write", "event:admin"])
-async def delete_organization_issue(request: AuthHttpRequest, organization_slug: str, issue_id: int):
+async def delete_organization_issue(
+    request: AuthHttpRequest, organization_slug: str, issue_id: int
+):
     qs = await get_queryset(request.auth.user_id, organization_slug=organization_slug)
     result = await qs.filter(id=issue_id).aupdate(is_deleted=True)
     if not result:
@@ -544,12 +555,18 @@ async def list_issue_tags(
         for key in keys
     ]
 
+
 @router.get(
-    "organizations/{slug:organization_slug}/issues/{int:issue_id}/tags/", response=list[IssueTagSchema], by_alias=True
+    "organizations/{slug:organization_slug}/issues/{int:issue_id}/tags/",
+    response=list[IssueTagSchema],
+    by_alias=True,
 )
 @has_permission(["event:read", "event:write", "event:admin"])
 async def list_organization_issue_tags(
-    request: AuthHttpRequest, organization_slug: str, issue_id: int, key: str | None = None
+    request: AuthHttpRequest,
+    organization_slug: str,
+    issue_id: int,
+    key: str | None = None,
 ):
     qs = await get_queryset(request.auth.user_id, organization_slug)
     try:
