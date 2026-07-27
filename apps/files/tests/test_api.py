@@ -1,11 +1,11 @@
+import gzip
 import tempfile
 from hashlib import sha1
-from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
 
 from django.core.files.base import File as DjangoFile
-from django.core.files.uploadedfile import InMemoryUploadedFile, SimpleUploadedFile
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from model_bakery import baker
@@ -13,13 +13,16 @@ from model_bakery import baker
 from apps.sourcecode.models import DebugSymbolBundle
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
+from ..api import CHUNK_UPLOAD_BLOB_SIZE, MAX_COMPRESSED_CHUNK_SIZE
 from ..models import File, FileBlob
 
 
-def generate_file():
-    im_io = BytesIO()
-    return InMemoryUploadedFile(
-        im_io, None, "random-name.jpg", "image/jpeg", len(im_io.getvalue()), None
+def generate_file(content: bytes = b"sample debug file content"):
+    """A protocol-correct chunk upload: gzipped, named by its content SHA-1."""
+    return SimpleUploadedFile(
+        sha1(content).hexdigest(),
+        gzip.compress(content),
+        content_type="application/octet-stream",
     )
 
 
@@ -62,11 +65,76 @@ class ChunkUploadAPITestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertTrue(data["url"].startswith("https://"))
 
     async def test_post(self):
-        data = {"file_gzip": generate_file()}
-        res = await self.async_client.post(self.url, data)
+        content = b"sample debug file content"
+        res = await self.async_client.post(
+            self.url, {"file_gzip": generate_file(content)}
+        )
         self.assertEqual(res.status_code, 200)
-        res = await self.async_client.post(self.url, data)  # Should do nothing
+        blob = await FileBlob.objects.aget()
+        self.assertEqual(blob.checksum, sha1(content).hexdigest())
+        self.assertEqual(blob.size, len(content))
+        with blob.blob.open("rb") as stored:
+            self.assertEqual(stored.read(), content)
+
+        # Re-uploading the same chunk deduplicates
+        res = await self.async_client.post(
+            self.url, {"file_gzip": generate_file(content)}
+        )
+        self.assertEqual(res.status_code, 200)
         self.assertEqual(await FileBlob.objects.acount(), 1)
+
+    async def test_post_rejects_checksum_mismatch(self):
+        chunk = SimpleUploadedFile(
+            sha1(b"other content").hexdigest(), gzip.compress(b"sample content")
+        )
+        res = await self.async_client.post(self.url, {"file_gzip": chunk})
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("checksum", res.json()["detail"])
+        self.assertEqual(await FileBlob.objects.acount(), 0)
+
+    async def test_post_rejects_invalid_gzip(self):
+        chunk = SimpleUploadedFile(sha1(b"x").hexdigest(), b"not gzip data")
+        res = await self.async_client.post(self.url, {"file_gzip": chunk})
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("gzip", res.json()["detail"])
+        self.assertEqual(await FileBlob.objects.acount(), 0)
+
+    async def test_post_accepts_empty_content_chunk(self):
+        res = await self.async_client.post(self.url, {"file_gzip": generate_file(b"")})
+        self.assertEqual(res.status_code, 200)
+        blob = await FileBlob.objects.aget()
+        self.assertEqual(blob.size, 0)
+        self.assertEqual(blob.checksum, sha1(b"").hexdigest())
+
+    async def test_post_rejects_too_many_chunks(self):
+        res = await self.async_client.post(
+            self.url, {"file_gzip": [generate_file(b"aaa"), generate_file(b"bbb")]}
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("chunks", res.json()["detail"])
+        self.assertEqual(await FileBlob.objects.acount(), 0)
+
+    async def test_post_rejects_oversized_compressed_chunk(self):
+        # Compressed input over the cap is rejected before any inflation;
+        # an output-size cap alone never fires on gzip streams of empty
+        # members, which burn CPU while producing zero bytes.
+        chunk = SimpleUploadedFile(
+            sha1(b"x").hexdigest(), b"\0" * (MAX_COMPRESSED_CHUNK_SIZE + 1)
+        )
+        res = await self.async_client.post(self.url, {"file_gzip": chunk})
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("size", res.json()["detail"])
+        self.assertEqual(await FileBlob.objects.acount(), 0)
+
+    async def test_post_rejects_decompression_bomb(self):
+        # A few hundred KB compressed that inflates past the chunk cap; the
+        # streaming cap must abort mid-inflate, not after full expansion.
+        content = b"\0" * (CHUNK_UPLOAD_BLOB_SIZE + 1)
+        chunk = SimpleUploadedFile(sha1(content).hexdigest(), gzip.compress(content, 1))
+        res = await self.async_client.post(self.url, {"file_gzip": chunk})
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("size", res.json()["detail"])
+        self.assertEqual(await FileBlob.objects.acount(), 0)
 
 
 class ReleaseAssembleAPITests(GlitchTipTestCaseMixin, TestCase):
