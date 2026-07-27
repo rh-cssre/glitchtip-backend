@@ -1,4 +1,5 @@
 import hashlib
+import importlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -60,7 +61,7 @@ class OrganizationSocialAppAPITestCase(TestCase):
     async def test_create(self):
         await make_sso_subscription(self.organization)
         res = await self.async_client.post(
-            self.list_url, {**VALID_PAYLOAD, "isPublic": True}, "application/json"
+            self.list_url, VALID_PAYLOAD, "application/json"
         )
         self.assertEqual(res.status_code, 201)
         data = res.json()
@@ -70,8 +71,6 @@ class OrganizationSocialAppAPITestCase(TestCase):
         self.assertIn(data["providerID"], data["callbackUrl"])
         self.assertIn(f"/login/{self.organization.slug}", data["loginUrl"])
         self.assertEqual(data["serverUrl"], "https://corp.okta.example.com")
-        # Billing-enabled installs never expose org apps on the global login page
-        self.assertFalse(data["isPublic"])
         self.assertNotIn("sekrit", res.content.decode())
 
         social_app = await SocialApp.objects.aget(provider_id=data["providerID"])
@@ -158,12 +157,11 @@ class OrganizationSocialAppAPITestCase(TestCase):
 
     @override_settings(BILLING_ENABLED=False, ENABLE_ORGANIZATION_CREATION=False)
     async def test_create_self_hosted(self):
-        """Single-tenant self-host: ungated, and the public toggle works."""
+        """Self-host has no subscription to check, so creation is ungated."""
         res = await self.async_client.post(
-            self.list_url, {**VALID_PAYLOAD, "isPublic": True}, "application/json"
+            self.list_url, VALID_PAYLOAD, "application/json"
         )
         self.assertEqual(res.status_code, 201)
-        self.assertTrue(res.json()["isPublic"])
 
     async def test_create_requires_manager(self):
         await make_sso_subscription(self.organization)
@@ -184,9 +182,9 @@ class OrganizationSocialAppAPITestCase(TestCase):
         )
         self.assertEqual(res.status_code, 201)
 
-    async def test_update_preserves_admin_set_is_public(self):
-        """On billing installs the toggle isn't offered, so a PUT must not
-        clobber an instance admin's Django-admin is_public override."""
+    async def test_update_never_writes_is_public(self):
+        """A PUT must not clobber an instance admin's Django-admin override,
+        including when the client sends isPublic itself."""
         await make_sso_subscription(self.organization)
         res = await self.async_client.post(
             self.list_url, VALID_PAYLOAD, "application/json"
@@ -197,19 +195,29 @@ class OrganizationSocialAppAPITestCase(TestCase):
             "api:update_organization_social_app",
             args=[self.organization.slug, app_id],
         )
-        res = await self.async_client.put(url, VALID_PAYLOAD, "application/json")
+        res = await self.async_client.put(
+            url, {**VALID_PAYLOAD, "isPublic": False}, "application/json"
+        )
         self.assertEqual(res.status_code, 200)
-        self.assertTrue(res.json()["isPublic"])
+        self.assertTrue(
+            (await OrganizationSocialApp.objects.aget(social_app_id=app_id)).is_public
+        )
 
-    @override_settings(BILLING_ENABLED=False, ENABLE_ORGANIZATION_CREATION=True)
-    async def test_is_public_denied_on_multi_tenant_self_host(self):
-        """With open org creation, untrusted managers must not be able to
-        plant sign-in buttons on the instance-wide login page."""
+    @override_settings(BILLING_ENABLED=False, ENABLE_ORGANIZATION_CREATION=False)
+    async def test_is_public_not_settable_by_organization(self):
+        """Listing on the instance-wide login page is an instance-admin
+        decision, so the org API neither accepts nor reports the flag."""
         res = await self.async_client.post(
             self.list_url, {**VALID_PAYLOAD, "isPublic": True}, "application/json"
         )
         self.assertEqual(res.status_code, 201)
-        self.assertFalse(res.json()["isPublic"])
+        self.assertNotIn("isPublic", res.json())
+        social_app_id = res.json()["id"]
+        self.assertFalse(
+            (
+                await OrganizationSocialApp.objects.aget(social_app_id=social_app_id)
+            ).is_public
+        )
 
     async def test_create_rejects_unsafe_server_urls(self):
         await make_sso_subscription(self.organization)
@@ -374,6 +382,20 @@ class LoginSettingsTestCase(TestCase):
         await self.prime_oidc_cache()
         res = await self.async_client.get(reverse("api:get_settings"))
         self.assertEqual(len(res.json()["socialApps"]), 2)
+
+    def test_upgrade_keeps_existing_org_apps_on_instance_login_page(self):
+        """
+        Installs predating is_public listed every social app on the
+        instance-wide login page, org-linked ones included. The backfill must
+        stay True or upgrading silently removes working sign-in buttons;
+        only rows created afterwards default to private.
+        """
+        migration = importlib.import_module(
+            "apps.organizations_ext.migrations.0013_organizationsocialapp_is_public"
+        )
+        backfill, new_row_default = migration.Migration.operations
+        self.assertTrue(backfill.field.default)
+        self.assertFalse(new_row_default.field.default)
 
     async def test_organization_login_settings(self):
         await self.prime_oidc_cache()

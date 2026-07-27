@@ -148,9 +148,6 @@ class OrganizationSocialAppIn(CamelSchema):
     openid_connect; ignored for preconfigured providers."""
     client_id: str = Field(min_length=1, max_length=191)
     client_secret: str = Field(min_length=1, max_length=191)
-    is_public: bool = False
-    """Show on the instance-wide login page. Ignored on billing-enabled
-    installs, where organization apps are always private."""
 
 
 class OrganizationSocialAppUpdateIn(OrganizationSocialAppIn):
@@ -163,7 +160,6 @@ class OrganizationSocialAppSchema(CamelSchema, ModelSchema):
     brand: str
     """Identity provider brand for display (e.g. "google"); falls back to the
     allauth provider name."""
-    is_public: bool
     callback_url: str | None
     """Redirect URI to register with the identity provider."""
     login_url: str
@@ -180,10 +176,6 @@ class OrganizationSocialAppSchema(CamelSchema, ModelSchema):
     @staticmethod
     def resolve_brand(obj):
         return (obj.settings or {}).get("brand") or obj.provider
-
-    @staticmethod
-    def resolve_is_public(obj):
-        return obj.organizationsocialapp.is_public
 
     @staticmethod
     def resolve_callback_url(obj):

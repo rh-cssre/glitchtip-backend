@@ -6,7 +6,7 @@ Lets organization managers configure their own OpenID Connect provider
 admin access. The created SocialApp is linked to the organization through
 OrganizationSocialApp, which both auto-joins users who authenticate with it
 (see apps.users.signals) and, when non-public, keeps it off the instance-wide
-login page in favor of /login/<org slug>.
+login page in favor of the organization's own login page.
 """
 
 import secrets
@@ -14,7 +14,6 @@ from ipaddress import ip_address
 from urllib.parse import urlsplit
 
 from allauth.socialaccount.models import SocialApp
-from django.conf import settings
 from django.shortcuts import aget_object_or_404
 from ninja import Router
 from ninja.errors import HttpError
@@ -48,20 +47,6 @@ POST /api/0/organizations/{organization_slug}/social-apps/
 PUT /api/0/organizations/{organization_slug}/social-apps/{social_app_id}/
 DELETE /api/0/organizations/{organization_slug}/social-apps/{social_app_id}/
 """
-
-
-def is_public_login_page_allowed() -> bool:
-    """
-    Whether org-managed apps may appear on the instance-wide login page.
-
-    Only on effectively single-tenant self-host installs. Anywhere untrusted
-    org managers can exist (billing, or open organization creation) a manager
-    could otherwise plant a convincingly-named sign-in button on the global
-    login page that authenticates victims at the manager's own IdP and
-    auto-joins them to the manager's organization. Instance admins can still
-    set is_public in Django admin.
-    """
-    return not settings.BILLING_ENABLED and not settings.ENABLE_ORGANIZATION_CREATION
 
 
 def validate_server_url(url: str) -> str:
@@ -176,10 +161,12 @@ async def create_organization_social_app(
         secret=payload.client_secret,
         settings=app_settings,
     )
+    # is_public is deliberately not settable here: listing a sign-in option on
+    # the instance-wide login page is a server-level decision, so it stays an
+    # instance-admin action in Django admin.
     await OrganizationSocialApp.objects.acreate(
         organization=organization,
         social_app=social_app,
-        is_public=payload.is_public and is_public_login_page_allowed(),
     )
     return 201, await get_social_apps_queryset(organization).aget(id=social_app.id)
 
@@ -216,14 +203,6 @@ async def update_organization_social_app(
     if payload.client_secret:
         social_app.secret = payload.client_secret
     await social_app.asave(update_fields=["name", "client_id", "secret", "settings"])
-
-    # Where the toggle isn't offered, leave is_public alone so an instance
-    # admin's deliberate Django-admin override survives org-side edits.
-    if is_public_login_page_allowed():
-        organization_social_app = social_app.organizationsocialapp
-        if organization_social_app.is_public != payload.is_public:
-            organization_social_app.is_public = payload.is_public
-            await organization_social_app.asave(update_fields=["is_public"])
     return social_app
 
 

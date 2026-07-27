@@ -470,8 +470,9 @@ class OrganizationSocialApp(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
     social_app = models.OneToOneField(SocialApp, on_delete=models.CASCADE)
     is_public = models.BooleanField(
-        default=True,
-        help_text="Show this sign-in option on the instance-wide login page. "
-        "When false it only appears on the organization's own login page "
-        "(/login/<org slug>).",
+        default=False,
+        help_text="Show this sign-in option on the instance-wide login page, "
+        "alongside the instance's own providers. When false it appears only on "
+        "the organization's own login page. Settable here only — the "
+        "organization API never writes it.",
     )

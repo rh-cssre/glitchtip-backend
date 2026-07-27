@@ -297,8 +297,8 @@ class LoginSettingsOut(CamelSchema):
 )
 async def get_organization_login_settings(request: HttpRequest, organization_slug: str):
     """
-    Sign-in options for one organization's login page (/login/<org slug>),
-    including social apps hidden from the instance-wide login page. Responds
+    Sign-in options for one organization's own login page, including social
+    apps hidden from the instance-wide login page. Responds
     200 with an empty list for unknown slugs so anonymous requests cannot
     enumerate which organizations exist.
     """
