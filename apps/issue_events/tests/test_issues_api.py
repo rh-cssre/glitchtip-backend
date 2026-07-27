@@ -238,6 +238,37 @@ class IssueAPITestCase(GlitchTestCase):
             page2 = [item["id"] for item in res2.json()]
             self.assertEqual(sorted(page1 + page2), sorted(str(i.id) for i in issues))
 
+    async def test_priority_sort_paginated_count(self):
+        """Sorting the issue list by ``priority`` while the result spans more
+        than one page must not 500 on the X-Hits count.
+
+        ``priority`` is a non-aggregate annotation
+        (LOG(10, index.count) + index.last_seen epoch / 300000), added on top of
+        the list's ``num_comments`` Count aggregate. Having a following page
+        triggers ``_aitems_count``, which wraps the sliced queryset in
+        ``SELECT COUNT(*) FROM (...)``. That subquery used to keep the priority
+        expression in its SELECT while ``index.count`` was absent from the
+        aggregate-forced GROUP BY, so Postgres rejected it with a 42803
+        ("must appear in the GROUP BY clause") error.
+        """
+        for _ in range(3):
+            await baker.amake("issue_events.Issue", project=self.project)
+
+        for sort in ("priority", "-priority"):
+            res = await self.async_client.get(self.list_url + f"?limit=2&sort={sort}")
+            self.assertEqual(res.status_code, 200, msg=f"sort={sort!r}: {res.content}")
+            # A following page is what makes the paginator run the count query.
+            self.assertIn('rel="next"; results="true"', res["Link"])
+            # X-Hits is the total match count produced by _aitems_count.
+            self.assertEqual(res["X-Hits"], "3", msg=f"sort={sort!r}")
+
+            # The next page must also load (the count runs again there).
+            next_url = re.search(r'<([^>]+)>; rel="next"', res["Link"]).group(1)
+            res2 = await self.async_client.get(next_url)
+            self.assertEqual(
+                res2.status_code, 200, msg=f"sort={sort!r}: {res2.content}"
+            )
+
     async def _set_search_document(self, issue, text):
         """Populate an issue's IssueIndex row (the full-text store).
 
