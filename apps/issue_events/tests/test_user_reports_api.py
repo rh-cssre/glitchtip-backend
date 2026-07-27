@@ -28,7 +28,11 @@ class IssuesUserReportTestCase(GlitchTipTestCaseMixin, TestCase):
         super().create_logged_in_user()
         self.async_client.force_login(self.user)
 
-        self.event = baker.make("issue_events.IssueEvent", issue__project=self.project)
+        self.event = baker.make(
+            "issue_events.IssueEvent",
+            issue__project=self.project,
+            organization=self.organization,
+        )
 
         self.user_report = baker.make(
             "issue_events.UserReport",
@@ -73,7 +77,11 @@ class OrganizationScopedUserReportTestCase(GlitchTipTestCaseMixin, TestCase):
     def setUp(self):
         super().create_logged_in_user()
         self.async_client.force_login(self.user)
-        self.event = baker.make("issue_events.IssueEvent", issue__project=self.project)
+        self.event = baker.make(
+            "issue_events.IssueEvent",
+            issue__project=self.project,
+            organization=self.organization,
+        )
         self.user_report = baker.make(
             "issue_events.UserReport",
             project=self.project,

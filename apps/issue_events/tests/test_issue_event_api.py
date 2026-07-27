@@ -169,26 +169,30 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
 
     async def test_relative_event_ordering(self):
         issue = await baker.amake("issue_events.issue", project=self.project)
+        org = self.project.organization
         now = timezone.now()
-        await baker.amake("issue_events.IssueEvent", issue=issue)
+        await baker.amake("issue_events.IssueEvent", issue=issue, organization=org)
         # Explicit, increasing UUIDv7 ids so id-based prev/next navigation is
         # deterministic (same-millisecond ids otherwise sort randomly).
         event1 = await baker.amake(
             "issue_events.IssueEvent",
             issue=issue,
+            organization=org,
             id=UUID7Helper.from_datetime(now + timedelta(seconds=1)),
         )
         event2 = await baker.amake(
             "issue_events.IssueEvent",
             issue=issue,
+            organization=org,
             id=UUID7Helper.from_datetime(now + timedelta(seconds=2)),
         )
         event3 = await baker.amake(
             "issue_events.IssueEvent",
             issue=issue,
+            organization=org,
             id=UUID7Helper.from_datetime(now + timedelta(seconds=3)),
         )
-        await baker.amake("issue_events.IssueEvent", issue=issue)
+        await baker.amake("issue_events.IssueEvent", issue=issue, organization=org)
         url = get_issue_event_url(issue.id, event2.id)
         res = await self.async_client.get(url)
         event_details = res.json()
