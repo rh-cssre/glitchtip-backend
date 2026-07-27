@@ -107,6 +107,7 @@ async def resolve_assignee(
         raise HttpError(404, "User is not a member of this organization")
     return org_user, None
 
+
 async def _aggregate_tags(issue: QuerySet, key: str):
     qs = issue.issuetag_set
     if key:
@@ -541,6 +542,7 @@ async def list_project_issues(
             if org:
                 organization_id = org.id
     return filter_issue_list(qs, filters, sort, event_id, organization_id)
+
 
 @router.get(
     "/issues/{int:issue_id}/tags/", response=list[IssueTagSchema], by_alias=True

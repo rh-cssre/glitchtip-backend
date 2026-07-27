@@ -1,6 +1,6 @@
 from typing import Literal
 
-from django.http import HttpResponse, Http404
+from django.http import Http404, HttpResponse
 from ninja import Schema, Status
 from ninja.errors import HttpError
 from ninja.pagination import paginate
@@ -13,7 +13,7 @@ from ..schema import CommentSchema
 from . import router
 
 
-def get_queryset(request, issue_id: int, organization_slug: str | None = None):
+def get_queryset(request: AuthHttpRequest, issue_id: int, organization_slug: str | None = None):
     qs = Comment.objects.select_related("user").filter(
         issue__project__organization__users=request.auth.user_id, issue__id=issue_id
     )
