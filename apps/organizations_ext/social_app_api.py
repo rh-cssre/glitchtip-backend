@@ -14,6 +14,8 @@ from ipaddress import ip_address
 from urllib.parse import urlsplit
 
 from allauth.socialaccount.models import SocialApp
+from asgiref.sync import sync_to_async
+from django.db import transaction
 from django.shortcuts import aget_object_or_404
 from ninja import Router
 from ninja.errors import HttpError
@@ -115,6 +117,42 @@ async def generate_provider_id(organization: Organization) -> str:
     raise HttpError(500, "Unable to generate a unique provider id")
 
 
+@sync_to_async
+def create_linked_social_app(
+    organization: Organization, provider_id: str, payload, app_settings: dict
+) -> SocialApp:
+    """
+    Create a SocialApp and its organization link as one unit.
+
+    Both rows must land together: a SocialApp with no OrganizationSocialApp is
+    indistinguishable from an instance-wide app, so a half-finished create would
+    leave the organization's provider listed on the instance-wide login page.
+
+    Sync because the transaction has to span allauth's SocialApp, which cannot
+    carry an async manager. async_atomic() covers async_connections, while
+    Django's native acreate() runs on the sync connection, so it would not
+    actually enclose these writes. Nothing awaits inside, so the transaction
+    opens and closes within this one thread-sensitive call.
+
+    is_public is deliberately not settable here: listing a sign-in option on the
+    instance-wide login page is a server-level decision, so it stays an
+    instance-admin action in Django admin.
+    """
+    with transaction.atomic():
+        social_app = SocialApp.objects.create(
+            provider="openid_connect",
+            provider_id=provider_id,
+            name=payload.name,
+            client_id=payload.client_id,
+            secret=payload.client_secret,
+            settings=app_settings,
+        )
+        OrganizationSocialApp.objects.create(
+            organization=organization, social_app=social_app
+        )
+    return social_app
+
+
 @router.get(
     "organizations/{slug:organization_slug}/social-apps/",
     response=list[OrganizationSocialAppSchema],
@@ -153,20 +191,11 @@ async def create_organization_social_app(
         app_settings["server_url"] = validate_server_url(payload.server_url)
     else:
         raise HttpError(400, "Server URL is required")
-    social_app = await SocialApp.objects.acreate(
-        provider="openid_connect",
+    social_app = await create_linked_social_app(
+        organization,
         provider_id=await generate_provider_id(organization),
-        name=payload.name,
-        client_id=payload.client_id,
-        secret=payload.client_secret,
-        settings=app_settings,
-    )
-    # is_public is deliberately not settable here: listing a sign-in option on
-    # the instance-wide login page is a server-level decision, so it stays an
-    # instance-admin action in Django admin.
-    await OrganizationSocialApp.objects.acreate(
-        organization=organization,
-        social_app=social_app,
+        payload=payload,
+        app_settings=app_settings,
     )
     return 201, await get_social_apps_queryset(organization).aget(id=social_app.id)
 

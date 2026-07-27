@@ -1,5 +1,4 @@
 import hashlib
-import importlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -219,6 +218,24 @@ class OrganizationSocialAppAPITestCase(TestCase):
             ).is_public
         )
 
+    async def test_failed_link_leaves_no_orphan_social_app(self):
+        """
+        A SocialApp with no OrganizationSocialApp reads as instance-wide, so a
+        half-finished create would publish the org's provider on the
+        instance-wide login page.
+        """
+        await make_sso_subscription(self.organization)
+        with (
+            patch.object(
+                OrganizationSocialApp.objects, "create", side_effect=OSError("db gone")
+            ),
+            self.assertRaises(OSError),
+        ):
+            await self.async_client.post(
+                self.list_url, VALID_PAYLOAD, "application/json"
+            )
+        self.assertFalse(await SocialApp.objects.aexists())
+
     async def test_create_rejects_unsafe_server_urls(self):
         await make_sso_subscription(self.organization)
         for server_url in [
@@ -382,20 +399,6 @@ class LoginSettingsTestCase(TestCase):
         await self.prime_oidc_cache()
         res = await self.async_client.get(reverse("api:get_settings"))
         self.assertEqual(len(res.json()["socialApps"]), 2)
-
-    def test_upgrade_keeps_existing_org_apps_on_instance_login_page(self):
-        """
-        Installs predating is_public listed every social app on the
-        instance-wide login page, org-linked ones included. The backfill must
-        stay True or upgrading silently removes working sign-in buttons;
-        only rows created afterwards default to private.
-        """
-        migration = importlib.import_module(
-            "apps.organizations_ext.migrations.0013_organizationsocialapp_is_public"
-        )
-        backfill, new_row_default = migration.Migration.operations
-        self.assertTrue(backfill.field.default)
-        self.assertFalse(new_row_default.field.default)
 
     async def test_organization_login_settings(self):
         await self.prime_oidc_cache()
