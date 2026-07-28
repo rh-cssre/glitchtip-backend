@@ -37,7 +37,7 @@ services:
       exit 0;
       "
   minio-netem:
-    image: alpine:3.22
+    image: alpine:3.24
     network_mode: "service:minio"
     cap_add:
       - NET_ADMIN
