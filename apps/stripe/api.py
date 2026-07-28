@@ -34,7 +34,6 @@ from .client import (
     create_session,
     create_subscription,
     fetch_subscription,
-    migrate_subscription_to_flexible,
 )
 from .constants import (
     ACTIVE_SUBSCRIPTION_STATUSES,
@@ -642,9 +641,6 @@ async def configure_overage(
                 if existing:
                     sub.metered_item_id = existing.id
                 else:
-                    # Metered prices require flexible billing mode; migrate if the
-                    # subscription is still on classic (no-op if already flexible).
-                    await migrate_subscription_to_flexible(sub.stripe_id)
                     item = await add_subscription_item(
                         sub.stripe_id, overage_price.stripe_id
                     )

@@ -109,10 +109,6 @@ class OverageAPITestCase(TestCase):
             ),
             patch("apps.stripe.api.add_subscription_item", new=item),
             patch(
-                "apps.stripe.api.migrate_subscription_to_flexible",
-                new_callable=AsyncMock,
-            ),
-            patch(
                 "apps.stripe.api.check_organization_throttle",
                 new=MagicMock(aenqueue=AsyncMock()),
             ),
@@ -139,10 +135,6 @@ class OverageAPITestCase(TestCase):
             ),
             patch("apps.stripe.api.add_subscription_item", new=add),
             patch(
-                "apps.stripe.api.migrate_subscription_to_flexible",
-                new_callable=AsyncMock,
-            ),
-            patch(
                 "apps.stripe.api.check_organization_throttle",
                 new=MagicMock(aenqueue=AsyncMock()),
             ),
@@ -163,7 +155,7 @@ class OverageAPITestCase(TestCase):
                 new=MagicMock(return_value=(None, None)),
             ),
             patch(
-                "apps.stripe.api.migrate_subscription_to_flexible",
+                "apps.stripe.api.add_subscription_item",
                 new=AsyncMock(side_effect=declined),
             ),
         ):
@@ -183,7 +175,7 @@ class OverageAPITestCase(TestCase):
                 new=MagicMock(return_value=(None, None)),
             ),
             patch(
-                "apps.stripe.api.migrate_subscription_to_flexible",
+                "apps.stripe.api.add_subscription_item",
                 new=AsyncMock(side_effect=boom),
             ),
         ):

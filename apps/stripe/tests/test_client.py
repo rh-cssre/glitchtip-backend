@@ -10,7 +10,6 @@ from apps.stripe.client import (
     create_session,
     create_subscription,
     fetch_v2_event,
-    migrate_subscription_to_flexible,
     stripe_get,
     stripe_post,
 )
@@ -240,12 +239,3 @@ class StripeBillingModeTests(TestCase):
         self.assertEqual(
             request.kwargs["data"]["subscription_data[billing_mode][type]"], "flexible"
         )
-
-    async def test_migrate_posts_flexible_mode(self):
-        with aioresponses() as mocked:
-            mocked.post(
-                f"{STRIPE_URL}/subscriptions/sub_1/migrate", status=200, body="{}"
-            )
-            await migrate_subscription_to_flexible("sub_1")
-            request = next(iter(mocked.requests.values()))[0]
-        self.assertEqual(request.kwargs["data"]["billing_mode[type]"], "flexible")
