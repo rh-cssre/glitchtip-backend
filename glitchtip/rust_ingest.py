@@ -133,7 +133,7 @@ def test_valkey_url() -> str:
 def _valkey_driver():
     """The Valkey driver the ingest path issues its commands on, or ``None``
     on a Postgres-only stack (the Rust pipeline then runs its cache ops
-    against the vcache_entry table and enqueues on the db_queuedtask broker).
+    against the django_cache table and enqueues on the db_queuedtask broker).
 
     Production with Valkey: the very driver behind Django's vcache cache
     (``DRIVER_CLASS`` is gt_rust's class unconditionally, so cache and
