@@ -1,6 +1,7 @@
 from allauth.account.models import EmailAddress
 from django.conf import settings
 from django.core.management import call_command
+from django.db.models import Q
 from django.http import Http404, HttpRequest, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 
@@ -35,7 +36,17 @@ def seed_data(request: HttpRequest):
     project_name = "seeded-project"
     monitor_name = "seeded-monitor"
 
-    User.objects.filter(email__in=[user_email, other_user_email]).delete()
+    # Orgs before their members: deleting a user cascades to its
+    # OrganizationUser rows, and the organization_has_members trigger rejects
+    # leaving a live org with none left. Orgs the seeded users belong to are
+    # matched too, so a test org missing `e2etestobj` can't wedge the next seed.
+    seeded_users = User.objects.filter(email__in=[user_email, other_user_email])
+    Organization.objects.filter(
+        Q(name__contains=e2e_object_identifier)
+        | Q(organization_users__user__in=seeded_users)
+    ).delete()
+
+    seeded_users.delete()
     user = User.objects.create_user(email=user_email, password=user_password)
     other_user = User.objects.create_user(
         email=other_user_email, password=user_password
@@ -48,7 +59,6 @@ def seed_data(request: HttpRequest):
         user=other_user, email=other_user_email, primary=True, verified=True
     )
 
-    Organization.objects.filter(name__contains=e2e_object_identifier).delete()
     organization = Organization.objects.create(name=organization_name)
     orgUser = organization.add_user(user=user)
 
