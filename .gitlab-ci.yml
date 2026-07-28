@@ -93,6 +93,36 @@ test-rust-ingest:
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 
+# Postgres-only Rust ingest lane: the same flag-on stack with no Valkey at
+# all (VALKEY_URL=""), so the Rust path's cache ops run against the
+# django_cache table and enqueue goes to the db_queuedtask broker. The
+# parity suite skips itself here (broker batch order); RustIngestTestCase
+# covers the lane end-to-end.
+test-rust-ingest-postgres:
+  image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.14-$BASE_LAYER
+  variables:
+    SECRET_KEY: testing
+    DATABASE_URL: "postgres://postgres:postgres@postgres:5432/postgres"
+    ENABLE_TEST_API: "true"
+    ENABLE_OPEN_USER_REGISTRATION: "true"
+    VALKEY_URL: ""
+    GLITCHTIP_RUST_INGEST: "true"
+  services:
+    - name: postgres:18
+      alias: postgres
+  cache:
+    - key:
+        files:
+          - uv.lock
+      paths:
+        - $UV_CACHE_DIR
+  script:
+    - uv sync --frozen --no-install-project
+    - uv run ./manage.py test apps.event_ingest glitchtip
+    - uv cache prune --ci
+  rules:
+    - if: $CI_PIPELINE_SOURCE != "schedule"
+
 # Latest stack: Python 3.14, PostgreSQL 18, Valkey, S3 cold storage
 test-latest:
   image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.14-$BASE_LAYER

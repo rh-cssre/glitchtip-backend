@@ -96,6 +96,13 @@ def _goldens() -> dict:
     return _goldens_cache
 
 
+@unittest.skipIf(
+    RUST and not settings.VALKEY_URL,
+    "parity goldens assume within-batch FIFO enqueue order, which the "
+    "Postgres broker's same-timestamp batch INSERT does not define; the "
+    "wire bytes are broker-independent (identical serialize() blobs), and "
+    "the Postgres-only lane is covered end-to-end by RustIngestTestCase",
+)
 class IngestParityTestCase(AsgiIngestTestMixin, EventIngestTestCase):
     maxDiff = None
 

@@ -1346,14 +1346,15 @@ class CacheConfigTestCase(TestCase):
         self.assertTrue(info["rust_ingest"])
         self.assertEqual(info["database_engine"], "gt_rust.django_backend")
 
-    def test_rust_ingest_without_valkey_deactivates_gracefully(self):
-        """Flag on + no valkey: the Rust enqueue path only speaks the Valkey
-        task broker today, so the flag deactivates (Python ingest path)
-        instead of hard-failing startup. Temporary until the postgres
-        task-broker port lands. The DB engine stays gt_rust regardless."""
+    def test_rust_ingest_without_valkey_stays_enabled(self):
+        """Flag on + no valkey: the Postgres-only shape. The Rust path runs
+        its cache ops against the django_cache table and enqueues on the
+        db_queuedtask broker, so the flag stays enabled alongside the DB
+        cache and DB task backend."""
         info = self._probe({"VALKEY_URL": "", "GLITCHTIP_RUST_INGEST": "true"})
-        self.assertFalse(info["rust_ingest"])
+        self.assertTrue(info["rust_ingest"])
         self.assertEqual(info["database_engine"], "gt_rust.django_backend")
+        self.assertEqual(info["cache_backend"], self.DB_CACHE_BACKEND)
         self.assertEqual(info["task_backend"], self.VTASKS_DB)
 
     def test_no_valkey_env_defaults_to_vcache(self):
