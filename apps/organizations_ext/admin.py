@@ -140,7 +140,11 @@ class OrganizationUserAdmin(BaseOrganizationUserAdmin, ImportExportModelAdmin):
 
 
 class OrganizationSocialAppAdmin(admin.ModelAdmin):
-    list_display = ["organization", "social_app"]
+    list_display = ["organization", "social_app", "is_public"]
+    # Django admin is the only place is_public can be set, so make promoting an
+    # app to the instance-wide login page a changelist toggle.
+    list_editable = ["is_public"]
+    list_filter = ("is_public",)
     search_fields = ("organization__name", "social_app__name")
 
 

@@ -219,4 +219,24 @@ class AsyncLinkHeaderPagination(CursorPagination):
         return page
 
     async def _aitems_count(self, queryset: "QuerySet") -> int:
-        return await queryset.order_by()[: self.max_hits].acount()  # type: ignore
+        base = queryset.order_by()
+        # For a plain model queryset, count distinct primary keys rather than
+        # counting it as-is. A list queryset may carry a non-aggregate ordering
+        # annotation (e.g. the issue list's ``priority``, a LOG(count) + last_seen
+        # expression over the IssueIndex leaf) alongside an aggregate annotation
+        # such as ``num_comments``. The aggregate forces a GROUP BY, and wrapping
+        # the sliced queryset in ``SELECT COUNT(*) FROM (...)`` then leaves the
+        # ordering expression in the subquery SELECT while its underlying column
+        # is absent from the GROUP BY — Postgres rejects that with a 42803
+        # ("must appear in the GROUP BY clause") error. Reducing to distinct
+        # primary keys drops both the ordering expression and the comment-count
+        # aggregate from the counted query, so it stays valid regardless of which
+        # sort or annotations the caller applied.
+        #
+        # A ``.values()``/``.values_list()`` queryset is skipped: there each row
+        # is an explicit projection/group, not a model instance, so re-projecting
+        # to ``pk`` would silently miscount. Count those as-is (this paginator is
+        # the project default, so future aggregate list endpoints may rely on it).
+        if base._fields is None:  # type: ignore[attr-defined]
+            base = base.values("pk").distinct()
+        return await base[: self.max_hits].acount()  # type: ignore[attr-defined]

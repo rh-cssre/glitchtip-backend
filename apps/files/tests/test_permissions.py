@@ -12,9 +12,13 @@ class ChunkUploadAPIPermissionTests(APIPermissionTestCase):
         self.url = reverse("api:chunk_upload", args=[self.organization])
 
     def test_post(self):
-        data = {"file_gzip": generate_file()}
-        res = self.client.post(self.url, data, **self.get_headers())
+        # A fresh upload file per request: posting consumes the file object.
+        res = self.client.post(
+            self.url, {"file_gzip": generate_file()}, **self.get_headers()
+        )
         self.assertEqual(res.status_code, 403)
         self.auth_token.add_permission("project:write")
-        res = self.client.post(self.url, data, **self.get_headers())
+        res = self.client.post(
+            self.url, {"file_gzip": generate_file()}, **self.get_headers()
+        )
         self.assertEqual(res.status_code, 200)
