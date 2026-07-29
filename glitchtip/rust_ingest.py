@@ -10,8 +10,11 @@ pipeline's anomalies to the error tracker.
 
 The Rust path shares the process's existing I/O handles: the
 ``gt_rust.django_backend`` connection pool (auth query) and the vcache
-Valkey driver (block cache, dedupe, task queue). Nothing per-request is
-allocated on the Python heap beyond the ASGI messages themselves.
+Valkey driver (block cache, dedupe, task queue) — or, on a Postgres-only
+stack (``VALKEY_URL=""``), the same connection pool serves the
+django_cache table and the db_queuedtask broker instead. Nothing
+per-request is allocated on the Python heap beyond the ASGI messages
+themselves.
 
 Envelopes the Rust pipeline cannot fully own — SDK minidump submissions,
 which need the ``symbolic`` stack — come back as a fallback and are
@@ -77,6 +80,10 @@ def _build_config() -> dict:
         "cors_whitelist": [str(o) for o in settings.CORS_ORIGIN_WHITELIST],
         "cache_key_prefix": cache_key_prefix,
         "vtasks_prefix": vtasks_settings.VTASKS_VALKEY_PREFIX,
+        # VALKEY_URL drives cache and task broker together: without it the
+        # stack runs vtasks' DatabaseTaskBackend and the Rust path must
+        # INSERT db_queuedtask rows instead of LPUSHing.
+        "task_broker": "valkey" if settings.VALKEY_URL else "postgres",
     }
 
 
@@ -124,16 +131,20 @@ def test_valkey_url() -> str:
 
 
 def _valkey_driver():
-    """The Valkey driver the ingest path issues its commands on.
+    """The Valkey driver the ingest path issues its commands on, or ``None``
+    on a Postgres-only stack (the Rust pipeline then runs its cache ops
+    against the django_cache table and enqueues on the db_queuedtask broker).
 
-    Production: the very driver behind Django's vcache cache (``DRIVER_CLASS``
-    is gt_rust's class unconditionally, so cache and ingest share one
-    connection). Under the test runner the cache is LocMem, so connect a
-    dedicated driver to the test database instead.
+    Production with Valkey: the very driver behind Django's vcache cache
+    (``DRIVER_CLASS`` is gt_rust's class unconditionally, so cache and
+    ingest share one connection). Under the test runner the cache is
+    LocMem, so connect a dedicated driver to the test database instead.
     """
     from django.conf import settings
     from django.core.cache import caches
 
+    if not settings.VALKEY_URL:
+        return None
     cache_backend = caches["default"]
     if hasattr(cache_backend, "_driver"):
         return cache_backend._driver
