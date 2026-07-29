@@ -60,9 +60,16 @@ async def _resolve_issue(
     return issue
 
 
-def _get_issue_event_queryset(request: AuthHttpRequest, issue_id: int):
-    """Hot-table queryset for one issue, annotated for prev/next navigation."""
-    qs = get_queryset(request, issue_id)
+def _get_issue_event_queryset(
+    request: AuthHttpRequest, issue_id: int, organization_id: int
+):
+    """Hot-table queryset for one issue, annotated for prev/next navigation.
+
+    ``organization_id`` is filtered in before annotating so the constant lands on
+    the prev/next subqueries too - they scan the same partitioned hot table and
+    would otherwise hit every hash sub-partition.
+    """
+    qs = get_queryset(request, issue_id).filter(organization_id=organization_id)
     # Use id (UUIDv7) for prev/next navigation - enables partition pruning
     return qs.annotate(
         previous=Subquery(
@@ -175,15 +182,16 @@ async def _get_issue_event(request: AuthHttpRequest, issue: Issue, event_id: uui
     reaches this far.
     """
     org_id = issue.project.organization_id
-    qs = _get_issue_event_queryset(request, issue.id)
+    # organization_id is already filtered in - it prunes the hash sub-partitions for
+    # the event lookup and for the prev/next subqueries alike.
+    qs = _get_issue_event_queryset(request, issue.id, org_id)
 
     # A UUIDv7 event_id is our own primary key; anything else is a client-provided
-    # sentry SDK event_id (typically UUIDv4). Either way organization_id prunes the
-    # hash sub-partitions.
+    # sentry SDK event_id (typically UUIDv4).
     if is_uuid7(event_id):
-        event = await qs.filter(id=event_id, organization_id=org_id).afirst()
+        event = await qs.filter(id=event_id).afirst()
     else:
-        event = await qs.filter(event_id=event_id, organization_id=org_id).afirst()
+        event = await qs.filter(event_id=event_id).afirst()
 
     if event:
         event.user_report = await get_user_report(event.id)

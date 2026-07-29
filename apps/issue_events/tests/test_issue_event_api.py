@@ -406,6 +406,26 @@ class OrganizationScopedIssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
         )
         self.assertEqual(res.status_code, 404)
 
+    async def test_retrieve_relative_event_ordering(self):
+        """prev/next are org-scoped subqueries; scoping must not break navigation."""
+        now = timezone.now()
+        events = [
+            await baker.amake(
+                "issue_events.IssueEvent",
+                issue=self.issue,
+                organization=self.organization,
+                id=UUID7Helper.from_datetime(now + timedelta(seconds=seconds)),
+            )
+            for seconds in (1, 2, 3)
+        ]
+        res = await self.async_client.get(
+            self.detail_url(self.organization.slug, self.issue.id, events[1].id.hex)
+        )
+        self.assertEqual(res.status_code, 200)
+        event_details = res.json()
+        self.assertEqual(event_details["nextEventID"], events[2].id.hex)
+        self.assertEqual(event_details["previousEventID"], events[0].id.hex)
+
     async def test_retrieve_by_sentry_event_id(self):
         """The UUIDv4 branch resolves the org separately; it must scope too."""
         sentry_event_id = uuid.uuid4()
