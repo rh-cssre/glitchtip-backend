@@ -108,8 +108,8 @@ async def resolve_assignee(
     return org_user, None
 
 
-async def _aggregate_tags(issue: QuerySet, key: str):
-    qs = issue.issuetag_set
+async def _aggregate_tags(issue: Issue, key: str | None):
+    qs = issue.issuetag_set.filter(organization_id=issue.project.organization_id)
     if key:
         qs = qs.filter(tag_key__key=key)
     qs = (
