@@ -166,7 +166,7 @@ async def get_issue(request: AuthHttpRequest, issue_id: int):
     by_alias=True,
 )
 @has_permission(["event:read", "event:write", "event:admin"])
-async def organization_get_issue(
+async def get_organization_issue(
     request: AuthHttpRequest, organization_slug: str, issue_id: int
 ):
     qs = await get_queryset(request.auth.user_id, organization_slug=organization_slug)
@@ -203,7 +203,7 @@ async def list_issue_commits(request: AuthHttpRequest, issue_id: int):
     by_alias=True,
 )
 @has_permission(["event:read", "event:write", "event:admin"])
-async def list_org_issue_commits(
+async def list_organization_issue_commits(
     request: AuthHttpRequest, organization_slug: str, issue_id: int
 ):
     qs = await get_queryset(request.auth.user_id, organization_slug=organization_slug)

@@ -44,7 +44,7 @@ async def list_comments(
 )
 @has_permission(["event:read", "event:admin"])
 @paginate
-async def organizations_list_comments(
+async def organization_list_comments(
     request: AuthHttpRequest,
     response: HttpResponse,
     issue_id: int,
@@ -91,7 +91,7 @@ async def add_comment(
     by_alias=True,
 )
 @has_permission(["event:write", "event:admin"])
-async def organization_add_comment(
+async def add_organization_comment(
     request: AuthHttpRequest,
     organization_slug: str,
     issue_id: int,
@@ -145,7 +145,7 @@ async def update_comment(
     by_alias=True,
 )
 @has_permission(["event:write", "event:admin"])
-async def organization_update_comment(
+async def update_organization_comment(
     request: AuthHttpRequest,
     organization_slug: str,
     issue_id: int,
@@ -191,7 +191,7 @@ async def delete_comment(
     by_alias=True,
 )
 @has_permission(["event:admin"])
-async def organization_delete_comment(
+async def delete_organization_comment(
     request: AuthHttpRequest,
     organization_slug: str,
     issue_id: int,
