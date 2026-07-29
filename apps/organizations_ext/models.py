@@ -308,6 +308,9 @@ class Organization(SharedBaseModel, OrganizationBase):
             "admin",
             "status_page",
             "__debug__",
+            # /login/<org slug> is the per-organization login page; "finalize"
+            # would shadow the /login/finalize social-auth callback route.
+            "finalize",
         ]
         slug = slugify(content)
         if slug in reserved_words:
@@ -466,3 +469,10 @@ class OrganizationSocialApp(models.Model):
 
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
     social_app = models.OneToOneField(SocialApp, on_delete=models.CASCADE)
+    is_public = models.BooleanField(
+        default=False,
+        help_text="Show this sign-in option on the instance-wide login page, "
+        "alongside the instance's own providers. When false it appears only on "
+        "the organization's own login page. Settable here only — the "
+        "organization API never writes it.",
+    )

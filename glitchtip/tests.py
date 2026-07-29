@@ -9,11 +9,7 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 from uuid import UUID
 
-from allauth_async.socialaccount.providers.openid_connect import (
-    _openid_config_cache_key,
-)
 from django.conf import settings
-from django.core.cache import cache
 from django.db import connection
 from django.test import (
     SimpleTestCase,
@@ -76,22 +72,16 @@ class SettingsTestCase(TestCase):
                 "socialaccount.socialapp",
                 provider=provider,
             )
-        # OIDC discovery is cached; pre-populate to avoid a real outbound
-        # request and to assert the cached value is consumed. The key uses the
-        # provider's normalized well-known URL, shared with the login flow.
-        cache_key = _openid_config_cache_key(
-            "https://example.com/.well-known/openid-configuration"
-        )
-        await cache.aset(
-            cache_key,
-            {"authorization_endpoint": "https://example.com/authorize"},
-        )
-        try:
+        # Serializing an app must never reach the network: this endpoint is
+        # unauthenticated and lists every app, so an outbound call per app
+        # would let one anonymous request fan out across the IdPs they name.
+        with patch("aiohttp.ClientSession.get", side_effect=AssertionError) as no_http:
             res = await self.async_client.get(self.url)
-        finally:
-            await cache.adelete(cache_key)
+        no_http.assert_not_called()
         self.assertContains(res, social_app.name)
-        self.assertContains(res, "https://example.com/authorize")
+        # OIDC apps report provider_id, which is what the headless redirect
+        # needs to tell several apps of the same brand apart.
+        self.assertContains(res, "my-openid")
 
 
 class InstanceLicenseTestCase(TestCase):
@@ -1356,14 +1346,15 @@ class CacheConfigTestCase(TestCase):
         self.assertTrue(info["rust_ingest"])
         self.assertEqual(info["database_engine"], "gt_rust.django_backend")
 
-    def test_rust_ingest_without_valkey_deactivates_gracefully(self):
-        """Flag on + no valkey: the Rust enqueue path only speaks the Valkey
-        task broker today, so the flag deactivates (Python ingest path)
-        instead of hard-failing startup. Temporary until the postgres
-        task-broker port lands. The DB engine stays gt_rust regardless."""
+    def test_rust_ingest_without_valkey_stays_enabled(self):
+        """Flag on + no valkey: the Postgres-only shape. The Rust path runs
+        its cache ops against the django_cache table and enqueues on the
+        db_queuedtask broker, so the flag stays enabled alongside the DB
+        cache and DB task backend."""
         info = self._probe({"VALKEY_URL": "", "GLITCHTIP_RUST_INGEST": "true"})
-        self.assertFalse(info["rust_ingest"])
+        self.assertTrue(info["rust_ingest"])
         self.assertEqual(info["database_engine"], "gt_rust.django_backend")
+        self.assertEqual(info["cache_backend"], self.DB_CACHE_BACKEND)
         self.assertEqual(info["task_backend"], self.VTASKS_DB)
 
     def test_no_valkey_env_defaults_to_vcache(self):
