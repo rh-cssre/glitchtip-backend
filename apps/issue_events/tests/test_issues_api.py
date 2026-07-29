@@ -1572,13 +1572,13 @@ class OrganizationScopedIssueAPITestCase(GlitchTestCase):
 
     def detail_url(self, organization_slug: str, issue_id: int) -> str:
         return reverse(
-            "api:organization_get_issue",
+            "api:get_organization_issue",
             kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
         )
 
     def commits_url(self, organization_slug: str, issue_id: int) -> str:
         return reverse(
-            "api:list_org_issue_commits",
+            "api:list_organization_issue_commits",
             kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
         )
 
