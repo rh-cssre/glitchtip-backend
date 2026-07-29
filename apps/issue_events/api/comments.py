@@ -44,7 +44,7 @@ async def list_comments(
 )
 @has_permission(["event:read", "event:admin"])
 @paginate
-async def organization_list_comments(
+async def list_organization_comments(
     request: AuthHttpRequest,
     response: HttpResponse,
     issue_id: int,
