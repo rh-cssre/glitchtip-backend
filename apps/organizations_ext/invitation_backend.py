@@ -37,10 +37,8 @@ class InvitationTokenGenerator(PasswordResetTokenGenerator):
             return False
 
         # Check the timestamp is within limit
-        if (self._num_seconds(self._now()) - ts) > REGISTRATION_TIMEOUT_DAYS * 86400:
-            return False
-
-        return True
+        elapsed = self._num_seconds(self._now()) - ts
+        return elapsed <= REGISTRATION_TIMEOUT_DAYS * 86400
 
 
 class InvitationBackend(BaseInvitationBackend):

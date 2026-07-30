@@ -43,7 +43,7 @@ GET /api/0/organizations/{organization_slug}/projects/
 
 
 def get_projects_queryset(
-    user_id: int, organization_slug: str = None, team_slug: str = None
+    user_id: int, organization_slug: str | None = None, team_slug: str | None = None
 ):
     qs = Project.annotate_is_member(
         Project.undeleted_objects.filter(organization__users=user_id), user_id
@@ -220,8 +220,8 @@ async def list_organization_projects(
     # This query param isn't documented in sentry api but exists
     if query:
         query_parts = query.split()
-        for query in query_parts:
-            query_part = query.split(":", 1)
+        for part in query_parts:
+            query_part = part.split(":", 1)
             if len(query_part) == 2:
                 query_name, query_value = query_part
                 if query_name == "team":

@@ -1,6 +1,6 @@
 import random
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from django.db import connection
 
@@ -75,7 +75,7 @@ class Command(MakeSampleCommand):
         days_ago = options["days_ago"]
         span_days = options["span_days"]
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start_time = now - timedelta(days=days_ago + span_days)
         end_time = now - timedelta(days=days_ago)
 

@@ -1,4 +1,4 @@
-from typing import List, Literal
+from typing import Literal
 
 from django.http import HttpResponse
 from ninja import Schema, Status
@@ -22,7 +22,7 @@ def get_queryset(request: AuthHttpRequest, issue_id: int):
 
 @router.get(
     "/issues/{int:issue_id}/comments/",
-    response=List[CommentSchema],
+    response=list[CommentSchema],
     by_alias=True,
 )
 @has_permission(["event:read", "event:admin"])

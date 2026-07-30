@@ -12,7 +12,7 @@ and multi-tenant query performance.
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -48,10 +48,10 @@ class UUID7Helper:
         import os
 
         if dt is None:
-            dt = datetime.now(timezone.utc)
+            dt = datetime.now(UTC)
 
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
 
         # Convert datetime to milliseconds since Unix epoch
         timestamp_ms = int(dt.timestamp() * 1000)
@@ -96,7 +96,7 @@ class UUID7Helper:
 
         # Convert to datetime
         timestamp_sec = timestamp_ms / 1000.0
-        return datetime.fromtimestamp(timestamp_sec, tz=timezone.utc)
+        return datetime.fromtimestamp(timestamp_sec, tz=UTC)
 
     @staticmethod
     def get_range_for_date(
@@ -120,9 +120,9 @@ class UUID7Helper:
             Tuple of (start_uuid, end_uuid)
         """
         if start_date.tzinfo is None:
-            start_date = start_date.replace(tzinfo=timezone.utc)
+            start_date = start_date.replace(tzinfo=UTC)
         if end_date.tzinfo is None:
-            end_date = end_date.replace(tzinfo=timezone.utc)
+            end_date = end_date.replace(tzinfo=UTC)
 
         # Generate deterministic UUID bounds for partition ranges
         # Use minimum possible UUID (all random bits = 0) for start
@@ -147,7 +147,7 @@ class UUID7Helper:
             UUIDv7 with deterministic random bits
         """
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
 
         # Convert datetime to milliseconds since Unix epoch
         # UUIDv7 uses a 48-bit unsigned timestamp, so clamp to [0, 2^48 - 1]
@@ -271,9 +271,9 @@ class PartitionManager:
 
         # Ensure timezone-aware datetimes
         if start_date.tzinfo is None:
-            start_date = start_date.replace(tzinfo=timezone.utc)
+            start_date = start_date.replace(tzinfo=UTC)
         if end_date.tzinfo is None:
-            end_date = end_date.replace(tzinfo=timezone.utc)
+            end_date = end_date.replace(tzinfo=UTC)
 
         # Calculate range bounds based on key type
         if key_type == "uuid7":
@@ -370,7 +370,7 @@ FOR VALUES FROM ({range_from}) TO ({range_to});"""
         from datetime import timedelta
 
         partitions = self.list_partitions(parent_table)
-        threshold_date = datetime.now(timezone.utc).date() - timedelta(days=max_days)
+        threshold_date = datetime.now(UTC).date() - timedelta(days=max_days)
         dropped_count = 0
         interval = timedelta(days=partition_interval_days)
 
@@ -591,11 +591,13 @@ FOR VALUES FROM ({range_from}) TO ({range_to});"""
             )
             return 0
 
-        with transaction.atomic(using=self.db_connection.alias):
-            with self.db_connection.cursor() as cursor:
-                for sql in sqls_to_execute:
-                    logger.debug(f"Executing partition SQL: {sql[:100]}...")
-                    cursor.execute(sql)
+        with (
+            transaction.atomic(using=self.db_connection.alias),
+            self.db_connection.cursor() as cursor,
+        ):
+            for sql in sqls_to_execute:
+                logger.debug(f"Executing partition SQL: {sql[:100]}...")
+                cursor.execute(sql)
 
         logger.debug(
             f"Verified partition {partition_name} with {hash_buckets} hash buckets "
@@ -648,8 +650,7 @@ FOR VALUES FROM ({range_from}) TO ({range_to});"""
 
         while current_date < end_date:
             next_date = current_date + interval
-            if next_date > end_date:
-                next_date = end_date
+            next_date = min(next_date, end_date)
 
             # Generate partition name: parent_table_YYYYMMDD
             date_suffix = current_date.strftime("%Y%m%d")

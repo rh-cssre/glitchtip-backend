@@ -64,7 +64,7 @@ def auth_from_request(request: HttpRequest):
     ``Authorization`` header format. Avoids reading the request body, which
     could trigger slow decompression.
     """
-    for k in request.GET.keys():
+    for k in request.GET:
         if k in ["sentry_key", "glitchtip_key"]:
             return request.GET[k]
 
@@ -146,7 +146,12 @@ async def get_project(request: HttpRequest) -> ProjectAuthInfo | None:
     """
     if not request.resolver_match:
         raise ValidationError([{"message": "Invalid project ID"}])
-    project_id: int = request.resolver_match.captured_kwargs.get("project_id")
+    # str on the re_path routes (store/security), int on <int:> ones.
+    project_id = request.resolver_match.captured_kwargs.get("project_id")
+    if project_id is not None and int(project_id) > 0x7FFF_FFFF_FFFF_FFFF:
+        # Past BIGINT range no project can exist, and the driver refuses to
+        # bind the value (DataError) — reject before touching the database.
+        raise ValidationError([{"message": "Invalid project ID"}])
     try:
         sentry_key = UUID(auth_from_request(request))
     except (ValueError, TypeError) as err:
@@ -165,14 +170,16 @@ async def get_project(request: HttpRequest) -> ProjectAuthInfo | None:
     block_cache_key = EVENT_BLOCK_CACHE_KEY + str(project_id)
     dsn_block_cache_key = f"{block_cache_key}:{sentry_key}"
     cached = await cache.aget_many([block_cache_key, dsn_block_cache_key])
-    if block_value := cached.get(block_cache_key):
-        if block_value.startswith("t"):
-            if throttle := deserialize_throttle(block_value):
-                org_throttle, project_throttle = throttle
-                if not is_accepting_events(org_throttle) or not is_accepting_events(
-                    project_throttle
-                ):
-                    raise ThrottleException(calculate_retry_after(max(throttle)))
+    if (
+        (block_value := cached.get(block_cache_key))
+        and block_value.startswith("t")
+        and (throttle := deserialize_throttle(block_value))
+    ):
+        org_throttle, project_throttle = throttle
+        if not is_accepting_events(org_throttle) or not is_accepting_events(
+            project_throttle
+        ):
+            raise ThrottleException(calculate_retry_after(max(throttle)))
     if cached.get(dsn_block_cache_key) == "v":
         raise REJECTION_MAP["v"]
 

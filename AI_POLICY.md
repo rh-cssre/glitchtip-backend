@@ -1,64 +1,27 @@
 # AI Usage Policy
 
-The GlitchTip project has strict rules for AI usage:
+GlitchTip's AI policy is maintained in one place for the whole organization:
 
-- **All AI usage in any form must be disclosed.** You must state
-  the tool you used (e.g. Claude Code, Cursor, Amp) along with
-  the extent that the work was AI-assisted.
+**https://gitlab.com/glitchtip/glitchtip/-/blob/master/AI_POLICY.md**
 
-- **Merge requests created by AI must have been fully verified with
-  human use.** AI must not create hypothetically correct code that
-  hasn't been tested.
+In short: every issue and merge request must open with a **human-written
+summary**, all **AI usage must be disclosed**, AI-authored code must be **verified
+with real human use**, and no AI-generated media. Known contributors (GitLab
+Developer+ members) are exempt from the mandatory human-summary rule. Please read
+the full policy before contributing.
 
-- **Issues and discussions can use AI assistance but must have a full
-  human-in-the-loop.** This means that any content generated with AI
-  must have been reviewed _and edited_ by a human before submission.
-  AI is very good at being overly verbose and including noise that
-  distracts from the main point. Humans must do their research and
-  trim this down.
+## Backend-specific: clean-room development
 
-- **No AI-generated media is allowed (art, images, videos, audio, etc.).**
-  Text and code are the only acceptable AI-generated content, per the
-  other rules in this policy.
+GlitchTip is API-compatible with Sentry, but Sentry's server code and docs are
+**not** open source (BSL/FSL). Whether you write code by hand or with AI, you
+must follow a strict clean-room process:
 
-- **Bad AI drivers will be banned.** You've
-  been warned. We love to help junior developers learn and grow, but
-  if you're interested in that then don't use AI, and we'll help you.
-  I'm sorry that bad AI drivers have ruined this for you.
+- Do **not** read, search, copy, or reference Sentry's server-side source or
+  official documentation (`getsentry/sentry`, `getsentry/self-hosted`,
+  `docs.sentry.io`, `getsentry/sentry-docs`, or similar).
+- You **may** read Sentry's MIT-licensed client SDKs (e.g. `sentry-python`,
+  `sentry-javascript`) to understand wire formats and payloads.
+- AI tools are held to the same standard: do not paste or prompt with
+  proprietary Sentry code, and do not ask an AI to reproduce it.
 
-These rules apply only to outside contributions to GlitchTip. Maintainers
-are exempt from these rules and may use AI tools at their discretion;
-they've proven themselves trustworthy to apply good judgment.
-
-## There are Humans Here
-
-Please remember that GlitchTip is maintained by humans.
-
-Every discussion, issue, and pull request is read and reviewed by
-humans (and sometimes machines, too). It is a boundary point at which
-people interact with each other and the work done. It is rude and
-disrespectful to approach this boundary with low-effort, unqualified
-work, since it puts the burden of validation on the maintainer.
-
-In a perfect world, AI would produce high-quality, accurate work
-every time. But today, that reality depends on the driver of the AI.
-And today, most drivers of AI are just not good enough. So, until either
-the people get better, the AI gets better, or both, we have to have
-strict rules to protect maintainers.
-
-## AI is Welcome Here
-
-GlitchTip is written with plenty of AI assistance, and many maintainers embrace
-AI tools as a productive tool in their workflow. As a project, we welcome
-AI as a tool!
-
-**Our reason for the strict AI policy is not due to an anti-AI stance**, but
-instead due to the number of highly unqualified people using AI. It's the
-people, not the tools, that are the problem.
-
-I include this section to be transparent about the project's usage of
-AI for people who may disagree with it, and to address the misconception
-that this policy is anti-AI in nature.
-
-Portions of this text are Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors, used under the MIT License.
-Adapted from Ghostty AI Policy https://github.com/ghostty-org/ghostty/blob/main/AI_POLICY.md Thank you Ghostty!
+Merge requests must confirm clean-room compliance (see the MR template checkbox).

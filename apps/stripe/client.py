@@ -2,8 +2,9 @@ import asyncio
 import json
 import random
 import re
+from collections.abc import AsyncGenerator
 from decimal import Decimal
-from typing import Any, AsyncGenerator, Type, TypeAlias, TypeVar
+from typing import Any
 
 import aiohttp
 from django.conf import settings
@@ -49,9 +50,8 @@ BASE_RETRY_DELAY = 0.5
 # per attempt; _stripe_request retries up to MAX_RETRIES on 429/5xx.
 STRIPE_TIMEOUT = aiohttp.ClientTimeout(total=10)
 
-AIOTupleParams: TypeAlias = list[tuple[str, str]]
-AIODictParams: TypeAlias = dict[str, int | str | list[int | str]]
-T = TypeVar("T", bound=BaseModel)
+type AIOTupleParams = list[tuple[str, str]]
+type AIODictParams = dict[str, int | str | list[int | str]]
 
 
 def param_helper(data: AIODictParams) -> AIOTupleParams:
@@ -76,30 +76,32 @@ async def _stripe_request(
     reusing a connection that may have been poisoned by the prior failure.
     """
     for attempt in range(max_retries + 1):
-        async with aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session:
-            async with session.request(
+        async with (
+            aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session,
+            session.request(
                 method, url, headers=HEADERS, timeout=STRIPE_TIMEOUT, **kwargs
-            ) as response:
-                if response.status == 200:
-                    return await response.text()
-                if response.status == 404:
-                    raise StripeResourceNotFound()
+            ) as response,
+        ):
+            if response.status == 200:
+                return await response.text()
+            if response.status == 404:
+                raise StripeResourceNotFound()
 
-                error = (await response.json()).get("error", {})
+            error = (await response.json()).get("error", {})
 
-                should_retry_header = response.headers.get("Stripe-Should-Retry")
-                if should_retry_header is not None:
-                    should_retry = should_retry_header.lower() == "true"
-                else:
-                    should_retry = response.status in RETRY_STATUSES
+            should_retry_header = response.headers.get("Stripe-Should-Retry")
+            if should_retry_header is not None:
+                should_retry = should_retry_header.lower() == "true"
+            else:
+                should_retry = response.status in RETRY_STATUSES
 
-                if not should_retry or attempt >= max_retries:
-                    raise StripeError(
-                        error.get("message", "Unknown error"),
-                        status=response.status,
-                        type=error.get("type", ""),
-                        code=error.get("code", ""),
-                    )
+            if not should_retry or attempt >= max_retries:
+                raise StripeError(
+                    error.get("message", "Unknown error"),
+                    status=response.status,
+                    type=error.get("type", ""),
+                    code=error.get("code", ""),
+                )
 
         delay = BASE_RETRY_DELAY * (2**attempt) + random.uniform(0, BASE_RETRY_DELAY)
         await asyncio.sleep(delay)
@@ -127,9 +129,9 @@ async def stripe_delete(endpoint: str) -> str:
     return await _stripe_request("DELETE", f"{STRIPE_URL}/{endpoint}")
 
 
-async def _paginated_stripe_get(
+async def _paginated_stripe_get[T: BaseModel](
     endpoint: str,
-    response_model: Type[StripeListResponse[T]],  # Use the generic type here
+    response_model: type[StripeListResponse[T]],  # Use the generic type here
     params: dict[str, AIODictParams] | None = None,
 ) -> AsyncGenerator[list[T], None]:
     """
@@ -224,7 +226,10 @@ async def create_session(
         "customer_update[address]": "auto",
         "customer_update[name]": "auto",
         "tax_id_collection[enabled]": True,
-        "subscription_data[billing_mode][type]": "classic",
+        # Set explicitly rather than relying on the Stripe-Version default, so
+        # the mode a subscription is born with never silently changes with a
+        # version bump. See create_subscription for what flexible mode buys us.
+        "subscription_data[billing_mode][type]": "flexible",
         "success_url": domain
         + "/"
         + organization_slug
@@ -257,10 +262,18 @@ async def mark_welcome_sent(subscription_id: str) -> None:
 
 
 async def create_subscription(customer: str, price: str, **kwargs) -> Subscription:
+    """Create a subscription in flexible billing mode.
+
+    Flexible mode is a prerequisite for attaching a metered price (see
+    ``migrate_subscription_to_flexible``), and it stops Stripe from resetting
+    the billing cycle anchor on plan changes — the anchor drives the quota
+    window an organization is throttled against. Set explicitly rather than
+    relying on the Stripe-Version default, which differs across versions.
+    """
     params = {
         "customer": customer,
         "items[][price]": price,
-        "billing_mode[type]": "classic",
+        "billing_mode[type]": "flexible",
         **kwargs,
     }
     response = await stripe_post("subscriptions", params)
@@ -361,10 +374,13 @@ async def create_metered_price(
 async def migrate_subscription_to_flexible(subscription_id: str) -> None:
     """Migrate a classic-billing-mode subscription to flexible billing mode.
 
-    Metered prices require flexible billing mode. Migration is one-way and needs
-    a payment method on the customer. Re-running on an already-flexible
-    subscription is a harmless no-op, so any error here is real (e.g. no card on
-    file) and propagates to the caller.
+    Metered prices require flexible billing mode. Migration is one-way: Stripe
+    offers no path back to classic. It needs no payment method on the customer
+    (a zero-amount plan migrates fine) and leaves the subscription's periods,
+    anchor, and items untouched, so it neither bills nor moves the quota
+    window. Re-running on an already-flexible subscription is a no-op that
+    leaves ``billing_mode_details.updated_at`` unchanged, so callers may retry
+    freely and any error raised here is a real one.
     """
     await stripe_post(
         f"subscriptions/{subscription_id}/migrate",

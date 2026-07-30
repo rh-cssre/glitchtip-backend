@@ -6,8 +6,8 @@ from django.test.runner import DiscoverRunner
 
 class TimedTextTestResult(TextTestResult):
     def __init__(self, *args, **kwargs):
-        super(TimedTextTestResult, self).__init__(*args, **kwargs)
-        self.clocks = dict()
+        super().__init__(*args, **kwargs)
+        self.clocks = {}
 
     def startTest(self, test):
         self.clocks[test] = time()
@@ -100,4 +100,3 @@ class TimedTestRunner(DiscoverRunner):
                 # Don't let teardown failures mask the real test result.
                 pass
         return super().teardown_databases(old_config, **kwargs)
-

@@ -10,9 +10,9 @@ alternative_arch = {"x86": ["x86", "x86_64"]}
 
 
 class ResolvedStacktrace:
-    def __init__(self, score=0, frames=[]):
+    def __init__(self, score=0, frames=None):
         self.score = score
-        self.frames = frames
+        self.frames = frames if frames is not None else []
 
 
 def find_arch_object(archive, arch):
@@ -23,14 +23,11 @@ def find_arch_object(archive, arch):
             return obj
         return None
 
-    if arch in alternative_arch:
-        arch_list = alternative_arch[arch]
-    else:
-        arch_list = [arch]
+    arch_list = alternative_arch.get(arch, [arch])
 
-    for arch in arch_list:
+    for candidate_arch in arch_list:
         try:
-            object = archive.get_object(arch=arch)
+            object = archive.get_object(arch=candidate_arch)
             return object
         except Exception:
             pass
@@ -46,7 +43,6 @@ def digest_symbol(symbol):
         return item
     except Exception as e:
         getLogger().info(f"digest_symbol: exception {e}, symbol={symbol}")
-        pass
 
 
 def getLogger():
@@ -80,16 +76,18 @@ def extract_source_from_bundle(source_bundle, file_path):
     try:
         from apps.difs.tasks import difs_concat_file_blobs_to_disk
 
-        with difs_concat_file_blobs_to_disk([source_bundle.file.blob]) as temp_file:
-            with zipfile.ZipFile(temp_file.name, "r") as zf:
-                # Source bundles store files with a 'files/' prefix
-                bundle_path = f"files{file_path}"
+        with (
+            difs_concat_file_blobs_to_disk([source_bundle.file.blob]) as temp_file,
+            zipfile.ZipFile(temp_file.name, "r") as zf,
+        ):
+            # Source bundles store files with a 'files/' prefix
+            bundle_path = f"files{file_path}"
 
-                if bundle_path in zf.namelist():
-                    content = zf.read(bundle_path).decode("utf-8")
-                    return content.splitlines()
-                else:
-                    return None
+            if bundle_path in zf.namelist():
+                content = zf.read(bundle_path).decode("utf-8")
+                return content.splitlines()
+            else:
+                return None
     except Exception as e:
         getLogger().error(f"extract_source_from_bundle: Error extracting source: {e}")
         return None
@@ -131,17 +129,19 @@ def open_source_bundle(source_bundle_dif):
     """
     from apps.difs.tasks import difs_concat_file_blobs_to_disk
 
-    with difs_concat_file_blobs_to_disk([source_bundle_dif.file.blob]) as temp_file:
-        with zipfile.ZipFile(temp_file.name, "r") as zf:
-            namelist = set(zf.namelist())
+    with (
+        difs_concat_file_blobs_to_disk([source_bundle_dif.file.blob]) as temp_file,
+        zipfile.ZipFile(temp_file.name, "r") as zf,
+    ):
+        namelist = set(zf.namelist())
 
-            def get_source_lines(file_path):
-                bundle_path = f"files{file_path}"
-                if bundle_path in namelist:
-                    return zf.read(bundle_path).decode("utf-8").splitlines()
-                return None
+        def get_source_lines(file_path):
+            bundle_path = f"files{file_path}"
+            if bundle_path in namelist:
+                return zf.read(bundle_path).decode("utf-8").splitlines()
+            return None
 
-            yield get_source_lines
+        yield get_source_lines
 
 
 def _estimate_image_base(sym_cache, instruction_addrs):
@@ -396,7 +396,6 @@ class StacktraceProcessor:
             event.data = data
         except Exception as e:
             getLogger().error(f"StacktraceProcessor: Unexpected error: {e}")
-            pass
 
     @classmethod
     def has_native_frames(cls, event):

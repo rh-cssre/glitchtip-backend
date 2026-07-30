@@ -8,8 +8,7 @@ Tests that need S3 access are skipped when no bucket is configured.
 import os
 import shutil
 import tempfile
-from datetime import datetime, timedelta
-from datetime import timezone as dt_timezone
+from datetime import UTC, datetime, timedelta
 from unittest import mock
 from uuid import UUID
 
@@ -131,14 +130,13 @@ class ColdStorageQueryTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         self._skip_if_no_backend()
 
         from datetime import datetime
-        from datetime import timezone as dt_timezone
 
         from ..api import query_cold_storage
 
-        now = datetime.now(dt_timezone.utc)
+        now = datetime.now(UTC)
         results = query_cold_storage(
             organization_id=99999,
-            start_dt=datetime(2025, 1, 1, tzinfo=dt_timezone.utc),
+            start_dt=datetime(2025, 1, 1, tzinfo=UTC),
             end_dt=now,
         )
 
@@ -221,7 +219,7 @@ class NoDuckDBTestCase(TestCase):
         """Test that cold storage returns empty when GLITCHTIP_ENABLE_DUCKDB is not set."""
         from ..api import query_cold_storage
 
-        now = datetime.now(dt_timezone.utc)
+        now = datetime.now(UTC)
         start = now - timedelta(days=1)
 
         results = query_cold_storage(
@@ -313,8 +311,8 @@ class ColdStorageQueryUnionTestCase(GlitchTipTestCaseMixin, TransactionTestCase)
     def setUp(self):
         self.create_project()
         self.cold_dir = tempfile.mkdtemp(prefix="glitchtip_cold_test_")
-        self.cold_date = datetime(2025, 4, 10, tzinfo=dt_timezone.utc)
-        self.hot_date = datetime(2025, 4, 11, tzinfo=dt_timezone.utc)
+        self.cold_date = datetime(2025, 4, 10, tzinfo=UTC)
+        self.hot_date = datetime(2025, 4, 11, tzinfo=UTC)
         self.cold_part = _create_log_partition(self.cold_date)
         self.hot_part = _create_log_partition(self.hot_date)
 
@@ -461,17 +459,19 @@ class MissingParquetTestCase(TestCase):
     )
     def test_query_cold_logs_returns_empty(self):
         """query_cold_storage returns [] when no parquet files exist."""
-        with tempfile.TemporaryDirectory(prefix="glitchtip_cold_test_") as cold_dir:
-            with self.settings(GLITCHTIP_COLD_STORAGE_DIR=cold_dir):
-                from ..api import query_cold_storage
+        with (
+            tempfile.TemporaryDirectory(prefix="glitchtip_cold_test_") as cold_dir,
+            self.settings(GLITCHTIP_COLD_STORAGE_DIR=cold_dir),
+        ):
+            from ..api import query_cold_storage
 
-                results = query_cold_storage(
-                    organization_id=99999,
-                    start_dt=datetime(2020, 1, 1, tzinfo=dt_timezone.utc),
-                    end_dt=datetime(2020, 12, 31, tzinfo=dt_timezone.utc),
-                    limit=100,
-                )
-                self.assertEqual(results, [])
+            results = query_cold_storage(
+                organization_id=99999,
+                start_dt=datetime(2020, 1, 1, tzinfo=UTC),
+                end_dt=datetime(2020, 12, 31, tzinfo=UTC),
+                limit=100,
+            )
+            self.assertEqual(results, [])
 
     @override_settings(
         GLITCHTIP_ENABLE_DUCKDB="true",
@@ -480,14 +480,16 @@ class MissingParquetTestCase(TestCase):
     )
     def test_get_log_from_cold_returns_none(self):
         """_get_log_from_cold returns None when parquet file doesn't exist."""
-        with tempfile.TemporaryDirectory(prefix="glitchtip_cold_test_") as cold_dir:
-            with self.settings(GLITCHTIP_COLD_STORAGE_DIR=cold_dir):
-                from ..api import _get_log_from_cold
+        with (
+            tempfile.TemporaryDirectory(prefix="glitchtip_cold_test_") as cold_dir,
+            self.settings(GLITCHTIP_COLD_STORAGE_DIR=cold_dir),
+        ):
+            from ..api import _get_log_from_cold
 
-                fake_time = datetime(2020, 6, 15, tzinfo=dt_timezone.utc)
-                fake_id = UUID7Helper.from_datetime(fake_time)
-                result = _get_log_from_cold(99999, fake_id, fake_time)
-                self.assertIsNone(result)
+            fake_time = datetime(2020, 6, 15, tzinfo=UTC)
+            fake_id = UUID7Helper.from_datetime(fake_time)
+            result = _get_log_from_cold(99999, fake_id, fake_time)
+            self.assertIsNone(result)
 
 
 class CorruptParquetTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
@@ -502,8 +504,8 @@ class CorruptParquetTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
     def setUp(self):
         self.create_project()
         self.cold_dir = tempfile.mkdtemp(prefix="glitchtip_cold_test_")
-        self.day1 = datetime(2025, 5, 1, tzinfo=dt_timezone.utc)
-        self.day2 = datetime(2025, 5, 2, tzinfo=dt_timezone.utc)
+        self.day1 = datetime(2025, 5, 1, tzinfo=UTC)
+        self.day2 = datetime(2025, 5, 2, tzinfo=UTC)
         self.part1 = _create_log_partition(self.day1)
         self.part2 = _create_log_partition(self.day2)
 
@@ -628,16 +630,18 @@ class CorruptParquetTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
             def patched_get_conn(storage=None):
                 return _OOMConnProxy(real_get_conn(storage))
 
-            with mock.patch.object(
-                cs, "get_duckdb_read_connection", side_effect=patched_get_conn
+            with (
+                mock.patch.object(
+                    cs, "get_duckdb_read_connection", side_effect=patched_get_conn
+                ),
+                self.assertRaises(duckdb.OutOfMemoryException),
             ):
-                with self.assertRaises(duckdb.OutOfMemoryException):
-                    query_cold_storage(
-                        organization_id=org_id,
-                        start_dt=self.day1,
-                        end_dt=self.day1 + timedelta(days=1),
-                        limit=200,
-                    )
+                query_cold_storage(
+                    organization_id=org_id,
+                    start_dt=self.day1,
+                    end_dt=self.day1 + timedelta(days=1),
+                    limit=200,
+                )
 
             # File must still exist — OOM is not corruption.
             self.assertTrue(
@@ -653,7 +657,7 @@ class RowToLogEventCoercionTestCase(TestCase):
         """NULL body, service, environment, host from Parquet are coerced to ''."""
         from ..api import _row_to_log_event
 
-        now = datetime.now(dt_timezone.utc)
+        now = datetime.now(UTC)
         uid = UUID7Helper.from_datetime(now)
 
         row = (
@@ -684,7 +688,7 @@ class RowToLogEventCoercionTestCase(TestCase):
         """span_id returned as string from DuckDB is converted to int."""
         from ..api import _row_to_log_event
 
-        now = datetime.now(dt_timezone.utc)
+        now = datetime.now(UTC)
         uid = UUID7Helper.from_datetime(now)
 
         row = (
@@ -708,7 +712,7 @@ class RowToLogEventCoercionTestCase(TestCase):
         """Empty span_id string from DuckDB becomes None."""
         from ..api import _row_to_log_event
 
-        now = datetime.now(dt_timezone.utc)
+        now = datetime.now(UTC)
         uid = UUID7Helper.from_datetime(now)
 
         row = (uid, None, 1, 1, "", LogLevel.INFO, 9, "b", "s", "e", "h", "{}")
@@ -719,7 +723,7 @@ class RowToLogEventCoercionTestCase(TestCase):
         """id returned as string from DuckDB is converted to UUID."""
         from ..api import _row_to_log_event
 
-        now = datetime.now(dt_timezone.utc)
+        now = datetime.now(UTC)
         uid = UUID7Helper.from_datetime(now)
 
         row = (
@@ -746,7 +750,7 @@ class RowToLogEventCoercionTestCase(TestCase):
 
         from ..api import _row_to_log_event
 
-        now = datetime.now(dt_timezone.utc)
+        now = datetime.now(UTC)
         uid = UUID7Helper.from_datetime(now)
         trace = uuid.uuid4()
 
@@ -767,9 +771,9 @@ class CombinedQueryBothTiersTestCase(GlitchTipTestCaseMixin, TransactionTestCase
         self.create_project()
         self.cold_dir = tempfile.mkdtemp(prefix="glitchtip_cold_test_")
         # Cold partition: 2 days before frozen time
-        self.cold_date = datetime(2025, 4, 10, tzinfo=dt_timezone.utc)
+        self.cold_date = datetime(2025, 4, 10, tzinfo=UTC)
         # Hot partition: same day as frozen time
-        self.hot_date = datetime(2025, 4, 12, tzinfo=dt_timezone.utc)
+        self.hot_date = datetime(2025, 4, 12, tzinfo=UTC)
         self.cold_part = _create_log_partition(self.cold_date)
         self.hot_part = _create_log_partition(self.hot_date)
 
@@ -881,8 +885,8 @@ class CountStorageTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
     def setUp(self):
         self.create_project()
         self.cold_dir = tempfile.mkdtemp(prefix="glitchtip_cold_test_")
-        self.cold_date = datetime(2025, 4, 10, tzinfo=dt_timezone.utc)
-        self.hot_date = datetime(2025, 4, 11, tzinfo=dt_timezone.utc)
+        self.cold_date = datetime(2025, 4, 10, tzinfo=UTC)
+        self.hot_date = datetime(2025, 4, 11, tzinfo=UTC)
         self.cold_part = _create_log_partition(self.cold_date)
         self.hot_part = _create_log_partition(self.hot_date)
 
@@ -965,8 +969,8 @@ class CountStorageTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
 
         count = count_cold_storage(
             organization_id=1,
-            start_dt=datetime(2020, 1, 1, tzinfo=dt_timezone.utc),
-            end_dt=datetime(2020, 12, 31, tzinfo=dt_timezone.utc),
+            start_dt=datetime(2020, 1, 1, tzinfo=UTC),
+            end_dt=datetime(2020, 12, 31, tzinfo=UTC),
         )
         self.assertEqual(count, 0)
 
@@ -976,7 +980,7 @@ class ILIKEEscapingTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
 
     def setUp(self):
         self.create_project()
-        self.date = datetime(2025, 6, 1, tzinfo=dt_timezone.utc)
+        self.date = datetime(2025, 6, 1, tzinfo=UTC)
         self.part = _create_log_partition(self.date)
 
     def tearDown(self):

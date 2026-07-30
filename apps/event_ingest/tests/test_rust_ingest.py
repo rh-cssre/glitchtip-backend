@@ -29,7 +29,9 @@ from .utils import (
     CLIENT_IP,
     AsgiIngestTestMixin,
     EventIngestTestCase,
+    flush_rust_ingest_state,
     list_to_envelope,
+    pop_rust_ingest_messages,
 )
 
 
@@ -37,14 +39,17 @@ from .utils import (
     settings.GLITCHTIP_RUST_INGEST, "requires GLITCHTIP_RUST_INGEST=true"
 )
 class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
+    """Runs in BOTH Rust ingest shapes: the Valkey lane (block/dedupe cache
+    and LPUSH broker on the dedicated test Valkey database) and the
+    Postgres-only lane (``VALKEY_URL=""``: django_cache table +
+    db_queuedtask broker). The broker/store differences live in the
+    ``flush_rust_ingest_state``/``pop_rust_ingest_messages`` helpers."""
+
     def setUp(self):
         super().setUp()
         cache.clear()
-        # Rust writes its block/dedupe/queue state to the dedicated test
-        # Valkey database — start each test from a clean slate.
-        from glitchtip.rust_ingest import _valkey_driver
-
-        _valkey_driver().flushdb_sync()
+        # Start each test from a clean Rust-side block/dedupe/queue slate.
+        flush_rust_ingest_state()
 
     async def _drain_rust_queue(self):
         """Pop everything the Rust path enqueued and run it through the real
@@ -52,14 +57,8 @@ class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
         the Rust-written bytes are exactly what a worker would consume."""
         from django_vtasks.serialization import deserialize
 
-        from glitchtip.rust_ingest import _valkey_driver
-
-        driver = _valkey_driver()
-        while True:
-            raw = await driver.rpop("{vt}:q:ingest")
-            if raw is None:
-                break
-            message = deserialize(bytes(raw))
+        for raw in await pop_rust_ingest_messages():
+            message = deserialize(raw)
             module, name = message["func"].rsplit(".", 1)
             vtask = getattr(importlib.import_module(module), name)
             # Ingest tasks are batched consumers: each call takes a list of
@@ -78,7 +77,7 @@ class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
 
     async def test_event_envelope(self):
         data, envelope = self._envelope()
-        status, headers, body = await self._post(envelope.encode())
+        status, _headers, body = await self._post(envelope.encode())
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["id"], data[0]["event_id"])
         await self._drain_rust_queue()

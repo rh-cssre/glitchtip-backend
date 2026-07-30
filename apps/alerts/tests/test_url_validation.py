@@ -53,12 +53,14 @@ class ValidatePublicURLTests(SimpleTestCase):
         validate_public_url("http://127.0.0.1/", allow_private=True)
 
     def test_blocks_hostname_resolving_to_loopback(self):
-        with mock.patch(
-            "glitchtip.url_validation.socket.getaddrinfo",
-            return_value=[(0, 0, 0, "", ("127.0.0.1", 0))],
+        with (
+            mock.patch(
+                "glitchtip.url_validation.socket.getaddrinfo",
+                return_value=[(0, 0, 0, "", ("127.0.0.1", 0))],
+            ),
+            self.assertRaises(ValueError),
         ):
-            with self.assertRaises(ValueError):
-                validate_public_url("http://localhost.evil.example/")
+            validate_public_url("http://localhost.evil.example/")
 
     def test_dns_failure_is_permissive(self):
         # DNS failure defers to the runtime async check so that typos don't
@@ -214,9 +216,31 @@ class WebhookRuntimeGuardTests(SimpleTestCase):
         mock_session.__aexit__ = mock.AsyncMock(return_value=False)
 
         with mock.patch(
-            "apps.alerts.webhooks.aiohttp.ClientSession",
+            "apps.alerts.webhooks.safe_session",
             mock.MagicMock(return_value=mock_session),
         ):
             async_to_sync(send_webhook)("http://127.0.0.1/", "msg")
 
         mock_session.post.assert_called_once()
+
+    def test_send_webhook_disables_redirect_following(self):
+        # A webhook must not follow a 3xx into internal space; redirects are off.
+        from apps.alerts.webhooks import send_webhook
+
+        mock_response = mock.AsyncMock()
+        mock_response.__aenter__ = mock.AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = mock.AsyncMock(return_value=False)
+        mock_session = mock.AsyncMock()
+        mock_session.post = mock.MagicMock(return_value=mock_response)
+        mock_session.__aenter__ = mock.AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = mock.AsyncMock(return_value=False)
+
+        with mock.patch(
+            "apps.alerts.webhooks.safe_session",
+            mock.MagicMock(return_value=mock_session),
+        ):
+            # 8.8.8.8 is public, so _is_url_allowed passes without DNS.
+            async_to_sync(send_webhook)("https://8.8.8.8/hook", "msg")
+
+        _, kwargs = mock_session.post.call_args
+        self.assertIs(kwargs.get("allow_redirects"), False)

@@ -1,5 +1,12 @@
-# MinIO overlay for testing S3-based cold storage locally.
+# MinIO overlay for testing S3-based storage locally (default file storage
+# for uploads/file blobs, plus cold storage).
 # Usage: docker compose -f compose.yml -f compose.minio.yml up -d
+#
+# The minio-netem one-shot service injects a small egress delay on MinIO's
+# interface so storage I/O behaves like a real network object store instead
+# of a loopback (override with MINIO_LATENCY, e.g. MINIO_LATENCY="5ms 1ms").
+# It reruns on every `up`; if the minio container is restarted by other
+# means, rerun `up` to reapply the delay.
 services:
   minio:
     image: minio/minio:latest
@@ -25,14 +32,33 @@ services:
     entrypoint: >
       /bin/sh -c "
       mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc mb --ignore-existing myminio/glitchtip;
       mc mb --ignore-existing myminio/glitchtip-cold;
       exit 0;
       "
+  minio-netem:
+    image: alpine:3.24
+    network_mode: "service:minio"
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      minio:
+        condition: service_started
+    command: >
+      /bin/sh -c "
+      apk add --no-cache iproute2 >/dev/null &&
+      tc qdisc replace dev eth0 root netem delay $${MINIO_LATENCY:-2ms} &&
+      echo netem applied: $${MINIO_LATENCY:-2ms};
+      "
+    environment:
+      MINIO_LATENCY: ${MINIO_LATENCY:-2ms}
   web:
     environment:
+      AWS_STORAGE_BUCKET_NAME: glitchtip
       GLITCHTIP_COLD_STORAGE_BUCKET: glitchtip-cold
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
       AWS_S3_ENDPOINT_URL: http://minio:9000
+      AWS_S3_USE_SSL: "False"
 volumes:
   minio-data:

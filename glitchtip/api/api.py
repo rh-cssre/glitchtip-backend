@@ -1,16 +1,11 @@
 import logging
 from urllib.parse import urlencode
 
-import aiohttp
 from allauth.socialaccount.models import SocialApp
-from allauth.socialaccount.providers.openid_connect.views import (
-    OpenIDConnectOAuth2Adapter,
-)
-from allauth_async.socialaccount.providers.openid_connect import aget_authorize_url
-from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.contrib.auth import aget_user
 from django.core.exceptions import RequestDataTooBig
+from django.db.models import Q
 from django.http import HttpRequest, HttpResponse
 from ninja import Field, ModelSchema, NinjaAPI, Router, Schema
 
@@ -27,6 +22,9 @@ from apps.importer.api import router as importer_router
 from apps.issue_events.api import router as issue_events_router
 from apps.logs.api import router as logs_router
 from apps.organizations_ext.api import router as organizations_ext_router
+from apps.organizations_ext.social_app_api import (
+    router as organization_social_apps_router,
+)
 from apps.performance.api import router as performance_router
 from apps.projects.api import router as projects_router
 from apps.releases.api import router as releases_router
@@ -39,7 +37,6 @@ from apps.users.api import router as users_router
 from apps.users.models import User
 from apps.users.schema import UserSchema
 from apps.wizard.api import router as wizard_router
-from glitchtip.constants import SOCIAL_ADAPTER_MAP
 
 from ..schema import CamelSchema
 from .authentication import SessionAuth, TokenAuth
@@ -66,6 +63,7 @@ api.add_router("0", importer_router)
 api.add_router("0", issue_events_router)
 api.add_router("0", logs_router)
 api.add_router("0", organizations_ext_router)
+api.add_router("0", organization_social_apps_router)
 api.add_router("0", performance_router)
 api.add_router("0", projects_router)
 api.add_router("0", stats_router)
@@ -124,7 +122,10 @@ def request_too_big(request: HttpRequest, exc: RequestDataTooBig):
 
 class SocialAppSchema(ModelSchema):
     scopes: list[str]
-    authorize_url: str | None
+    brand: str
+    """Identity provider brand for display (e.g. picking a logo). Unlike
+    `provider`, which is overridden with provider_id for multi-instance
+    providers, this always names the underlying identity provider."""
 
     class Meta:
         model = SocialApp
@@ -151,45 +152,38 @@ class SettingsOut(CamelSchema):
     enabled_features: list[str]
 
 
+def _serialize_social_app(request: HttpRequest, social_app: SocialApp):
+    """
+    Annotate a SocialApp with the fields the login page needs. Mutates and
+    returns the instance for SocialAppSchema.
+
+    Deliberately makes no outbound request. Resolving an OIDC authorize_url
+    means fetching the provider's discovery document, and both callers are
+    unauthenticated endpoints that list every app for an instance or an
+    organization -- so one anonymous request would fan out into one fetch per
+    app, against hosts the app's owner chose. Nothing consumes an authorize
+    URL: sign-in posts to allauth's headless endpoint and the server issues
+    the redirect.
+    """
+    social_app.scopes = social_app.get_provider(request).get_scope()
+    social_app.brand = (social_app.settings or {}).get("brand") or social_app.provider
+    social_app.provider = social_app.provider_id or social_app.provider
+    return social_app
+
+
 @api.get("settings/", response=SettingsOut, by_alias=True, auth=None)
 async def get_settings(request: HttpRequest):
-    social_apps: list[SocialApp] = []
-    async for social_app in SocialApp.objects.order_by("name"):
-        provider = social_app.get_provider(request)
-        social_app.scopes = provider.get_scope()
-
-        adapter_cls = SOCIAL_ADAPTER_MAP.get(social_app.provider)
-        if adapter_cls == OpenIDConnectOAuth2Adapter:
-            # OIDC adapters resolve authorize_url by fetching the provider's
-            # discovery document. Use the async cached helper so the public
-            # /api/settings/ endpoint never blocks on a synchronous outbound
-            # request to the IdP -- and degrade to None rather than failing
-            # the whole settings payload when the IdP is unreachable (the
-            # OAuth flow itself surfaces a clearer error on login attempts).
-            # provider.server_url is the normalized .well-known URL, matching
-            # what the login flow fetches (and its cache key).
-            try:
-                server_url = provider.server_url
-                social_app.authorize_url = await aget_authorize_url(server_url)
-            except (
-                TimeoutError,
-                aiohttp.ClientError,
-                ValueError,
-                KeyError,
-                TypeError,
-            ) as exc:
-                logger.warning("OIDC discovery failed for %s: %s", social_app.name, exc)
-                social_app.authorize_url = None
-        elif adapter_cls:
-            adapter = adapter_cls(request)
-            social_app.authorize_url = await sync_to_async(
-                lambda: adapter.authorize_url
-            )()
-        else:
-            social_app.authorize_url = None
-
-        social_app.provider = social_app.provider_id or social_app.provider
-        social_apps.append(social_app)
+    # Organization-linked social apps marked non-public (SaaS per-org SSO)
+    # only appear on that organization's own login page, never here.
+    social_apps: list[SocialApp] = [
+        social_app
+        async for social_app in SocialApp.objects.filter(
+            Q(organizationsocialapp__isnull=True)
+            | Q(organizationsocialapp__is_public=True)
+        ).order_by("name")
+    ]
+    for social_app in social_apps:
+        _serialize_social_app(request, social_app)
 
     billing_enabled = settings.BILLING_ENABLED
 
@@ -241,6 +235,35 @@ async def get_settings(request: HttpRequest):
         "glitchtip_instance_name": settings.GLITCHTIP_INSTANCE_NAME,
         "enabled_features": enabled_features,
     }
+
+
+class LoginSettingsOut(CamelSchema):
+    social_apps: list[SocialAppSchema]
+
+
+@api.get(
+    "settings/{slug:organization_slug}/",
+    response=LoginSettingsOut,
+    by_alias=True,
+    auth=None,
+)
+async def get_organization_login_settings(request: HttpRequest, organization_slug: str):
+    """
+    Sign-in options for one organization's own login page, including social
+    apps hidden from the instance-wide login page. Responds
+    200 with an empty list for unknown slugs so anonymous requests cannot
+    enumerate which organizations exist.
+    """
+    social_apps: list[SocialApp] = [
+        social_app
+        async for social_app in SocialApp.objects.filter(
+            organizationsocialapp__organization__slug=organization_slug,
+            organizationsocialapp__organization__is_deleted=False,
+        ).order_by("name")
+    ]
+    for social_app in social_apps:
+        _serialize_social_app(request, social_app)
+    return {"social_apps": social_apps}
 
 
 class InstanceLicenseOut(CamelSchema):

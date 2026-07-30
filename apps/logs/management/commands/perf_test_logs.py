@@ -14,7 +14,7 @@ Usage:
 
 import random
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from django.core.management.base import BaseCommand
 from django.db import connection
@@ -159,7 +159,7 @@ class Command(BaseCommand):
         self.stdout.write(f"GENERATING {count:,} LOGS OVER {days} DAYS")
         self.stdout.write(f"{'=' * 60}\n")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start_time = now - timedelta(days=days)
         end_time = now
 
@@ -287,7 +287,7 @@ class Command(BaseCommand):
         self.stdout.write(f"Hot storage: {total_count:,} logs\n")
 
         # Define benchmark queries
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         benchmarks = [
             {
                 "name": "Last 1 hour (hot only)",

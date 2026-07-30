@@ -11,7 +11,7 @@ from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
 from django.conf import settings
 
-CENTS = Decimal("1")
+CENTS = Decimal(1)
 
 
 def _tiers() -> list[tuple[int | None, Decimal]]:

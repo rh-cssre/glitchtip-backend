@@ -3,7 +3,7 @@
 
 import uuid
 import apps.performance.models
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from django.db import migrations, models
 from django.db.migrations import RunSQL, SeparateDatabaseAndState
 from apps.shared.migration_utils import get_sql_content
@@ -19,9 +19,7 @@ def create_initial_partitions(apps, schema_editor):
 
     # 1. TransactionEvent (UUIDv7 Range -> Hash)
     # Create daily partitions for next 7 days
-    start_date = datetime.now(timezone.utc).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    start_date = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     end_date = start_date + timedelta(days=7)
 
     manager.create_partitions_for_date_range(

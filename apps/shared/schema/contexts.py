@@ -1,5 +1,6 @@
 import logging
-from typing import Annotated, Any, Callable, Literal, Optional, TypedDict
+from collections.abc import Callable
+from typing import Annotated, Any, Literal, TypedDict
 
 from ninja import Field, Schema
 from pydantic import (
@@ -78,45 +79,45 @@ class ExcludeNoneSchema(Schema):
 
 class DeviceContext(LaxIngestSchema, ExcludeNoneSchema):
     type: Literal["device"] = "device"
-    name: Optional[str] = None  # Inconsistency documented as required
-    family: Optional[str] = None  # Recommended but optional
-    model: Optional[str] = None  # Recommended but optional
-    model_id: Optional[str] = None
-    arch: Optional[str] = None
-    battery_level: Optional[float] = None
-    orientation: Optional[str] = None
-    manufacturer: Optional[str] = None
-    brand: Optional[str] = None
-    screen_resolution: Optional[str] = None
-    screen_height_pixels: Optional[int] = None
-    screen_width_pixels: Optional[int] = None
-    screen_density: Optional[float] = None
-    screen_dpi: Optional[float] = None
-    online: Optional[bool] = None
-    charging: Optional[bool] = None
-    low_memory: Optional[bool] = None
-    simulator: Optional[bool] = None
-    memory_size: Optional[int] = None
-    free_memory: Optional[int] = None
-    usable_memory: Optional[int] = None
-    storage_size: Optional[int] = None
-    free_storage: Optional[int] = None
-    external_storage_size: Optional[int] = None
-    external_free_storage: Optional[int] = None
-    boot_time: Optional[str] = None
-    timezone: Optional[str] = None  # Deprecated, use timezone of culture context
-    language: Optional[str] = None  # Deprecated, use locale of culture context
-    processor_count: Optional[int] = None
-    cpu_description: Optional[str] = None
-    processor_frequency: Optional[float] = None
-    device_type: Optional[str] = None
-    battery_status: Optional[str] = None
-    device_unique_identifier: Optional[str] = None
-    supports_vibration: Optional[bool] = None
-    supports_accelerometer: Optional[bool] = None
-    supports_gyroscope: Optional[bool] = None
-    supports_audio: Optional[bool] = None
-    supports_location_service: Optional[bool] = None
+    name: str | None = None  # Inconsistency documented as required
+    family: str | None = None  # Recommended but optional
+    model: str | None = None  # Recommended but optional
+    model_id: str | None = None
+    arch: str | None = None
+    battery_level: float | None = None
+    orientation: str | None = None
+    manufacturer: str | None = None
+    brand: str | None = None
+    screen_resolution: str | None = None
+    screen_height_pixels: int | None = None
+    screen_width_pixels: int | None = None
+    screen_density: float | None = None
+    screen_dpi: float | None = None
+    online: bool | None = None
+    charging: bool | None = None
+    low_memory: bool | None = None
+    simulator: bool | None = None
+    memory_size: int | None = None
+    free_memory: int | None = None
+    usable_memory: int | None = None
+    storage_size: int | None = None
+    free_storage: int | None = None
+    external_storage_size: int | None = None
+    external_free_storage: int | None = None
+    boot_time: str | None = None
+    timezone: str | None = None  # Deprecated, use timezone of culture context
+    language: str | None = None  # Deprecated, use locale of culture context
+    processor_count: int | None = None
+    cpu_description: str | None = None
+    processor_frequency: float | None = None
+    device_type: str | None = None
+    battery_status: str | None = None
+    device_unique_identifier: str | None = None
+    supports_vibration: bool | None = None
+    supports_accelerometer: bool | None = None
+    supports_gyroscope: bool | None = None
+    supports_audio: bool | None = None
+    supports_location_service: bool | None = None
 
     model_config = ConfigDict(protected_namespaces=())
 
@@ -124,12 +125,12 @@ class DeviceContext(LaxIngestSchema, ExcludeNoneSchema):
 class OSContext(LaxIngestSchema, ExcludeNoneSchema):
     type: Literal["os"] = "os"
     name: str
-    version: Optional[str] = None
-    build: Optional[str] = None
-    kernel_version: Optional[str] = None
-    rooted: Optional[bool] = None
-    theme: Optional[str] = None
-    raw_description: Optional[str] = None  # Recommended but optional
+    version: str | None = None
+    build: str | None = None
+    kernel_version: str | None = None
+    rooted: bool | None = None
+    theme: str | None = None
+    raw_description: str | None = None  # Recommended but optional
 
 
 class RuntimeContext(LaxIngestSchema, ExcludeNoneSchema):
@@ -141,40 +142,40 @@ class RuntimeContext(LaxIngestSchema, ExcludeNoneSchema):
 
 class AppContext(LaxIngestSchema, ExcludeNoneSchema):
     type: Literal["app"] = "app"
-    app_start_time: Optional[str] = None
-    device_app_hash: Optional[str] = None
-    build_type: Optional[str] = None
-    app_identifier: Optional[str] = None
-    app_name: Optional[str] = None
-    app_version: Optional[str] = None
-    app_build: Optional[str] = None
-    app_memory: Optional[int] = None
-    in_foreground: Optional[bool] = None
+    app_start_time: str | None = None
+    device_app_hash: str | None = None
+    build_type: str | None = None
+    app_identifier: str | None = None
+    app_name: str | None = None
+    app_version: str | None = None
+    app_build: str | None = None
+    app_memory: int | None = None
+    in_foreground: bool | None = None
 
 
 class BrowserContext(LaxIngestSchema, ExcludeNoneSchema):
     type: Literal["browser"] = "browser"
     name: str
-    version: Optional[str] = None
+    version: str | None = None
 
 
 class GPUContext(LaxIngestSchema, ExcludeNoneSchema):
     type: Literal["gpu"] = "gpu"
     name: str
-    version: Optional[str] = None
-    id: Optional[str] = None
-    vendor_id: Optional[str] = None
-    vendor_name: Optional[str] = None
-    memory_size: Optional[int] = None
-    api_type: Optional[str] = None
-    multi_threaded_rendering: Optional[bool] = None
-    npot_support: Optional[str] = None
-    max_texture_size: Optional[int] = None
-    graphics_shader_level: Optional[str] = None
-    supports_draw_call_instancing: Optional[bool] = None
-    supports_ray_tracing: Optional[bool] = None
-    supports_compute_shaders: Optional[bool] = None
-    supports_geometry_shaders: Optional[bool] = None
+    version: str | None = None
+    id: str | None = None
+    vendor_id: str | None = None
+    vendor_name: str | None = None
+    memory_size: int | None = None
+    api_type: str | None = None
+    multi_threaded_rendering: bool | None = None
+    npot_support: str | None = None
+    max_texture_size: int | None = None
+    graphics_shader_level: str | None = None
+    supports_draw_call_instancing: bool | None = None
+    supports_ray_tracing: bool | None = None
+    supports_compute_shaders: bool | None = None
+    supports_geometry_shaders: bool | None = None
 
 
 class StateContext(LaxIngestSchema):
@@ -184,11 +185,11 @@ class StateContext(LaxIngestSchema):
 
 class CultureContext(LaxIngestSchema, ExcludeNoneSchema):
     type: Literal["culture"] = "culture"
-    calendar: Optional[str] = None
-    display_name: Optional[str] = None
-    locale: Optional[str] = None
-    is_24_hour_format: Optional[bool] = None
-    timezone: Optional[str] = None
+    calendar: str | None = None
+    display_name: str | None = None
+    locale: str | None = None
+    is_24_hour_format: bool | None = None
+    timezone: str | None = None
 
 
 class CloudResourceContext(LaxIngestSchema):

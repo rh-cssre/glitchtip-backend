@@ -7,8 +7,7 @@ Tests that need S3 access are skipped when no bucket is configured.
 
 import shutil
 import tempfile
-from datetime import datetime, timedelta
-from datetime import timezone as dt_timezone
+from datetime import UTC, datetime, timedelta
 
 from django.conf import settings
 from django.db import connection
@@ -187,9 +186,8 @@ class NoDuckDBTestCase(TestCase):
 
     def test_cold_storage_returns_empty_when_disabled(self):
         from datetime import datetime
-        from datetime import timezone as dt_timezone
 
-        now = datetime.now(dt_timezone.utc)
+        now = datetime.now(UTC)
         start = now - timedelta(days=1)
 
         results = query_cold_events(
@@ -262,14 +260,16 @@ class MissingParquetTestCase(TestCase):
     )
     def test_query_cold_events_returns_empty(self):
         """query_cold_events returns [] when no parquet files exist."""
-        with tempfile.TemporaryDirectory(prefix="glitchtip_cold_test_") as cold_dir:
-            with self.settings(GLITCHTIP_COLD_STORAGE_DIR=cold_dir):
-                results = query_cold_events(
-                    organization_id=99999,
-                    start_dt=datetime(2020, 1, 1, tzinfo=dt_timezone.utc),
-                    end_dt=datetime(2020, 12, 31, tzinfo=dt_timezone.utc),
-                )
-                self.assertEqual(results, [])
+        with (
+            tempfile.TemporaryDirectory(prefix="glitchtip_cold_test_") as cold_dir,
+            self.settings(GLITCHTIP_COLD_STORAGE_DIR=cold_dir),
+        ):
+            results = query_cold_events(
+                organization_id=99999,
+                start_dt=datetime(2020, 1, 1, tzinfo=UTC),
+                end_dt=datetime(2020, 12, 31, tzinfo=UTC),
+            )
+            self.assertEqual(results, [])
 
     @override_settings(
         GLITCHTIP_ENABLE_DUCKDB="true",
@@ -278,12 +278,14 @@ class MissingParquetTestCase(TestCase):
     )
     def test_get_event_from_cold_returns_none(self):
         """get_event_from_cold returns None when parquet file doesn't exist."""
-        with tempfile.TemporaryDirectory(prefix="glitchtip_cold_test_") as cold_dir:
-            with self.settings(GLITCHTIP_COLD_STORAGE_DIR=cold_dir):
-                fake_time = datetime(2020, 6, 15, tzinfo=dt_timezone.utc)
-                fake_id = UUID7Helper.from_datetime(fake_time)
-                result = get_event_from_cold(99999, fake_id, fake_time)
-                self.assertIsNone(result)
+        with (
+            tempfile.TemporaryDirectory(prefix="glitchtip_cold_test_") as cold_dir,
+            self.settings(GLITCHTIP_COLD_STORAGE_DIR=cold_dir),
+        ):
+            fake_time = datetime(2020, 6, 15, tzinfo=UTC)
+            fake_id = UUID7Helper.from_datetime(fake_time)
+            result = get_event_from_cold(99999, fake_id, fake_time)
+            self.assertIsNone(result)
 
 
 def _create_issue_event_partition(date: datetime) -> str:
@@ -333,7 +335,7 @@ class ArchiveThenQueryTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
     def setUp(self):
         self.create_project()
         self.cold_dir = tempfile.mkdtemp(prefix="glitchtip_cold_test_")
-        self.archive_date = datetime(2025, 5, 1, tzinfo=dt_timezone.utc)
+        self.archive_date = datetime(2025, 5, 1, tzinfo=UTC)
         self.partition_name = _create_issue_event_partition(self.archive_date)
 
     def tearDown(self):
@@ -533,9 +535,9 @@ class MultiDateColdStorageTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         self.create_logged_in_user()
         self.cold_dir = tempfile.mkdtemp(prefix="glitchtip_cold_test_")
         self.dates = [
-            datetime(2025, 3, 1, tzinfo=dt_timezone.utc),
-            datetime(2025, 3, 15, tzinfo=dt_timezone.utc),
-            datetime(2025, 3, 30, tzinfo=dt_timezone.utc),
+            datetime(2025, 3, 1, tzinfo=UTC),
+            datetime(2025, 3, 15, tzinfo=UTC),
+            datetime(2025, 3, 30, tzinfo=UTC),
         ]
 
     def tearDown(self):
@@ -636,8 +638,8 @@ class MultiDateColdStorageTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
             # limit=1 should return only the newest event
             results = query_cold_events(
                 organization_id=self.organization.id,
-                start_dt=datetime(2025, 1, 1, tzinfo=dt_timezone.utc),
-                end_dt=datetime(2025, 12, 31, tzinfo=dt_timezone.utc),
+                start_dt=datetime(2025, 1, 1, tzinfo=UTC),
+                end_dt=datetime(2025, 12, 31, tzinfo=UTC),
                 issue_id=issue.id,
                 limit=1,
             )

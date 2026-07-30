@@ -8,7 +8,7 @@ the worker is the enforcement point.
 """
 
 import uuid
-from datetime import timezone as dt_timezone
+from datetime import UTC
 from unittest.mock import patch
 
 from django.utils import timezone
@@ -30,7 +30,7 @@ class IngestEventPoisonMessageTestCase(EventIngestTestCase):
         valid = {
             "project_id": project.id,
             "organization_id": project.organization_id,
-            "received": timezone.now().astimezone(dt_timezone.utc).isoformat(),
+            "received": timezone.now().astimezone(UTC).isoformat(),
             # The view enqueues the scrubbed event dict with the interchange
             # type discriminator appended (IssueEventType integer value).
             "payload": generate_event() | {"type": IssueEventType.ERROR.value},
@@ -55,7 +55,7 @@ class IngestUserReportPoisonTestCase(EventIngestTestCase):
         base = {
             "project_id": project.id,
             "organization_id": project.organization_id,
-            "received": timezone.now().astimezone(dt_timezone.utc).isoformat(),
+            "received": timezone.now().astimezone(UTC).isoformat(),
             "payload": {
                 "name": "Reporter",
                 "email": "r@example.com",
@@ -83,7 +83,7 @@ class IngestLogsPoisonTestCase(EventIngestTestCase):
         valid = {
             "project_id": project.id,
             "organization_id": project.organization_id,
-            "received": timezone.now().astimezone(dt_timezone.utc).isoformat(),
+            "received": timezone.now().astimezone(UTC).isoformat(),
             "logs": [
                 {
                     "timestamp": timezone.now().timestamp(),

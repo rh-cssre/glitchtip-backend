@@ -1,5 +1,4 @@
-from datetime import datetime, timedelta
-from datetime import timezone as dt_timezone
+from datetime import UTC, datetime, timedelta
 
 from asgiref.sync import async_to_sync
 from dateutil.relativedelta import relativedelta
@@ -310,66 +309,46 @@ class OrganizationThrottleCheckTestCase(TestCase):
 class FreeTierCycleTestCase(TestCase):
     def test_get_free_tier_cycle(self):
         # Test basic case
-        created = datetime(2020, 1, 15, 12, 0, 0, tzinfo=dt_timezone.utc)
+        created = datetime(2020, 1, 15, 12, 0, 0, tzinfo=UTC)
         with freeze_time("2020-03-10"):
             start, end = get_free_tier_cycle(created)
-            self.assertEqual(
-                start, datetime(2020, 2, 15, 12, 0, 0, tzinfo=dt_timezone.utc)
-            )
-            self.assertEqual(
-                end, datetime(2020, 3, 15, 12, 0, 0, tzinfo=dt_timezone.utc)
-            )
+            self.assertEqual(start, datetime(2020, 2, 15, 12, 0, 0, tzinfo=UTC))
+            self.assertEqual(end, datetime(2020, 3, 15, 12, 0, 0, tzinfo=UTC))
 
         # Test edge case: Created Jan 31, Now Feb 10 (Leap year 2020)
-        created = datetime(2020, 1, 31, 12, 0, 0, tzinfo=dt_timezone.utc)
+        created = datetime(2020, 1, 31, 12, 0, 0, tzinfo=UTC)
         with freeze_time("2020-02-10"):
             start, end = get_free_tier_cycle(created)
-            self.assertEqual(
-                start, datetime(2020, 1, 31, 12, 0, 0, tzinfo=dt_timezone.utc)
-            )
-            self.assertEqual(
-                end, datetime(2020, 2, 29, 12, 0, 0, tzinfo=dt_timezone.utc)
-            )
+            self.assertEqual(start, datetime(2020, 1, 31, 12, 0, 0, tzinfo=UTC))
+            self.assertEqual(end, datetime(2020, 2, 29, 12, 0, 0, tzinfo=UTC))
 
         # Test edge case: Created Jan 31, Now Feb 28 (Leap year 2020)
         # Cycle should be Jan 31 - Feb 29
         with freeze_time("2020-02-28"):
             start, end = get_free_tier_cycle(created)
-            self.assertEqual(
-                start, datetime(2020, 1, 31, 12, 0, 0, tzinfo=dt_timezone.utc)
-            )
-            self.assertEqual(
-                end, datetime(2020, 2, 29, 12, 0, 0, tzinfo=dt_timezone.utc)
-            )
+            self.assertEqual(start, datetime(2020, 1, 31, 12, 0, 0, tzinfo=UTC))
+            self.assertEqual(end, datetime(2020, 2, 29, 12, 0, 0, tzinfo=UTC))
 
         # Test edge case: Created Jan 31, Now April 10
         # Cycle should be Mar 31 - Apr 30
         with freeze_time("2020-04-10"):
             start, end = get_free_tier_cycle(created)
-            self.assertEqual(
-                start, datetime(2020, 3, 31, 12, 0, 0, tzinfo=dt_timezone.utc)
-            )
-            self.assertEqual(
-                end, datetime(2020, 4, 30, 12, 0, 0, tzinfo=dt_timezone.utc)
-            )
+            self.assertEqual(start, datetime(2020, 3, 31, 12, 0, 0, tzinfo=UTC))
+            self.assertEqual(end, datetime(2020, 4, 30, 12, 0, 0, tzinfo=UTC))
 
     def test_get_free_tier_cycle_historical_contiguous(self):
         # Historical cycles (periods_ago > 0) must tile the timeline with no
         # gaps or overlaps, even when the signup day (31) is clamped in short
         # months. Each cycle's start must equal the previous cycle's end.
-        created = datetime(2020, 1, 31, 12, 0, 0, tzinfo=dt_timezone.utc)
+        created = datetime(2020, 1, 31, 12, 0, 0, tzinfo=UTC)
         with freeze_time("2020-04-10"):
             current = get_free_tier_cycle(created)
             prev = get_free_tier_cycle(created, periods_ago=1)
             prev2 = get_free_tier_cycle(created, periods_ago=2)
         # current = Mar 31 - Apr 30 (matches the periods_ago=0 case above)
-        self.assertEqual(
-            current[0], datetime(2020, 3, 31, 12, 0, 0, tzinfo=dt_timezone.utc)
-        )
+        self.assertEqual(current[0], datetime(2020, 3, 31, 12, 0, 0, tzinfo=UTC))
         # Contiguous: each window ends exactly where the next begins.
         self.assertEqual(prev[1], current[0])
         self.assertEqual(prev2[1], prev[0])
         # Re-anchored on `created`, so the chain lands back on Jan 31.
-        self.assertEqual(
-            prev2[0], datetime(2020, 1, 31, 12, 0, 0, tzinfo=dt_timezone.utc)
-        )
+        self.assertEqual(prev2[0], datetime(2020, 1, 31, 12, 0, 0, tzinfo=UTC))

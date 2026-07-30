@@ -459,9 +459,11 @@ if SENTRY_DSN:
 
     def before_send(event, hint):
         """Don't log useless, inactionable errors in Sentry."""
-        if "log_record" in hint:
-            if hint["log_record"].name == "django.security.DisallowedHost":
-                return None
+        if (
+            "log_record" in hint
+            and hint["log_record"].name == "django.security.DisallowedHost"
+        ):
+            return None
         if "exc_info" in hint:
             _, exc_value, _ = hint["exc_info"]
             if isinstance(exc_value, UnreadablePostError):
@@ -827,6 +829,8 @@ ANYMAIL_SETTINGS = [
     "SPARKPOST_API_KEY",
     "SPARKPOST_API_URL",
     "SPARKPOST_TRACK_INITIAL_OPEN_AS_OPENED",
+    "SCALEWAY_SECRET_KEY",
+    "SCALEWAY_PROJECT_ID",
 ]
 
 ANYMAIL = {
@@ -891,19 +895,10 @@ else:
 # DSN auth, decompression/framing, PII scrubbing, dedupe and vtasks enqueue
 # run on the shared tokio runtime, and the event payload never materializes
 # on the Python heap. The ingest path issues its auth query on the very pool
-# the ORM uses (gt_rust is the only database engine, and the cache already
-# runs gt_rust's valkey driver unconditionally).
+# the ORM uses (gt_rust is the only database engine). With VALKEY_URL the
+# cache/broker ops ride gt_rust's valkey driver; without it they run against
+# the vcache_entry table and the db_queuedtask broker on the same pool.
 GLITCHTIP_RUST_INGEST = env.bool("GLITCHTIP_RUST_INGEST", False)
-if GLITCHTIP_RUST_INGEST and not VALKEY_URL:
-    # The Rust enqueue path currently speaks only the Valkey task broker.
-    # The crate's postgres-broker arm exists but is not yet exercised (see
-    # the rust-ingest plan); until it is, valkey-less deploys keep the
-    # Python ingest path rather than hard-failing at startup.
-    logging.getLogger(__name__).warning(
-        "GLITCHTIP_RUST_INGEST requires VALKEY_URL until the postgres task "
-        "broker port lands; serving ingest via the Python path."
-    )
-    GLITCHTIP_RUST_INGEST = False
 # Add other settings that apply to both methods.
 for db_config in DATABASES.values():
     # gt_rust.django_backend extends Django's stock postgresql backend and
@@ -991,6 +986,11 @@ VTASKS_QUEUES = {
     },
 }
 
+# Per-task sentry-sdk scope isolation. Without it, embedded workers share the
+# ambient isolation scope with HTTP requests and each other, cross-polluting
+# breadcrumbs.
+VTASKS_TASK_CONTEXT = "glitchtip.vtasks_context.sentry_task_scope"
+
 # Maximum number of issues send in a single alert payload
 MAX_ISSUES_PER_ALERT = env.int("MAX_ISSUES_PER_ALERT", 3)
 
@@ -1036,10 +1036,18 @@ if VALKEY_URL:
     }
     SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 else:  # Fallback to database cache
+    # The django_cache table is also the store the Rust ingest path reads
+    # and writes (block/dedupe keys) when GLITCHTIP_RUST_INGEST runs
+    # without a Valkey — one cache either way. MAX_ENTRIES is raised from
+    # Django's default 300: ingest dedupe writes one 5-minute key per
+    # event, and the default would make every Python-side set() cull a
+    # third of the table (dropping live dedupe/block keys) under even
+    # modest event volume.
     CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.db.DatabaseCache",
             "LOCATION": "django_cache",
+            "OPTIONS": {"MAX_ENTRIES": 100_000},
         }
     }
     INSTALLED_APPS.append("django.contrib.sessions")
@@ -1107,9 +1115,7 @@ GS_BUCKET_NAME = env("GS_BUCKET_NAME")
 GS_PROJECT_ID = env("GS_PROJECT_ID")
 
 if AWS_S3_ENDPOINT_URL:
-    MEDIA_URL = env.str(
-        "MEDIA_URL", "https://%s/%s/" % (AWS_S3_ENDPOINT_URL, AWS_LOCATION)
-    )
+    MEDIA_URL = env.str("MEDIA_URL", f"https://{AWS_S3_ENDPOINT_URL}/{AWS_LOCATION}/")
     STORAGES["default"] = {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage"}
 else:
     MEDIA_URL = "media/"
@@ -1285,6 +1291,18 @@ elif TESTING:
     # Must run tests with billing enabled
     BILLING_ENABLED = True
     logging.disable(logging.WARNING)
+
+# Refuse social-auth outbound HTTP (OIDC discovery, token/userinfo calls) to
+# private/internal addresses. Organization-managed OIDC providers make these
+# URLs partially user-controlled, so this closes the SSRF vector. Defaults on
+# whenever organization managers who are not instance admins can exist: billing
+# enabled (SaaS) or open organization creation (multi-tenant self-host).
+# Single-organization self-host installs keep private IdPs (e.g. an intranet
+# Keycloak) working by default.
+SOCIAL_AUTH_BLOCK_PRIVATE_IPS = env.bool(
+    "SOCIAL_AUTH_BLOCK_PRIVATE_IPS",
+    default=BILLING_ENABLED or ENABLE_ORGANIZATION_CREATION,
+)
 
 
 if TESTING:
