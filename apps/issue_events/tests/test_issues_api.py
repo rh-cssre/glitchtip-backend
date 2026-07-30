@@ -1417,6 +1417,7 @@ class IssueEventTagsAPITestCase(GlitchTestCase):
         await baker.amake(
             "issue_events.IssueTag",
             issue=issue,
+            organization=self.organization,
             tag_key=key_foo,
             tag_value=value_bar,
             count=2,
@@ -1424,6 +1425,7 @@ class IssueEventTagsAPITestCase(GlitchTestCase):
         await baker.amake(
             "issue_events.IssueTag",
             issue=issue,
+            organization=self.organization,
             tag_key=key_foo,
             tag_value=value_bar,
             count=1,
@@ -1431,12 +1433,14 @@ class IssueEventTagsAPITestCase(GlitchTestCase):
         await baker.amake(
             "issue_events.IssueTag",
             issue=issue,
+            organization=self.organization,
             tag_key=key_animal,
             tag_value=value_cat,
         )
         await baker.amake(
             "issue_events.IssueTag",
             issue=issue,
+            organization=self.organization,
             tag_key=key_animal,
             tag_value=value_dog,
             count=4,
@@ -1444,6 +1448,7 @@ class IssueEventTagsAPITestCase(GlitchTestCase):
         await baker.amake(
             "issue_events.IssueTag",
             issue=issue,
+            organization=self.organization,
             tag_key=key_foo,
             tag_value=value_cat,
             count=4,
@@ -1477,12 +1482,14 @@ class IssueEventTagsAPITestCase(GlitchTestCase):
         await baker.amake(
             "issue_events.IssueTag",
             issue=issue,
+            organization=self.organization,
             tag_key__key="foo",
             tag_value=value_bar,
         )
         await baker.amake(
             "issue_events.IssueTag",
             issue=issue,
+            organization=self.organization,
             tag_key__key="lol",
             tag_value=value_bar,
         )
@@ -1683,6 +1690,7 @@ class OrganizationScopedIssueAPITestCase(GlitchTestCase):
         await baker.amake(
             "issue_events.IssueTag",
             issue=issue,
+            organization=self.organization,
             tag_key=key_foo,
             tag_value=value_bar,
             count=2,
