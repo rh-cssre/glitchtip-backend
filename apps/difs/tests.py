@@ -13,11 +13,11 @@ from pydantic import ValidationError
 
 from apps.difs.stacktrace_processor import (
     StacktraceProcessor,
+    _estimate_image_base,
     digest_symbol,
     extract_source_from_bundle,
     find_source_bundle,
     jvm_module_to_path,
-    _estimate_image_base,
 )
 from apps.difs.tasks import ChecksumMismatched, difs_create_file_from_chunks
 from apps.event_ingest.schema import NativeDebugImage
