@@ -313,7 +313,7 @@ class StacktraceProcessor:
             estimated_base = 0
             if image_addr_from_meta is not None:
                 estimated_base = parse_addr(image_addr_from_meta)
-                getLogger().info(
+                getLogger().debug(
                     f"StacktraceProcessor: using debug_meta image_addr "
                     f"{image_addr_from_meta} for debug_id {debug_id}"
                 )

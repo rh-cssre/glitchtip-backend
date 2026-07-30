@@ -17,6 +17,7 @@ from apps.difs.stacktrace_processor import (
     extract_source_from_bundle,
     find_source_bundle,
     jvm_module_to_path,
+    _estimate_image_base,
 )
 from apps.difs.tasks import ChecksumMismatched, difs_create_file_from_chunks
 from apps.event_ingest.schema import NativeDebugImage
@@ -823,7 +824,6 @@ class NativeSymbolicationTestCase(GlitchTestCase):
 
     def test_estimate_image_base_handles_list_return(self):
         """lookup() returns a list, so next() must not be called on it."""
-        from apps.difs.stacktrace_processor import _estimate_image_base
 
         mock_symbol = MagicMock()
         mock_sym_cache = MagicMock()
@@ -835,7 +835,6 @@ class NativeSymbolicationTestCase(GlitchTestCase):
 
     def test_estimate_image_base_empty_input(self):
         """No addresses means base 0 and we don't touch the sym cache."""
-        from apps.difs.stacktrace_processor import _estimate_image_base
 
         mock_sym_cache = MagicMock()
         self.assertEqual(_estimate_image_base(mock_sym_cache, []), 0)
