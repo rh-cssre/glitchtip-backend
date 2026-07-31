@@ -34,6 +34,64 @@ def is_metered_price(price) -> bool:
     return recurring.get("usage_type") == "metered" or bool(recurring.get("meter"))
 
 
+def price_kwargs(price) -> dict:
+    """Map a Stripe Price (schema object) to StripePrice field values.
+
+    Shared by both sync paths. Tiered/metered prices have ``unit_amount=None``
+    (the per-unit cost lives in tiers, not on the price), so ``price`` is stored
+    as 0 and the graduated schedule in settings is the source of truth for cost.
+    """
+    meta = price.metadata or {}
+    recurring = price.recurring or {}
+    return {
+        "active": price.active,
+        "price": price.unit_amount / 100 if price.unit_amount is not None else 0,
+        "nickname": price.nickname or "",
+        "no_throttle": meta.get("no_throttle", "").lower() == "true",
+        "is_public": meta.get("is_public", "").lower() == "true",
+        "is_metered": is_metered_price(price),
+        "meter_id": recurring.get("meter") or "",
+        "interval": recurring.get("interval", "month"),
+    }
+
+
+def is_syncable_product(product) -> bool:
+    """True for products GlitchTip stores locally.
+
+    Hosted plans carry an ``events`` quota; the metered overage product
+    (product_type=overage) has no quota but must be synced so its tiered price
+    can be attached as a second subscription item. Everything else in the
+    account — notably self-host support licenses — is deliberately not stored.
+    """
+    product_type = product.metadata.get("product_type", "").lower()
+    if product_type == "overage":
+        return True
+    return product_type == "hosted" and "events" in product.metadata
+
+
+def product_kwargs(product) -> dict:
+    """Map a Stripe Product (schema object) to StripeProduct field values.
+
+    Shared by the periodic sync and the product webhook so the two can't drift.
+    """
+    metadata = product.metadata
+    is_overage = metadata.get("product_type", "").lower() == "overage"
+    return {
+        "name": product.name,
+        "description": product.description or "",
+        "active": product.active,
+        # The overage product has no quota. NULL says "quota is not a concept
+        # here", which 0 ("a plan that allows no events") cannot express.
+        "events": None if is_overage else int(metadata.get("events", 0)),
+        "is_public": metadata.get("is_public", "").lower() == "true",
+        "is_overage": is_overage,
+        "allow_sso": metadata.get("sso", "").lower() == "true",
+        "marketing_features": [
+            f["name"] for f in product.marketing_features if f.get("name")
+        ],
+    }
+
+
 def select_subscription_items(items):
     """Split a subscription's items into (base_item, metered_item).
 

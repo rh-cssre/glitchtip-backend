@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import IntegrityError, models
-from django.db.models.expressions import OuterRef, Subquery
+from django.db.models.expressions import F, OuterRef, Subquery
 from django.utils import timezone
 
 from apps.organizations_ext.models import Organization
@@ -24,7 +24,9 @@ from .constants import (
 from .exceptions import StripeResourceNotFound
 from .utils import (
     compute_cycle,
-    is_metered_price,
+    is_syncable_product,
+    price_kwargs,
+    product_kwargs,
     select_subscription_items,
     unix_to_datetime,
 )
@@ -32,37 +34,20 @@ from .utils import (
 logger = logging.getLogger(__name__)
 
 
-def _price_kwargs(price) -> dict:
-    """Map a Stripe Price (schema object) to StripePrice field values.
-
-    Shared by both sync paths. Tiered/metered prices have ``unit_amount=None``
-    (the per-unit cost lives in tiers, not on the price), so ``price`` is stored
-    as 0 and the graduated schedule in settings is the source of truth for cost.
-    """
-    meta = price.metadata or {}
-    recurring = price.recurring or {}
-    return {
-        "price": price.unit_amount / 100 if price.unit_amount is not None else 0,
-        "nickname": price.nickname or "",
-        "no_throttle": meta.get("no_throttle", "").lower() == "true",
-        "is_public": meta.get("is_public", "").lower() == "true",
-        "is_metered": is_metered_price(price),
-        "meter_id": recurring.get("meter") or "",
-        "interval": recurring.get("interval", "month"),
-    }
-
-
 def _warn_duplicate_public_prices(prices):
     """Warn if any (product, interval) pair has more than one public price.
 
     The frontend's price-selection invariant assumes at most one
-    is_public=True price per (product, interval). This check is per-page only;
-    duplicates split across pages are caught by StripeProduct.sync_from_stripe,
-    which loads default prices in a single pass per product.
+    is_public=True price per (product, interval). Archived prices are ignored:
+    replacing a public price leaves the retired one in place (grandfathered
+    subscriptions still point at it), which is expected, not a duplicate. This
+    check is per-page only; duplicates split across pages are caught by
+    StripeProduct.sync_from_stripe, which loads default prices in a single pass
+    per product.
     """
     grouped = defaultdict(list)
     for p in prices:
-        if p.is_public:
+        if p.is_public and p.active:
             grouped[(p.product_id, p.interval)].append(p.stripe_id)
     for (product_id, interval), price_ids in grouped.items():
         if len(price_ids) > 1:
@@ -87,8 +72,19 @@ class StripeProduct(StripeModel):
     default_price = models.ForeignKey(
         "StripePrice", on_delete=models.CASCADE, blank=True, null=True
     )
-    events = models.PositiveBigIntegerField()
+    events = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text="Monthly event quota. NULL when the product has no quota "
+        "(the metered overage product), which is distinct from a quota of 0.",
+    )
     is_public = models.BooleanField()
+    active = models.BooleanField(
+        default=True,
+        help_text="Mirrors Stripe's `active`. Archived products stay here so "
+        "existing subscriptions still render, but are excluded everywhere the "
+        "product is offered or acted on.",
+    )
     is_overage = models.BooleanField(
         default=False,
         help_text="Metered overage product (Stripe metadata product_type=overage).",
@@ -108,39 +104,18 @@ class StripeProduct(StripeModel):
         stripe_ids = set()
         async for products_page in list_products():
             logger.info(f"Found {len(products_page)} products in Stripe")
-            # Hosted plans carry an `events` quota; the metered overage product
-            # (product_type=overage) has no quota but must be synced so its
-            # tiered price can be attached as a second subscription item.
             products_page = [
-                product
-                for product in products_page
-                if (
-                    "events" in product.metadata
-                    and product.metadata.get("product_type", "").lower() == "hosted"
-                )
-                or product.metadata.get("product_type", "").lower() == "overage"
+                product for product in products_page if is_syncable_product(product)
             ]
             products = [
-                StripeProduct(
-                    stripe_id=product.id,
-                    name=product.name,
-                    description=product.description if product.description else "",
-                    events=int(product.metadata.get("events", 0)),
-                    is_public=product.metadata.get("is_public", "").lower() == "true",
-                    is_overage=product.metadata.get("product_type", "").lower()
-                    == "overage",
-                    allow_sso=product.metadata.get("sso", "").lower() == "true",
-                    marketing_features=[
-                        f["name"] for f in product.marketing_features if f.get("name")
-                    ],
-                )
+                StripeProduct(stripe_id=product.id, **product_kwargs(product))
                 for product in products_page
             ]
             prices = [
                 StripePrice(
                     stripe_id=product.default_price.id,
                     product_id=product.id,
-                    **_price_kwargs(product.default_price),
+                    **price_kwargs(product.default_price),
                 )
                 for product in products_page
                 if product.default_price
@@ -153,6 +128,7 @@ class StripeProduct(StripeModel):
                     "description",
                     "events",
                     "is_public",
+                    "active",
                     "is_overage",
                     "allow_sso",
                     "marketing_features",
@@ -167,6 +143,7 @@ class StripeProduct(StripeModel):
                     "price",
                     "nickname",
                     "product_id",
+                    "active",
                     "no_throttle",
                     "is_public",
                     "is_metered",
@@ -189,12 +166,16 @@ class StripeProduct(StripeModel):
             for obj in product_updated:
                 stripe_ids.add(obj.stripe_id)
 
-        # Keep products whose prices are still referenced by a subscription.
-        # StripePrice.product cascades, but StripeSubscription.price is RESTRICT,
-        # so deleting a product archived in Stripe while a (often grandfathered)
-        # subscription still points at one of its prices raises RestrictedError
-        # and aborts the whole sync. Retaining those products is harmless — they
-        # simply stop appearing in Stripe's product list.
+        # Archiving no longer reaches this pass: list_products() returns archived
+        # products too, so they land above with active=False and keep rendering
+        # for the (often grandfathered) subscriptions that point at them.
+        #
+        # Absence now means deleted in Stripe — or, just as reachable, that a
+        # metadata edit (dropping product_type or events) made the product fail
+        # is_syncable_product. StripePrice.product cascades while
+        # StripeSubscription.price is RESTRICT, so deleting a product a live
+        # subscription still points at raises RestrictedError and aborts the
+        # whole sync. Retaining those is harmless — they simply stop being sold.
         referenced_product_ids = StripeSubscription.objects.values_list(
             "price__product_id", flat=True
         )
@@ -211,6 +192,13 @@ class StripePrice(StripeModel):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     nickname = models.CharField(max_length=255)
     product = models.ForeignKey(StripeProduct, on_delete=models.CASCADE)
+    active = models.BooleanField(
+        default=True,
+        help_text="Mirrors Stripe's `active`. Archived prices are kept — "
+        "grandfathered subscriptions still point at them — but can no longer "
+        "be purchased. Unrelated to is_public, which marks a current price "
+        "that simply isn't offered publicly (non-profit, grandfathered).",
+    )
     no_throttle = models.BooleanField(default=False)
     is_public = models.BooleanField(default=False)
     is_metered = models.BooleanField(
@@ -236,7 +224,7 @@ class StripePrice(StripeModel):
                 StripePrice(
                     stripe_id=price.id,
                     product_id=price.product,
-                    **_price_kwargs(price),
+                    **price_kwargs(price),
                 )
                 for price in prices_page
                 if price.product in known_product_ids
@@ -248,6 +236,7 @@ class StripePrice(StripeModel):
                     "price",
                     "nickname",
                     "product_id",
+                    "active",
                     "no_throttle",
                     "is_public",
                     "is_metered",
@@ -308,7 +297,7 @@ class StripeSubscription(StripeModel):
             await cls.objects.filter(
                 organization=organization, status__in=ACTIVE_SUBSCRIPTION_STATUSES
             )
-            .order_by("-price__product__events", "-created")
+            .order_by(F("price__product__events").desc(nulls_last=True), "-created")
             .afirst()
         )
 
@@ -334,7 +323,7 @@ class StripeSubscription(StripeModel):
             cls.objects.filter(
                 organization_id=OuterRef("pk"), status__in=ACTIVE_SUBSCRIPTION_STATUSES
             )
-            .order_by("-price__product__events", "-created")
+            .order_by(F("price__product__events").desc(nulls_last=True), "-created")
             .values("pk")[:1]
         )
 

@@ -80,6 +80,52 @@ class StripeAPITestCase(TestCase):
         )
         self.assertEqual(res.status_code, 200)
 
+    async def test_list_stripe_products_excludes_archived(self):
+        """A retired plan stays in the DB for its grandfathered subscriptions
+        but must not be offered. is_public is a separate axis: a current price
+        can be non-public (non-profit) and still perfectly valid."""
+        archived_product = await baker.amake(
+            "stripe.StripeProduct", is_public=True, events=5, active=False
+        )
+        archived_price = await baker.amake(
+            "stripe.StripePrice",
+            product=self.product,
+            price=12,
+            is_public=True,
+            active=False,
+        )
+        url = reverse("api:list_stripe_products")
+        res = await self.async_client.get(url)
+        body = res.content.decode()
+        self.assertNotIn(archived_product.stripe_id, body)
+        self.assertNotIn(archived_price.stripe_id, body)
+
+    async def test_create_stripe_session_rejects_archived_price(self):
+        """404 locally beats a confusing failure inside Stripe's checkout."""
+        archived_price = await baker.amake(
+            "stripe.StripePrice", product=self.product, price=0, active=False
+        )
+        url = reverse("api:create_stripe_session", args=[self.organization.slug])
+        res = await self.async_client.post(
+            url, {"price": archived_price.stripe_id}, content_type="application/json"
+        )
+        self.assertEqual(res.status_code, 404)
+
+    async def test_create_subscription_rejects_archived_price(self):
+        archived_price = await baker.amake(
+            "stripe.StripePrice", product=self.product, price=0, active=False
+        )
+        url = reverse("api:stripe_create_subscription")
+        res = await self.async_client.post(
+            url,
+            {
+                "organization": str(self.organization.id),
+                "price": archived_price.stripe_id,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 404)
+
     async def test_create_stripe_session_rejects_metered_price(self):
         # The metered overage price is attached via configure_overage, never
         # sold through checkout.
