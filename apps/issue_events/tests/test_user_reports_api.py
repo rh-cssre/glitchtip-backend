@@ -2,6 +2,7 @@ from django.test import TestCase
 from django.urls import reverse
 from model_bakery import baker
 
+from apps.organizations_ext.constants import OrganizationUserRole
 from glitchtip.test_utils.test_case import APIPermissionTestCase, GlitchTipTestCaseMixin
 
 
@@ -15,12 +16,23 @@ def list_user_reports_url(issue_id: int) -> str:
     return reverse("api:list_user_reports", kwargs={"issue_id": issue_id})
 
 
+def list_organization_user_reports_url(organization_slug: str, issue_id: int) -> str:
+    return reverse(
+        "api:list_organization_user_reports",
+        kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+    )
+
+
 class IssuesUserReportTestCase(GlitchTipTestCaseMixin, TestCase):
     def setUp(self):
         super().create_logged_in_user()
         self.async_client.force_login(self.user)
 
-        self.event = baker.make("issue_events.IssueEvent", issue__project=self.project)
+        self.event = baker.make(
+            "issue_events.IssueEvent",
+            issue__project=self.project,
+            organization=self.organization,
+        )
 
         self.user_report = baker.make(
             "issue_events.UserReport",
@@ -52,6 +64,47 @@ class IssuesUserReportTestCase(GlitchTipTestCaseMixin, TestCase):
         res = await self.async_client.get(url)
         self.assertContains(res, self.user_report.email)
         self.assertNotContains(res, user_report2.email)
+
+
+class OrganizationScopedUserReportTestCase(GlitchTipTestCaseMixin, TestCase):
+    """Org-scoped twin of the bare ``/issues/{id}/user-reports/`` route.
+
+    ``other_organization`` is one the user *is* a member of, so a report
+    reachable through it proves the slug is being ignored rather than merely
+    proving that membership filtering works.
+    """
+
+    def setUp(self):
+        super().create_logged_in_user()
+        self.async_client.force_login(self.user)
+        self.event = baker.make(
+            "issue_events.IssueEvent",
+            issue__project=self.project,
+            organization=self.organization,
+        )
+        self.user_report = baker.make(
+            "issue_events.UserReport",
+            project=self.project,
+            issue=self.event.issue,
+            event_id=self.event.id.hex,
+        )
+        self.other_organization = baker.make("organizations_ext.Organization")
+        self.other_organization.add_user(self.user, OrganizationUserRole.ADMIN)
+
+    async def test_list(self):
+        url = list_organization_user_reports_url(
+            self.organization.slug, self.event.issue_id
+        )
+        res = await self.async_client.get(url)
+        self.assertContains(res, self.user_report.email)
+
+    async def test_list_wrong_organization(self):
+        url = list_organization_user_reports_url(
+            self.other_organization.slug, self.event.issue_id
+        )
+        res = await self.async_client.get(url)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.json()), 0)
 
 
 class UserReportAPIPermissionTests(APIPermissionTestCase):
