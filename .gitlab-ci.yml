@@ -380,7 +380,7 @@ release_manifest_merge:
     - if: '$CI_COMMIT_TAG =~ /^v\d+.\d+.\d+/ && $CI_COMMIT_REF_PROTECTED == "true"'
 
 update_deps:
-  image: renovate/renovate:43
+  image: renovate/renovate:44
   variables:
     RENOVATE_PLATFORM: gitlab
     RENOVATE_ENDPOINT: https://gitlab.com/api/v4
