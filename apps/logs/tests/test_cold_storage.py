@@ -17,7 +17,11 @@ from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from freezegun import freeze_time
 
-from glitchtip.cold_storage import get_cold_storage_backend, is_duckdb_available
+from glitchtip.cold_storage import (
+    CSV_QUOTE_CHAR,
+    get_cold_storage_backend,
+    is_duckdb_available,
+)
 from glitchtip.partition_manager import PartitionManager, UUID7Helper
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
@@ -1047,3 +1051,118 @@ class ILIKEEscapingTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         self.assertIn("log_event_started", matching_bodies)
         # Without escaping, "_" matches any char, so "logXeventXstarted" would match
         self.assertNotIn("logXeventXstarted", matching_bodies)
+
+
+# Log bodies are free text submitted by clients, so they can contain anything
+# Postgres accepts in a text column — including raw newlines, which split a
+# CSV record across physical lines during archival.
+HOSTILE_BODIES = [
+    "plain single line",
+    "traceback\n  File 'x.py', line 1\n    raise ValueError()",
+    "windows line\r\nendings",
+    "lone \r carriage return",
+    'quoted "value" inside',
+    "commas, everywhere, here",
+    f"contains {CSV_QUOTE_CHAR} the csv quote char",
+    f"doubled {CSV_QUOTE_CHAR}{CSV_QUOTE_CHAR} quote chars",
+    "backslashes \\ and \\n literal",
+    "unicode héllo 🌍 " + "ü" * 200,
+    "trailing newline\n",
+    "",
+    "\n",
+    "tabs\tand\tmore",
+]
+
+
+class HostileLogBodyArchivalTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
+    """
+    Test archival of log bodies containing CSV-hostile content.
+
+    Archival streams COPY ... TO STDOUT WITH (FORMAT CSV) and buffers the
+    pieces into chunks, so it depends on the driver framing that stream per
+    row rather than per physical line. A body containing a raw newline is one
+    CSV record spanning several lines; if the driver splits it, a chunk
+    boundary lands mid-record and the Parquet writer rejects the batch with
+    "incorrect number of fields for line N, expected 12 got 8" — failing the
+    partition and leaving it in hot storage indefinitely.
+
+    Postgres sends one CopyData message per row, and both psycopg and
+    django-vpg (>= 0.3.2) surface one piece per message, so records arrive
+    intact. This test pins that end to end: it is what catches a regression
+    in the driver, or a swap to one that reframes the stream.
+    """
+
+    def setUp(self):
+        self.create_project()
+        self.cold_dir = tempfile.mkdtemp(prefix="glitchtip_cold_test_")
+        self.date = datetime(2025, 5, 12, tzinfo=UTC)
+        self.partition = _create_log_partition(self.date)
+
+    def tearDown(self):
+        _drop_partition(self.partition)
+        shutil.rmtree(self.cold_dir, ignore_errors=True)
+
+    def _insert_hostile_logs(self) -> list[str]:
+        """Insert one log per hostile body. Returns the bodies inserted."""
+        with connection.cursor() as cursor:
+            for i, body in enumerate(HOSTILE_BODIES):
+                event_time = self.date + timedelta(seconds=i)
+                cursor.execute(
+                    "INSERT INTO logs_logevent "
+                    "(id, organization_id, project_id, level, severity_number, "
+                    "body, service, environment) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                    [
+                        str(UUID7Helper.from_datetime(event_time)),
+                        self.organization.id,
+                        self.project.id,
+                        LogLevel.INFO,
+                        9,
+                        body,
+                        "test-svc",
+                        "test",
+                    ],
+                )
+        return HOSTILE_BODIES
+
+    @override_settings(
+        GLITCHTIP_ENABLE_DUCKDB="true",
+        GLITCHTIP_COLD_STORAGE_BUCKET=None,
+        AWS_STORAGE_BUCKET_NAME=None,
+        BILLING_ENABLED=False,
+    )
+    def test_hostile_bodies_round_trip(self):
+        """Every row archives and reads back byte-exact."""
+        from glitchtip.cold_storage import archive_partition_per_org
+
+        with self.settings(GLITCHTIP_COLD_STORAGE_DIR=self.cold_dir):
+            bodies = self._insert_hostile_logs()
+
+            # Force multiple chunks so records cross a flush boundary — the
+            # single-chunk path never exercised the framing bug.
+            with mock.patch("glitchtip.cold_storage.ARCHIVE_CHUNK_ROWS", 2):
+                archived = archive_partition_per_org(
+                    self.partition,
+                    self.date.strftime("%Y%m%d"),
+                    "logs_logevent",
+                    EXPORT_COLUMN_TYPES,
+                    LOGS_SELECT_SQL,
+                )
+
+            self.assertEqual(len(archived), 1, "org should have an archived file")
+
+            from ..api import query_cold_storage
+
+            results = query_cold_storage(
+                organization_id=self.organization.id,
+                start_dt=self.date,
+                end_dt=self.date + timedelta(days=1),
+                limit=200,
+            )
+
+            with connection.cursor() as cursor:
+                cursor.execute(f"SELECT count(*) FROM {self.partition}")
+                pg_count = cursor.fetchone()[0]
+
+            self.assertEqual(len(results), pg_count)
+            self.assertEqual(sorted(r.body for r in results), sorted(bodies))
