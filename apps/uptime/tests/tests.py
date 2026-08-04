@@ -105,8 +105,11 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
             mon = baker.make(
                 Monitor, url="https://example.com", monitor_type=MonitorType.GET
             )
-        # Simulate post-pruning: only is_change=False checks remain
-        with freeze_time("2020-01-01"):
+        # Simulate post-pruning: only is_change=False checks remain. Written a
+        # minute earlier than the check below -- a check's identity carries its
+        # timestamp, so two checks minted in the same millisecond have no
+        # defined order. Real monitors are at least a second apart.
+        with freeze_time("2020-01-01 00:00:00"):
             baker.make(
                 MonitorCheck,
                 monitor=mon,
@@ -125,11 +128,11 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
             "last_change": None,
             "monitor_type": MonitorType.GET,
         }
-        with freeze_time("2020-01-01"):
+        with freeze_time("2020-01-01 00:01:00"):
             async_to_sync(save_monitor_checks)([result], timezone.now())
 
         # The new check should have is_change=True (baseline)
-        latest_check = mon.checks.order_by("-start_check").first()
+        latest_check = mon.checks.order_by("-id").first()
         self.assertTrue(latest_check.is_change)
 
     @aioresponses()
@@ -543,7 +546,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         self.assertTrue(mon.cached_is_up)  # still officially up
         self.assertEqual(mon.cached_consecutive_down, 1)
         # The raw failing check is still recorded, but it isn't a state change
-        latest = mon.checks.order_by("-start_check").first()
+        latest = mon.checks.order_by("-id").first()
         self.assertFalse(latest.is_up)
         self.assertFalse(latest.is_change)
 
@@ -564,7 +567,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         self.assertFalse(mon.cached_is_up)
         self.assertEqual(mon.cached_consecutive_down, 2)
         self.assertEqual(mon.cached_last_change, now)
-        latest = mon.checks.order_by("-start_check").first()
+        latest = mon.checks.order_by("-id").first()
         self.assertTrue(latest.is_change)
 
     def test_consecutive_down_resets_on_success(self):

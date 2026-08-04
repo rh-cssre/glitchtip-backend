@@ -87,12 +87,12 @@ async def fetch_checks_lateral(
     - No need to process all historical checks
     - Filters by organization_id for partition pruning
 
-    The inner ORDER BY is on ``id`` rather than ``start_check`` because ``id``
-    is the RANGE partition key. That is what lets Postgres plan an ordered
-    Append -- walking daily partitions newest-first and stopping once ``limit``
-    rows are in hand -- instead of a Merge Append that has to open an index
-    scan on every partition to find out which holds the newest row. Rows are
-    re-sorted by ``start_check`` on the way out for a stable display order.
+    Ordering by ``id`` is ordering by the check's start time, because that
+    timestamp is what the UUIDv7 encodes -- and ``id`` is also the RANGE
+    partition key. That is what lets Postgres plan an ordered Append, walking
+    daily partitions newest-first and stopping once ``limit`` rows are in hand,
+    instead of a Merge Append that has to open an index scan on every partition
+    to find out which holds the newest row.
 
     Returns a dict mapping monitor_id -> list of MonitorCheck instances.
     """
@@ -100,18 +100,18 @@ async def fetch_checks_lateral(
         return {}
 
     sql = """
-        SELECT c.id, c.organization_id, c.monitor_id, c.start_check,
+        SELECT c.id, c.organization_id, c.monitor_id,
                c.response_time, c.reason, c.is_up, c.is_change, c.data
         FROM unnest(%(monitor_ids)s::int[], %(organization_ids)s::int[]) AS m(id, org_id)
         CROSS JOIN LATERAL (
-            SELECT id, organization_id, monitor_id, start_check,
+            SELECT id, organization_id, monitor_id,
                    response_time, reason, is_up, is_change, data
             FROM uptime_monitorcheck
             WHERE monitor_id = m.id AND organization_id = m.org_id
             ORDER BY id DESC
             LIMIT %(limit)s
         ) c
-        ORDER BY c.monitor_id, c.start_check DESC
+        ORDER BY c.monitor_id, c.id DESC
     """
 
     def execute_query():
@@ -135,7 +135,6 @@ async def fetch_checks_lateral(
             id=row["id"],
             organization_id=row["organization_id"],
             monitor_id=row["monitor_id"],
-            start_check=row["start_check"],
             response_time=row["response_time"],
             reason=row["reason"],
             is_up=row["is_up"],
@@ -330,7 +329,7 @@ async def list_monitor_checks(
             monitor__organization__slug=organization_slug,
             monitor__organization__users=request.auth.user_id,
         )
-        .only("is_up", "start_check", "reason", "response_time")
+        .only("is_up", "reason", "response_time")
         # By the partition key, so paging deeper walks partitions newest-first
         # instead of re-opening every one per page. See MonitorCheck.Meta.
         .order_by("-id")

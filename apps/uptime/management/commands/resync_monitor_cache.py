@@ -18,7 +18,7 @@ FROM (
             LIMIT 1
         ) AS is_up,
         (
-            SELECT mc.start_check
+            SELECT uuid_extract_timestamp(mc.id)
             FROM uptime_monitorcheck mc
             WHERE mc.monitor_id = mon.id
               AND mc.organization_id = mon.organization_id

@@ -165,7 +165,7 @@ class BatchedDeleteSanityTestCase(TransactionTestCase):
                     organization=org,
                     is_up=True,
                     is_change=False,
-                    start_check=now,
+                    id=UUID7Helper.from_datetime(now),
                 )
             )
         MonitorCheck.objects.bulk_create(checks)

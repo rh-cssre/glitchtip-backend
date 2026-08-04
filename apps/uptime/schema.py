@@ -1,4 +1,5 @@
 import socket
+from datetime import datetime
 from typing import Annotated
 from urllib.parse import urlparse
 
@@ -19,9 +20,14 @@ from .utils import is_ip_blocked
 
 
 class MonitorCheckSchema(CamelSchema, ModelSchema):
+    # Not a column: read back out of the UUIDv7 primary key, which is where a
+    # check's start time is stored. Declared explicitly so the response shape
+    # is unchanged for API clients.
+    start_check: datetime
+
     class Meta:
         model = MonitorCheck
-        fields = ["is_up", "start_check", "reason"]
+        fields = ["is_up", "reason"]
 
 
 class MonitorCheckResponseTimeSchema(MonitorCheckSchema, ModelSchema):
