@@ -72,15 +72,15 @@ async def fetch(session, monitor):
     if monitor["monitor_type"] == MonitorType.HEARTBEAT:
         interval = timedelta(seconds=monitor["interval"])
         since = timezone.now() - interval
-        # Partition-aware: organization_id prunes hash sub-partitions,
+        # Partition-aware: organization_id prunes hash sub-partitions and
         # id__gte prunes RANGE (UUIDv7) partitions to the interval window.
         # Without both, Postgres locks every partition and exhausts
-        # max_locks_per_transaction.
+        # max_locks_per_transaction. Bounding id also *is* the time filter --
+        # the check's start time is the timestamp inside its id.
         if await MonitorCheck.objects.filter(
             organization_id=monitor["organization_id"],
             monitor_id=monitor["id"],
             id__gte=UUID7Helper._uuid7_for_timestamp(since, min_random=True),
-            start_check__gte=since,
         ).aexists():
             monitor["is_up"] = True
         return monitor
