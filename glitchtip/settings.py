@@ -157,10 +157,13 @@ DATA_UPLOAD_MAX_NUMBER_FIELDS = env.int(
     default=global_settings.DATA_UPLOAD_MAX_NUMBER_FIELDS,
 )
 
-# Hash sub-partitions per time partition. Raising this multiplies the
-# partitions, and the indexes on them, that Postgres locks for a query or DDL
-# statement it can't narrow to one partition. Raise max_locks_per_transaction
-# with it; 512 is a reasonable floor at any bucket count.
+# Hash sub-partitions per time partition. Scale it with the number of
+# organizations; 2 is the floor that still sub-partitions, so a query that
+# forgets to filter on organization_id is visible in development instead of
+# only in production. Raising it multiplies the partitions, and the indexes on
+# them, that Postgres locks for work it can't narrow to one organization
+# (retention sweeps, archival, DDL on a parent) — so raise
+# max_locks_per_transaction with it; 512 is a reasonable floor at any count.
 PARTITION_HASH_BUCKETS = env.int("PARTITION_HASH_BUCKETS", 2)
 
 # ── Retention settings ──────────────────────────────────────────────
