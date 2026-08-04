@@ -157,9 +157,14 @@ DATA_UPLOAD_MAX_NUMBER_FIELDS = env.int(
     default=global_settings.DATA_UPLOAD_MAX_NUMBER_FIELDS,
 )
 
-PARTITION_HASH_BUCKETS = env.int("PARTITION_HASH_BUCKETS", 4)
+# Hash sub-partitions per time partition. Raising this multiplies the
+# partitions, and the indexes on them, that Postgres locks for a query or DDL
+# statement it can't narrow to one partition. Raise max_locks_per_transaction
+# with it; 512 is a reasonable floor at any bucket count.
+PARTITION_HASH_BUCKETS = env.int("PARTITION_HASH_BUCKETS", 2)
 
 # ── Retention settings ──────────────────────────────────────────────
+# More retention days means more partitions, which spends the same lock budget.
 # Master default; falls back to legacy GLITCHTIP_MAX_EVENT_LIFE_DAYS
 GLITCHTIP_RETENTION_DAYS = env.int(
     "GLITCHTIP_RETENTION_DAYS",

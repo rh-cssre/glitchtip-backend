@@ -1,3 +1,7 @@
+# Unreleased
+
+- Change: Default `PARTITION_HASH_BUCKETS` from 4 to 2. Every partition, and every index on it, takes a lock slot in queries and DDL that PostgreSQL cannot narrow to one partition — a cross-organization sweep, `ALTER TABLE` on a parent, `DROP ... CASCADE`. Those locks come from a table shared by the whole instance, so exhausting it fails event ingestion and not only queries. Halving the bucket count halves that worst case. It does not change an organization-scoped query, which locks one hash leaf per time partition at any modulus. Existing partitions are untouched: only newly created ones follow the new default, and a table holding both moduli is correct. Retention and the number of indexes per table dominate this budget, so any install keeping months of events in PostgreSQL should raise `max_locks_per_transaction` — 512 is a reasonable floor — whatever the bucket count.
+
 # 6.2.3
 
 - Security: Fix an SSRF bypass where an authenticated user could reach internal addresses through uptime monitors, webhook alert recipients, or the project importer by pointing them at a public URL that redirects to an internal IP (or via DNS rebinding). Outbound requests now validate the address actually connected to; uptime checks and the importer re-validate every redirect hop, and webhook delivery no longer follows redirects at all. The importer also rejects internal URLs at submission time. Still governed by the existing `GLITCHTIP_ALLOW_PRIVATE_IPS` / `GLITCHTIP_UPTIME_ALLOW_PRIVATE_IPS` opt-outs. Reported by GitLab user ngit-tm.

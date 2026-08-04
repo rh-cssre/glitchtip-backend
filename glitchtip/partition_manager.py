@@ -189,7 +189,7 @@ class PartitionManager:
             partition_name="issue_events_issueaggregate_20250115",
             start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
             end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
-            hash_buckets=16,
+            hash_buckets=2,
             key_type="datetime",
         )
 
@@ -230,7 +230,7 @@ class PartitionManager:
         2. Child hash partitions (HASH on organization_id)
 
         Hash Buckets:
-        - If `hash_buckets` is None, it reads from settings.PARTITION_HASH_BUCKETS (default: 16).
+        - If `hash_buckets` is None, it reads from settings.PARTITION_HASH_BUCKETS.
         - If `hash_buckets` is 0, it creates a simple leaf partition (no hash sub-partitioning).
         - If `hash_buckets` > 0, it creates that many sub-partitions.
 
@@ -240,8 +240,8 @@ class PartitionManager:
             PARTITION BY HASH (organization_id);
 
           CREATE TABLE events_2025_01_15_h0 PARTITION OF events_2025_01_15
-            FOR VALUES WITH (MODULUS 16, REMAINDER 0);
-          ... (h1 through h15)
+            FOR VALUES WITH (MODULUS 2, REMAINDER 0);
+          ... (h1)
 
         Example for uuid7 mode:
           CREATE TABLE events_2025_01_15 PARTITION OF events

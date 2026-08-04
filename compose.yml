@@ -34,6 +34,11 @@ services:
       - postgres
       - -c
       - max_connections=300
+      # A query Postgres can't narrow to one partition locks every partition
+      # and every index on it, so the default of 64 is too low. Matches what
+      # the install docs recommend to self-hosters.
+      - -c
+      - max_locks_per_transaction=512
   valkey:
     image: valkey/valkey:9
   web:

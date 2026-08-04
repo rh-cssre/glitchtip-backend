@@ -23,6 +23,9 @@ x-healthcheck: &glitchtip-healthcheck
 services:
   postgres:
     image: postgres:18
+    # Match compose.yml, so end-to-end runs exercise the lock budget we
+    # recommend rather than Postgres' default of 64.
+    command: -c max_locks_per_transaction=512
     environment:
       POSTGRES_HOST_AUTH_METHOD: "trust"
     healthcheck:
