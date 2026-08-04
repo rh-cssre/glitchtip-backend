@@ -174,11 +174,30 @@ class MonitorCheck(models.Model):
     data = models.JSONField(null=True, blank=True)
 
     class Meta:
+        # Ordered by ``id``, not ``start_check``, because ``id`` is the RANGE
+        # partition key. Sorting by a non-partition-key column forces Postgres
+        # into a Merge Append that must open an index scan on *every* partition
+        # just to discover which one holds the newest row. Sorting by the
+        # partition key yields an ordered Append instead, which walks partitions
+        # newest-first and stops as soon as LIMIT is satisfied.
+        #
+        # The two orderings are equivalent in practice: ``id`` is a UUIDv7
+        # minted at insert and every writer records a ``start_check`` no later
+        # than that insert, so per monitor the sequences agree.
         indexes = [
-            models.Index(fields=["monitor", "-start_check"]),
-            models.Index(fields=["monitor", "is_change", "-start_check"]),
+            models.Index(fields=["monitor", "-id"], name="uptime_check_monitor_id_idx"),
+            # Partial: is_change marks an up/down transition, which is 0.03-0.6%
+            # of rows in practice. A full three-column index over every check
+            # costs more than the table itself for a filter almost nothing
+            # matches. ``is_change=False`` is served by the index above plus a
+            # filter, which is what you want when 99%+ of rows qualify.
+            models.Index(
+                fields=["monitor", "-id"],
+                name="uptime_check_change_id_idx",
+                condition=models.Q(is_change=True),
+            ),
         ]
-        ordering = ("-start_check",)
+        ordering = ("-id",)
 
     def __str__(self):
         return self.up_or_down

@@ -14,7 +14,7 @@ FROM (
             FROM uptime_monitorcheck mc
             WHERE mc.monitor_id = mon.id
               AND mc.organization_id = mon.organization_id
-            ORDER BY mc.start_check DESC
+            ORDER BY mc.id DESC
             LIMIT 1
         ) AS is_up,
         (
@@ -23,7 +23,7 @@ FROM (
             WHERE mc.monitor_id = mon.id
               AND mc.organization_id = mon.organization_id
               AND mc.is_change = TRUE
-            ORDER BY mc.start_check DESC
+            ORDER BY mc.id DESC
             LIMIT 1
         ) AS last_change
     FROM uptime_monitor mon
