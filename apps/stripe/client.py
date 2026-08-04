@@ -166,8 +166,13 @@ async def _paginated_stripe_get[T: BaseModel](
 
 
 async def list_products() -> AsyncGenerator[list[ProductExpandedPrice], None]:
-    """Yield each page of products with associated default price"""
-    params = {"active": "true", "expand": ["data.default_price"]}
+    """Yield each page of products with associated default price.
+
+    Archived products are included so the sync can record ``active=False``
+    rather than infer it from absence — absence now means the product was
+    deleted in Stripe, or its metadata no longer qualifies it for sync.
+    """
+    params = {"expand": ["data.default_price"]}
     async for page in _paginated_stripe_get(
         "products", ProductExpandedPriceListResponse, params
     ):

@@ -48,9 +48,11 @@ class OverageAPITestCase(TestCase):
         self.org.save(update_fields=["stripe_primary_subscription"])
 
         # A provisioned metered overage price.
-        overage_product = baker.make("stripe.StripeProduct", events=0, is_overage=True)
+        self.overage_product = baker.make(
+            "stripe.StripeProduct", events=None, is_overage=True
+        )
         self.overage_price = baker.make(
-            "stripe.StripePrice", product=overage_product, price=0, is_metered=True
+            "stripe.StripePrice", product=self.overage_product, price=0, is_metered=True
         )
 
     def _status(self):
@@ -69,6 +71,33 @@ class OverageAPITestCase(TestCase):
         self.assertTrue(body["eligible"])
         self.assertTrue(body["configured"])
         self.assertEqual(body["quota"], QUOTA)
+
+    def test_archived_overage_product_is_not_configured(self):
+        """Archiving the overage product in Stripe turns the feature off — this
+        lookup is the only gate, and the frontend hides the card on it."""
+        self.overage_product.active = False
+        self.overage_product.save(update_fields=["active"])
+
+        self.assertFalse(self._status().json()["configured"])
+
+    def test_archived_overage_price_is_not_configured(self):
+        """Same for retiring just the price (e.g. a superseded tier schedule)."""
+        self.overage_price.active = False
+        self.overage_price.save(update_fields=["active"])
+
+        self.assertFalse(self._status().json()["configured"])
+
+    def test_quotaless_plan_is_not_eligible(self):
+        """`eligible` must agree with the guard configure_overage applies, or the
+        card offers a toggle the POST would reject."""
+        self.product.events = None
+        self.product.save(update_fields=["events"])
+
+        body = self._status().json()
+        self.assertFalse(body["eligible"])
+
+        res = self._configure({"enabled": True, "capCents": 5000})
+        self.assertEqual(res.status_code, 400)
 
     def test_enable_attaches_item_and_sets_cap(self):
         item = AsyncMock(return_value=type("I", (), {"id": "si_new"})())

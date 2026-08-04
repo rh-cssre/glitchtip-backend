@@ -38,6 +38,9 @@ from .schema import (
 from .utils import (
     compute_cycle,
     is_metered_price,
+    is_syncable_product,
+    price_kwargs,
+    product_kwargs,
     select_subscription_items,
     unix_to_datetime,
 )
@@ -46,24 +49,18 @@ logger = logging.getLogger(__name__)
 
 
 async def update_product(product: Product):
-    metadata = product.metadata
-    product_type = metadata.get("product_type", "").lower()
-    is_overage = product_type == "overage"
-    if not is_overage and ("events" not in metadata or product_type != "hosted"):
+    """Apply a product.created/updated webhook.
+
+    Archiving a product in Stripe arrives as product.updated with active=False,
+    so it now takes effect within seconds instead of at the next nightly sync.
+    The field mapping is shared with that sync so the two writers can't disagree
+    about what a product row means.
+    """
+    if not is_syncable_product(product):
         return
 
     await StripeProduct.objects.aupdate_or_create(
-        stripe_id=product.id,
-        defaults={
-            "name": product.name,
-            "description": product.description,
-            "events": int(metadata.get("events", 0)),
-            "is_public": metadata.get("is_public") == "true",
-            "is_overage": is_overage,
-            "marketing_features": [
-                f["name"] for f in product.marketing_features if f.get("name")
-            ],
-        },
+        stripe_id=product.id, defaults=product_kwargs(product)
     )
 
 
@@ -76,21 +73,9 @@ async def update_price(price: Price):
     ) or not await StripeProduct.objects.filter(stripe_id=price.product).aexists():
         return
 
-    metadata = price.metadata or {}
-    recurring = price.recurring or {}
-
     await StripePrice.objects.aupdate_or_create(
         stripe_id=price.id,
-        defaults={
-            "product_id": price.product,
-            "nickname": price.nickname or "",
-            "price": price.unit_amount / 100 if price.unit_amount else 0,
-            "no_throttle": metadata.get("no_throttle", "").lower() == "true",
-            "is_public": metadata.get("is_public", "").lower() == "true",
-            "is_metered": metered,
-            "meter_id": recurring.get("meter") or "",
-            "interval": recurring.get("interval", "month"),
-        },
+        defaults={"product_id": price.product, **price_kwargs(price)},
     )
 
 
