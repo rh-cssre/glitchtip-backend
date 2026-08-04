@@ -1,93 +1,85 @@
-"""Make the UUIDv7 ``id`` the only timestamp on MonitorCheck.
+"""Rebuild MonitorCheck: one timestamp (the UUIDv7 id), weekly partitions.
 
-``start_check`` duplicated information already carried by ``id``, and the two
-could disagree: ``id`` defaulted to insert time while ``start_check`` recorded
-probe time. Dropping the column removes the divergence and, more usefully,
-makes ``id`` the sole temporal column -- which is also the RANGE partition key,
-so a time-based query on this table can no longer be written without pruning
+Two changes that both need the partition tree replaced, done together because
+doing them separately would mean discarding check history twice.
+
+**``start_check`` is dropped.** It duplicated information already carried by
+``id``, and the two could disagree: ``id`` defaulted to insert time while
+``start_check`` recorded probe time. Beyond removing the divergence, it makes
+``id`` the sole temporal column -- and ``id`` is the RANGE partition key, so a
+time-based query on this table can no longer be written without pruning
 partitions.
 
-Three phases, in this order, all idempotent and all outside a transaction.
+**Range partitions become weekly.** The cost of a partitioned table is paid in
+relation locks, and locks scale with the number of RANGE nodes rather than the
+rows in them. One monitors page load takes a lock per partition it plans over.
+Measured against a faithful reproduction:
 
-1. **Discard check history older than PRESERVE_DAYS.** This is not
-   housekeeping, it is what makes the rest of the migration safe. ``ALTER TABLE
-   ... DROP COLUMN`` recurses through the whole partition tree and takes one
-   lock per relation in a single transaction. Measured on a faithful
-   reproduction of a large install (98 daily partitions x 16 hash buckets =
-   1,568 leaves) that is **3,337 locks** -- over half of a default cluster's
-   entire shared lock table (``max_locks_per_transaction`` 64 x
-   ``max_connections`` 100 = 6,400), which is shared with every other backend.
-   Trimming to a one-week window first brings it to **243**. At the default 4
-   hash buckets the same numbers are 985 and 75.
+    daily,  90-day retention, 4 buckets     1,946 locks
+    daily,  90-day retention, 16 buckets    6,602 locks
+    weekly, 90-day retention, any buckets     118 locks
 
-   Dropping whole partitions is cheap (metadata only), is done one partition
-   per statement so locks never accumulate, and is the same operation retention
-   performs routinely. The cost is history: on upgrade, checks older than a
-   week are gone rather than aging out over the retention window. Monitor
-   *state* is unaffected -- ``cached_is_up``, ``cached_last_change`` and
-   ``cached_consecutive_down`` live on ``uptime_monitor``, and ``_next_state``
-   reads only those, so alerting cannot be perturbed by this.
+A stock cluster's shared lock table is ``max_locks_per_transaction`` (64) x
+``max_connections`` (100) = 6,400 entries, shared by every backend -- so on a
+16-bucket install a single page load could exhaust it and fail unrelated
+transactions, ingest included. Uptime check volume is orders of magnitude below
+event volume, so daily granularity bought nothing except a finer retention
+boundary; weekly means data may be kept up to 7 days past retention before its
+partition is dropped.
 
-2. **Drop the column.** Metadata only; Postgres marks it dropped rather than
-   rewriting rows. This also drops the two ``start_check`` indexes that
-   depended on it, so they need no separate migration.
+Sequence, all outside a transaction and all idempotent:
 
-3. **Build the replacement indexes**, one leaf at a time with CONCURRENTLY,
-   adopted into a partitioned index via ``ON ONLY`` + ``ATTACH PARTITION``.
-   Postgres refuses CONCURRENTLY on a partitioned parent but allows it per
-   leaf, so nothing takes a long exclusive lock. Doing this after phase 1 means
-   building over ~112 leaves instead of ~1,568.
+1. Drop every existing partition, one per statement so locks never accumulate.
+   This discards check history. It is deliberate: preserving a window would
+   leave daily partitions in place that overlap the weekly ones created below,
+   and the resulting mixed-granularity edge cases are exactly the sort of thing
+   that turns an upgrade into a failed migration. Losing old check data is
+   recoverable by waiting; a wedged migration is not.
+2. Drop the column. With no partitions left this touches the parent alone -- a
+   handful of locks rather than the 3,337 measured against a full tree. It also
+   drops the two ``start_check`` indexes that depended on it.
+3. Create the replacement indexes on the now-childless parent. Instant, and
+   partitions created afterwards inherit them automatically, so none of the
+   usual CONCURRENTLY-per-leaf machinery is needed.
+4. Create weekly partitions covering the current window so ingest has somewhere
+   to land immediately. ``maintain_partitions`` keeps them going from there.
 
-Re-running is safe and is the intended recovery from any interruption: dropped
-partitions stay dropped, the column drop is ``IF EXISTS``, and index building
-skips leaves that already have a valid index while replacing any left INVALID
-by a killed build. Phase 2 refuses to run rather than risk exhausting the lock
-table, with an error saying exactly what to do.
+**Alerting is unaffected.** ``cached_is_up``, ``cached_last_change`` and
+``cached_consecutive_down`` live on ``uptime_monitor``, and ``_next_state``
+reads only those -- ``perform_checks`` never consults ``MonitorCheck``. That
+includes the post-pruning ``is_change`` baseline path.
 
-**Do not run ``resync_monitor_cache`` after this.** It rebuilds
-``cached_is_up``/``cached_last_change`` *from* check history, so running it
-against the trimmed table would discard monitor state this migration preserves.
+**Do not run ``resync_monitor_cache`` after upgrading.** It rebuilds those
+cached fields *from* check history, which this migration has just cleared.
 """
 
 import logging
+from datetime import UTC, datetime, timedelta
 
-import apps.uptime.models as apps_models
+import apps.uptime.models as uptime_models
 from django.db import migrations, models
 
 logger = logging.getLogger(__name__)
 
 TABLE = "uptime_monitorcheck"
 
-# Check history retained through the upgrade. A week is well past the point
-# anyone reads an individual check, and it keeps the lock count for phase 2 an
-# order of magnitude below the cluster's budget.
-PRESERVE_DAYS = 7
-
-# Refuse phase 2 above this many relations in the tree. Chosen well under a
-# default cluster's 6,400-entry shared lock table, since that table is shared
-# with every other backend and a migration must not be the thing that exhausts
-# it. Roughly 2.5 locks are taken per leaf (leaf table, its indexes, and the
-# enclosing partitioned index).
-MAX_TREE_RELATIONS = 800
-
-# (parent index name, child suffix, columns, predicate)
 INDEX_SPECS = (
-    ("uptime_check_monitor_id_idx", "mid", "(monitor_id, id DESC)", ""),
-    ("uptime_check_change_id_idx", "cid", "(monitor_id, id DESC)", " WHERE is_change"),
+    ("uptime_check_monitor_id_idx", "(monitor_id, id DESC)", ""),
+    ("uptime_check_change_id_idx", "(monitor_id, id DESC)", " WHERE is_change"),
 )
 
 
-def _children(cursor, relname):
-    """Immediate partitions of ``relname`` as (name, relkind) pairs.
+def _partitions(cursor, relname):
+    """Immediate partitions of ``relname``.
 
     Relations are resolved by name through ``to_regclass`` rather than by
-    passing oids as query parameters -- the Rust driver has no codec for the
-    oid type in either direction -- which also means the search_path decides
-    the schema, matching how the DDL below resolves.
+    passing oids as parameters: the Rust driver has no codec for the oid type
+    in either direction. It also means search_path decides the schema, matching
+    how the DDL below resolves.
     """
     cursor.execute(
         """
-        SELECT c.relname, c.relkind
+        SELECT c.relname
         FROM pg_inherits i
         JOIN pg_class c ON c.oid = i.inhrelid
         WHERE i.inhparent = to_regclass(%s)
@@ -95,112 +87,11 @@ def _children(cursor, relname):
         """,
         [relname],
     )
-    return cursor.fetchall()
-
-
-def _attached_index(cursor, parent_index, child_table):
-    """Index already attached to ``parent_index`` covering ``child_table``.
-
-    Keyed on the child *table*, not on a computed index name: when a partition
-    is created while the parent index exists, Postgres clones the index onto it
-    under a name of its own choosing and attaches it. Looking for our own name
-    would miss that and then fail the ATTACH with "another index is already
-    attached".
-    """
-    cursor.execute(
-        """
-        SELECT c.relname
-        FROM pg_inherits i
-        JOIN pg_class c ON c.oid = i.inhrelid
-        JOIN pg_index x ON x.indexrelid = c.oid
-        WHERE i.inhparent = to_regclass(%s) AND x.indrelid = to_regclass(%s)
-        """,
-        [parent_index, child_table],
-    )
-    row = cursor.fetchone()
-    return row[0] if row else None
+    return [row[0] for row in cursor.fetchall()]
 
 
 def _exists(cursor, relname):
     cursor.execute("SELECT to_regclass(%s) IS NOT NULL", [relname])
-    return cursor.fetchone()[0]
-
-
-def _index_valid(cursor, name):
-    """None when absent, else indisvalid."""
-    cursor.execute(
-        """
-        SELECT i.indisvalid
-        FROM pg_class c
-        JOIN pg_index i ON i.indexrelid = c.oid
-        WHERE c.oid = to_regclass(%s)
-        """,
-        [name],
-    )
-    row = cursor.fetchone()
-    return None if row is None else row[0]
-
-
-def _child_index_name(child_relname, suffix):
-    # Postgres caps identifiers at 63 bytes.
-    return f"{child_relname[: 63 - len(suffix) - 1]}_{suffix}"
-
-
-def _build_index(
-    cursor, relname, relkind, index_name, columns, predicate, suffix, counts
-):
-    if relkind == "p":
-        if _index_valid(cursor, index_name) is None:
-            cursor.execute(
-                f'CREATE INDEX "{index_name}" ON ONLY "{relname}" {columns}{predicate}'
-            )
-        for child_name, child_kind in _children(cursor, relname):
-            if _attached_index(cursor, index_name, child_name):
-                counts["skipped"] += 1
-                continue
-            child_index = _child_index_name(child_name, suffix)
-            _build_index(
-                cursor,
-                child_name,
-                child_kind,
-                child_index,
-                columns,
-                predicate,
-                suffix,
-                counts,
-            )
-            cursor.execute(
-                f'ALTER INDEX "{index_name}" ATTACH PARTITION "{child_index}"'
-            )
-        return
-
-    valid = _index_valid(cursor, index_name)
-    if valid is False:
-        # Left behind by an interrupted build; it can never become valid.
-        cursor.execute(f'DROP INDEX CONCURRENTLY IF EXISTS "{index_name}"')
-        valid = None
-    if valid is None:
-        cursor.execute(
-            f'CREATE INDEX CONCURRENTLY "{index_name}" ON "{relname}" '
-            f"{columns}{predicate}"
-        )
-        counts["built"] += 1
-    else:
-        counts["skipped"] += 1
-
-
-def _count_tree_relations(cursor, relname):
-    cursor.execute(
-        """
-        WITH RECURSIVE tree AS (
-            SELECT to_regclass(%s) AS oid
-            UNION ALL
-            SELECT i.inhrelid FROM pg_inherits i JOIN tree t ON i.inhparent = t.oid
-        )
-        SELECT count(*) FROM tree
-        """,
-        [relname],
-    )
     return cursor.fetchone()[0]
 
 
@@ -219,52 +110,40 @@ def forwards(apps, schema_editor):
                 f"{TABLE} does not exist. Apply the earlier uptime migrations first."
             )
 
-        # Phase 1 -- trim to the preserve window so phases 2 and 3 stay small.
-        dropped = PartitionManager(connection).drop_old_partitions(TABLE, PRESERVE_DAYS)
-        logger.info(
-            "Dropped %s monitor check partitions older than %s days",
-            dropped,
-            PRESERVE_DAYS,
-        )
+        # 1 -- drop every partition, one statement at a time.
+        existing = _partitions(cursor, TABLE)
+        for name in existing:
+            cursor.execute(f'DROP TABLE IF EXISTS "{name}" CASCADE')
+        logger.info("Dropped %s monitor check partitions", len(existing))
 
-        # Phase 2 -- drop the column, which also drops its two indexes.
-        relations = _count_tree_relations(cursor, TABLE)
-        if relations > MAX_TREE_RELATIONS:
-            raise RuntimeError(
-                f"{TABLE} still has {relations} partitions after trimming to "
-                f"{PRESERVE_DAYS} days, and dropping a column locks every one of "
-                "them in a single transaction. Refusing to proceed rather than "
-                "risk exhausting the cluster lock table.\n"
-                "Either raise max_locks_per_transaction (a value giving "
-                f"max_locks_per_transaction * max_connections well above "
-                f"{relations * 3} is safe) and re-run, or run "
-                "'manage.py maintain_partitions' first to clear the backlog."
-            )
+        # 2 -- the column, and with it the indexes that referenced it.
         cursor.execute(f'ALTER TABLE "{TABLE}" DROP COLUMN IF EXISTS start_check')
 
-        # Phase 3 -- build the replacement indexes over what remains.
-        for index_name, suffix, columns, predicate in INDEX_SPECS:
-            counts = {"built": 0, "skipped": 0}
-            _build_index(
-                cursor, TABLE, "p", index_name, columns, predicate, suffix, counts
+        # 3 -- replacement indexes on an empty parent; new partitions inherit.
+        for index_name, columns, predicate in INDEX_SPECS:
+            cursor.execute(
+                f'CREATE INDEX IF NOT EXISTS "{index_name}" '
+                f'ON "{TABLE}" {columns}{predicate}'
             )
-            logger.info(
-                "%s: %s leaves built, %s already present",
-                index_name,
-                counts["built"],
-                counts["skipped"],
-            )
-            if _index_valid(cursor, index_name) is not True:
-                raise RuntimeError(
-                    f"{index_name} is not valid -- some partitions were not "
-                    "attached. Re-run this migration; it resumes where it stopped."
-                )
+
+    # 4 -- weekly partitions so ingest has somewhere to land immediately.
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    start_of_week = today - timedelta(days=today.weekday())
+    PartitionManager(connection).create_partitions_for_date_range(
+        parent_table=TABLE,
+        start_date=start_of_week,
+        end_date=start_of_week + timedelta(weeks=3),
+        partition_interval="WEEK",
+        hash_buckets=None,
+        hash_column="organization_id",
+        key_type="uuid7",
+    )
 
 
 def backwards(apps, schema_editor):
     """Restore the column, empty. The original values are not recoverable."""
     with schema_editor.connection.cursor() as cursor:
-        for index_name, _, _, _ in INDEX_SPECS:
+        for index_name, _, _ in INDEX_SPECS:
             cursor.execute(f'DROP INDEX IF EXISTS "{index_name}"')
         cursor.execute(
             f'ALTER TABLE "{TABLE}" ADD COLUMN IF NOT EXISTS start_check '
@@ -273,8 +152,7 @@ def backwards(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    # CREATE INDEX CONCURRENTLY cannot run in a transaction, and each partition
-    # drop must commit on its own so locks do not accumulate.
+    # Each partition drop must commit on its own so locks never accumulate.
     atomic = False
 
     dependencies = [
@@ -304,7 +182,7 @@ class Migration(migrations.Migration):
                     model_name="monitorcheck",
                     name="id",
                     field=models.UUIDField(
-                        default=apps_models._generate_uuid7,
+                        default=uptime_models._generate_uuid7,
                         editable=False,
                         help_text=(
                             "UUIDv7; its embedded timestamp is when the check started"

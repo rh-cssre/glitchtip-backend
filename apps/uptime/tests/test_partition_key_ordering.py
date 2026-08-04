@@ -31,28 +31,31 @@ from ..constants import MonitorType
 from ..models import Monitor, MonitorCheck
 from ..tasks import save_monitor_checks
 
-# Days of daily partitions the fixture writes into. Each is its own RANGE
-# partition (times PARTITION_HASH_BUCKETS leaves), so this is also roughly how
-# many partitions an unordered read would have to open.
-FIXTURE_DAYS = 30
+# Weeks of partitions the fixture writes into -- a quarter, matching the default
+# retention window. Each week is its own RANGE partition (times
+# PARTITION_HASH_BUCKETS leaves), so this is also how many partitions a read
+# that cannot stop early would have to open.
+FIXTURE_WEEKS = 13
 
 # Matches the API's per-monitor check limit.
 CHART_LIMIT = 60
 
 
 def create_fixture_partitions():
-    """Daily partitions covering the backdated fixture range.
+    """Weekly partitions covering the backdated fixture range.
 
-    The test database only carries partitions from today forward, so backdated
-    rows need their own. Bounds land on day boundaries so they do not overlap
-    the partition already covering today.
+    The test database only carries partitions from the current week forward, so
+    backdated rows need their own. Bounds are aligned to week boundaries and
+    stop at the start of the current week, so they abut the partitions the
+    migration created rather than overlapping them.
     """
     today = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    start_of_week = today - timedelta(days=today.weekday())
     PartitionManager().create_partitions_for_date_range(
         parent_table="uptime_monitorcheck",
-        start_date=today - timedelta(days=FIXTURE_DAYS),
-        end_date=today,
-        partition_interval="DAY",
+        start_date=start_of_week - timedelta(weeks=FIXTURE_WEEKS),
+        end_date=start_of_week,
+        partition_interval="WEEK",
         hash_buckets=None,
         hash_column="organization_id",
         key_type="uuid7",
@@ -403,7 +406,7 @@ class MonitorCheckPlanShapeTestCase(GlitchTestCase):
         executed = self._executed_indexes(plan)
         skipped = plan.count("never executed")
 
-        # All 60 come from the current day, so the walk should reach data
+        # All 60 come from the current week, so the walk should reach data
         # almost immediately and stop. It is not 1: partition maintenance keeps
         # a week of empty partitions ahead of now, and an ordered Append starts
         # at the newest, so it descends through those before finding rows. That
@@ -415,10 +418,11 @@ class MonitorCheckPlanShapeTestCase(GlitchTestCase):
             f"partition, opened {len(executed)}:\n{plan}",
         )
         # And the rest of the window must be left untouched rather than seeded.
-        self.assertGreaterEqual(
+        self.assertGreater(
             skipped,
-            FIXTURE_DAYS - 2,
-            f"expected ~{FIXTURE_DAYS} partitions unopened, saw {skipped}:\n{plan}",
+            len(executed),
+            f"expected most partitions to go unopened, {len(executed)} opened "
+            f"and {skipped} skipped:\n{plan}",
         )
 
     def test_chart_query_uses_the_partition_key_index(self):

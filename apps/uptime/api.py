@@ -75,7 +75,7 @@ def get_monitor_queryset(user_id: int, organization_slug: str):
 
 async def fetch_checks_lateral(
     monitor_ids: list[int],
-    organization_ids: list[int],
+    organization_id: int,
     limit: int = 60,
 ) -> dict[int, list[MonitorCheck]]:
     """
@@ -90,9 +90,17 @@ async def fetch_checks_lateral(
     Ordering by ``id`` is ordering by the check's start time, because that
     timestamp is what the UUIDv7 encodes -- and ``id`` is also the RANGE
     partition key. That is what lets Postgres plan an ordered Append, walking
-    daily partitions newest-first and stopping once ``limit`` rows are in hand,
+    partitions newest-first and stopping once ``limit`` rows are in hand,
     instead of a Merge Append that has to open an index scan on every partition
     to find out which holds the newest row.
+
+    ``organization_id`` is a single value rather than one per monitor because
+    every caller is scoped to one organization, and that lets the planner prune
+    the HASH dimension instead of deferring it to execution. Pruning at plan
+    time is what keeps the relation locks down: with the org supplied per row
+    the planner must consider every hash bucket of every partition, which
+    measured 6,602 locks against a 16-bucket install -- more than a stock
+    cluster's entire shared lock table. As a single value it is 118.
 
     Returns a dict mapping monitor_id -> list of MonitorCheck instances.
     """
@@ -102,12 +110,12 @@ async def fetch_checks_lateral(
     sql = """
         SELECT c.id, c.organization_id, c.monitor_id,
                c.response_time, c.reason, c.is_up, c.is_change, c.data
-        FROM unnest(%(monitor_ids)s::int[], %(organization_ids)s::int[]) AS m(id, org_id)
+        FROM unnest(%(monitor_ids)s::int[]) AS m(id)
         CROSS JOIN LATERAL (
             SELECT id, organization_id, monitor_id,
                    response_time, reason, is_up, is_change, data
             FROM uptime_monitorcheck
-            WHERE monitor_id = m.id AND organization_id = m.org_id
+            WHERE monitor_id = m.id AND organization_id = %(organization_id)s
             ORDER BY id DESC
             LIMIT %(limit)s
         ) c
@@ -120,7 +128,7 @@ async def fetch_checks_lateral(
                 sql,
                 {
                     "monitor_ids": monitor_ids,
-                    "organization_ids": organization_ids,
+                    "organization_id": organization_id,
                     "limit": limit,
                 },
             )
@@ -156,10 +164,19 @@ async def attach_checks_to_monitors(
     # times (e.g. shared across status pages), and duplicate ids in the
     # unnest() would run the LATERAL subquery once per copy and double the
     # returned checks. Attach the result to every instance below.
-    org_by_monitor = {m.id: m.organization_id for m in monitors}
-    checks_by_monitor = await fetch_checks_lateral(
-        list(org_by_monitor), list(org_by_monitor.values()), limit
-    )
+    #
+    # Grouped by organization so each query can name a single organization_id,
+    # which the planner needs in order to prune hash partitions (see
+    # fetch_checks_lateral). Every caller is org-scoped, so this is one group.
+    monitor_ids_by_org: dict[int, set[int]] = defaultdict(set)
+    for monitor in monitors:
+        monitor_ids_by_org[monitor.organization_id].add(monitor.id)
+
+    checks_by_monitor: dict[int, list[MonitorCheck]] = {}
+    for organization_id, monitor_ids in monitor_ids_by_org.items():
+        checks_by_monitor.update(
+            await fetch_checks_lateral(sorted(monitor_ids), organization_id, limit)
+        )
     for monitor in monitors:
         # Use Django's prefetch cache so serializers see the checks
         monitor._prefetched_objects_cache = {
