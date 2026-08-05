@@ -107,6 +107,7 @@ def serialize_alert(alert) -> dict:
         "timespanMinutes": alert.timespan_minutes,
         "quantity": alert.quantity,
         "uptime": alert.uptime,
+        "environments": alert.environments,
     }
     if hasattr(alert, "alertrecipient_set"):
         recipients = alert.alertrecipient_set.all()

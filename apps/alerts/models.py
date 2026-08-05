@@ -4,6 +4,7 @@ from asgiref.sync import sync_to_async
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
+from apps.issue_events.constants import MAX_TAG_LENGTH
 from glitchtip.base_models import CreatedModel
 
 from .constants import RecipientType
@@ -22,6 +23,15 @@ class ProjectAlert(CreatedModel):
     quantity = models.PositiveSmallIntegerField(blank=True, null=True)
     uptime = models.BooleanField(
         default=False, help_text="Send alert on any uptime monitor check failure"
+    )
+    environments = ArrayField(
+        models.CharField(max_length=MAX_TAG_LENGTH),
+        default=list,
+        blank=True,
+        help_text=(
+            "Only alert on events from these environments. Empty matches every "
+            "environment."
+        ),
     )
 
 

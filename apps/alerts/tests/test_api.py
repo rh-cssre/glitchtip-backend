@@ -93,6 +93,47 @@ class AlertAPITestCase(GlitchTipTestCaseMixin, TestCase):
         for i, recipient in enumerate(created):
             self.assertEqual(recipient.tags_to_add, recipients[i]["tagsToAdd"])
 
+    async def test_project_alerts_environments(self):
+        url = reverse(
+            "api:create_project_alert", args=[self.organization.slug, self.project.slug]
+        )
+        data = {
+            "name": "foo",
+            "timespanMinutes": 60,
+            "quantity": 2,
+            # Blanks and duplicates are normalized away so they cannot silently
+            # widen the filter to every environment
+            "environments": ["production", " staging ", "", "production"],
+        }
+        res = await self.async_client.post(url, data, content_type="application/json")
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.json()["environments"], ["production", "staging"])
+        alert = await ProjectAlert.objects.filter(name="foo").afirst()
+        self.assertEqual(alert.environments, ["production", "staging"])
+
+        url = reverse(
+            "api:update_project_alert",
+            args=[self.organization.slug, self.project.slug, alert.pk],
+        )
+        # Omitting the field leaves it alone, matching how this endpoint treats
+        # every other field it receives
+        res = await self.async_client.put(
+            url,
+            {"name": "foo", "timespanMinutes": 60, "quantity": 2},
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["environments"], ["production", "staging"])
+
+        # Sending an empty list clears it, restoring alerts on all environments
+        res = await self.async_client.put(
+            url,
+            {"name": "foo", "timespanMinutes": 60, "quantity": 2, "environments": []},
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["environments"], [])
+
     async def test_project_alerts_create_invalid_recipient_type(self):
         url = reverse(
             "api:create_project_alert", args=[self.organization.slug, self.project.slug]
