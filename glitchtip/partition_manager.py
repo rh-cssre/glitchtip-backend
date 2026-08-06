@@ -500,18 +500,31 @@ FOR VALUES FROM ({range_from}) TO ({range_to});"""
         # Check what already exists to avoid unnecessary heavy locks.
         range_exists = self.table_exists(partition_name)
         if range_exists and hash_buckets > 0:
+            if not self.is_table_partitioned(partition_name):
+                # The range partition was created as a plain leaf (with
+                # hash_buckets=0, as import_legacy_events does). CREATE TABLE
+                # ... PARTITION OF against it raises 42P17, which would abort
+                # the whole maintenance run and leave later tables without
+                # their partitions. Leave it alone instead.
+                logger.warning(
+                    f"Partition {partition_name} is a plain leaf, not "
+                    f"sub-partitioned by hash; leaving as-is (cannot add "
+                    f"{hash_buckets} hash children to it)"
+                )
+                return 0
             existing_children = self.list_partitions(partition_name)
         else:
             existing_children = []
 
-        # A hash partition set always tiles the entire keyspace at a single
-        # modulus, and that modulus cannot be changed online (no incremental
-        # bucket add without detach + rewrite). If a range partition already
-        # has hash children at a *different* modulus than the configured
-        # bucket count, it is already 100% complete — every row maps somewhere
-        # — so attempting to create buckets at the new modulus would overlap
-        # the existing ones ("partition ... would overlap partition ..."). In
-        # that case the only correct action is to leave the existing set alone.
+        # A hash partition set tiles the entire keyspace at a single modulus,
+        # and that modulus cannot be changed online (no incremental bucket add
+        # without detach + rewrite). So when a range partition already has
+        # hash children at a *different* modulus than the configured bucket
+        # count, creating buckets at the new modulus would overlap the existing
+        # ones ("partition ... would overlap partition ...") and the existing
+        # set must be left alone — but only once it is actually complete. A set
+        # missing a remainder tiles nothing of the gap, and rows hashing there
+        # are rejected outright, so completeness is checked rather than assumed.
         existing_modulus = None
         if existing_children:
             moduli = set()
@@ -543,11 +556,34 @@ FOR VALUES FROM ({range_from}) TO ({range_to});"""
                 return 0
 
         if existing_modulus is not None and existing_modulus != hash_buckets:
-            # The range partition is already fully tiled at a modulus that
-            # differs from the configured bucket count. A hash set always
-            # covers the whole keyspace at its modulus, and that modulus
-            # cannot be changed online (detach + rewrite required), so do
-            # nothing here regardless of how many children are present.
+            if len(existing_children) < existing_modulus:
+                # Incomplete set at the old modulus: rows whose hash lands on a
+                # missing remainder have nowhere to go and are rejected with
+                # 23514. Repair it at the modulus the set already uses — those
+                # children cannot overlap the existing ones — rather than
+                # leaving a slice of organizations unable to ingest until the
+                # partition ages out. Recursing with the existing modulus takes
+                # the name-based gap fill below.
+                logger.warning(
+                    f"Partition {partition_name} has an incomplete "
+                    f"{existing_modulus}-bucket hash set "
+                    f"({len(existing_children)} of {existing_modulus} present); "
+                    f"filling the gaps at that modulus, since the configured "
+                    f"count ({hash_buckets}) cannot be applied to it"
+                )
+                return self.execute_partition_creation(
+                    parent_table=parent_table,
+                    partition_name=partition_name,
+                    start_date=start_date,
+                    end_date=end_date,
+                    hash_buckets=existing_modulus,
+                    hash_column=hash_column,
+                    key_type=key_type,
+                    partition_column=partition_column,
+                )
+
+            # Complete set at a differing modulus: it already covers the whole
+            # keyspace, so there is nothing to do and nothing to warn about.
             logger.info(
                 f"Partition {partition_name} has a {existing_modulus}-bucket "
                 f"hash set; configured count ({hash_buckets}) differs, leaving "
