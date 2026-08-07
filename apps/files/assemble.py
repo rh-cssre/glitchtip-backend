@@ -172,7 +172,18 @@ def assemble_artifacts(
     # (which carries the sourcemap_file reference).
     bundles_by_debug_id: dict[str, DebugSymbolBundle] = {}
     bundles_without_debug_id: list[DebugSymbolBundle] = []
+    unreferenceable_files: list[File] = []
     for file in files:
+        debug_id = file.headers.get("debug-id")
+        if debug_id is None and release is None:
+            # Nothing could ever resolve this artifact: bundles are looked up
+            # by debug_id, or by release plus file name. Storing it is also
+            # rejected by the debug_id_or_release_required check constraint,
+            # which would abort the whole bulk insert and lose the rest of
+            # the upload.
+            unreferenceable_files.append(file)
+            continue
+
         sourcemap_file = None
         if file.type == "minified_source":
             try:
@@ -195,18 +206,41 @@ def assemble_artifacts(
 
         bundle = DebugSymbolBundle(
             organization=organization,
-            debug_id=file.headers.get("debug-id"),
+            debug_id=debug_id,
             release=release,
             sourcemap_file=sourcemap_file,
             file=file,
         )
-        debug_id = bundle.debug_id
         if debug_id is None:
             bundles_without_debug_id.append(bundle)
         elif debug_id not in bundles_by_debug_id or sourcemap_file is not None:
             bundles_by_debug_id[debug_id] = bundle
 
     bundles = list(bundles_by_debug_id.values()) + bundles_without_debug_id
+
+    if unreferenceable_files:
+        # One aggregate line per upload, not one per artifact: a large bundle
+        # can hold thousands of files. Symbolication silently not working is
+        # otherwise hard to trace back to the upload.
+        logger.warning(
+            "assemble_artifacts: skipped %d artifact(s) for org %s checksum %s: "
+            "no debug-id header and no release, so they could never be matched "
+            "to an event. Upload with a release version, or use an SDK build "
+            "that emits debug ids.",
+            len(unreferenceable_files),
+            organization.pk,
+            checksum,
+        )
+        # Their contents were already written to storage above. A skipped file
+        # may still be referenced as another bundle's sourcemap_file; delete
+        # only the ones nothing points at, so they do not linger until the
+        # retention sweep.
+        referenced_ids = {b.file_id for b in bundles} | {
+            b.sourcemap_file_id for b in bundles
+        }
+        orphaned_upload_ids = {f.id for f in unreferenceable_files} - referenced_ids
+        if orphaned_upload_ids:
+            File.objects.filter(id__in=orphaned_upload_ids).delete()
 
     # Split bundles: complete bundles (with sourcemap_file) can upsert to
     # replace stale data. Incomplete bundles (no sourcemap_file) should only
