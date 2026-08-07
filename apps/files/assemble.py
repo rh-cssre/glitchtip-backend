@@ -13,7 +13,7 @@ from django.core.cache import cache
 from apps.organizations_ext.models import Organization
 from apps.releases.models import Release
 from apps.sourcecode.models import DebugSymbolBundle
-from sentry.utils.zip import safe_extract_zip
+from sentry.utils.zip import ZipExtractionLimitExceeded, safe_extract_zip
 
 from .exceptions import AssembleChecksumMismatch
 from .models import File, FileBlob
@@ -100,6 +100,18 @@ def assemble_artifacts(
 
     try:
         safe_extract_zip(temp_file, scratchpad, strip_toplevel=False)
+    except ZipExtractionLimitExceeded as err:
+        # An over-sized bundle is a rejected upload, not a server fault: report
+        # it back through the assemble status so the client sees why.
+        logger.warning(
+            "assemble_artifacts: bundle over extraction limits for org %s "
+            "checksum %s: %s",
+            organization.pk,
+            checksum,
+            err,
+        )
+        _fail_and_cleanup(f"Failed to extract bundle: {err}")
+        return
     except Exception:
         # Catch broadly: zipfile raises BadZipFile, but other I/O errors are
         # possible. All mean the uploaded blob is not a usable zip bundle.

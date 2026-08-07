@@ -1,9 +1,12 @@
 import gzip
+import io
 import tempfile
+import zipfile
 from hashlib import sha1
 from pathlib import Path
 from urllib.parse import urlparse
 
+from django.core.cache import cache
 from django.core.files.base import File as DjangoFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -14,6 +17,7 @@ from apps.sourcecode.models import DebugSymbolBundle
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
 from ..api import CHUNK_UPLOAD_BLOB_SIZE, MAX_COMPRESSED_CHUNK_SIZE
+from ..assemble import AssembleTask, ChunkFileState, _get_cache_key
 from ..models import File, FileBlob
 
 
@@ -173,6 +177,36 @@ class ReleaseAssembleAPITests(GlitchTipTestCaseMixin, TestCase):
                 sourcemap_file=map_file, release=self.release
             ).aexists()
         )
+
+    @override_settings(GLITCHTIP_MAX_UNZIPPED_ARCHIVE_SIZE=64 * 1024)
+    async def test_post_rejects_bundle_over_extraction_limit(self):
+        """A bundle that expands past the limit fails the assemble cleanly."""
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("manifest.json", b'{"org": "whab", "release": "lol"}')
+            zf.writestr("files/_/big.js", b"\0" * (4 * 1024 * 1024))
+        payload = buf.getvalue()
+        checksum = sha1(payload).hexdigest()
+
+        await FileBlob.objects.acreate(
+            blob=SimpleUploadedFile(checksum, payload),
+            size=len(payload),
+            checksum=checksum,
+        )
+        res = await self.async_client.post(
+            self.url,
+            {"checksum": checksum, "chunks": [checksum]},
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+
+        state, detail = cache.get(
+            _get_cache_key(AssembleTask.ARTIFACTS, self.organization.pk, checksum)
+        )
+        self.assertEqual(state, ChunkFileState.ERROR)
+        self.assertIn("Failed to extract bundle", detail)
+        # The over-sized member never becomes a stored artifact.
+        self.assertFalse(await File.objects.filter(name="big.js").aexists())
 
 
 class AssembleFromFileBlobIdsTests(TestCase):
