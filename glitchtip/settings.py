@@ -139,6 +139,12 @@ GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE = env.int(
 # sentry.utils.zip.safe_extract_zip against the bytes actually written; the
 # sizes an archive declares for itself are uploader-supplied metadata.
 #
+# Both are also applied to the archive before it is opened. That is not
+# redundant: reading a zip's directory allocates an entry object per member
+# well before any post-open check could count them, so on their own these
+# would cap the files written without capping the memory spent deciding to
+# write them.
+#
 # 512 MB is well past any real source-map bundle — a large single-page app's
 # minified chunks plus their maps, sourcesContent included, land in the tens
 # of MB — while keeping one assemble task's worst case bounded. 10,000 entries

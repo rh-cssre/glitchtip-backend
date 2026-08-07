@@ -1,6 +1,8 @@
 import gzip
 import io
+import json
 import tempfile
+import warnings
 import zipfile
 from hashlib import sha1
 from pathlib import Path
@@ -178,13 +180,34 @@ class ReleaseAssembleAPITests(GlitchTipTestCaseMixin, TestCase):
             ).aexists()
         )
 
-    @override_settings(GLITCHTIP_MAX_UNZIPPED_ARCHIVE_SIZE=64 * 1024)
+    @override_settings(GLITCHTIP_MAX_UNZIPPED_ARCHIVE_SIZE=640 * 1024)
     async def test_post_rejects_bundle_over_extraction_limit(self):
-        """A bundle that expands past the limit fails the assemble cleanly."""
+        """A bundle that expands past the limit fails the assemble cleanly.
+
+        The manifest declares the artifact and matches the organization and
+        release, so an unbounded extraction runs all the way through and
+        stores ``big.js``. The bundle is built so that the declared sizes stay
+        under the cap and only the running count of bytes written catches it:
+        eight directory entries share one name, so extraction writes the
+        member that name resolves to eight times over.
+        """
+        manifest = json.dumps(
+            {
+                "org": self.organization.slug,
+                "release": self.release.version,
+                "files": {
+                    "files/_/big.js": {"type": "minified_source", "url": "~/big.js"}
+                },
+            }
+        ).encode()
         buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr("manifest.json", b'{"org": "whab", "release": "lol"}')
-            zf.writestr("files/_/big.js", b"\0" * (4 * 1024 * 1024))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # duplicate names are the point
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr("manifest.json", manifest)
+                for _ in range(7):
+                    zf.writestr("files/_/big.js", b"t")
+                zf.writestr("files/_/big.js", b"B" * (256 * 1024))
         payload = buf.getvalue()
         checksum = sha1(payload).hexdigest()
 
@@ -205,8 +228,12 @@ class ReleaseAssembleAPITests(GlitchTipTestCaseMixin, TestCase):
         )
         self.assertEqual(state, ChunkFileState.ERROR)
         self.assertIn("Failed to extract bundle", detail)
-        # The over-sized member never becomes a stored artifact.
+        # The over-sized member never becomes a stored artifact, and the
+        # rejected upload leaves no File rows behind at all -- not the
+        # artifact, not the assembled bundle it came in.
         self.assertFalse(await File.objects.filter(name="big.js").aexists())
+        self.assertFalse(await DebugSymbolBundle.objects.aexists())
+        self.assertEqual(await File.objects.acount(), 0)
 
 
 class AssembleFromFileBlobIdsTests(TestCase):
