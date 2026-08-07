@@ -1343,7 +1343,7 @@ requires-dist = [
     { name = "django-extensions", specifier = "~=4.0" },
     { name = "django-import-export", specifier = "~=4.1" },
     { name = "django-ipware", specifier = "~=7.0" },
-    { name = "django-ninja", specifier = "~=1.5" },
+    { name = "django-ninja", specifier = "~=1.6" },
     { name = "django-ninja-cursor-pagination", specifier = ">=0.1.0" },
     { name = "django-organizations", specifier = "~=2.7" },
     { name = "django-postgres-partition", specifier = ">=0.1.4" },
