@@ -6,7 +6,21 @@ authors = ["David Burke"]
 license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
-    "django~=6.0",
+    # Capped BELOW 6.1 on purpose, not merely "compatible with 6.x".
+    # `~=6.0` means >=6.0,<7.0, and renovate.json runs
+    # rangeStrategy=update-lockfile with lockFileMaintenance enabled — so
+    # Django 6.1 would be pulled into uv.lock inside that range, bundled with
+    # dozens of other bumps, without anyone deciding to move to 6.1.
+    #
+    # Why that would break: django-async-backend (and so the whole async ORM)
+    # ships its own fork of Django's SQLCompiler. Django 6.1's `Col.as_sql`
+    # calls `compiler.quote_name`, which the fork does not define through
+    # 6.0.9, so EVERY async ORM query raises AttributeError. django-vpg tests
+    # this and documents it; the fix has to come from upstream.
+    #
+    # Moving to 6.1 is therefore a deliberate, reviewed edit to this line —
+    # not a lockfile refresh. Lift it once django-async-backend supports 6.1.
+    "django>=6.0,<6.1",
     "django-vtasks[valkey]~=3.1.0",
     "django-allauth-async[mfa,socialaccount]==65.16.1.7",
     "django-cors-headers~=4.0",
@@ -54,7 +68,11 @@ dependencies = [
     "minidump>=0.0.24",
     "arro3-core~=0.8",
     "arro3-io~=0.8",
-    "django-async-backend~=6.0",
+    # Same shape, same treatment as the django pin above: `~=6.0` would let a
+    # lockfile refresh take 6.1 when it ships. This package tracks Django's
+    # version line, so its 6.1 release is exactly what unblocks lifting the
+    # django cap — bump both together, deliberately.
+    "django-async-backend>=6.0,<6.1",
     "opentelemetry-proto~=1.0",
 ]
 
