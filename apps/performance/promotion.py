@@ -352,6 +352,100 @@ def _duckdb_copy(storage, input_relpaths: list[str], output_relpath: str) -> boo
     return True
 
 
+# Outcome of a tolerant compaction copy.
+_COPY_DONE = "done"  # output written — inputs are safe to delete
+_COPY_EMPTY = "empty"  # every input had vanished — nothing to write, safe to delete
+_COPY_RETRY = "retry"  # could not complete — leave the inputs alone, try next run
+
+
+def _existing_inputs(storage, input_relpaths: list[str]) -> list[str]:
+    """Subset of ``input_relpaths`` the backend still reports as present.
+
+    Only called after a copy already failed, so the extra existence check
+    (an S3 HEAD per input) never runs on a healthy pass. An ``exists()``
+    that itself errors keeps the input: "can't tell" must not be read as
+    "gone".
+    """
+    present = []
+    for rel in input_relpaths:
+        try:
+            if storage.exists(rel):
+                present.append(rel)
+        except Exception:
+            present.append(rel)
+    return present
+
+
+def _compact_inputs(
+    storage, input_relpaths: list[str], output_relpath: str, label: str
+) -> str:
+    """``_duckdb_copy`` that tolerates inputs which vanished from storage.
+
+    An object listing can hand compaction a key that the subsequent read
+    fails on with 404 — a retention sweep or a bucket lifecycle rule
+    removing the object between the listing and the read, or a listing that
+    is simply stale. Unhandled, that failure is *permanent*: callers only
+    delete the source directory after a successful copy, so the next run
+    lists the same missing key and fails identically, forever.
+
+    On failure we therefore re-check the inputs against the backend, drop
+    the ones that are really gone — an object that cannot be read loses
+    nothing by being skipped — and copy again. If every input is gone there
+    is nothing to write and the caller should simply clean up.
+
+    Never raises: a single bad hour must not abort the rest of the date.
+    """
+    if not input_relpaths:
+        return _COPY_EMPTY
+
+    try:
+        written = _duckdb_copy(storage, input_relpaths, output_relpath)
+    except Exception as exc:
+        first_error = exc
+    else:
+        return _COPY_DONE if written else _COPY_RETRY
+
+    survivors = _existing_inputs(storage, input_relpaths)
+    surviving = set(survivors)
+    missing = [p for p in input_relpaths if p not in surviving]
+
+    if not missing:
+        logger.error(
+            "Span compaction failed for %s; all %d input files are still "
+            "present so this is not a vanished object. Leaving them intact "
+            "for the next run.",
+            label,
+            len(input_relpaths),
+            exc_info=first_error,
+        )
+        return _COPY_RETRY
+
+    # One line per directory, not per file — a wedged date can hold hundreds.
+    logger.warning(
+        "Span compaction for %s: %d of %d input files are missing from cold "
+        "storage and will be skipped (first: %s). Expected if a retention "
+        "sweep or object-store lifecycle rule removed them; the remaining "
+        "files compact normally.",
+        label,
+        len(missing),
+        len(input_relpaths),
+        missing[0],
+    )
+    if not survivors:
+        return _COPY_EMPTY
+
+    try:
+        written = _duckdb_copy(storage, survivors, output_relpath)
+    except Exception:
+        logger.exception(
+            "Span compaction for %s still failed after dropping %d missing input files",
+            label,
+            len(missing),
+        )
+        return _COPY_RETRY
+    return _COPY_DONE if written else _COPY_RETRY
+
+
 def _write_hour_rollup(
     storage, hour_file_rel: str, rollup_rel: str, hour_start: datetime
 ) -> None:
@@ -559,17 +653,27 @@ def _compact_org_date(
             _delete_subtree(storage, chunk_dir)
             continue
 
-        if not _duckdb_copy(storage, [f"{chunk_dir}/{c}" for c in chunks], hour_file):
-            continue  # slot saturated — retry next run, chunks intact
+        result = _compact_inputs(
+            storage,
+            [f"{chunk_dir}/{c}" for c in chunks],
+            hour_file,
+            f"{date_dir}/{hh}",
+        )
+        if result == _COPY_RETRY:
+            continue  # slot saturated or unreadable — retry next run, chunks intact
 
-        try:
-            _write_hour_rollup(storage, hour_file, rollup_file, hour_start)
-        except Exception:
-            # Rollup will be recomputed on the next compaction tick by the
-            # recovery loop above.
-            logger.exception("Failed hour rollup %s/%s", date_dir, hh)
+        if result == _COPY_DONE:
+            try:
+                _write_hour_rollup(storage, hour_file, rollup_file, hour_start)
+            except Exception:
+                # Rollup will be recomputed on the next compaction tick by the
+                # recovery loop above.
+                logger.exception("Failed hour rollup %s/%s", date_dir, hh)
+            compacted += len(chunks)
+        # _COPY_EMPTY means every chunk had already vanished: no hour file to
+        # write, but the empty chunk dir must still go or it is re-listed
+        # (and re-attempted) on every future run.
         _delete_subtree(storage, chunk_dir)
-        compacted += len(chunks)
 
     # Lazy daily roll once the whole day is sealed.
     if now > day_start + timedelta(days=1) + SEAL_GRACE:
@@ -579,10 +683,20 @@ def _compact_org_date(
 
 
 def _roll_sealed_day(storage, base_org: str, date_dir: str) -> None:
-    """Concat a fully-sealed day's hour files into ``{date}.parquet``.
+    """Concat a fully-sealed day's Parquet files into ``{date}.parquet``.
 
     Idempotent: if the day file already exists, just clears the leftover
     ``{date}/`` subtree. Used for both the raw and the rollup trees.
+
+    Every ``.parquet`` file directly under ``{date}/`` is an input, not just
+    the ``HH.parquet`` sealed hours. A ``chunk_*.parquet`` here is a
+    pre-hour-tiering chunk (promotion used to write chunks straight into the
+    date directory) and holds real span data, so it is rolled in
+    deliberately — that is how a legacy install migrates without a backfill.
+    Applying the hour-seal loop's ``HH``-name validation here would exclude
+    those chunks from the roll and then delete them with the subtree, i.e.
+    silently drop readable spans. Inputs that are genuinely unreadable are
+    handled by ``_compact_inputs`` instead, which skips only what is gone.
     """
     day_file = f"{base_org}/{date_dir}.parquet"
     date_path = f"{base_org}/{date_dir}"
@@ -594,8 +708,5 @@ def _roll_sealed_day(storage, base_org: str, date_dir: str) -> None:
     except (NotImplementedError, OSError):
         return
     hours = sorted(f"{date_path}/{f}" for f in hour_files if f.endswith(".parquet"))
-    if not hours:
-        _delete_subtree(storage, date_path)
-        return
-    if _duckdb_copy(storage, hours, day_file):
+    if _compact_inputs(storage, hours, day_file, date_path) != _COPY_RETRY:
         _delete_subtree(storage, date_path)
