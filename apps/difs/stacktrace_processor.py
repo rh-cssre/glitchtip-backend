@@ -161,7 +161,8 @@ def _estimate_image_base(sym_cache, instruction_addrs):
     threshold = max(len(instruction_addrs) // 2, 1)
 
     for elf_offset in range(0, 0x500000, 0x1000):
-        if next(sym_cache.lookup(elf_offset), None) is None:
+        # SymCache.lookup returns a (possibly empty) list of SourceLocation.
+        if not sym_cache.lookup(elf_offset):
             continue
         candidate_base = probe - elf_offset
         if candidate_base < 0:
@@ -169,7 +170,9 @@ def _estimate_image_base(sym_cache, instruction_addrs):
         score = sum(
             1
             for addr in instruction_addrs
-            if next(sym_cache.lookup(addr - candidate_base), None) is not None
+            # An address below the base is outside the image, and looking it
+            # up would pass a negative offset to the symbol cache.
+            if addr >= candidate_base and sym_cache.lookup(addr - candidate_base)
         )
         if score > best_score:
             best_score = score
