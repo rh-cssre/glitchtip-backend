@@ -91,6 +91,19 @@ def parse_debug_id(value) -> str | None:
 def assemble_artifacts(
     organization: Organization, version: str | None, checksum: str, chunks: list[str]
 ):
+    """
+    Turn an uploaded artifact bundle into File rows and debug symbol bundles.
+
+    This module is deliberately sync, against the async-first rule: the work
+    is dominated by blocking filesystem and CPU steps with no async
+    counterpart — zip extraction, a read per artifact, SHA-1 hashing, and
+    storage writes through django-storages, which has no async API (see the
+    note in maintenance.py). Declaring it async would make none of that
+    non-blocking. Every storage call would still need its own thread hop, and
+    the hashing and extraction would run on the event loop unless hopped off
+    it as well. One coarse sync_to_async at the task boundary (tasks.py) is
+    cheaper than many fine-grained ones, and cannot stall the loop.
+    """
     set_assemble_status(
         AssembleTask.ARTIFACTS, organization.pk, checksum, ChunkFileState.ASSEMBLING
     )
