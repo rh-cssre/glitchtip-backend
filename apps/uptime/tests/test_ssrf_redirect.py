@@ -11,6 +11,7 @@ from django.test import SimpleTestCase
 
 from apps.uptime.constants import MonitorCheckReason, MonitorType
 from apps.uptime.utils import fetch
+from glitchtip.test_utils.dns import resolves_to
 
 
 class FakeResponse:
@@ -57,12 +58,13 @@ def _monitor(url):
 
 class UptimeRedirectSSRFTests(SimpleTestCase):
     def test_redirect_to_internal_is_blocked_and_not_dialed(self):
-        # public.example does not resolve, so the entry passes validation and we
+        # public.example resolves public, so the entry passes validation and we
         # exercise the redirect path exactly as a public redirector would.
         session = FakeSession(
             [FakeResponse(302, {"Location": "http://169.254.169.254/latest/"})]
         )
-        result = async_to_sync(fetch)(session, _monitor("http://public.example/"))
+        with resolves_to():
+            result = async_to_sync(fetch)(session, _monitor("http://public.example/"))
         self.assertFalse(result["is_up"])
         self.assertEqual(result["reason"], MonitorCheckReason.NETWORK)
         # Only the public entry was dialed; the metadata IP never was.
@@ -75,7 +77,8 @@ class UptimeRedirectSSRFTests(SimpleTestCase):
                 FakeResponse(200),
             ]
         )
-        result = async_to_sync(fetch)(session, _monitor("http://start.example/"))
+        with resolves_to():
+            result = async_to_sync(fetch)(session, _monitor("http://start.example/"))
         self.assertTrue(result["is_up"])
         self.assertEqual(
             session.requested, ["http://start.example/", "http://final.example/"]

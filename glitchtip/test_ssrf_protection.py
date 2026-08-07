@@ -17,6 +17,7 @@ from glitchtip.ssrf_protection import (
     request_with_validated_redirects,
     resolve_validated_ip,
 )
+from glitchtip.test_utils.dns import resolves_to
 
 
 class FakeInnerResolver:
@@ -106,14 +107,15 @@ class FakeSession:
         return self._responses.pop(0)
 
 
-# ".example" is a reserved, non-resolving TLD, so check_url_safe's getaddrinfo
-# fails and (by design) treats these hostnames as allowed — letting these tests
-# exercise the redirect logic without real DNS.
+# Every ".example" host here is pinned to a public address by ``resolves_to``.
+# Relying on the reserved TLD not resolving would hand the outcome to whatever
+# the machine's resolver does with an unknown name.
 class RequestWithValidatedRedirectsTests(SimpleTestCase):
     def _run(self, session, method, url, **kwargs):
-        return async_to_sync(request_with_validated_redirects)(
-            session, method, url, **kwargs
-        )
+        with resolves_to():
+            return async_to_sync(request_with_validated_redirects)(
+                session, method, url, **kwargs
+            )
 
     def test_blocks_redirect_to_metadata_ip_literal(self):
         # The reported PoC: a public URL 302-redirects to an internal IP literal.

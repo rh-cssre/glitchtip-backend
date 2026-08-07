@@ -3,6 +3,7 @@ from unittest import mock
 from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, override_settings
 
+from glitchtip.test_utils.dns import resolution_fails, resolves_to
 from glitchtip.url_validation import (
     check_url_safe,
     is_ip_blocked,
@@ -95,6 +96,23 @@ class CheckURLSafeAsyncTests(SimpleTestCase):
         ):
             self.assertFalse(
                 async_to_sync(check_url_safe)("http://public-name.example/")
+            )
+
+    def test_hostname_resolving_to_public_allowed(self):
+        with resolves_to():
+            self.assertTrue(
+                async_to_sync(check_url_safe)("http://public-name.example/")
+            )
+
+    def test_unresolvable_hostname_allowed(self):
+        # Deliberate: a name that cannot be resolved cannot be connected to
+        # either, so the fetch fails on its own and the guard stays out of the
+        # way. The SSRF redirect tests used to lean on this path implicitly by
+        # using names they assumed would never resolve; it is asserted here
+        # instead so pinning DNS in those tests does not drop the coverage.
+        with resolution_fails():
+            self.assertTrue(
+                async_to_sync(check_url_safe)("http://no-such-host.invalid/")
             )
 
 
