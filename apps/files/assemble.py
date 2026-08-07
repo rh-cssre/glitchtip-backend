@@ -140,8 +140,10 @@ def assemble_artifacts(
     try:
         safe_extract_zip(temp_file, scratchpad, strip_toplevel=False)
     except ZipExtractionLimitExceeded as err:
-        # An over-sized bundle is a rejected upload, not a server fault: report
-        # it back through the assemble status so the client sees why.
+        # An over-sized bundle is a rejected upload, not a server fault. Record
+        # it on the assemble status and log the reason. The assemble endpoints
+        # answer before this task runs and do not read the status back, so for
+        # now the log is what an operator has to go on.
         logger.warning(
             "assemble_artifacts: bundle over extraction limits for org %s "
             "checksum %s: %s",
