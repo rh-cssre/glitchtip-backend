@@ -4,7 +4,6 @@ import uuid
 import zipfile
 from hashlib import sha1
 
-from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
@@ -12,7 +11,7 @@ from django.urls import reverse
 from apps.sourcecode.models import DebugSymbolBundle
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
-from ..assemble import AssembleTask, ChunkFileState, _get_cache_key
+from ..assemble import AssembleTask, ChunkFileState, get_assemble_status
 from ..models import File, FileBlob
 
 
@@ -35,28 +34,38 @@ class ArtifactBundleAssembleTests(GlitchTipTestCaseMixin, TestCase):
             "api:artifact_bundle_assemble", args=[self.organization.slug]
         )
 
-    async def assemble(self, manifest: dict, contents: dict[str, str]) -> str:
+    async def assemble(
+        self, manifest: dict, contents: dict[str, str], version: str | None = None
+    ) -> str:
         data, checksum = build_bundle(manifest, contents)
         await FileBlob.objects.acreate(
             blob=SimpleUploadedFile(checksum, data),
             size=len(data),
             checksum=checksum,
         )
+        payload = {
+            "checksum": checksum,
+            "chunks": [checksum],
+            "projects": [self.project.slug],
+        }
+        if version is not None:
+            payload["version"] = version
         res = await self.async_client.post(
-            self.url,
-            {
-                "checksum": checksum,
-                "chunks": [checksum],
-                "projects": [self.project.slug],
-            },
-            content_type="application/json",
+            self.url, payload, content_type="application/json"
         )
         self.assertEqual(res.status_code, 200)
         return checksum
 
     def assertAssembleState(self, checksum: str, state: ChunkFileState):
-        status = cache.get(
-            _get_cache_key(AssembleTask.ARTIFACTS, self.organization.pk, checksum)
+        """Assert how the assemble task finished.
+
+        This is the load-bearing assertion in every test here. The task runs
+        inline under the immediate backend, which swallows exceptions into a
+        failed result, so the 200 from the enqueueing request says nothing
+        about whether assembling itself blew up.
+        """
+        status = get_assemble_status(
+            AssembleTask.ARTIFACTS, self.organization.pk, checksum
         )
         self.assertIsNotNone(status, "assemble status was never set")
         self.assertEqual(status[0], state, status[1])
@@ -168,25 +177,9 @@ class ArtifactBundleAssembleTests(GlitchTipTestCaseMixin, TestCase):
                 },
             },
         }
-        data, checksum = build_bundle(
-            manifest, {"files/_/_/plain.js": "function b(){}"}
+        checksum = await self.assemble(
+            manifest, {"files/_/_/plain.js": "function b(){}"}, version=version
         )
-        await FileBlob.objects.acreate(
-            blob=SimpleUploadedFile(checksum, data),
-            size=len(data),
-            checksum=checksum,
-        )
-        res = await self.async_client.post(
-            self.url,
-            {
-                "checksum": checksum,
-                "chunks": [checksum],
-                "projects": [self.project.slug],
-                "version": version,
-            },
-            content_type="application/json",
-        )
-        self.assertEqual(res.status_code, 200)
 
         self.assertAssembleState(checksum, ChunkFileState.OK)
         bundle = await DebugSymbolBundle.objects.select_related("file", "release").aget(
@@ -195,3 +188,115 @@ class ArtifactBundleAssembleTests(GlitchTipTestCaseMixin, TestCase):
         self.assertIsNone(bundle.debug_id)
         self.assertEqual(bundle.release.version, version)
         self.assertEqual(bundle.file.name, "plain.js")
+
+    async def test_unusable_debug_id_headers_do_not_abort_the_upload(self):
+        """debug-id is client-supplied, so it need not be a usable uuid.
+
+        An empty, malformed, or non-string value reaches a UUIDField. Each
+        would raise during insert and lose the whole upload, so they are
+        treated as no debug id at all.
+        """
+        debug_id = str(uuid.uuid4())
+        manifest = {
+            "org": self.organization.slug,
+            "project": self.project.slug,
+            "files": {
+                "files/_/_/good.js": {
+                    "type": "minified_source",
+                    "url": "~/good.js",
+                    "headers": {"debug-id": debug_id},
+                },
+                "files/_/_/empty.js": {
+                    "type": "minified_source",
+                    "url": "~/empty.js",
+                    "headers": {"debug-id": ""},
+                },
+                "files/_/_/malformed.js": {
+                    "type": "minified_source",
+                    "url": "~/malformed.js",
+                    "headers": {"debug-id": "not-a-uuid"},
+                },
+                "files/_/_/wrongtype.js": {
+                    "type": "minified_source",
+                    "url": "~/wrongtype.js",
+                    "headers": {"debug-id": ["nope"]},
+                },
+                "files/_/_/nullheaders.js": {
+                    "type": "minified_source",
+                    "url": "~/nullheaders.js",
+                    "headers": None,
+                },
+            },
+        }
+        checksum = await self.assemble(
+            manifest,
+            {
+                f"files/_/_/{name}": "x"
+                for name in (
+                    "good.js",
+                    "empty.js",
+                    "malformed.js",
+                    "wrongtype.js",
+                    "nullheaders.js",
+                )
+            },
+        )
+
+        self.assertAssembleState(checksum, ChunkFileState.OK)
+        bundle = await DebugSymbolBundle.objects.select_related("file").aget(
+            organization=self.organization
+        )
+        self.assertEqual(str(bundle.debug_id), debug_id)
+        self.assertEqual(bundle.file.name, "good.js")
+
+    async def test_same_debug_id_in_different_spellings_is_deduplicated(self):
+        """Two spellings of one uuid must not both reach the unique index.
+
+        Upper case and unhyphenated are distinct strings but the same UUID
+        once stored. Both artifacts here carry a source map, so both bundles
+        take the upsert path, where hitting the arbiter twice in one statement
+        is a cardinality violation that aborts the upload.
+        """
+        debug_id = uuid.uuid4()
+        manifest = {
+            "org": self.organization.slug,
+            "project": self.project.slug,
+            "files": {
+                "files/_/_/a.js": {
+                    "type": "minified_source",
+                    "url": "~/a.js",
+                    "headers": {
+                        "debug-id": str(debug_id).upper(),
+                        "sourcemap": "a.js.map",
+                    },
+                },
+                "files/_/_/a.js.map": {
+                    "type": "source_map",
+                    "url": "~/a.js.map",
+                    "headers": {"debug-id": str(debug_id).upper()},
+                },
+                "files/_/_/b.js": {
+                    "type": "minified_source",
+                    "url": "~/b.js",
+                    "headers": {"debug-id": debug_id.hex, "sourcemap": "b.js.map"},
+                },
+                "files/_/_/b.js.map": {
+                    "type": "source_map",
+                    "url": "~/b.js.map",
+                    "headers": {"debug-id": debug_id.hex},
+                },
+            },
+        }
+        checksum = await self.assemble(
+            manifest,
+            {
+                "files/_/_/a.js": "x",
+                "files/_/_/a.js.map": "{}",
+                "files/_/_/b.js": "y",
+                "files/_/_/b.js.map": "{}",
+            },
+        )
+
+        self.assertAssembleState(checksum, ChunkFileState.OK)
+        bundle = await DebugSymbolBundle.objects.aget(organization=self.organization)
+        self.assertEqual(bundle.debug_id, debug_id)
