@@ -8,6 +8,14 @@ from symbolic import Archive, ProguardMapper, SymCache, normalize_debug_id, pars
 
 alternative_arch = {"x86": ["x86", "x86_64"]}
 
+# SymCache lookups take a uint64 address; anything outside this range cannot be
+# probed at all and raises rather than returning no match.
+UINT64_MAX = 0xFFFFFFFFFFFFFFFF
+
+# Scoring one candidate base costs a lookup per address, and the event payload
+# decides how many addresses there are, so score against a bounded sample.
+MAX_SCORED_ADDRS = 32
+
 
 class ResolvedStacktrace:
     def __init__(self, score=0, frames=None):
@@ -156,20 +164,26 @@ def _estimate_image_base(sym_cache, instruction_addrs):
         return 0
 
     probe = instruction_addrs[0]
+    sample = instruction_addrs[:MAX_SCORED_ADDRS]
     best_base = 0
     best_score = 0
-    threshold = max(len(instruction_addrs) // 2, 1)
+    threshold = max(len(sample) // 2, 1)
 
     for elf_offset in range(0, 0x500000, 0x1000):
-        if next(sym_cache.lookup(elf_offset), None) is None:
+        # SymCache.lookup returns a (possibly empty) list of SourceLocation.
+        if not sym_cache.lookup(elf_offset):
             continue
         candidate_base = probe - elf_offset
         if candidate_base < 0:
-            continue
+            # elf_offset only grows, so no later candidate can be valid either.
+            break
         score = sum(
             1
-            for addr in instruction_addrs
-            if next(sym_cache.lookup(addr - candidate_base), None) is not None
+            for addr in sample
+            # An address outside the base's addressable range is not part of
+            # this image and cannot be probed.
+            if candidate_base <= addr <= candidate_base + UINT64_MAX
+            and sym_cache.lookup(addr - candidate_base)
         )
         if score > best_score:
             best_score = score
@@ -304,6 +318,12 @@ class StacktraceProcessor:
                 )
                 instruction_addr = parse_addr(frame.get("instruction_addr"))
                 addr = instruction_addr - image_addr
+                if not 0 <= addr <= UINT64_MAX:
+                    # The frame is outside this image - another object, or no
+                    # instruction_addr at all, which parse_addr reports as 0.
+                    # Probing it would abort the whole stacktrace.
+                    resolved_frames.append(frame)
+                    continue
                 symbol = sym_cache.lookup(addr)
                 digested_symbol = digest_symbol(symbol)
 
