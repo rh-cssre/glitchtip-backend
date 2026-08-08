@@ -37,8 +37,12 @@ from .cold_storage import (
 
 logger = logging.getLogger(__name__)
 
-# Process up to this many rows per organization per invocation.
-BATCH_LIMIT_PER_ORG = 100_000
+# Process up to this many rows per organization per invocation. Every row in
+# the batch is materialized as a Python tuple (then regrouped and converted to
+# Arrow) before anything is freed, so this limit is also the promotion task's
+# peak-memory bound. Truncated runs re-enqueue themselves, so a busy org still
+# drains — in more, smaller chunks.
+BATCH_LIMIT_PER_ORG = 20_000
 
 # An hour is sealed (safe to compact, no longer accepting chunks) once this
 # long after the hour ends. Only throttles re-compaction churn — compaction
