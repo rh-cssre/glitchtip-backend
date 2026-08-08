@@ -23,6 +23,19 @@ UINT64_MAX = 0xFFFFFFFFFFFFFFFF
 MAX_SCORED_ADDRS = 32
 
 
+def _parse_addr_or_none(value) -> int | None:
+    """parse_addr, treating an unparseable event-supplied address as absent.
+
+    parse_addr rejects magnitudes beyond i128 that unbounded int() parsing
+    accepted; such values could never pass the uint64 range check anyway, so
+    they should cost the event that one frame, not the whole stacktrace.
+    """
+    try:
+        return parse_addr(value)
+    except (ValueError, OverflowError):
+        return None
+
+
 class ResolvedStacktrace:
     def __init__(self, score=0, frames=None):
         self.score = score
@@ -303,11 +316,12 @@ class StacktraceProcessor:
             # land inside the symbol cache.
             estimated_base = 0
             if frames and not any(f.get("image_addr") for f in frames if f):
-                addrs = [
-                    parse_addr(f.get("instruction_addr"))
+                parsed = (
+                    _parse_addr_or_none(f.get("instruction_addr"))
                     for f in frames
                     if f and f.get("instruction_addr")
-                ]
+                )
+                addrs = [addr for addr in parsed if addr is not None]
                 estimated_base = _estimate_image_base(sym_cache, addrs)
 
             for frame in frames:
@@ -318,11 +332,15 @@ class StacktraceProcessor:
 
                 raw_image_addr = frame.get("image_addr")
                 image_addr = (
-                    parse_addr(raw_image_addr)
+                    _parse_addr_or_none(raw_image_addr)
                     if raw_image_addr is not None
                     else estimated_base
                 )
-                instruction_addr = parse_addr(frame.get("instruction_addr"))
+                instruction_addr = _parse_addr_or_none(frame.get("instruction_addr"))
+                if image_addr is None or instruction_addr is None:
+                    # Unparseable addresses can't resolve; keep the frame as-is.
+                    resolved_frames.append(frame)
+                    continue
                 addr = instruction_addr - image_addr
                 if not 0 <= addr <= UINT64_MAX:
                     # The frame is outside this image - another object, or no
