@@ -1011,8 +1011,15 @@ TASKS = {
 VTASKS_QUEUES = {
     "default": {},
     "ingest": {
+        # Batch size and per-queue concurrency bound the worker's peak working
+        # set: every fetched batch holds its full envelope payloads in memory
+        # until the batch completes, so worst case ≈ worker_concurrency × count
+        # payloads resident at once while draining a backlog. 25 × 12 drains a
+        # deep backlog as fast as 100-task batches on the shared pool did, at
+        # roughly a quarter of the peak RSS.
+        "worker_concurrency": env.int("VTASKS_INGEST_CONCURRENCY", 12),
         "batch": {
-            "count": 100,
+            "count": env.int("VTASKS_INGEST_BATCH_COUNT", 25),
             "timeout": 2.0,
         },
     },
