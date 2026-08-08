@@ -6,7 +6,7 @@ from hashlib import sha1
 from asgiref.sync import sync_to_async
 from django.core.files import File as DjangoFile
 from django.tasks import task
-from symbolic import Archive, normalize_debug_id, parse_addr
+from gt_rust.symbolic import Archive, normalize_debug_id, parse_addr
 
 from apps.difs.models import DebugInformationFile
 from apps.difs.stacktrace_processor import StacktraceProcessor

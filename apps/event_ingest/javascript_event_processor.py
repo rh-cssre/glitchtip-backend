@@ -5,7 +5,7 @@ from os.path import splitext
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
-from symbolic import SourceMapCache
+from gt_rust.symbolic import SourceMapCache
 
 from apps.sourcecode.models import DebugSymbolBundle
 

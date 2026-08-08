@@ -3,8 +3,14 @@ import copy
 import logging
 import zipfile
 
-import cxxfilt
-from symbolic import Archive, ProguardMapper, SymCache, normalize_debug_id, parse_addr
+from gt_rust.symbolic import (
+    Archive,
+    ProguardMapper,
+    SymCache,
+    demangle,
+    normalize_debug_id,
+    parse_addr,
+)
 
 alternative_arch = {"x86": ["x86", "x86_64"]}
 
@@ -331,12 +337,9 @@ class StacktraceProcessor:
                     frame["resolved"] = True
                     frame["filename"] = digested_symbol.full_path
                     frame["lineno"] = digested_symbol.line
-                    try:
-                        frame["function"] = cxxfilt.demangle(digested_symbol.symbol)
-                    except cxxfilt.InvalidName:
-                        frame["function"] = (
-                            digested_symbol.symbol
-                        )  # Keep original if demangling fails
+                    # demangle returns the input unchanged when it can't
+                    # demangle, so there is no failure case to handle.
+                    frame["function"] = demangle(digested_symbol.symbol)
                     score = score + 1
 
                     # Extract source context from source bundle if available

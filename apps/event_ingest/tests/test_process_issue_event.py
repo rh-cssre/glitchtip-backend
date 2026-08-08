@@ -13,8 +13,8 @@ from django.tasks import task_backends
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
+from gt_rust.symbolic import Archive, normalize_debug_id
 from model_bakery import baker
-from symbolic import Archive, normalize_debug_id
 
 from apps.difs.tasks import event_difs_resolve_stacktrace
 from apps.event_ingest.tests.utils import generate_event
