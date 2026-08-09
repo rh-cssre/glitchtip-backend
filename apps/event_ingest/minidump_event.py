@@ -3,12 +3,12 @@ import logging
 import struct
 import uuid
 
+from gt_rust.symbolic import normalize_debug_id
 from minidump.directory import MINIDUMP_STREAM_TYPE
 from minidump.minidumpfile import MinidumpFile
 from minidump.streams.ExceptionStream import ExceptionCode
 from minidump.streams.ModuleListStream import MINIDUMP_MODULE_LIST
 from minidump.streams.SystemInfoStream import PLATFORM_ID, PROCESSOR_ARCHITECTURE
-from symbolic import normalize_debug_id
 
 # Maps PROCESSOR_ARCHITECTURE enum to standard arch strings
 ARCH_MAP = {

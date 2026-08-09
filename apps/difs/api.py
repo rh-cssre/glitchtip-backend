@@ -10,12 +10,12 @@ from asgiref.sync import sync_to_async
 from django.core.files import File as DjangoFile
 from django.http import HttpResponse
 from django.shortcuts import aget_object_or_404
+from gt_rust.symbolic import ProguardMapper, normalize_debug_id
 from ninja import File as NinjaFile
 from ninja import Router
 from ninja.errors import HttpError
 from ninja.files import UploadedFile
 from ninja.pagination import paginate
-from symbolic import ProguardMapper, normalize_debug_id
 
 from apps.files.models import File, FileBlob
 from apps.organizations_ext.models import Organization

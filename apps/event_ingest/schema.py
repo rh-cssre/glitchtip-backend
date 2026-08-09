@@ -7,6 +7,7 @@ from urllib.parse import parse_qs
 
 from django.conf import settings
 from django.utils.timezone import now
+from gt_rust.symbolic import normalize_debug_id
 from ninja import Field
 from pydantic import (
     AliasChoices,
@@ -20,7 +21,6 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from symbolic import normalize_debug_id
 
 from apps.issue_events.constants import IssueEventType
 from apps.shared.schema.error import EventProcessingError
