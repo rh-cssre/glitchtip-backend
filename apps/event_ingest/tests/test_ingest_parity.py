@@ -1,46 +1,34 @@
-"""Golden parity lock between the two envelope-ingest arms.
+"""Golden lock on the envelope-ingest contract.
 
-``POST /api/<project_id>/envelope/`` is served two ways: the Python Django
-view (default) and, behind ``GLITCHTIP_RUST_INGEST``, the Rust pipeline via
-``glitchtip/rust_ingest.py``. This module is the correctness contract between
-them: every test posts raw request bytes through ``IngestDispatcher`` (the
-seam production traffic enters in both modes) and asserts the observable
+``POST /api/<project_id>/envelope/`` is served by the Rust pipeline via
+``glitchtip/rust_ingest.py`` (minidump envelopes are handed back to the
+Django fallback view pre-side-effect). This module locks the observable
+contract of that endpoint: every test posts raw request bytes through
+``IngestDispatcher`` (the seam production traffic enters) and asserts the
 outcome — response status/body/headers-subset, the canonicalized enqueued
 vtasks message(s), and the DB rows after draining those messages through the
 real task functions — against a committed golden
 (``parity_fixtures/goldens.json``).
 
-The module runs UNCONDITIONALLY in both CI lanes (the default ``test`` job
-and the flag-on ``test-rust-ingest`` job). Each lane asserts against the
-golden for whichever arm is active; every case shares ONE golden unless the
-two arms intentionally diverge, in which case the golden entry carries
-per-arm expectations plus a ``_divergence`` note documenting why. The single
-documented divergence is:
-
-- ``header_dsn_only``: the credential appears only in the envelope-header
-  ``dsn`` field. The Rust arm recovers the key from the header and accepts;
-  the Python view reads only the query string / auth headers and denies.
-
-Notably verified IDENTICAL (empirically, 2026-07): the over-cap 413s —
-``oversize_body`` (over ``DATA_UPLOAD_MAX_MEMORY_SIZE``) and
-``over_unzipped_cap`` (over ``GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE``) return
-the same status, body text, and content-type from both arms, so they share
-one golden like everything else.
-
-Any OTHER mismatch between the arms is a bug this module exists to catch —
-do not paper over one by widening a golden into per-arm entries.
+The goldens were recorded as a parity lock while the endpoint had two arms
+(the Python view was the default until the Rust pipeline replaced it), so
+they double as the contract the retired Python pipeline honored — a golden
+mismatch means the endpoint's observable behavior changed, and the change
+should be deliberate. The one behavior recorded here that the Python view
+never had: ``header_dsn_only``, where the credential appears only in the
+envelope-header ``dsn`` field and the Rust pipeline recovers it (the view
+reads only the query string / auth headers and denies).
 
 One canonicalization rule matters for reading the goldens: enqueued
 event/transaction/user-report messages are compared AFTER re-validation
-through the worker-side schema (see ``_canon_message``), because the two
-arms intentionally serialize the wire payload differently while the worker
-schema — the only consumer — normalizes both to the same structure.
+through the worker-side schema (see ``_canon_message``), because the wire
+payload's serialization is an implementation detail while the worker
+schema — the only consumer — normalizes it.
 
 Regenerating goldens: run with ``GLITCHTIP_INGEST_PARITY_RECORD=<path>`` set
-to write the active arm's observed results to ``<path>`` instead of
-asserting (each test is reported as skipped). Record from the Python arm
-first (that is the baseline), diff a Rust-arm recording against it, then
-update ``goldens.json`` by hand so intentional divergences stay explicit.
+to write the observed results to ``<path>`` instead of asserting (each test
+is reported as skipped), diff against ``goldens.json``, and update it by
+hand so behavior changes stay explicit.
 """
 
 import gzip
@@ -71,15 +59,12 @@ from apps.performance.models import TransactionGroup
 
 from .utils import AsgiIngestTestMixin, EventIngestTestCase, list_to_envelope
 
-RUST = settings.GLITCHTIP_RUST_INGEST
-ARM = "rust" if RUST else "python"
-
 FIXTURES = Path(__file__).parent / "parity_fixtures"
 GOLDENS_PATH = FIXTURES / "goldens.json"
 RECORD_PATH = os.environ.get("GLITCHTIP_INGEST_PARITY_RECORD")
 
 # The response headers the contract locks. Everything else (Date, Server,
-# middleware security headers, ...) is deployment noise, not arm behavior.
+# middleware security headers, ...) is deployment noise, not ingest behavior.
 SIGNIFICANT_HEADERS = ("content-type", "retry-after", "access-control-allow-origin")
 
 # Keys masked in every canonicalized structure: generated per request, never
@@ -97,7 +82,7 @@ def _goldens() -> dict:
 
 
 @unittest.skipIf(
-    RUST and not settings.VALKEY_URL,
+    not settings.VALKEY_URL,
     "parity goldens assume within-batch FIFO enqueue order, which the "
     "Postgres broker's same-timestamp batch INSERT does not define; the "
     "wire bytes are broker-independent (identical serialize() blobs), and "
@@ -109,18 +94,17 @@ class IngestParityTestCase(AsgiIngestTestMixin, EventIngestTestCase):
     def setUp(self):
         super().setUp()
         cache.clear()
-        if RUST:
-            # Rust writes its block/dedupe/queue state to the dedicated test
-            # Valkey database — start each test from a clean slate.
-            from glitchtip.rust_ingest import _valkey_driver
+        # Rust writes its block/dedupe/queue state to the dedicated test
+        # Valkey database — start each test from a clean slate.
+        from glitchtip.rust_ingest import _valkey_driver
 
-            _valkey_driver().flushdb_sync()
+        _valkey_driver().flushdb_sync()
 
     # -- canonicalization ---------------------------------------------------
 
     def _canon(self, obj, masks: frozenset = frozenset()):
-        """Canonicalize a JSON-compatible structure for cross-run and
-        cross-arm comparison: mask non-deterministic fields and substitute
+        """Canonicalize a JSON-compatible structure for cross-run
+        comparison: mask non-deterministic fields and substitute
         the per-run project/organization ids (asserting they are the right
         ones before masking, so a message for the wrong project can't hide
         behind the placeholder)."""
@@ -160,33 +144,32 @@ class IngestParityTestCase(AsgiIngestTestMixin, EventIngestTestCase):
     # -- queue draining -----------------------------------------------------
 
     async def _drain(self, masks: frozenset = frozenset()) -> list:
-        """Pop everything the active arm enqueued, canonicalize it, then run
+        """Pop everything the endpoint enqueued, canonicalize it, then run
         it through the REAL task functions so the DB assertions also prove
         the messages are consumable exactly as a worker would consume them.
 
-        The Rust arm enqueues to the test Valkey queue; anything it hands
-        back to the Python view (the minidump fallback) lands in the
-        immediate test backend instead — so both sources are drained
+        The Rust pipeline enqueues to the test Valkey queue; anything it
+        hands back to the Python fallback view (the minidump fallback) lands
+        in the immediate test backend instead — so both sources are drained
         unconditionally, in that order.
         """
         raw_messages = []
-        if RUST:
-            from django_vtasks.serialization import deserialize
+        from django_vtasks.serialization import deserialize
 
-            from glitchtip.rust_ingest import _valkey_driver
+        from glitchtip.rust_ingest import _valkey_driver
 
-            driver = _valkey_driver()
-            while True:
-                raw = await driver.rpop("{vt}:q:ingest")
-                if raw is None:
-                    break
-                raw_messages.append(deserialize(bytes(raw)))
-            for message in raw_messages:
-                module, name = message["func"].rsplit(".", 1)
-                vtask = getattr(importlib.import_module(module), name)
-                # Ingest tasks are batched consumers: each call takes a list
-                # of task-message dicts.
-                await vtask.func([message])
+        driver = _valkey_driver()
+        while True:
+            raw = await driver.rpop("{vt}:q:ingest")
+            if raw is None:
+                break
+            raw_messages.append(deserialize(bytes(raw)))
+        for message in raw_messages:
+            module, name = message["func"].rsplit(".", 1)
+            vtask = getattr(importlib.import_module(module), name)
+            # Ingest tasks are batched consumers: each call takes a list
+            # of task-message dicts.
+            await vtask.func([message])
         backend = task_backends["default"]
         raw_messages += list(backend.pending_batches.get("ingest", []))
         # The immediate backend's flush runs async task functions through
@@ -196,18 +179,18 @@ class IngestParityTestCase(AsgiIngestTestMixin, EventIngestTestCase):
 
     def _canon_message(self, message: dict, masks: frozenset) -> dict:
         """Reduce a wire message to the canonical ``{"func", "args",
-        "kwargs"}`` shape (the Rust arm's extra wire fields — the generated
-        vtasks envelope ``id`` — are dropped).
+        "kwargs"}`` shape (the Rust pipeline's extra wire fields — the
+        generated vtasks envelope ``id`` — are dropped).
 
         Event/transaction/user-report payloads are re-validated through the
         worker-side schema (the exact ``_validate_batch`` step the worker
         applies) and compared as that schema's canonical JSON dump. The two
-        arms intentionally serialize the wire payload differently — the
-        Python view enqueues its full pydantic dump (explicit nulls, listed
-        header pairs), the Rust pipeline forwards the compact validated SDK
-        JSON — and the worker schema is the deliberate semantic equalizer
-        (see the ``_validate_batch`` docstring in tasks.py). A payload
-        either arm enqueued that the worker would parse differently WILL
+        enqueue sources serialize the wire payload differently — the Python
+        fallback view enqueues its full pydantic dump (explicit nulls,
+        listed header pairs), the Rust pipeline forwards the compact
+        validated SDK JSON — and the worker schema is the deliberate
+        semantic equalizer (see the ``_validate_batch`` docstring in
+        tasks.py). A payload the worker would parse differently WILL
         diverge here."""
         from apps.event_ingest.schema import (
             InterchangeTransactionEvent,
@@ -219,8 +202,8 @@ class IngestParityTestCase(AsgiIngestTestMixin, EventIngestTestCase):
             "apps.event_ingest.tasks.ingest_event": IssueTaskMessage,
             "apps.event_ingest.tasks.ingest_transaction": InterchangeTransactionEvent,
             "apps.event_ingest.tasks.ingest_user_report": UserReportTaskMessage,
-            # apps.logs.tasks.ingest_logs consumes the raw dicts (both arms
-            # already enqueue the flattened normalized log items).
+            # apps.logs.tasks.ingest_logs consumes the raw dicts (both
+            # enqueue sources already send the flattened normalized items).
         }
         args = list(message.get("args") or [])
         schema = worker_schemas.get(message["func"])
@@ -281,19 +264,11 @@ class IngestParityTestCase(AsgiIngestTestMixin, EventIngestTestCase):
             data = json.loads(path.read_text()) if path.exists() else {}
             data[name] = observed
             path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
-            self.skipTest(f"recorded observed golden for {name!r} ({ARM} arm)")
-        golden = _goldens()[name]
-        if "python" in golden and "rust" in golden:
-            self.assertIn(
-                "_divergence",
-                golden,
-                "per-arm goldens must document why the arms diverge",
-            )
-            golden = golden[ARM]
+            self.skipTest(f"recorded observed golden for {name!r}")
         self.assertEqual(
             observed,
-            golden,
-            f"{ARM} arm diverged from the committed golden for {name!r}",
+            _goldens()[name],
+            f"envelope ingest diverged from the committed golden for {name!r}",
         )
 
     # -- fixtures -----------------------------------------------------------
@@ -396,13 +371,11 @@ class IngestParityTestCase(AsgiIngestTestMixin, EventIngestTestCase):
         """An envelope that is just a header line — zero items."""
         await self._run_case("header_only", self._fixture("header_only.envelope"))
 
-    # -- cases: documented divergences ----------------------------------------
-
     async def test_header_dsn_only(self):
-        """DOCUMENTED DIVERGENCE — credential only in the envelope-header
-        ``dsn``, no query/header auth: the Rust arm recovers the key from the
-        header and ingests; the Python view never reads the body for auth and
-        denies."""
+        """Credential only in the envelope-header ``dsn``, no query/header
+        auth: the Rust pipeline recovers the key from the header and ingests.
+        (The retired Python pipeline never read the body for auth and denied
+        this — a divergence that was deliberate when both arms ran.)"""
         body = (
             self._fixture("header_dsn_only.envelope")
             .replace(b"__PUBLIC_KEY__", str(self.projectkey.public_key).encode())
@@ -411,9 +384,8 @@ class IngestParityTestCase(AsgiIngestTestMixin, EventIngestTestCase):
         await self._run_case("header_dsn_only", body, query="")
 
     async def test_oversize_body(self):
-        """DOCUMENTED DIVERGENCE — body over DATA_UPLOAD_MAX_MEMORY_SIZE:
-        both arms 413, but the response body/content-type differ (Django's
-        RequestDataTooBig text vs the Rust mid-stream response)."""
+        """Body over DATA_UPLOAD_MAX_MEMORY_SIZE: the Rust pipeline answers
+        413 mid-stream."""
         size = settings.DATA_UPLOAD_MAX_MEMORY_SIZE + 1
         body = (
             b'{"event_id": "cafe0d6be51c4b8a9f3e2d1c0b9a8f77"}\n'
@@ -449,22 +421,17 @@ class IngestParityTestCase(AsgiIngestTestMixin, EventIngestTestCase):
 
     async def test_unknown_item_type(self):
         """A well-formed item of a type neither supported nor ignored: the
-        envelope is accepted (200) and the item skipped; the Rust arm reports
-        it as an ingest anomaly (asserted directly, same fingerprint contract
-        as the Python view's sentry capture)."""
-        if RUST:
-            from unittest import mock
+        envelope is accepted (200), the item skipped, and the pipeline
+        reports it as an ingest anomaly (asserted directly, same fingerprint
+        contract as the fallback view's sentry capture)."""
+        from unittest import mock
 
-            with mock.patch("glitchtip.rust_ingest._report_anomalies") as report:
-                await self._run_case(
-                    "unknown_item", self._fixture("unknown_item.envelope")
-                )
-            anomalies = [a for call in report.call_args_list for a in call.args[0]]
-            self.assertEqual(len(anomalies), 1)
-            self.assertEqual(anomalies[0].get("kind"), "unsupported-item-type")
-            self.assertEqual(anomalies[0].get("item_type"), "quantum_report")
-        else:
+        with mock.patch("glitchtip.rust_ingest._report_anomalies") as report:
             await self._run_case("unknown_item", self._fixture("unknown_item.envelope"))
+        anomalies = [a for call in report.call_args_list for a in call.args[0]]
+        self.assertEqual(len(anomalies), 1)
+        self.assertEqual(anomalies[0].get("kind"), "unsupported-item-type")
+        self.assertEqual(anomalies[0].get("item_type"), "quantum_report")
 
     async def test_non_utf8_header(self):
         """Envelope whose header line is not valid UTF-8."""
@@ -515,11 +482,11 @@ class IngestParityTestCase(AsgiIngestTestMixin, EventIngestTestCase):
     # -- cases: fallback -------------------------------------------------------
 
     async def test_minidump_envelope(self):
-        """SDK minidump attachment: the Rust arm hands the buffered request
-        back to the Python view pre-side-effect, so the two arms must be
-        IDENTICAL here — one shared golden, no arm key. The 8-byte MDMP stub
-        parses into a minimal fatal native event whose event_id (the envelope
-        header has none, so one is generated) and timestamp are masked."""
+        """SDK minidump attachment: the Rust pipeline hands the buffered
+        request back to the Python fallback view pre-side-effect. The 8-byte
+        MDMP stub parses into a minimal fatal native event whose event_id
+        (the envelope header has none, so one is generated) and timestamp
+        are masked."""
         await self._run_case(
             "minidump",
             self._fixture("minidump.envelope"),

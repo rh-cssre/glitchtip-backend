@@ -1,7 +1,12 @@
 """
-Lightweight ASGI dispatcher that routes ingest paths to a Django handler
-with minimal middleware, bypassing session, auth, CSRF, messages, locale,
-and allauth middleware on the hot ingest path.
+Lightweight ASGI dispatcher for the ingest paths.
+
+Envelope POSTs (``/api/<id>/envelope/``) are served by the Rust ingest
+pipeline (``glitchtip.rust_ingest``). The remaining ingest endpoints —
+``/store/``, ``/security/``, ``/minidump/``, OTLP — and anything the Rust
+handler declines or hands back go to a Django handler with minimal
+middleware, bypassing session, auth, CSRF, messages, locale, and allauth
+middleware on the hot ingest path.
 
 Non-ingest requests pass through to the full Django application unchanged.
 """
@@ -80,7 +85,7 @@ class IngestDispatcher:
         return self._ingest_app
 
     def _get_rust_handler(self):
-        """Lazily build the Rust envelope handler (GLITCHTIP_RUST_INGEST)."""
+        """Lazily build the Rust envelope handler."""
         if self._rust_handler is None:
             from glitchtip.rust_ingest import RustEnvelopeHandler
 
@@ -89,15 +94,12 @@ class IngestDispatcher:
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and _INGEST_PATH_RE.match(scope.get("path", "")):
-            from django.conf import settings
+            from glitchtip.rust_ingest import RustEnvelopeHandler
 
-            if settings.GLITCHTIP_RUST_INGEST:
-                from glitchtip.rust_ingest import RustEnvelopeHandler
-
-                project_id = RustEnvelopeHandler.match(scope)
-                if project_id is not None:
-                    await self._get_rust_handler()(scope, receive, send, project_id)
-                    return
+            project_id = RustEnvelopeHandler.match(scope)
+            if project_id is not None:
+                await self._get_rust_handler()(scope, receive, send, project_id)
+                return
             ingest_app = self._get_ingest_app()
             await ingest_app(scope, receive, send)
         else:

@@ -10,7 +10,9 @@ from gt_rust.symbolic import SourceMapCache
 from apps.sourcecode.models import DebugSymbolBundle
 
 if TYPE_CHECKING:
-    from .schema import EventException, IssueEventSchema, StackTraceFrame
+    from apps.shared.schema.exception import EventException, StackTraceFrame
+
+    from .schema import IssueEventSchema
 
 logger = logging.getLogger(__name__)
 

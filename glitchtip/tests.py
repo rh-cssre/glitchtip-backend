@@ -1272,7 +1272,6 @@ json.dump({
     "cache_options": settings.CACHES["default"].get("OPTIONS", {}),
     "task_backend": settings.TASKS["default"]["BACKEND"],
     "session_engine": settings.SESSION_ENGINE,
-    "rust_ingest": settings.GLITCHTIP_RUST_INGEST,
     "database_engine": settings.DATABASE_ENGINE,
 }, __import__("sys").stdout)
 """
@@ -1431,30 +1430,13 @@ class CacheConfigTestCase(TestCase):
         )
 
     def test_empty_valkey_url_falls_back_to_db(self):
-        """VALKEY_URL="" → database cache + DB task backend."""
+        """VALKEY_URL="" → database cache + DB task backend. The Rust DB
+        engine (which also carries the Rust ingest path's cache and broker
+        ops in this shape) is unconditional."""
         info = self._probe({"VALKEY_URL": ""})
         self.assertEqual(info["cache_backend"], self.DB_CACHE_BACKEND)
         self.assertEqual(info["task_backend"], self.VTASKS_DB)
-
-    def test_rust_ingest_flag_enables_with_valkey(self):
-        """GLITCHTIP_RUST_INGEST with valkey configured stays enabled; the
-        Rust DB engine is unconditional."""
-        info = self._probe(
-            {"VALKEY_URL": "redis://valkey:6379/0", "GLITCHTIP_RUST_INGEST": "true"}
-        )
-        self.assertTrue(info["rust_ingest"])
         self.assertEqual(info["database_engine"], "gt_rust.django_backend")
-
-    def test_rust_ingest_without_valkey_stays_enabled(self):
-        """Flag on + no valkey: the Postgres-only shape. The Rust path runs
-        its cache ops against the django_cache table and enqueues on the
-        db_queuedtask broker, so the flag stays enabled alongside the DB
-        cache and DB task backend."""
-        info = self._probe({"VALKEY_URL": "", "GLITCHTIP_RUST_INGEST": "true"})
-        self.assertTrue(info["rust_ingest"])
-        self.assertEqual(info["database_engine"], "gt_rust.django_backend")
-        self.assertEqual(info["cache_backend"], self.DB_CACHE_BACKEND)
-        self.assertEqual(info["task_backend"], self.VTASKS_DB)
 
     def test_no_valkey_env_defaults_to_vcache(self):
         """When no VALKEY_URL/REDIS_URL is set at all, settings.py defaults to

@@ -923,14 +923,6 @@ if VALKEY_HOST:
 else:
     VALKEY_URL = env.str("VALKEY_URL", env.str("REDIS_URL", "redis://redis:6379/0"))
 
-# Serve POST /api/<project_id>/envelope/ entirely in Rust (gt_rust.ingest):
-# DSN auth, decompression/framing, PII scrubbing, dedupe and vtasks enqueue
-# run on the shared tokio runtime, and the event payload never materializes
-# on the Python heap. The ingest path issues its auth query on the very pool
-# the ORM uses (gt_rust is the only database engine). With VALKEY_URL the
-# cache/broker ops ride gt_rust's valkey driver; without it they run against
-# the vcache_entry table and the db_queuedtask broker on the same pool.
-GLITCHTIP_RUST_INGEST = env.bool("GLITCHTIP_RUST_INGEST", False)
 # Add other settings that apply to both methods.
 for db_config in DATABASES.values():
     # gt_rust.django_backend extends Django's stock postgresql backend and
@@ -1076,8 +1068,8 @@ if VALKEY_URL:
     SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 else:  # Fallback to database cache
     # The django_cache table is also the store the Rust ingest path reads
-    # and writes (block/dedupe keys) when GLITCHTIP_RUST_INGEST runs
-    # without a Valkey — one cache either way. MAX_ENTRIES is raised from
+    # and writes (block/dedupe keys) when it runs without a Valkey — one
+    # cache either way. MAX_ENTRIES is raised from
     # Django's default 300: ingest dedupe writes one 5-minute key per
     # event, and the default would make every Python-side set() cull a
     # third of the table (dropping live dedupe/block keys) under even

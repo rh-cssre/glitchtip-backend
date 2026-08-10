@@ -1,23 +1,16 @@
-"""Tests for the Rust envelope-ingest ASGI path (``GLITCHTIP_RUST_INGEST``).
+"""Tests for the Rust envelope-ingest ASGI path.
 
 These drive ``IngestDispatcher`` at the ASGI layer — the seam where the Rust
-path replaces the Django view — and then flush the vtasks batch so the real
+pipeline serves envelope POSTs — and then flush the vtasks batch so the real
 worker tasks consume what Rust enqueued. That covers the full contract: DSN
 auth against the shared Postgres pool, Valkey block/dedupe caches, the vtasks
 wire format, and worker-side re-validation of the payloads.
-
-Skipped unless ``GLITCHTIP_RUST_INGEST`` is enabled: the flag wires the Rust
-ASGI dispatch in (the ``gt_rust.django_backend`` engine and gt_rust Valkey
-cache driver it relies on run unconditionally), so these run in a dedicated
-flag-on test lane while the default suite keeps covering the Python view.
 """
 
 import importlib
 import json
-import unittest
 import uuid
 
-from django.conf import settings
 from django.core.cache import cache
 from django.tasks import task_backends
 
@@ -35,9 +28,6 @@ from .utils import (
 )
 
 
-@unittest.skipUnless(
-    settings.GLITCHTIP_RUST_INGEST, "requires GLITCHTIP_RUST_INGEST=true"
-)
 class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
     """Runs in BOTH Rust ingest shapes: the Valkey lane (block/dedupe cache
     and LPUSH broker on the dedicated test Valkey database) and the

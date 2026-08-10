@@ -18,99 +18,78 @@
     }
   },
   "header_dsn_only": {
-    "_divergence": "Credential only in the envelope-header 'dsn' (no query/header auth): the Rust arm recovers the public key from the envelope header and ingests the event, so a mis-configured SDK's events are captured; the Python view authenticates from the query string / Authorization / X-Sentry-Auth only (it never reads the body for auth) and denies with 403.",
-    "python": {
-      "db": {
-        "issue_count": 0,
-        "issue_events": [],
-        "logs": [],
-        "transaction_groups": []
-      },
-      "messages": [],
-      "response": {
-        "body": {
-          "detail": "Denied"
-        },
-        "headers": {
-          "content-type": "application/json"
-        },
-        "status": 403
-      }
-    },
-    "rust": {
-      "db": {
-        "issue_count": 1,
-        "issue_events": [
-          {
-            "event_id": "b6a1c9e2d3f44c5e8a7b9c0d1e2f3a4b",
-            "ip_address": "93.184.216.0",
-            "level": 3,
-            "title": "header dsn only"
-          }
-        ],
-        "logs": [],
-        "transaction_groups": []
-      },
-      "messages": [
+    "db": {
+      "issue_count": 1,
+      "issue_events": [
         {
-          "args": [
-            {
-              "organization_id": "<organization_id>",
-              "payload": {
-                "breadcrumbs": null,
-                "contexts": null,
-                "debug_meta": null,
-                "dist": null,
-                "environment": null,
-                "errors": null,
-                "event_id": "b6a1c9e2-d3f4-4c5e-8a7b-9c0d1e2f3a4b",
-                "exception": null,
-                "extra": null,
-                "fingerprint": null,
-                "level": "warning",
-                "logentry": null,
-                "logger": null,
-                "message": "header dsn only",
-                "modules": null,
-                "platform": "python",
-                "release": null,
-                "request": null,
-                "sdk": null,
-                "server_name": null,
-                "tags": null,
-                "template": null,
-                "threads": null,
-                "timestamp": "2026-01-05T12:00:00.100000Z",
-                "transaction": null,
-                "type": 0,
-                "user": {
-                  "data": null,
-                  "email": null,
-                  "geo": null,
-                  "id": null,
-                  "ip_address": "93.184.216.0",
-                  "username": null
-                }
-              },
-              "project_id": "<project_id>",
-              "received": "<received>",
-              "update_first_event": true,
-              "uuid": "<uuid>"
-            }
-          ],
-          "func": "apps.event_ingest.tasks.ingest_event",
-          "kwargs": {}
+          "event_id": "b6a1c9e2d3f44c5e8a7b9c0d1e2f3a4b",
+          "ip_address": "93.184.216.0",
+          "level": 3,
+          "title": "header dsn only"
         }
       ],
-      "response": {
-        "body": {
-          "id": "b6a1c9e2d3f44c5e8a7b9c0d1e2f3a4b"
-        },
-        "headers": {
-          "content-type": "application/json"
-        },
-        "status": 200
+      "logs": [],
+      "transaction_groups": []
+    },
+    "messages": [
+      {
+        "args": [
+          {
+            "organization_id": "<organization_id>",
+            "payload": {
+              "breadcrumbs": null,
+              "contexts": null,
+              "debug_meta": null,
+              "dist": null,
+              "environment": null,
+              "errors": null,
+              "event_id": "b6a1c9e2-d3f4-4c5e-8a7b-9c0d1e2f3a4b",
+              "exception": null,
+              "extra": null,
+              "fingerprint": null,
+              "level": "warning",
+              "logentry": null,
+              "logger": null,
+              "message": "header dsn only",
+              "modules": null,
+              "platform": "python",
+              "release": null,
+              "request": null,
+              "sdk": null,
+              "server_name": null,
+              "tags": null,
+              "template": null,
+              "threads": null,
+              "timestamp": "2026-01-05T12:00:00.100000Z",
+              "transaction": null,
+              "type": 0,
+              "user": {
+                "data": null,
+                "email": null,
+                "geo": null,
+                "id": null,
+                "ip_address": "93.184.216.0",
+                "username": null
+              }
+            },
+            "project_id": "<project_id>",
+            "received": "<received>",
+            "update_first_event": true,
+            "uuid": "<uuid>"
+          }
+        ],
+        "func": "apps.event_ingest.tasks.ingest_event",
+        "kwargs": {}
       }
+    ],
+    "response": {
+      "body": {
+        "id": "b6a1c9e2d3f44c5e8a7b9c0d1e2f3a4b"
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "status": 200
     }
   },
   "header_only": {

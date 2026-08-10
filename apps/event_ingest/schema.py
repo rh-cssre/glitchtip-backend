@@ -15,7 +15,6 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     JsonValue,
-    RootModel,
     ValidationError,
     WrapValidator,
     field_validator,
@@ -58,15 +57,6 @@ resolve None correctly.
 def coerce_list(v: Any) -> Any:
     """Wrap non-list dict into list: {"a": 1} to [{"a": 1}]"""
     return v if not isinstance(v, dict) else [v]
-
-
-def truncate_str(v: Any) -> Any:
-    """
-    Truncates a string if its max_length is set.
-    """
-    if isinstance(v, str):
-        return v[:8192]
-    return v
 
 
 def truncate_on_error(v: Any, handler) -> str:
@@ -218,14 +208,6 @@ class ClientSDKInfo(LaxIngestSchema):
     @field_validator("packages", mode="before")
     def name_must_contain_space(cls, v: Any) -> Any:
         return coerce_list(v)
-
-
-class RequestHeaders(LaxIngestSchema):
-    content_type: str | None
-
-
-class RequestEnv(LaxIngestSchema):
-    remote_addr: str | None
 
 
 QueryString = str | ListKeyValue | dict[str, str | dict[str, Any] | None]
@@ -550,14 +532,6 @@ class UserReportTaskMessage(LaxIngestSchema):
     comments: str = ""
 
 
-class EnvelopeSchema(RootModel[list[dict[str, Any]]]):
-    root: list[dict[str, Any]]
-    _header: EnvelopeHeaderSchema
-    _items: list[
-        tuple[ItemHeaderSchema, WebIngestIssueEvent | TransactionEventSchema]
-    ] = []
-
-
 class CSPReportSchema(LaxIngestSchema):
     """
     https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy-Report-Only#violation_report_syntax
@@ -610,18 +584,6 @@ class TaskIssueEvent(BaseIssueEvent):
 
     # CSP-specific field
     csp: CSPReportSchema | None = None
-
-
-class TaskDefaultIssueEvent(TaskIssueEvent):
-    type: Literal[IssueEventType.DEFAULT] = IssueEventType.DEFAULT
-
-
-class TaskErrorIssueEvent(TaskIssueEvent):
-    type: Literal[IssueEventType.ERROR] = IssueEventType.ERROR
-
-
-class TaskCSPIssueEvent(TaskIssueEvent):
-    type: Literal[IssueEventType.CSP] = IssueEventType.CSP
 
 
 class IssueEventSchema(WebIngestIssueEvent):

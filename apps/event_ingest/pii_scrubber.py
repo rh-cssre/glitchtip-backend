@@ -115,9 +115,6 @@ DEFAULT_WHOLE_KEYS: frozenset[str] = frozenset(
     }
 )
 
-# Combined view used only by the opt-in aggressive (substring) matcher.
-DEFAULT_DENYLIST: tuple[str, ...] = tuple(DEFAULT_KEY_TOKENS | DEFAULT_WHOLE_KEYS)
-
 # Top-level event sections that may carry user data. Scrubbing is scoped to
 # these keys rather than walking the whole event: it keeps structural fields
 # (event_id, level, release, environment, platform...) untouched and bounds the

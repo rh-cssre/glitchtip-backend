@@ -73,9 +73,8 @@ partitions managed by `pg_partman`.
 
 ### Load testing
 
-Load and A/B benchmarks live in [benchmarks/](./benchmarks/README.md) — see
-`run_ingest_bench.sh` (memory growth under sustained load) and
-`run_ingest_ab.sh` (Python vs Rust ingest A/B).
+Load benchmarks live in [benchmarks/](./benchmarks/README.md) — see
+`run_ingest_bench.sh` (memory growth under sustained load).
 
 
 ### Memory profiling

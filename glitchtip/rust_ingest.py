@@ -1,7 +1,6 @@
 """ASGI handler serving ``POST /api/<project_id>/envelope/`` in Rust.
 
-When ``GLITCHTIP_RUST_INGEST`` is enabled, ``IngestDispatcher`` routes
-envelope POSTs here instead of the Django view. The whole request — DSN
+``IngestDispatcher`` routes every envelope POST here. The whole request — DSN
 auth + throttling, body buffering, decompression/framing, item validation,
 PII scrubbing, event-id dedupe and the vtasks enqueue — runs inside
 ``gt_rust`` on the shared tokio runtime; this module only adapts ASGI
@@ -150,7 +149,7 @@ def _valkey_driver():
         return cache_backend._driver
     if not settings.TESTING:
         raise RuntimeError(
-            "GLITCHTIP_RUST_INGEST requires the vcache Valkey cache backend"
+            "Rust envelope ingest requires the vcache Valkey cache backend"
         )
     from gt_rust.valkey import RustValkeyDriver
 

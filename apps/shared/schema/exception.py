@@ -27,38 +27,6 @@ def _truncate_var_value(value: str | dict | list) -> str | dict | list:
     return value
 
 
-class PosixSignal(LaxIngestSchema):
-    number: int
-    code: int | None
-    name: str | None
-    code_name: str | None
-
-
-class MachException(LaxIngestSchema):
-    number: int
-    code: int
-    subcode: int
-    name: str | None
-
-
-class NSError(LaxIngestSchema):
-    code: int
-    domain: str
-
-
-class Errno(LaxIngestSchema):
-    number: int
-    name: str | None
-
-
-class MechanismMeta(LaxIngestSchema):
-    posix_signal: PosixSignal | None = None
-    match_exception: MachException | None = None
-    ns_error: NSError | None = None
-    errno: Errno | None = None
-    relevant_address: str | None = None
-
-
 class ExceptionMechanism(LaxIngestSchema):
     type: str
     description: str | None = None
@@ -151,12 +119,6 @@ class EventException(LaxIngestSchema):
 
 class ValueEventException(LaxIngestSchema):
     values: list[EventException]
-
-
-class ExceptionEntryData(LaxIngestSchema):
-    values: dict
-    exc_omitted: None = None
-    has_system_frames: bool
 
 
 class ExceptionEntry(LaxIngestSchema):
