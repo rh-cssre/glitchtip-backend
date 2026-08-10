@@ -141,7 +141,7 @@ def flush_rust_ingest_state():
 
 
 async def pop_rust_ingest_messages() -> list[bytes]:
-    """Pop every raw serialized task message the Rust arm enqueued onto the
+    """Pop every raw serialized task message the Rust path enqueued onto the
     ingest queue, oldest first. Valkey: RPOP the queue list. Postgres: read
     and delete the db_queuedtask rows (created_at order; rows enqueued in
     one batch share a timestamp, so within-batch order is not defined —
