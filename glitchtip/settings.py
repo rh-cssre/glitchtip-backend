@@ -923,7 +923,7 @@ if VALKEY_HOST:
 else:
     VALKEY_URL = env.str("VALKEY_URL", env.str("REDIS_URL", "redis://redis:6379/0"))
 
-# Add other settings that apply to both methods.
+# Settings applied to every DATABASES entry, however it was configured above.
 for db_config in DATABASES.values():
     # gt_rust.django_backend extends Django's stock postgresql backend and
     # adds the AsyncDatabaseWrapper that django-async-backend's
@@ -1069,11 +1069,10 @@ if VALKEY_URL:
 else:  # Fallback to database cache
     # The django_cache table is also the store the Rust ingest path reads
     # and writes (block/dedupe keys) when it runs without a Valkey — one
-    # cache either way. MAX_ENTRIES is raised from
-    # Django's default 300: ingest dedupe writes one 5-minute key per
-    # event, and the default would make every Python-side set() cull a
-    # third of the table (dropping live dedupe/block keys) under even
-    # modest event volume.
+    # cache either way. MAX_ENTRIES is raised from Django's default 300:
+    # ingest dedupe writes one 5-minute key per event, and the default would
+    # make every Python-side set() cull a third of the table (dropping live
+    # dedupe/block keys) under even modest event volume.
     CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.db.DatabaseCache",

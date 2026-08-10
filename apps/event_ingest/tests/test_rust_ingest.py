@@ -229,6 +229,34 @@ class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
         # The Django view answers non-POST envelope requests.
         self.assertEqual(status, 405)
 
+    async def test_absurdly_long_project_id_does_not_raise(self):
+        """A project id past CPython's 4300-digit ``int()`` limit must not
+        escape the dispatcher as an unhandled ASGI error.
+
+        The path pattern is matched before any handler that could turn an
+        exception into a response, so an unbounded digit capture would let
+        ``int()`` raise straight out of ``IngestDispatcher`` — no response,
+        no CORS headers, no error capture. Django's router 404s the same URL.
+        """
+        _, envelope = self._envelope()
+        status, _, _ = await self._post(
+            envelope.encode(), path="/api/" + "1" * 4301 + "/envelope/"
+        )
+        self.assertGreaterEqual(status, 400)
+        self.assertLess(status, 500)
+
+    async def test_non_ascii_digit_project_id_not_claimed(self):
+        """``\\d`` matches non-ASCII digits and ``int()`` converts them, so an
+        unrestricted pattern would ingest ``/api/<arabic-indic 123>/envelope/``
+        as project 123 while Django's ``[0-9]+`` router 404s it. Anything an
+        edge rule keyed on the ASCII project id cannot see must not be
+        accepted here either."""
+        _, envelope = self._envelope()
+        status, _, _ = await self._post(envelope.encode(), path="/api/١٢٣/envelope/")
+        self.assertEqual(status, 404)
+        await self._drain_rust_queue()
+        self.assertEqual(await IssueEvent.objects.acount(), 0)
+
     async def test_oversized_project_id_falls_through_to_django(self):
         # A project id past the BIGINT/i64 range can't name a real project
         # and must not overflow the Rust session arg into a 500 + error

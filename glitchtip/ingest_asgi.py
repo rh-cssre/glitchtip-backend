@@ -14,8 +14,11 @@ Non-ingest requests pass through to the full Django application unchanged.
 import re
 
 _INGEST_PATH_RE = re.compile(
+    # ASCII digits only: Django's ``<int:>`` converter is ``[0-9]+``, and a
+    # path this doesn't claim falls through to the full app, which routes it
+    # the same way it always did.
     r"^/(?:"
-    r"api/\d+/(?:envelope|store|minidump|security)/"
+    r"api/[0-9]+/(?:envelope|store|minidump|security)/"
     # Native OTLP/HTTP ingest (optional trailing slash, no /api prefix).
     r"|v1/(?:logs|traces|metrics)/?$"
     r")"
@@ -50,6 +53,13 @@ class IngestDispatcher:
         self._full_app = full_app
         self._ingest_app = None
         self._rust_handler = None
+        # Build the ingest handler now, at import time, rather than on the
+        # first ingest request. Building it swaps settings.MIDDLEWARE for the
+        # duration (see load_middleware below), and doing that while the
+        # process is already serving traffic is only safe by accident — here
+        # it happens before the server accepts anything. It also keeps the
+        # ~1ms middleware build out of the first request's latency.
+        self._get_ingest_app()
 
     def _get_ingest_app(self):
         """Lazily build the ingest ASGI handler with minimal middleware."""
