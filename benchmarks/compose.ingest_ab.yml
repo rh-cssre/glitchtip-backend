@@ -1,0 +1,127 @@
+# A/B ingest benchmark stack: two identical production-shaped GlitchTip web
+# services from the SAME image, differing only in GLITCHTIP_RUST_INGEST.
+# Each arm gets its own postgres database and its own valkey instance so
+# the embedded vtasks workers can never drain (or starve) each other's
+# queues.
+#
+# Both webs boot through bin/run-all-in-one.sh — the production entrypoint —
+# so tune-malloc.sh, the embedded worker, and granian flags match deploys.
+# GRANIAN_WORKERS_MAX_RSS is raised far above bench RSS so worker recycling
+# never fires mid-measurement (a respawn would reset the RSS series; the
+# driver detects it via process_start_time_seconds and flags the run).
+#
+# Resource caps keep the arms symmetric and prevent the load generator from
+# starving the servers. Override via env: WEB_CPUS, WEB_MEM, PG_CPUS, ...
+#
+# The explicit project name keeps this stack from colliding with
+# compose.bench.yml (same directory -> same default project name, and the
+# shared postgres/valkey service names would get recreated across harnesses).
+name: glitchtip_ingest_ab
+
+x-web: &web
+  build: ..
+  user: root
+  volumes:
+    - ..:/code
+  depends_on:
+    postgres:
+      condition: service_healthy
+    valkey-py:
+      condition: service_started
+    valkey-rust:
+      condition: service_started
+  command: >
+    bash -c "
+      python manage.py migrate --no-input --skip-checks &&
+      python manage.py maintain_partitions &&
+      DEBUG=true python manage.py bootstrap_dev &&
+      SKIP_INIT=true exec bin/run-all-in-one.sh
+    "
+  deploy:
+    resources:
+      limits:
+        cpus: "${WEB_CPUS:-2}"
+        memory: "${WEB_MEM:-2g}"
+
+x-web-environment: &web-environment
+  SECRET_KEY: change_me
+  DEBUG: "false"
+  LOG_LEVEL: WARNING
+  EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
+  ENABLE_OBSERVABILITY_API: "true"  # /metrics — the driver's CPU/RSS source
+  GLITCHTIP_ENABLE_LOGS: "true"
+  GRANIAN_WORKERS: "1"
+  GRANIAN_LOG_LEVEL: warning
+  GRANIAN_WORKERS_MAX_RSS: "16384"
+  VTASKS_CONCURRENCY: "${VTASKS_CONCURRENCY:-20}"
+  # Two deliberate departures from production shape, both for measurement
+  # determinism: the 1s uptime-dispatch schedule and the hourly (jittered)
+  # gc+malloc_trim pass land in random segments' CPU/RSS windows otherwise.
+  GLITCHTIP_ENABLE_UPTIME: "false"
+  GLITCHTIP_MALLOC_TRIM_INTERVAL: "0"
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: "trust"
+    volumes:
+      - ./ingest_ab_init.sql:/docker-entrypoint-initdb.d/ingest_ab_init.sql:ro
+    healthcheck:
+      # First boot spends seconds in initdb + ingest_ab_init.sql; without
+      # this the webs race it, crash on connect, and (restart: on-failure
+      # aside) waste a slow retry loop.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d glitchtip_rust"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    deploy:
+      resources:
+        limits:
+          cpus: "${PG_CPUS:-2}"
+          memory: "${PG_MEM:-1g}"
+  # One valkey per arm: a DB index only isolates keyspaces, not memory or
+  # CPU — a burst backlog filling the instance would silently wipe BOTH
+  # arms' queues at once.
+  valkey-py: &valkey
+    image: valkey/valkey:9
+    deploy:
+      resources:
+        limits:
+          cpus: "${VALKEY_CPUS:-0.5}"
+          memory: "${VALKEY_MEM:-256m}"
+  valkey-rust: *valkey
+  web-py:
+    <<: *web
+    restart: on-failure
+    environment:
+      <<: *web-environment
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/glitchtip_py
+      VALKEY_URL: redis://valkey-py:6379/0
+      GLITCHTIP_RUST_INGEST: "false"
+    ports:
+      - "8101:8000"
+  web-rust:
+    <<: *web
+    restart: on-failure
+    environment:
+      <<: *web-environment
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/glitchtip_rust
+      VALKEY_URL: redis://valkey-rust:6379/0
+      GLITCHTIP_RUST_INGEST: "true"
+    ports:
+      - "8102:8000"
+  bench:
+    build: ..
+    user: root
+    volumes:
+      - ..:/code
+    depends_on:
+      - web-py
+      - web-rust
+    entrypoint: ["sleep", "infinity"]
+    deploy:
+      resources:
+        limits:
+          cpus: "${BENCH_CPUS:-2}"
+          memory: "${BENCH_MEM:-1g}"
