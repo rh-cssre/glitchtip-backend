@@ -448,6 +448,82 @@ class LogIngestProcessingTestCase(TransactionTestCase):
         self.assertEqual(log.data["custom_field"], "custom_value")
         self.assertEqual(log.data["request_id"], "abc-123")
 
+    def test_millisecond_timestamp_rescaled(self):
+        """Epoch milliseconds in the timestamp field ingest at the correct
+        time instead of raising (seen in production as
+        'ValueError: year must be in 1..9999')."""
+        now = datetime.now(UTC)
+        message = LogTaskMessage(
+            project_id=self.project.id,
+            organization_id=self.organization.id,
+            received=now,
+            logs=[
+                {
+                    "timestamp": round(now.timestamp() * 1000),
+                    "level": "info",
+                    "body": "ms timestamp",
+                }
+            ],
+        )
+
+        count = process_log_events([message])
+
+        self.assertEqual(count, 1)
+        log = LogEvent.objects.first()
+        stored = UUID7Helper.extract_datetime(log.id)
+        self.assertLess(abs((stored - now).total_seconds()), 1)
+
+    def test_micro_and_nanosecond_timestamps_rescaled(self):
+        """Epoch micro- and nanoseconds rescale to seconds as well."""
+        now = datetime.now(UTC)
+        message = LogTaskMessage(
+            project_id=self.project.id,
+            organization_id=self.organization.id,
+            received=now,
+            logs=[
+                {
+                    "timestamp": round(now.timestamp() * 1e6),
+                    "level": "info",
+                    "body": "us timestamp",
+                },
+                {
+                    "timestamp": round(now.timestamp() * 1e9),
+                    "level": "info",
+                    "body": "ns timestamp",
+                },
+            ],
+        )
+
+        count = process_log_events([message])
+
+        self.assertEqual(count, 2)
+
+    def test_unparseable_timestamp_rejects_log_not_batch(self):
+        """A timestamp no rescaling can save rejects that single log;
+        other logs and other batched messages still process."""
+        now = datetime.now(UTC)
+        bad_message = LogTaskMessage(
+            project_id=self.project.id,
+            organization_id=self.organization.id,
+            received=now,
+            logs=[
+                {"timestamp": 1e30, "level": "info", "body": "too large"},
+                {"timestamp": float("inf"), "level": "info", "body": "inf"},
+                {"timestamp": float("nan"), "level": "info", "body": "nan"},
+                {"timestamp": "not-a-date", "level": "info", "body": "bad str"},
+                {"timestamp": now.timestamp(), "level": "info", "body": "good"},
+            ],
+        )
+        good_message = self._log_message("second message")
+
+        count = process_log_events([bad_message, good_message])
+
+        self.assertEqual(count, 2)
+        self.assertEqual(
+            set(LogEvent.objects.values_list("body", flat=True)),
+            {"good", "second message"},
+        )
+
 
 @override_settings(GLITCHTIP_ENABLE_LOGS=True)
 class LogEnvelopeAPITestCase(GlitchTipTestCaseMixin, TransactionTestCase):

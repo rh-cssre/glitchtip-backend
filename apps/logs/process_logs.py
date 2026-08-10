@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 # Maximum allowed time difference between client timestamp and server time
 MAX_TIMESTAMP_DRIFT = timedelta(days=1)
 
+# Numeric timestamps above this cannot be epoch seconds (1e11 is roughly
+# year 5138); assume the client sent milli/micro/nanoseconds and rescale.
+MAX_EPOCH_SECONDS = 1e11
+
 
 async def update_log_statistics(
     stats_data: defaultdict[datetime, defaultdict[tuple[int, int, int, int], dict]],
@@ -170,17 +174,32 @@ async def process_log_events(messages: list) -> int:
         project_id = message.project_id
 
         for log_item in message.logs:
-            # Parse timestamp from the log item
+            # Parse timestamp from the log item. The value is client
+            # controlled, so a parse failure must reject the single log,
+            # not raise and fail every message batched in this task.
             timestamp_val = log_item.get("timestamp")
-            if isinstance(timestamp_val, (int, float)):
-                # Unix timestamp with fractional seconds
-                log_timestamp = datetime.fromtimestamp(timestamp_val, tz=UTC)
-            elif isinstance(timestamp_val, str):
-                # ISO format string
-                log_timestamp = datetime.fromisoformat(timestamp_val)
-            else:
-                # No timestamp provided - use server time
-                log_timestamp = server_time
+            try:
+                if isinstance(timestamp_val, (int, float)):
+                    # Unix timestamp with fractional seconds. Rescale values
+                    # sent as milli/micro/nanoseconds; anything still out of
+                    # range (e.g. inf, nan) fails fromtimestamp below.
+                    for _ in range(3):
+                        if abs(timestamp_val) <= MAX_EPOCH_SECONDS:
+                            break
+                        timestamp_val /= 1000
+                    log_timestamp = datetime.fromtimestamp(timestamp_val, tz=UTC)
+                elif isinstance(timestamp_val, str):
+                    # ISO format string
+                    log_timestamp = datetime.fromisoformat(timestamp_val)
+                else:
+                    # No timestamp provided - use server time
+                    log_timestamp = server_time
+            except (ValueError, OverflowError, OSError):
+                rejected_count += 1
+                logger.debug(
+                    f"Rejected log with unparseable timestamp {timestamp_val!r}"
+                )
+                continue
 
             # Validate timestamp is within acceptable range
             if not validate_timestamp(log_timestamp, server_time):
@@ -274,7 +293,8 @@ async def process_log_events(messages: list) -> int:
 
     if rejected_count > 0:
         logger.warning(
-            f"Rejected {rejected_count} logs due to timestamp drift > {MAX_TIMESTAMP_DRIFT}"
+            f"Rejected {rejected_count} logs with invalid timestamps "
+            f"(unparseable or drift > {MAX_TIMESTAMP_DRIFT})"
         )
 
     if not log_rows:
