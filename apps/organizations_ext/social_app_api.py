@@ -17,7 +17,7 @@ from allauth.socialaccount.models import SocialApp
 from asgiref.sync import sync_to_async
 from django.db import transaction
 from django.shortcuts import aget_object_or_404
-from ninja import Router
+from ninja import Router, Status
 from ninja.errors import HttpError
 
 from glitchtip.api.authentication import AuthHttpRequest
@@ -197,7 +197,9 @@ async def create_organization_social_app(
         payload=payload,
         app_settings=app_settings,
     )
-    return 201, await get_social_apps_queryset(organization).aget(id=social_app.id)
+    return Status(
+        201, await get_social_apps_queryset(organization).aget(id=social_app.id)
+    )
 
 
 @router.put(
@@ -250,4 +252,4 @@ async def delete_organization_social_app(
     # Cascades to OrganizationSocialApp. Existing user accounts and their
     # SocialAccount links remain; only this sign-in route goes away.
     await social_app.adelete()
-    return 204, None
+    return Status(204, None)

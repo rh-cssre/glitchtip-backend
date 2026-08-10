@@ -3,10 +3,37 @@ import copy
 import logging
 import zipfile
 
-import cxxfilt
-from symbolic import Archive, ProguardMapper, SymCache, normalize_debug_id, parse_addr
+from gt_rust.symbolic import (
+    Archive,
+    ProguardMapper,
+    SymCache,
+    demangle,
+    normalize_debug_id,
+    parse_addr,
+)
 
 alternative_arch = {"x86": ["x86", "x86_64"]}
+
+# SymCache lookups take a uint64 address; anything outside this range cannot be
+# probed at all and raises rather than returning no match.
+UINT64_MAX = 0xFFFFFFFFFFFFFFFF
+
+# Scoring one candidate base costs a lookup per address, and the event payload
+# decides how many addresses there are, so score against a bounded sample.
+MAX_SCORED_ADDRS = 32
+
+
+def _parse_addr_or_none(value) -> int | None:
+    """parse_addr, treating an unparseable event-supplied address as absent.
+
+    parse_addr rejects magnitudes beyond i128 that unbounded int() parsing
+    accepted; such values could never pass the uint64 range check anyway, so
+    they should cost the event that one frame, not the whole stacktrace.
+    """
+    try:
+        return parse_addr(value)
+    except (ValueError, OverflowError):
+        return None
 
 
 class ResolvedStacktrace:
@@ -156,22 +183,26 @@ def _estimate_image_base(sym_cache, instruction_addrs):
         return 0
 
     probe = instruction_addrs[0]
+    sample = instruction_addrs[:MAX_SCORED_ADDRS]
     best_base = 0
     best_score = 0
-    threshold = max(len(instruction_addrs) // 2, 1)
+    threshold = max(len(sample) // 2, 1)
 
     for elf_offset in range(0, 0x500000, 0x1000):
-        # lookup() returns a list, not an iterator; don't call next() on it
+        # SymCache.lookup returns a (possibly empty) list of SourceLocation.
         if not sym_cache.lookup(elf_offset):
             continue
         candidate_base = probe - elf_offset
         if candidate_base < 0:
-            continue
-        # skip negative offsets; symbolic rejects them
+            # elf_offset only grows, so no later candidate can be valid either.
+            break
         score = sum(
             1
-            for addr in instruction_addrs
-            if addr - candidate_base >= 0 and sym_cache.lookup(addr - candidate_base)
+            for addr in sample
+            # An address outside the base's addressable range is not part of
+            # this image and cannot be probed.
+            if candidate_base <= addr <= candidate_base + UINT64_MAX
+            and sym_cache.lookup(addr - candidate_base)
         )
         if score > best_score:
             best_score = score
@@ -312,18 +343,15 @@ class StacktraceProcessor:
             # image_addr, then heuristic estimation as a last resort.
             estimated_base = 0
             if image_addr_from_meta is not None:
-                estimated_base = parse_addr(image_addr_from_meta)
-                getLogger().debug(
-                    f"StacktraceProcessor: using debug_meta image_addr "
-                    f"{image_addr_from_meta} for debug_id {debug_id}"
-                )
+                # SDK-provided base from debug_meta is more reliable than guessing.
+                estimated_base = _parse_addr_or_none(image_addr_from_meta) or 0
             elif frames and not any(f.get("image_addr") for f in frames if f):
-                # Flutter Android without debug_meta: guess the base.
-                addrs = [
-                    parse_addr(f.get("instruction_addr"))
+                parsed = (
+                    _parse_addr_or_none(f.get("instruction_addr"))
                     for f in frames
                     if f and f.get("instruction_addr")
-                ]
+                )
+                addrs = [addr for addr in parsed if addr is not None]
                 estimated_base = _estimate_image_base(sym_cache, addrs)
 
             for frame in frames:
@@ -334,26 +362,32 @@ class StacktraceProcessor:
 
                 raw_image_addr = frame.get("image_addr")
                 image_addr = (
-                    parse_addr(raw_image_addr)
+                    _parse_addr_or_none(raw_image_addr)
                     if raw_image_addr is not None
                     else estimated_base
                 )
-                instruction_addr = parse_addr(frame.get("instruction_addr"))
+                instruction_addr = _parse_addr_or_none(frame.get("instruction_addr"))
+                if image_addr is None or instruction_addr is None:
+                    # Unparseable addresses can't resolve; keep the frame as-is.
+                    resolved_frames.append(frame)
+                    continue
                 addr = instruction_addr - image_addr
-                # skip negative offsets; symbolic rejects them
-                symbol = sym_cache.lookup(addr) if addr >= 0 else None
+                if not 0 <= addr <= UINT64_MAX:
+                    # The frame is outside this image - another object, or no
+                    # instruction_addr at all, which parse_addr reports as 0.
+                    # Probing it would abort the whole stacktrace.
+                    resolved_frames.append(frame)
+                    continue
+                symbol = sym_cache.lookup(addr)
                 digested_symbol = digest_symbol(symbol)
 
                 if digested_symbol is not None:
                     frame["resolved"] = True
                     frame["filename"] = digested_symbol.full_path
                     frame["lineno"] = digested_symbol.line
-                    try:
-                        frame["function"] = cxxfilt.demangle(digested_symbol.symbol)
-                    except cxxfilt.InvalidName:
-                        frame["function"] = (
-                            digested_symbol.symbol
-                        )  # Keep original if demangling fails
+                    # demangle returns the input unchanged when it can't
+                    # demangle, so there is no failure case to handle.
+                    frame["function"] = demangle(digested_symbol.symbol)
                     score = score + 1
 
                     # Extract source context from source bundle if available

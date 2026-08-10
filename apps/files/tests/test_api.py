@@ -1,9 +1,14 @@
 import gzip
+import io
+import json
 import tempfile
+import warnings
+import zipfile
 from hashlib import sha1
 from pathlib import Path
 from urllib.parse import urlparse
 
+from django.core.cache import cache
 from django.core.files.base import File as DjangoFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -14,6 +19,7 @@ from apps.sourcecode.models import DebugSymbolBundle
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
 from ..api import CHUNK_UPLOAD_BLOB_SIZE, MAX_COMPRESSED_CHUNK_SIZE
+from ..assemble import AssembleTask, ChunkFileState, _get_cache_key
 from ..models import File, FileBlob
 
 
@@ -173,6 +179,61 @@ class ReleaseAssembleAPITests(GlitchTipTestCaseMixin, TestCase):
                 sourcemap_file=map_file, release=self.release
             ).aexists()
         )
+
+    @override_settings(GLITCHTIP_MAX_UNZIPPED_ARCHIVE_SIZE=640 * 1024)
+    async def test_post_rejects_bundle_over_extraction_limit(self):
+        """A bundle that expands past the limit fails the assemble cleanly.
+
+        The manifest declares the artifact and matches the organization and
+        release, so an unbounded extraction runs all the way through and
+        stores ``big.js``. The bundle is built so that the declared sizes stay
+        under the cap and only the running count of bytes written catches it:
+        eight directory entries share one name, so extraction writes the
+        member that name resolves to eight times over.
+        """
+        manifest = json.dumps(
+            {
+                "org": self.organization.slug,
+                "release": self.release.version,
+                "files": {
+                    "files/_/big.js": {"type": "minified_source", "url": "~/big.js"}
+                },
+            }
+        ).encode()
+        buf = io.BytesIO()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # duplicate names are the point
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr("manifest.json", manifest)
+                for _ in range(7):
+                    zf.writestr("files/_/big.js", b"t")
+                zf.writestr("files/_/big.js", b"B" * (256 * 1024))
+        payload = buf.getvalue()
+        checksum = sha1(payload).hexdigest()
+
+        await FileBlob.objects.acreate(
+            blob=SimpleUploadedFile(checksum, payload),
+            size=len(payload),
+            checksum=checksum,
+        )
+        res = await self.async_client.post(
+            self.url,
+            {"checksum": checksum, "chunks": [checksum]},
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+
+        state, detail = cache.get(
+            _get_cache_key(AssembleTask.ARTIFACTS, self.organization.pk, checksum)
+        )
+        self.assertEqual(state, ChunkFileState.ERROR)
+        self.assertIn("Failed to extract bundle", detail)
+        # The over-sized member never becomes a stored artifact, and the
+        # rejected upload leaves no File rows behind at all -- not the
+        # artifact, not the assembled bundle it came in.
+        self.assertFalse(await File.objects.filter(name="big.js").aexists())
+        self.assertFalse(await DebugSymbolBundle.objects.aexists())
+        self.assertEqual(await File.objects.acount(), 0)
 
 
 class AssembleFromFileBlobIdsTests(TestCase):

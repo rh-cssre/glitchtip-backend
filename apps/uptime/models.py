@@ -6,7 +6,6 @@ from django.core.validators import MaxValueValidator, MinValueValidator, URLVali
 from django.db import models
 from django.db.models import F
 from django.urls import reverse
-from django.utils.timezone import now
 from django_extensions.db.fields import AutoSlugField
 
 from glitchtip.base_models import CreatedModel
@@ -138,12 +137,27 @@ def _generate_uuid7():
 
 
 class MonitorCheck(models.Model):
+    """A single probe of a monitor.
+
+    A check has a start, a finish, and a result. Only two of those are stored:
+    the start is the timestamp already carried inside the UUIDv7 ``id``, and
+    ``response_time`` is the duration, from which the finish is derived. There
+    is deliberately no second timestamp column.
+
+    That is not only a space saving. ``id`` is the RANGE partition key, so
+    making it the *only* temporal column means a time-based query on this table
+    cannot be written without also pruning partitions -- the mistake is no
+    longer expressible. Every writer must therefore mint ``id`` from the moment
+    the check started rather than letting it default to insert time.
+    """
+
     # Partitioned by id (UUIDv7) -> Hash by organization
 
     # 16-byte alignment: UUIDs
     id = models.UUIDField(
         default=_generate_uuid7,
         editable=False,
+        help_text="UUIDv7; its embedded timestamp is when the check started",
     )
     # Primary Key is composite (id, organization)
     pk = models.CompositePrimaryKey("id", "organization")
@@ -154,10 +168,6 @@ class MonitorCheck(models.Model):
     )
     organization = models.ForeignKey(
         "organizations_ext.Organization", on_delete=models.CASCADE
-    )
-    start_check = models.DateTimeField(
-        default=now,
-        help_text="Time when the start of this check was performed",
     )
 
     # Other fields
@@ -173,12 +183,36 @@ class MonitorCheck(models.Model):
     )
     data = models.JSONField(null=True, blank=True)
 
+    @property
+    def start_check(self):
+        """When the check started, read back out of the UUIDv7 ``id``.
+
+        Kept under the original name because it is what the API exposes and
+        what the monitor chart plots. Precision is milliseconds, which is the
+        resolution UUIDv7 encodes.
+        """
+        return UUID7Helper.extract_datetime(self.id)
+
     class Meta:
+        # Ordering by ``id`` is ordering by time, and ``id`` is also the RANGE
+        # partition key. That is what lets Postgres plan an ordered Append --
+        # walking partitions newest-first and stopping once LIMIT is satisfied
+        # -- instead of a Merge Append that must open an index scan on every
+        # partition just to discover which one holds the newest row.
         indexes = [
-            models.Index(fields=["monitor", "-start_check"]),
-            models.Index(fields=["monitor", "is_change", "-start_check"]),
+            models.Index(fields=["monitor", "-id"], name="uptime_check_monitor_id_idx"),
+            # Partial: is_change marks an up/down transition, which is 0.03-0.6%
+            # of rows in practice. A full three-column index over every check
+            # costs more than the table itself for a filter almost nothing
+            # matches. ``is_change=False`` is served by the index above plus a
+            # filter, which is what you want when 99%+ of rows qualify.
+            models.Index(
+                fields=["monitor", "-id"],
+                name="uptime_check_change_id_idx",
+                condition=models.Q(is_change=True),
+            ),
         ]
-        ordering = ("-start_check",)
+        ordering = ("-id",)
 
     def __str__(self):
         return self.up_or_down

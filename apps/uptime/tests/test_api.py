@@ -7,6 +7,7 @@ from freezegun import freeze_time
 from model_bakery import baker
 
 from apps.uptime.models import Monitor, MonitorCheck
+from glitchtip.partition_manager import UUID7Helper
 from glitchtip.test_utils.test_case import GlitchTestCase
 
 
@@ -33,7 +34,7 @@ class UptimeAPITestCase(GlitchTestCase):
             monitor=monitor,
             organization=monitor.organization,
             is_up=False,
-            start_check="2021-09-19T15:39:31Z",
+            id=UUID7Helper.from_datetime(parse_datetime("2021-09-19T15:39:31Z")),
         )
         await baker.amake(
             "uptime.MonitorCheck",
@@ -41,7 +42,7 @@ class UptimeAPITestCase(GlitchTestCase):
             organization=monitor.organization,
             is_up=True,
             is_change=True,
-            start_check="2021-09-19T15:40:31Z",
+            id=UUID7Helper.from_datetime(parse_datetime("2021-09-19T15:40:31Z")),
         )
         monitor.cached_is_up = True
         monitor.cached_last_change = parse_datetime("2021-09-19T15:40:31Z")
@@ -71,7 +72,7 @@ class UptimeAPITestCase(GlitchTestCase):
                     monitor=monitor,
                     organization=monitor.organization,
                     is_up=is_up,
-                    start_check=current_time,
+                    id=UUID7Helper.from_datetime(current_time),
                 )
         with freeze_time(current_time):
             res = await self.async_client.get(self.list_url)
@@ -270,7 +271,7 @@ class UptimeAPITestCase(GlitchTestCase):
             organization=monitor.organization,
             is_up=False,
             is_change=True,
-            start_check="2021-09-19T15:39:31Z",
+            id=UUID7Helper.from_datetime(parse_datetime("2021-09-19T15:39:31Z")),
         )
         await baker.amake(
             "uptime.MonitorCheck",
@@ -278,7 +279,7 @@ class UptimeAPITestCase(GlitchTestCase):
             organization=monitor.organization,
             is_up=True,
             is_change=True,
-            start_check=now,
+            id=UUID7Helper.from_datetime(now),
         )
         monitor.cached_is_up = True
         monitor.cached_last_change = now
@@ -304,7 +305,7 @@ class UptimeAPITestCase(GlitchTestCase):
             monitor=monitor,
             organization=monitor.organization,
             is_up=False,
-            start_check="2021-09-19T15:39:31Z",
+            id=UUID7Helper.from_datetime(parse_datetime("2021-09-19T15:39:31Z")),
         )
 
         url = reverse(
@@ -332,7 +333,7 @@ class UptimeAPITestCase(GlitchTestCase):
             organization=monitor.organization,
             is_up=True,
             is_change=False,
-            start_check="2021-09-19T15:39:31Z",
+            id=UUID7Helper.from_datetime(parse_datetime("2021-09-19T15:39:31Z")),
         )
         await baker.amake(
             "uptime.MonitorCheck",
@@ -340,7 +341,7 @@ class UptimeAPITestCase(GlitchTestCase):
             organization=monitor.organization,
             is_up=True,
             is_change=False,
-            start_check="2021-09-19T15:40:31Z",
+            id=UUID7Helper.from_datetime(parse_datetime("2021-09-19T15:40:31Z")),
         )
 
         url = reverse(
@@ -428,7 +429,7 @@ class UptimeAPITestCase(GlitchTestCase):
             monitor=monitor,
             organization=monitor.organization,
             is_up=False,
-            start_check="2021-09-19T15:39:31Z",
+            id=UUID7Helper.from_datetime(parse_datetime("2021-09-19T15:39:31Z")),
         )
 
         url = reverse("api:delete_monitor", args=[self.organization.slug, monitor.pk])

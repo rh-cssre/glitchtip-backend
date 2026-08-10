@@ -208,7 +208,11 @@ async def _check_and_update_throttle(org: Organization):
         if price.no_throttle:
             org_throttle = 0
         else:
-            plan_events = price.product.events
+            # A hosted plan always carries a quota; NULL means the base price
+            # points at a quota-less product, which is only reachable if a
+            # subscription somehow has nothing but a metered item. Fall back to
+            # the free tier instead of throttling the org to a standstill.
+            plan_events = price.product.events or settings.GLITCHTIP_FREE_TIER_EVENTS
 
             period = await get_current_period_dates(org)
             start, end = period if period else (None, None)

@@ -16,6 +16,7 @@ from django.utils.dateparse import parse_datetime
 from apps.alerts.constants import RecipientType
 from apps.alerts.models import AlertRecipient
 from apps.shared.raw_sql import execute_unnest
+from glitchtip.partition_manager import UUID7Helper
 from glitchtip.ssrf_protection import safe_session
 
 from .email import MonitorEmail
@@ -141,11 +142,16 @@ async def save_monitor_checks(results, now):
     monitor_checks = await MonitorCheck.objects.abulk_create(
         [
             MonitorCheck(
+                # Minted from the tick that started this round of probes, not
+                # from insert time. The row is written after the fetch returns,
+                # which can be up to ``timeout`` seconds later, so defaulting
+                # the id would record completion order and let a slow probe
+                # sort ahead of a later one. See MonitorCheck's docstring.
+                id=UUID7Helper.from_datetime(now),
                 monitor_id=result["id"],
                 organization_id=result["organization_id"],
                 is_up=result["is_up"],
                 is_change=is_change,
-                start_check=now,
                 reason=result.get("reason", None),
                 response_time=result.get("response_time", None),
                 data=result.get("data", None),

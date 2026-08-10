@@ -34,7 +34,10 @@ workflow:
     - if: $CI_PIPELINE_SOURCE == 'web'
     - if: $CI_PIPELINE_SOURCE == 'schedule'
 
-# Minimum supported: Python 3.12, PostgreSQL 14, Redis
+# Lowest tested stack: Python 3.12, PostgreSQL 15, Redis.
+# PostgreSQL 14 is still supported and still works; this lane moved to 15
+# because Django 6.1 drops PostgreSQL 14, and the floor we test against
+# should lead the floor we document rather than trail it.
 test-min:
   image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.12-$BASE_LAYER
   variables:
@@ -44,7 +47,7 @@ test-min:
     ENABLE_OPEN_USER_REGISTRATION: "true"
     VALKEY_URL: "redis://redis:6379"
   services:
-    - postgres:14
+    - postgres:15
     - name: redis:7
       alias: redis
   cache:
@@ -380,7 +383,7 @@ release_manifest_merge:
     - if: '$CI_COMMIT_TAG =~ /^v\d+.\d+.\d+/ && $CI_COMMIT_REF_PROTECTED == "true"'
 
 update_deps:
-  image: renovate/renovate:43
+  image: renovate/renovate:44
   variables:
     RENOVATE_PLATFORM: gitlab
     RENOVATE_ENDPOINT: https://gitlab.com/api/v4

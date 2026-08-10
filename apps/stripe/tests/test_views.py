@@ -198,6 +198,7 @@ class TestStripeWebhookView(TestCase):
                         "events": "1",
                         "is_public": "true",
                         "product_type": "hosted",
+                        "sso": "true",
                     },
                     "name": "Test Product",
                     "statement_descriptor": None,
@@ -223,6 +224,66 @@ class TestStripeWebhookView(TestCase):
         self.assertEqual(product.name, "Test Product")
         self.assertEqual(product.description, "Test Description")
         self.assertEqual(product.events, 1)
+        self.assertTrue(product.active)
+        self.assertTrue(product.allow_sso)
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_product_archived(self):
+        """Archiving a product in Stripe arrives as product.updated with
+        active=False and must deactivate the row immediately, rather than
+        leaving it live until the nightly sync."""
+        await StripeProduct.objects.acreate(
+            stripe_id="prod_archive_me",
+            name="Retiring Plan",
+            description="",
+            events=1000,
+            is_public=True,
+        )
+
+        payload = {
+            "type": "product.updated",
+            "id": "evt_archive",
+            "data": {
+                "object": {
+                    "object": "product",
+                    "id": "prod_archive_me",
+                    "active": False,
+                    "attributes": [],
+                    "created": 1678886400,
+                    "default_price": None,
+                    "description": "",
+                    "images": [],
+                    "livemode": False,
+                    "marketing_features": [],
+                    "metadata": {
+                        "events": "1000",
+                        "is_public": "true",
+                        "product_type": "hosted",
+                    },
+                    "name": "Retiring Plan",
+                    "statement_descriptor": None,
+                    "tax_code": None,
+                    "type": "service",
+                    "unit_label": None,
+                    "updated": 1678886400,
+                    "url": None,
+                }
+            },
+            "api_version": "",
+            "created": 1678886401,
+            "livemode": False,
+            "pending_webhooks": 1,
+            "request": {"id": "req_test", "idemoptency_key": "test_key"},
+        }
+        response = await stripe_webhook_view(self.generate_stripe_request(payload))
+        self.assertEqual(response.status_code, 200)
+
+        product = await StripeProduct.objects.aget(stripe_id="prod_archive_me")
+        self.assertFalse(product.active)
 
     @override_settings(
         STRIPE_WEBHOOK_SECRET="test_webhook_secret",

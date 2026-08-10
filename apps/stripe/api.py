@@ -68,15 +68,29 @@ class StripeNestedPriceSchema(StripeIDSchema, ModelSchema):
 
 
 class StripeProductSchema(StripeIDSchema, ModelSchema):
+    # The column is nullable (the overage product has no quota), but this schema
+    # renders a subscription's plan, where a quota always exists. Keep the API
+    # contract non-null so clients need no null branch, and coerce rather than
+    # declare `int`: a bare annotation would 500 the whole subscription endpoint
+    # if a quota-less product ever reached it.
+    events: int
+
     class Meta:
         model = StripeProduct
         fields = ["name", "description", "events", "default_price"]
+
+    @staticmethod
+    def resolve_events(obj: StripeProduct) -> int:
+        return obj.events or 0
 
 
 class StripeProductExpandedPriceSchema(StripeIDSchema, ModelSchema):
     default_price: StripeNestedPriceSchema
     prices: list[StripeNestedPriceSchema]
     marketing_features: list[str]
+    # Non-null by construction here: list_stripe_products filters events__gt=0,
+    # which excludes NULL.
+    events: int
 
     class Meta:
         model = StripeProduct
@@ -170,13 +184,17 @@ class DailyEventsCountSchema(CamelSchema):
 
 @router.get("products/", response=list[StripeProductExpandedPriceSchema], by_alias=True)
 async def list_stripe_products(request: AuthHttpRequest):
+    # Archived plans and archived prices are excluded: a retired price still
+    # exists locally for the subscriptions grandfathered onto it, but must never
+    # be offered again. is_public is a separate axis — a current price that
+    # isn't publicly listed (non-profit, grandfathered) is simply not shown here.
     products = (
-        StripeProduct.objects.filter(is_public=True, events__gt=0)
+        StripeProduct.objects.filter(is_public=True, active=True, events__gt=0)
         .select_related("default_price")
         .prefetch_related(
             Prefetch(
                 "stripeprice_set",
-                queryset=StripePrice.objects.filter(is_public=True),
+                queryset=StripePrice.objects.filter(is_public=True, active=True),
                 to_attr="prices_list",
             )
         )
@@ -227,10 +245,13 @@ async def create_stripe_session(
     else:
         customer = await create_customer(organization)
         customer_id = customer.id
-    # Ensure the price exists and is a base plan; the metered overage price is
-    # attached via configure_overage, never sold through checkout.
+    # Ensure the price exists, is current, and is a base plan; the metered
+    # overage price is attached via configure_overage, never sold through
+    # checkout. Archived prices 404 here rather than failing inside Stripe.
     price_id = payload.price
-    await aget_object_or_404(StripePrice, stripe_id=price_id, is_metered=False)
+    await aget_object_or_404(
+        StripePrice, stripe_id=price_id, is_metered=False, active=True
+    )
     return await create_session(price_id, customer_id, organization_slug)
 
 
@@ -272,6 +293,7 @@ async def stripe_create_subscription(request: AuthHttpRequest, payload: Subscrip
         stripe_id=payload.price,
         price=0,
         is_metered=False,
+        active=True,
     )
     if organization.stripe_customer_id:
         customer_id = organization.stripe_customer_id
@@ -493,9 +515,22 @@ class OverageConfigIn(CamelSchema):
 
 
 async def _get_overage_price() -> StripePrice | None:
-    """The provisioned metered overage price, if any (POC assumes one)."""
+    """The live metered overage price, or None if the account has none.
+
+    This lookup is the feature gate: overage billing is offered exactly when an
+    overage product is live in the connected Stripe account. Archiving either
+    the product or the price turns it off, and the product webhook applies that
+    immediately — so `active` has to be honored on both sides of the join.
+
+    Exactly one live overage price is expected. Should a second be provisioned
+    (e.g. a re-priced tier schedule published before the old one is archived),
+    the newest by Stripe id wins so behavior stays deterministic rather than
+    depending on row order; archive the superseded price to resolve it.
+    """
     return await (
-        StripePrice.objects.filter(is_metered=True, product__is_overage=True)
+        StripePrice.objects.filter(
+            is_metered=True, active=True, product__is_overage=True, product__active=True
+        )
         .select_related("product")
         .order_by("-stripe_id")
         .afirst()
@@ -516,10 +551,12 @@ async def get_overage_status(request: AuthHttpRequest, organization_slug: str):
         users=request.auth.user_id,
     )
     sub = org.stripe_primary_subscription
-    eligible = bool(sub and not sub.price.no_throttle)
-    quota = (
-        sub.price.product.events if eligible else settings.GLITCHTIP_FREE_TIER_EVENTS
-    )
+    # Same test configure_overage applies, so the card can't offer a toggle the
+    # POST would reject: a plan with no quota (NULL or 0) has nothing to meter
+    # overage against, and no_throttle plans are unlimited already.
+    plan_events = (sub.price.product.events or 0) if sub else 0
+    eligible = bool(sub and not sub.price.no_throttle and plan_events > 0)
+    quota = plan_events if eligible else settings.GLITCHTIP_FREE_TIER_EVENTS
 
     usage = 0
     period = await get_current_period_dates(org)
@@ -571,7 +608,7 @@ async def configure_overage(
     sub = org.stripe_primary_subscription
 
     if payload.enabled:
-        if not sub or sub.price.no_throttle or sub.price.product.events <= 0:
+        if not sub or sub.price.no_throttle or not sub.price.product.events:
             return JsonResponse(
                 {"detail": "An active paid plan is required for overage billing."},
                 status=400,

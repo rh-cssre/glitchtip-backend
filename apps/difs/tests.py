@@ -12,6 +12,7 @@ from model_bakery import baker
 from pydantic import ValidationError
 
 from apps.difs.stacktrace_processor import (
+    MAX_SCORED_ADDRS,
     StacktraceProcessor,
     _estimate_image_base,
     digest_symbol,
@@ -649,8 +650,139 @@ class JvmSourceContextTestCase(GlitchTestCase):
         self.assertFalse(result)
 
 
+class FakeSymCache:
+    """Stand-in for symbolic.SymCache with the same lookup() contract.
+
+    lookup() returns a plain list of matches - empty when nothing resolves -
+    and the underlying FFI takes an unsigned address, so a negative offset
+    raises rather than returning no match.
+    """
+
+    def __init__(self, valid_offsets):
+        self.valid_offsets = set(valid_offsets)
+        self.lookups = []
+
+    def lookup(self, addr):
+        self.lookups.append(addr)
+        if not 0 <= addr <= 0xFFFFFFFFFFFFFFFF:
+            raise OverflowError("can't convert negative number to unsigned")
+        if addr not in self.valid_offsets:
+            return []
+        location = MagicMock()
+        location.symbol = "_MyHomePageState._incrementCounter"
+        location.full_path = "/lib/main.dart"
+        location.line = 68
+        location.lang = "unknown"
+        return [location]
+
+
+class EstimateImageBaseTestCase(GlitchTestCase):
+    """Test image base estimation for frames without image_addr."""
+
+    def test_estimates_base_from_absolute_addresses(self):
+        sym_cache = FakeSymCache([0x2000, 0x4000, 0x6000])
+
+        base = _estimate_image_base(sym_cache, [0x402000, 0x404000, 0x406000])
+
+        self.assertEqual(base, 0x400000)
+
+    def test_skips_addresses_below_the_candidate_base(self):
+        """A frame below the probe must not be looked up at a negative offset."""
+        sym_cache = FakeSymCache([0x1000, 0x5000])
+
+        _estimate_image_base(sym_cache, [0x105000, 0x101000])
+
+        self.assertTrue(all(addr >= 0 for addr in sym_cache.lookups))
+
+    def test_scores_a_bounded_sample_of_addresses(self):
+        """The event payload decides the frame count, so scoring is bounded."""
+        sym_cache = FakeSymCache([0x1000])
+        addrs = [0x101000 + (i * 0x10000) for i in range(500)]
+
+        _estimate_image_base(sym_cache, addrs)
+
+        # One lookup per candidate offset, plus one per scored address. Only
+        # 0x1000 resolves, so scoring runs once and must not walk all 500.
+        candidate_offsets = 0x500000 // 0x1000
+        self.assertLessEqual(
+            len(sym_cache.lookups), candidate_offsets + MAX_SCORED_ADDRS
+        )
+
+
 class NativeSymbolicationTestCase(GlitchTestCase):
     """Test native stacktrace symbolication via StacktraceProcessor."""
+
+    def test_resolve_frames_without_image_addr(self):
+        """Flutter on Android sends instruction_addr with no image_addr/debug_meta."""
+        sym_cache = FakeSymCache([0x2000, 0x4000])
+
+        mock_obj = MagicMock()
+        mock_obj.arch = "arm64"
+
+        mock_archive = MagicMock()
+        mock_archive.get_object.return_value = mock_obj
+
+        stacktrace = {
+            "frames": [
+                {"instruction_addr": "0x402000", "function": "bK"},
+                {"instruction_addr": "0x404000", "function": "bL"},
+            ]
+        }
+
+        with (
+            patch("apps.difs.stacktrace_processor.Archive") as MockArchive,
+            patch("apps.difs.stacktrace_processor.SymCache") as MockSymCache,
+        ):
+            MockArchive.open.return_value = mock_archive
+            MockSymCache.from_object.return_value = sym_cache
+
+            result = StacktraceProcessor.resolve_native_stacktrace(
+                stacktrace, "/fake/symbols.so", arch="arm64"
+            )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.score, 2)
+        self.assertTrue(all(frame["resolved"] for frame in result.frames))
+        self.assertEqual(result.frames[0]["filename"], "/lib/main.dart")
+
+    def test_frame_outside_the_image_does_not_drop_the_stacktrace(self):
+        """One frame below the base must not cost every other frame its symbol."""
+        sym_cache = FakeSymCache([0x2000, 0x4000])
+
+        mock_obj = MagicMock()
+        mock_obj.arch = "arm64"
+
+        mock_archive = MagicMock()
+        mock_archive.get_object.return_value = mock_obj
+
+        stacktrace = {
+            "frames": [
+                {"instruction_addr": "0x402000"},
+                {"instruction_addr": "0x404000"},
+                # Below the estimated base, so instruction_addr - base is
+                # negative.
+                {"instruction_addr": "0x1000"},
+                # No instruction_addr at all: parse_addr reports 0.
+                {"function": "<unknown>"},
+            ]
+        }
+
+        with (
+            patch("apps.difs.stacktrace_processor.Archive") as MockArchive,
+            patch("apps.difs.stacktrace_processor.SymCache") as MockSymCache,
+        ):
+            MockArchive.open.return_value = mock_archive
+            MockSymCache.from_object.return_value = sym_cache
+
+            result = StacktraceProcessor.resolve_native_stacktrace(
+                stacktrace, "/fake/symbols.so", arch="arm64"
+            )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.score, 2)
+        self.assertEqual(len(result.frames), 4)
+        self.assertNotIn("resolved", result.frames[2])
+        self.assertNotIn("resolved", result.frames[3])
 
     def test_resolve_with_mismatched_function_names(self):
         """Obfuscated function names (e.g. Flutter --obfuscate) should still resolve."""
