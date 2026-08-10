@@ -511,6 +511,9 @@ class LogIngestProcessingTestCase(TransactionTestCase):
                 {"timestamp": float("inf"), "level": "info", "body": "inf"},
                 {"timestamp": float("nan"), "level": "info", "body": "nan"},
                 {"timestamp": "not-a-date", "level": "info", "body": "bad str"},
+                # Naive ISO far outside the drift window: must be rejected
+                # by drift, not raise TypeError in the aware comparison
+                {"timestamp": "2030-01-01T00:00:00", "level": "info", "body": "naive"},
                 {"timestamp": now.timestamp(), "level": "info", "body": "good"},
             ],
         )
@@ -523,6 +526,99 @@ class LogIngestProcessingTestCase(TransactionTestCase):
             set(LogEvent.objects.values_list("body", flat=True)),
             {"good", "second message"},
         )
+
+    def test_naive_iso_timestamp_treated_as_utc(self):
+        """A naive ISO timestamp string ingests as UTC."""
+        now = datetime.now(UTC)
+        message = LogTaskMessage(
+            project_id=self.project.id,
+            organization_id=self.organization.id,
+            received=now,
+            logs=[
+                {
+                    "timestamp": now.replace(tzinfo=None).isoformat(),
+                    "level": "info",
+                    "body": "naive utc",
+                }
+            ],
+        )
+
+        count = process_log_events([message])
+
+        self.assertEqual(count, 1)
+        log = LogEvent.objects.first()
+        stored = UUID7Helper.extract_datetime(log.id)
+        self.assertLess(abs((stored - now).total_seconds()), 1)
+
+    def test_out_of_range_severity_number_dropped_not_batch(self):
+        """A severity_number that doesn't fit the smallint column is
+        stored as NULL instead of failing the insert for the batch."""
+        now = datetime.now(UTC)
+        message = LogTaskMessage(
+            project_id=self.project.id,
+            organization_id=self.organization.id,
+            received=now,
+            logs=[
+                {
+                    "timestamp": now.timestamp(),
+                    "level": "info",
+                    "body": "overflow",
+                    "severity_number": 40000,
+                },
+                {
+                    "timestamp": now.timestamp(),
+                    "level": "info",
+                    "body": "negative",
+                    "severity_number": -7,
+                },
+                {
+                    "timestamp": now.timestamp(),
+                    "level": "info",
+                    "body": "valid",
+                    "severity_number": 17,
+                },
+            ],
+        )
+
+        count = process_log_events([message])
+
+        self.assertEqual(count, 3)
+        by_body = {log.body: log for log in LogEvent.objects.all()}
+        self.assertIsNone(by_body["overflow"].severity_number)
+        self.assertIsNone(by_body["negative"].severity_number)
+        self.assertEqual(by_body["valid"].severity_number, 17)
+
+    def test_nul_bytes_stripped_not_batch(self):
+        """PostgreSQL cannot store NUL in text or jsonb; strip it rather
+        than fail the whole insert batch."""
+        now = datetime.now(UTC)
+        message = LogTaskMessage(
+            project_id=self.project.id,
+            organization_id=self.organization.id,
+            received=now,
+            logs=[
+                {
+                    "timestamp": now.timestamp(),
+                    "level": "info",
+                    "body": "bad\x00body",
+                    "service": "svc\x00",
+                    "environment": "prod",
+                    "host": "web\x001",
+                    "custom": "x\x00y",
+                    "nested": {"k\x00ey": ["a\x00b", 1]},
+                }
+            ],
+        )
+
+        count = process_log_events([message])
+
+        self.assertEqual(count, 1)
+        log = LogEvent.objects.first()
+        self.assertEqual(log.body, "badbody")
+        self.assertEqual(log.service, "svc")
+        self.assertEqual(log.host, "web1")
+        self.assertEqual(log.data["custom"], "xy")
+        self.assertEqual(log.data["nested"], {"key": ["ab", 1]})
 
 
 @override_settings(GLITCHTIP_ENABLE_LOGS=True)
