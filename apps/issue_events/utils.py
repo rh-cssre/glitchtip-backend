@@ -57,14 +57,15 @@ def to_camel_with_lower_id(string: str) -> str:
 
 def get_entries(data):
     entries = []
-    if exception := data.get("exception"):
-        if isinstance(exception, list):  # Old format, delete after 2025
-            exception = {"values": exception, "hasSystemFrames": False}
-        elif isinstance(exception, dict):
-            exception["hasSystemFrames"] = False
-        # https://gitlab.com/glitchtip/sentry-open-source/sentry/-/blob/master/src/sentry/interfaces/stacktrace.py#L487
+    # ``exception`` and ``breadcrumbs`` are stored in the shape ingest
+    # normalizes to, ``{"values": [...]}``. Events ingested before that
+    # normalization existed (5.1 and earlier) stored a bare list instead;
+    # such a row can only exist on an install that kept it through the whole
+    # 6.x series, so it is skipped rather than adapted.
+    if (exception := data.get("exception")) and isinstance(exception, dict):
+        exception["hasSystemFrames"] = False
         # if any frame is "in_app" set this to True
-        for value in exception["values"]:
+        for value in exception.get("values", ()):
             if (
                 value.get("stacktrace", None) is not None
                 and "frames" in value["stacktrace"]
@@ -92,9 +93,7 @@ def get_entries(data):
 
         entries.append({"type": "exception", "data": exception})
 
-    if breadcrumbs := data.get("breadcrumbs"):
-        if isinstance(breadcrumbs, list):  # Old format, delete after 2025
-            breadcrumbs = {"values": breadcrumbs}
+    if (breadcrumbs := data.get("breadcrumbs")) and isinstance(breadcrumbs, dict):
         entries.append({"type": "breadcrumbs", "data": breadcrumbs})
 
     if logentry := data.get("logentry"):

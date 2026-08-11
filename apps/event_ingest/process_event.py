@@ -804,11 +804,7 @@ async def process_issue_events(
         for event in messages
         if isinstance(event.payload, (ErrorIssueEventSchema, IssueEventSchema))
         and event.payload.exception
-        for exception in (
-            event.payload.exception
-            if isinstance(event.payload.exception, list)
-            else event.payload.exception.values
-        )
+        for exception in event.payload.exception.values
         if exception.stacktrace
         for frame in exception.stacktrace.frames
         if frame.filename
