@@ -321,8 +321,8 @@ try:
         application, trusted_hosts=trusted_proxies
     )
 except ImportError:
-    # Graceful fallback if granian can't be imported (custom installations, etc.)
-    # The wrapper is safe to use with uwsgi but this provides defensive error handling
+    # Graceful fallback if granian can't be imported (custom installations
+    # serving this app under another ASGI server)
     pass
 
 # Outermost so lifespan startup reaches it even in embed-worker mode (the

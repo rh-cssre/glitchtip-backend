@@ -98,7 +98,6 @@ In order to enable json logging, set the environment as follows::
 
 ```
 DJANGO_LOGGING_HANDLER_CLASS=google.cloud.logging_v2.handlers.ContainerEngineHandler
-UWSGI_LOG_ENCODER='json {"severity":"info","timestamp":${unix},"message":"${msg}"}}'
 ```
 
 # Acknowledgements
