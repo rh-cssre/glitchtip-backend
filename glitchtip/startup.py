@@ -93,6 +93,10 @@ def format_banner(info: dict) -> str:
 # Environment variables that no longer do anything. Setting one used to
 # change behavior, so staying silent would turn an upgrade into a silent
 # behavior swap for the operator who deliberately set it.
+#
+# The renamed ones below are only reachable here alongside their replacement,
+# which governs: settings refuses to start when a removed name is set on its
+# own (see _REMOVED_ENV_VARS in glitchtip.settings).
 RETIRED_ENV_VARS = {
     "GLITCHTIP_RUST_INGEST": (
         "envelope ingest is always served by the Rust pipeline; the variable "
@@ -113,6 +117,33 @@ RETIRED_ENV_VARS = {
     "SERVER_ROLE": (
         "there is only one role; bin/start.sh refuses anything but web or "
         "all_in_one rather than starting the wrong thing"
+    ),
+    "GLITCHTIP_DOMAIN": "renamed; GLITCHTIP_URL (or APP_URL) is what applies",
+    "GLITCHTIP_MAX_EVENT_LIFE_DAYS": (
+        "renamed; GLITCHTIP_RETENTION_DAYS is what applies"
+    ),
+    "GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS": (
+        "renamed; GLITCHTIP_TRANSACTION_RETENTION_DAYS is what applies"
+    ),
+    "GLITCHTIP_MAX_UPTIME_CHECK_LIFE_DAYS": (
+        "renamed; GLITCHTIP_UPTIME_RETENTION_DAYS is what applies"
+    ),
+    "GLITCHTIP_MAX_FILE_LIFE_DAYS": (
+        "renamed; GLITCHTIP_FILE_RETENTION_DAYS is what applies"
+    ),
+    "GLITCHTIP_LOGS_COLD_DAYS": (
+        "renamed; GLITCHTIP_LOG_RETENTION_DAYS is what applies"
+    ),
+    "GLITCHTIP_EVENTS_HOT_DAYS": "renamed; GLITCHTIP_EVENT_HOT_DAYS is what applies",
+    "GLITCHTIP_LOGS_HOT_DAYS": "renamed; GLITCHTIP_LOG_HOT_DAYS is what applies",
+    "FORCE_SCRIPT_NAME": (
+        "renamed; BASE_PATH is what applies (the Django setting of this name is "
+        "still set from it)"
+    ),
+    "ENABLE_OPEN_USER_REGISTRATION": (
+        "renamed; ENABLE_ORGANIZATION_CREATION now governs on its own. It used "
+        "to be overridden by this variable, so a false here no longer keeps "
+        "organization creation closed"
     ),
 }
 

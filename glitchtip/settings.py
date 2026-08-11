@@ -51,6 +51,37 @@ path = environ.Path()
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# Environment variables removed in 7.0, mapped to what replaces each one.
+# Ignoring a removed name that is still set would apply a default instead: a
+# retention window silently shrinking to 90 days, whose next maintenance run
+# drops the partitions past it; a DSN handed to SDKs pointing at localhost; a
+# reverse-proxy prefix disappearing from every generated URL. Refusing to start
+# and naming the replacement is the cheaper failure. Setting a removed name
+# alongside its replacement is harmless — the replacement governs — and only
+# warns, via RETIRED_ENV_VARS in glitchtip.startup.
+_REMOVED_ENV_VARS = {
+    "GLITCHTIP_DOMAIN": ("GLITCHTIP_URL", "APP_URL"),
+    "GLITCHTIP_MAX_EVENT_LIFE_DAYS": ("GLITCHTIP_RETENTION_DAYS",),
+    "GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS": (
+        "GLITCHTIP_TRANSACTION_RETENTION_DAYS",
+    ),
+    "GLITCHTIP_MAX_UPTIME_CHECK_LIFE_DAYS": ("GLITCHTIP_UPTIME_RETENTION_DAYS",),
+    "GLITCHTIP_MAX_FILE_LIFE_DAYS": ("GLITCHTIP_FILE_RETENTION_DAYS",),
+    "GLITCHTIP_LOGS_COLD_DAYS": ("GLITCHTIP_LOG_RETENTION_DAYS",),
+    "GLITCHTIP_EVENTS_HOT_DAYS": ("GLITCHTIP_EVENT_HOT_DAYS",),
+    "GLITCHTIP_LOGS_HOT_DAYS": ("GLITCHTIP_LOG_HOT_DAYS",),
+    "FORCE_SCRIPT_NAME": ("BASE_PATH",),
+    "ENABLE_OPEN_USER_REGISTRATION": ("ENABLE_ORGANIZATION_CREATION",),
+}
+for _removed, _replacements in _REMOVED_ENV_VARS.items():
+    if _removed in os.environ and not any(
+        _name in os.environ for _name in _replacements
+    ):
+        raise ImproperlyConfigured(
+            f"{_removed} was removed in GlitchTip 7.0. Set "
+            f"{' or '.join(_replacements)} instead."
+        )
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/dev/howto/deployment/checklist/
