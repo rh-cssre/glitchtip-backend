@@ -35,6 +35,7 @@ class WebhookAlertRecipientIn(CamelSchema):
         RecipientType.GOOGLE_CHAT,
         RecipientType.MICROSOFT_TEAMS,
         RecipientType.NTFY,
+        RecipientType.SLACK,
     ]
     url: HttpUrl
     tags_to_add: list[str] | None = Field(default_factory=list)

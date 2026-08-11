@@ -591,6 +591,95 @@ async def send_issue_as_feishu_webhook(
     return await send_feishu_webhook(url, payload)
 
 
+def escape_slack_mrkdwn(text: str) -> str:
+    """Escape the three characters Slack reserves in mrkdwn text.
+
+    Issue titles and culprits routinely contain angle brackets (``<anonymous>``,
+    ``Foo<Bar>``), which Slack would otherwise parse as link syntax.
+    """
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+# Slack rejects the whole message if any of these limits is exceeded, and the
+# 400 is invisible here because _post swallows the response. Escaping can
+# quintuple a string ("&" -> "&amp;"), so a long title plus culprit can overrun
+# the section limit even though both columns are individually shorter than it.
+SLACK_MAX_BLOCKS = 50
+SLACK_MAX_CONTEXT_ELEMENTS = 10
+SLACK_MAX_SECTION_TEXT = 3000
+
+
+@dataclass
+class SlackWebhookPayload:
+    """Block Kit based layout for Slack.
+
+    See https://docs.slack.dev/block-kit/. `text` is not rendered in the channel
+    when `blocks` is set, but Slack uses it for the desktop/mobile notification
+    preview and as a fallback for clients that can't render blocks.
+    """
+
+    text: str
+    blocks: list[dict]
+
+
+async def send_slack_webhook(url: str, text: str, blocks: list[dict]):
+    payload = SlackWebhookPayload(text=text, blocks=blocks[:SLACK_MAX_BLOCKS])
+    return await _post(url, json=asdict(payload))
+
+
+async def send_issue_as_slack_webhook(
+    url,
+    issues: list,
+    issue_count: int = 1,
+    tags_to_add: list[str] | None = None,
+    **kwargs,
+):
+    title = "GlitchTip Alert"
+    if issue_count > 1:
+        title += f" ({issue_count} issues)"
+
+    blocks: list[dict] = [
+        {"type": "header", "text": {"type": "plain_text", "text": title}}
+    ]
+
+    for issue in issues:
+        if len(blocks) > 1:
+            blocks.append({"type": "divider"})
+
+        section_text = f":rotating_light: *<{issue.get_detail_url()}|{escape_slack_mrkdwn(str(issue))}>*"
+        if issue.culprit:
+            section_text += f"\n{escape_slack_mrkdwn(issue.culprit)}"
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": section_text[:SLACK_MAX_SECTION_TEXT],
+                },
+            }
+        )
+
+        elements = [
+            {
+                "type": "mrkdwn",
+                "text": f"*Project:* {escape_slack_mrkdwn(issue.project.name)}",
+            }
+        ]
+        for tag in await gather_issue_tags(issue, tags_to_add):
+            elements.append(
+                {
+                    "type": "mrkdwn",
+                    "text": f"*{escape_slack_mrkdwn(tag.label)}:* {escape_slack_mrkdwn(tag.value)}",
+                }
+            )
+        blocks.append(
+            {"type": "context", "elements": elements[:SLACK_MAX_CONTEXT_ELEMENTS]}
+        )
+
+    text = f"{title}: {issues[0]}" if issues else title
+    return await send_slack_webhook(url, text, blocks)
+
+
 ISSUE_NOTIFICATION_HANDLERS = {
     RecipientType.GENERAL_WEBHOOK: send_issue_as_webhook,
     RecipientType.DISCORD: send_issue_as_discord_webhook,
@@ -598,6 +687,7 @@ ISSUE_NOTIFICATION_HANDLERS = {
     RecipientType.GOOGLE_CHAT: send_issue_as_googlechat_webhook,
     RecipientType.NTFY: send_issue_as_ntfy,
     RecipientType.MICROSOFT_TEAMS: send_issue_as_teams_webhook,
+    RecipientType.SLACK: send_issue_as_slack_webhook,
     RecipientType.ZULIP: send_issue_as_zulip,
 }
 
@@ -663,6 +753,15 @@ async def send_test_notification(
             },
         }
         return await send_feishu_webhook(url, payload)
+    elif recipient_type == RecipientType.SLACK:
+        blocks = [
+            {"type": "header", "text": {"type": "plain_text", "text": title}},
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": escape_slack_mrkdwn(message)},
+            },
+        ]
+        return await send_slack_webhook(url, title, blocks)
     elif recipient_type == RecipientType.GOOGLE_CHAT:
         card = GoogleChatCard()
         card.header = {"title": title, "subtitle": project.name}
