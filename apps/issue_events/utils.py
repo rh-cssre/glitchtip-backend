@@ -1,8 +1,11 @@
+import logging
 import string
 
 from sentry.interfaces.stacktrace import get_context
 
 from .constants import IssueEventType
+
+logger = logging.getLogger(__name__)
 
 digs = string.digits + string.ascii_uppercase
 
@@ -61,11 +64,23 @@ def get_entries(data):
     # normalizes to, ``{"values": [...]}``. Events ingested before that
     # normalization existed (5.1 and earlier) stored a bare list instead;
     # such a row can only exist on an install that kept it through the whole
-    # 6.x series, so it is skipped rather than adapted.
-    if (exception := data.get("exception")) and isinstance(exception, dict):
+    # 6.x series, so it is skipped rather than adapted. The check is for the
+    # whole shape, values included: an entry without them renders as undefined
+    # in the frontend, which is worse than the section being absent.
+    exception = data.get("exception")
+    if exception and not (
+        isinstance(exception, dict) and isinstance(exception.get("values"), list)
+    ):
+        # Only reachable for a row written before 5.2.0 normalized the shape.
+        # Log the shape, never the content: it is user-submitted event data.
+        logger.warning(
+            "Skipping event exception stored in an unsupported shape: %s",
+            type(exception).__name__,
+        )
+    elif isinstance(exception, dict) and isinstance(exception.get("values"), list):
         exception["hasSystemFrames"] = False
         # if any frame is "in_app" set this to True
-        for value in exception.get("values", ()):
+        for value in exception["values"]:
             if (
                 value.get("stacktrace", None) is not None
                 and "frames" in value["stacktrace"]
@@ -93,7 +108,8 @@ def get_entries(data):
 
         entries.append({"type": "exception", "data": exception})
 
-    if (breadcrumbs := data.get("breadcrumbs")) and isinstance(breadcrumbs, dict):
+    breadcrumbs = data.get("breadcrumbs")
+    if isinstance(breadcrumbs, dict) and isinstance(breadcrumbs.get("values"), list):
         entries.append({"type": "breadcrumbs", "data": breadcrumbs})
 
     if logentry := data.get("logentry"):
