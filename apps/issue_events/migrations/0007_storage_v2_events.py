@@ -295,7 +295,7 @@ def drop_initial_partitions(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("issue_events", "0006_replace_tsvector_function"),
+        ("issue_events", "0001_squashed_0006_replace_tsvector_function"),
     ]
 
     operations = [

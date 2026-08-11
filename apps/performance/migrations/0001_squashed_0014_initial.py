@@ -12,20 +12,10 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    replaces = [
-        ("performance", "0001_squashed_0012_alter_span_op"),
-        ("performance", "0013_alter_transactionevent_options_and_more"),
-        ("performance", "0014_initial"),
-    ]
-
     initial = True
 
     dependencies = [
-        (
-            "projects",
-            "0001_squashed_0009_alter_project_id_alter_projectcounter_id_and_more",
-        ),
-        ("projects", "0015_rename_label_projectkey_name_projectkey_is_active"),
+        ("projects", "0001_squashed_0016_auto_20250125_1733"),
     ]
 
     operations = [

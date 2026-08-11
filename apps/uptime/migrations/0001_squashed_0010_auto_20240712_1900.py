@@ -23,29 +23,13 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    replaces = [
-        ("uptime", "0001_squashed_0008_statuspage_statuspage_unique_organization_slug"),
-        ("uptime", "0009_alter_monitor_interval_alter_monitor_monitor_type_and_more"),
-        ("uptime", "0010_auto_20240712_1900"),
-    ]
-
     initial = True
 
     dependencies = [
-        (
-            "environments",
-            "0001_squashed_0003_alter_environment_id_alter_environmentproject_id",
-        ),
-        (
-            "organizations_ext",
-            "0001_squashed_0003_alter_organization_id_alter_organization_users_and_more",
-        ),
-        ("organizations_ext", "0004_organizationsubscription_alter_organization_slug"),
-        ("performance", "0014_initial"),
-        (
-            "projects",
-            "0001_squashed_0009_alter_project_id_alter_projectcounter_id_and_more",
-        ),
+        ("environments", "0001_squashed_0004_alter_environment_name"),
+        ("organizations_ext", "0001_squashed_0008_merge_20250210_1625"),
+        ("performance", "0001_squashed_0014_initial"),
+        ("projects", "0001_squashed_0016_auto_20250125_1733"),
     ]
 
     operations = [

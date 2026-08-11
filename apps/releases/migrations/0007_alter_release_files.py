@@ -7,7 +7,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("files", "0001_squashed_0009_alter_file_size"),
         ("releases", "0006_alter_release_files_delete_releasefile"),
-        ("sourcecode", "0002_alter_debugsymbolbundle_file_and_more"),
+        ("sourcecode", "0001_squashed_0002_alter_debugsymbolbundle_file_and_more"),
     ]
 
     operations = [

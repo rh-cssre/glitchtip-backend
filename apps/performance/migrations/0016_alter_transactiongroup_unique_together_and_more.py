@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("performance", "0015_transactiongroup_is_deleted"),
-        ("projects", "0017_auto_20250627_1413"),
+        ("projects", "0001_squashed_0016_auto_20250125_1733"),
     ]
 
     operations = [
