@@ -27,10 +27,9 @@ CLIENT_IP = "93.184.216.34"
 
 class AsgiIngestTestMixin:
     """Drive envelope requests at the ASGI seam — ``IngestDispatcher`` — the
-    exact layer production traffic enters, for BOTH ingest arms: with
-    ``GLITCHTIP_RUST_INGEST`` off the dispatcher routes to the
-    minimal-middleware Django ingest handler (the Python view); with it on,
-    matching envelope POSTs are served by the Rust handler."""
+    exact layer production traffic enters: matching envelope POSTs are
+    served by the Rust handler; what it declines (non-POST, minidump
+    handbacks) lands on the minimal-middleware Django ingest handler."""
 
     def _dispatcher(self):
         from django.core.asgi import get_asgi_application
@@ -142,7 +141,7 @@ def flush_rust_ingest_state():
 
 
 async def pop_rust_ingest_messages() -> list[bytes]:
-    """Pop every raw serialized task message the Rust arm enqueued onto the
+    """Pop every raw serialized task message the Rust path enqueued onto the
     ingest queue, oldest first. Valkey: RPOP the queue list. Postgres: read
     and delete the db_queuedtask rows (created_at order; rows enqueued in
     one batch share a timestamp, so within-batch order is not defined —

@@ -1,23 +1,17 @@
-"""Tests for the Rust envelope-ingest ASGI path (``GLITCHTIP_RUST_INGEST``).
+"""Tests for the Rust envelope-ingest ASGI path.
 
 These drive ``IngestDispatcher`` at the ASGI layer — the seam where the Rust
-path replaces the Django view — and then flush the vtasks batch so the real
+pipeline serves envelope POSTs — and then flush the vtasks batch so the real
 worker tasks consume what Rust enqueued. That covers the full contract: DSN
 auth against the shared Postgres pool, Valkey block/dedupe caches, the vtasks
 wire format, and worker-side re-validation of the payloads.
-
-Skipped unless ``GLITCHTIP_RUST_INGEST`` is enabled: the flag wires the Rust
-ASGI dispatch in (the ``gt_rust.django_backend`` engine and gt_rust Valkey
-cache driver it relies on run unconditionally), so these run in a dedicated
-flag-on test lane while the default suite keeps covering the Python view.
 """
 
+import gzip
 import importlib
 import json
-import unittest
 import uuid
 
-from django.conf import settings
 from django.core.cache import cache
 from django.tasks import task_backends
 
@@ -35,9 +29,6 @@ from .utils import (
 )
 
 
-@unittest.skipUnless(
-    settings.GLITCHTIP_RUST_INGEST, "requires GLITCHTIP_RUST_INGEST=true"
-)
 class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
     """Runs in BOTH Rust ingest shapes: the Valkey lane (block/dedupe cache
     and LPUSH broker on the dedicated test Valkey database) and the
@@ -118,10 +109,10 @@ class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
 
     async def test_header_dsn_auth_no_query_credential(self):
         """Worst case: the credential is *only* in the envelope-header ``dsn`` —
-        no query string, no auth header. The Python view denies this (it reads
-        only the query / Authorization / X-Sentry-Auth); the Rust path recovers
-        the public key from the header and accepts, so a mis-configured SDK's
-        events are ingested instead of silently dropped."""
+        no query string, no auth header. The Rust path recovers the public key
+        from the header and accepts, so a mis-configured SDK's events are
+        ingested instead of silently dropped. (The fallback view reads only the
+        query / Authorization / X-Sentry-Auth and would deny.)"""
         data, _ = self._envelope()
         data[0]["dsn"] = (
             f"https://{self.projectkey.public_key}@localhost/{self.project.id}"
@@ -238,6 +229,34 @@ class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
         # The Django view answers non-POST envelope requests.
         self.assertEqual(status, 405)
 
+    async def test_absurdly_long_project_id_does_not_raise(self):
+        """A project id past CPython's 4300-digit ``int()`` limit must not
+        escape the dispatcher as an unhandled ASGI error.
+
+        The path pattern is matched before any handler that could turn an
+        exception into a response, so an unbounded digit capture would let
+        ``int()`` raise straight out of ``IngestDispatcher`` — no response,
+        no CORS headers, no error capture. Django's router 404s the same URL.
+        """
+        _, envelope = self._envelope()
+        status, _, _ = await self._post(
+            envelope.encode(), path="/api/" + "1" * 4301 + "/envelope/"
+        )
+        self.assertGreaterEqual(status, 400)
+        self.assertLess(status, 500)
+
+    async def test_non_ascii_digit_project_id_not_claimed(self):
+        """``\\d`` matches non-ASCII digits and ``int()`` converts them, so an
+        unrestricted pattern would ingest ``/api/<arabic-indic 123>/envelope/``
+        as project 123 while Django's ``[0-9]+`` router 404s it. Anything an
+        edge rule keyed on the ASCII project id cannot see must not be
+        accepted here either."""
+        _, envelope = self._envelope()
+        status, _, _ = await self._post(envelope.encode(), path="/api/١٢٣/envelope/")
+        self.assertEqual(status, 404)
+        await self._drain_rust_queue()
+        self.assertEqual(await IssueEvent.objects.acount(), 0)
+
     async def test_oversized_project_id_falls_through_to_django(self):
         # A project id past the BIGINT/i64 range can't name a real project
         # and must not overflow the Rust session arg into a 500 + error
@@ -250,59 +269,85 @@ class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
         self.assertGreaterEqual(status, 400)
         self.assertLess(status, 500)
 
-    async def test_minidump_envelope_falls_back_to_python_view(self):
+    MINIDUMP_ENVELOPE = (
+        b"{}\n"
+        b'{"type": "attachment", "attachment_type": "event.minidump", "length": 8}\n'
+        b"MDMPxxxx\n"
+    )
+
+    async def test_minidump_envelope_falls_back_to_django_view(self):
         # A garbage minidump exercises the pre-side-effect fallback: the
-        # Rust path hands the buffered request to the Django view, which
-        # owns the minidump -> event conversion.
-        envelope = (
-            b"{}\n"
-            b'{"type": "attachment", "attachment_type": "event.minidump", "length": 8}\n'
-            b"MDMPxxxx\n"
-        )
-        status, _, body = await self._post(envelope)
+        # Rust path hands the buffered request to the Django view, which is
+        # where the (in-progress, not end-to-end) minidump -> event
+        # conversion lives. What is pinned here is the handback and the
+        # 200 — not minidump support.
+        status, _, body = await self._post(self.MINIDUMP_ENVELOPE)
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body), {})
 
-    async def test_python_rust_payload_parity(self):
-        """The worker-visible event must not depend on which path served the
-        request: post the same event through the Rust ASGI path and the
-        Python view, then compare the stored events field by field."""
+    async def test_compressed_minidump_envelope_falls_back(self):
+        """A Content-Encoded minidump envelope must survive the fallback.
+
+        The Rust pipeline hands back the buffered *raw* (still-compressed)
+        body and the replayed scope keeps its ``Content-Encoding``, so the
+        Django view is the one that decompresses. Handing back decompressed
+        bytes under an unchanged header would make the view decompress
+        twice and answer 400, so pin the round trip.
+        """
+        from asgiref.sync import sync_to_async
+
+        status, _, body = await self._post(
+            gzip.compress(self.MINIDUMP_ENVELOPE),
+            extra_headers=[(b"content-encoding", b"gzip")],
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {})
+        # The fallback view enqueues through the immediate test backend.
+        await sync_to_async(task_backends["default"].flush_batches)()
+        self.assertEqual(await IssueEvent.objects.acount(), 1)
+
+    async def test_fallback_view_payload_parity(self):
+        """The worker-visible event must not depend on whether the Rust
+        pipeline served the request or handed it to the fallback view — a
+        minidump envelope's regular items reach the DB through the view, and
+        must land identically. Post the same event both ways, then compare the
+        stored events field by field."""
         from asgiref.sync import sync_to_async
 
         data, envelope = self._envelope()
         await self._post(envelope.encode())
 
         rust_id = data[0]["event_id"]
-        python_id = uuid.uuid4().hex
-        data[0]["event_id"] = python_id
-        data[2]["event_id"] = python_id
+        fallback_id = uuid.uuid4().hex
+        data[0]["event_id"] = fallback_id
+        data[2]["event_id"] = fallback_id
 
-        def post_python():
+        def post_fallback():
             return self.client.post(
-                self.url_for_python_view(),
+                self.url_for_fallback_view(),
                 list_to_envelope(data),
                 content_type="application/json",
                 REMOTE_ADDR=CLIENT_IP,
             )
 
-        res = await sync_to_async(post_python)()
+        res = await sync_to_async(post_fallback)()
         self.assertEqual(res.status_code, 200)
         await self._drain_rust_queue()
-        # The Python view enqueued via the immediate backend; its flush runs
+        # The fallback view enqueued via the immediate backend; its flush runs
         # async task functions through async_to_sync, so it needs a thread.
         await sync_to_async(task_backends["default"].flush_batches)()
 
         rust_event = await IssueEvent.objects.aget(event_id=rust_id)
-        python_event = await IssueEvent.objects.aget(event_id=python_id)
-        self.assertEqual(rust_event.data, python_event.data)
-        self.assertEqual(rust_event.title, python_event.title)
-        self.assertEqual(rust_event.type, python_event.type)
-        self.assertEqual(rust_event.level, python_event.level)
-        self.assertEqual(rust_event.tags, python_event.tags)
+        fallback_event = await IssueEvent.objects.aget(event_id=fallback_id)
+        self.assertEqual(rust_event.data, fallback_event.data)
+        self.assertEqual(rust_event.title, fallback_event.title)
+        self.assertEqual(rust_event.type, fallback_event.type)
+        self.assertEqual(rust_event.level, fallback_event.level)
+        self.assertEqual(rust_event.tags, fallback_event.tags)
         # Both landed in the same issue (identical grouping hash).
-        self.assertEqual(rust_event.issue_id, python_event.issue_id)
+        self.assertEqual(rust_event.issue_id, fallback_event.issue_id)
 
-    def url_for_python_view(self):
+    def url_for_fallback_view(self):
         from django.urls import reverse
 
         return reverse("event_envelope", args=[self.project.id]) + self.params

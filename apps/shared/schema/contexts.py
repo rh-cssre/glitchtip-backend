@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Callable
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal
 
 from ninja import Field, Schema
 from pydantic import (
@@ -220,21 +220,6 @@ class ReplayContext(LaxIngestSchema):
 class ResponseContext(LaxIngestSchema):
     type: Literal["response"] = "response"
     status_code: int
-
-
-class ContextsDict(TypedDict):
-    device: DeviceContext
-    os: OSContext
-    runtime: RuntimeContext
-    app: AppContext
-    browser: BrowserContext
-    gpu: GPUContext
-    state: StateContext
-    culture: CultureContext
-    cloud_resource: CloudResourceContext
-    trace: TraceContext
-    replay: ReplayContext
-    response: ResponseContext
 
 
 ContextsUnion = Annotated[

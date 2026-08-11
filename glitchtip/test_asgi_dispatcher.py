@@ -2,6 +2,7 @@ import asyncio
 from unittest import mock
 
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from django.test import SimpleTestCase, TransactionTestCase
 
 from glitchtip.asgi import (
@@ -9,6 +10,34 @@ from glitchtip.asgi import (
     RecycleConnectionsMiddleware,
     _recycle_db_connections,
 )
+from glitchtip.ingest_asgi import IngestDispatcher
+
+
+class IngestDispatcherTestCase(SimpleTestCase):
+    def test_building_the_ingest_app_restores_global_middleware(self):
+        """The ingest handler is built by swapping ``settings.MIDDLEWARE`` for
+        the minimal ingest list. That global must be handed back exactly as it
+        was — a leaked swap would strip session/auth/CSRF middleware from the
+        whole site."""
+        before = list(settings.MIDDLEWARE)
+        dispatcher = IngestDispatcher(MockASGIApp())
+        self.assertEqual(list(settings.MIDDLEWARE), before)
+        # Built eagerly, so the swap window never overlaps served traffic.
+        self.assertIsNotNone(dispatcher._ingest_app)
+
+    async def test_non_ingest_path_goes_to_the_full_app(self):
+        full = MockASGIApp()
+        await IngestDispatcher(full)(
+            {"type": "http", "method": "GET", "path": "/api/0/organizations/"},
+            None,
+            None,
+        )
+        self.assertTrue(full.called)
+
+    async def test_lifespan_goes_to_the_full_app(self):
+        full = MockASGIApp()
+        await IngestDispatcher(full)({"type": "lifespan"}, None, None)
+        self.assertTrue(full.called)
 
 
 class MockASGIApp:

@@ -1,7 +1,6 @@
 """ASGI handler serving ``POST /api/<project_id>/envelope/`` in Rust.
 
-When ``GLITCHTIP_RUST_INGEST`` is enabled, ``IngestDispatcher`` routes
-envelope POSTs here instead of the Django view. The whole request — DSN
+``IngestDispatcher`` routes every envelope POST here. The whole request — DSN
 auth + throttling, body buffering, decompression/framing, item validation,
 PII scrubbing, event-id dedupe and the vtasks enqueue — runs inside
 ``gt_rust`` on the shared tokio runtime; this module only adapts ASGI
@@ -16,33 +15,52 @@ django_cache table and the db_queuedtask broker instead. Nothing
 per-request is allocated on the Python heap beyond the ASGI messages
 themselves.
 
-Envelopes the Rust pipeline cannot fully own — SDK minidump submissions,
-which need the ``symbolic`` stack — come back as a fallback and are
-replayed through the regular (minimal-middleware) Django ingest handler
-before any side effect happened.
+Envelopes carrying an SDK minidump attachment come back as a fallback and
+are replayed through the regular (minimal-middleware) Django ingest handler
+before any side effect happened, because the minidump-to-event conversion is
+implemented in Python (the ``minidump`` package plus the Python ingest
+schemas). Minidump ingest is in-progress groundwork that does not work end
+to end and is not supported; the handback keeps it reachable rather than
+claiming the path is finished.
 """
 
 import logging
 import os
 import re
+from collections import Counter
+from urllib.parse import parse_qsl, urlencode
 
 import orjson
 import sentry_sdk
 
 logger = logging.getLogger(__name__)
 
-_ENVELOPE_PATH_RE = re.compile(r"^/api/(\d+)/envelope/$")
+# ASCII digits only, and length-bounded, to match what Django's ``<int:>``
+# converter (``[0-9]+``) would route. ``\d`` also matches non-ASCII digits,
+# which ``int()`` happily converts — so ``/api/١٢٣/envelope/`` would resolve
+# here as project 123 while the Django router 404s it, leaving an edge rule
+# keyed on the ASCII spelling of a project id blind to the equivalent URL.
+# The bound matters too: ``int()`` raises above CPython's 4300-digit
+# conversion limit, and this pattern is matched outside any handler that
+# could turn that into a response.
+_ENVELOPE_PATH_RE = re.compile(r"^/api/([0-9]{1,19})/envelope/$")
 
 # SDKs authenticate envelope POSTs via ?sentry_key=<key> (glitchtip_key
 # also accepted). The key is a public ingest credential by design (it ships
 # in browser bundles), but there's still no reason to copy customers' keys
 # into the operator's tracker — the project id in the URL identifies the
 # project.
-_KEY_QS_RE = re.compile(r"((?:sentry|glitchtip)_key=)[^&]*")
+_CREDENTIAL_PARAMS = frozenset({"sentry_key", "glitchtip_key"})
 
 # Project ids are BIGINT; the Rust IngestSession takes an i64. A larger id
 # can't name a real project, so it must not overflow the session argument.
 _MAX_PROJECT_ID = 9223372036854775807
+
+# Chunk size for handing a fallback body back to the Django handler.
+_REPLAY_CHUNK_SIZE = 256 * 1024
+
+# Anomalies reported verbatim per request before switching to a summary.
+_MAX_REPORTED_ANOMALIES = 5
 
 _init_pid: int | None = None
 
@@ -150,7 +168,7 @@ def _valkey_driver():
         return cache_backend._driver
     if not settings.TESTING:
         raise RuntimeError(
-            "GLITCHTIP_RUST_INGEST requires the vcache Valkey cache backend"
+            "Rust envelope ingest requires the vcache Valkey cache backend"
         )
     from gt_rust.valkey import RustValkeyDriver
 
@@ -183,7 +201,7 @@ def _report_anomalies(anomalies: list[dict], path: str) -> None:
     Anomaly fields are attacker-controlled — they are recorded as context
     data, never interpreted.
     """
-    for anomaly in anomalies:
+    for anomaly in anomalies[:_MAX_REPORTED_ANOMALIES]:
         kind = anomaly.get("kind", "unknown")
         item_type = anomaly.get("item_type")
         with sentry_sdk.new_scope() as scope:
@@ -207,6 +225,77 @@ def _report_anomalies(anomalies: list[dict], path: str) -> None:
             path,
             anomaly.get("message"),
         )
+
+    # One envelope may carry up to the framing layer's item limit, and each
+    # anomaly here is an event in the operator's OWN project — so reporting
+    # every one lets a single request spend a thousand events of the
+    # operator's quota, with attacker-chosen bytes attached. Report a bounded
+    # sample verbatim and summarize the rest.
+    remaining = len(anomalies) - _MAX_REPORTED_ANOMALIES
+    if remaining > 0:
+        counts = Counter(a.get("kind", "unknown") for a in anomalies)
+        with sentry_sdk.new_scope() as scope:
+            scope.level = "warning"
+            scope.fingerprint = ["envelope-anomaly-flood"]
+            scope.set_context(
+                "rust ingest anomalies", {"total": len(anomalies), "by_kind": counts}
+            )
+            sentry_sdk.capture_message(
+                f"Envelope ingest reported {remaining} further anomalies on {path}",
+                "warning",
+            )
+        logger.warning(
+            "Envelope ingest suppressed %d further anomalies on %s: %s",
+            remaining,
+            path,
+            dict(counts),
+        )
+
+
+def _describe_request(sentry_scope, scope, project_id: int) -> None:
+    """Attach this request's identifying context to the scope.
+
+    Called only on the paths that actually report something (the 500 handler
+    and the anomaly reporter) rather than on every request: the context is
+    read exclusively by a capture, and building it costs a query-string parse
+    that the overwhelming majority of requests would never use.
+    """
+    sentry_scope.set_tag("rust_ingest.project_id", str(project_id))
+    sentry_scope.set_context(
+        "request",
+        {
+            "method": scope.get("method"),
+            "url": scope.get("path"),
+            "query_string": _filtered_query_string(scope.get("query_string", b"")),
+        },
+    )
+
+
+def _filtered_query_string(raw: bytes) -> str:
+    """The request's query string with credential values masked.
+
+    Masking has to key off the *decoded* parameter name. The ingest auth
+    path url-decodes names before comparing them, so ``sentry%5Fkey=<key>``
+    is a working credential — a filter matching the literal ``sentry_key=``
+    would pass it straight through into the operator's own error tracker.
+    Anything that doesn't parse as a query string is dropped wholesale
+    rather than reported verbatim.
+    """
+    decoded = raw.decode("latin1")
+    if not decoded:
+        return ""
+    try:
+        pairs = parse_qsl(decoded, keep_blank_values=True)
+    except ValueError:
+        pairs = []
+    if not pairs:
+        return "[unparseable]"
+    return urlencode(
+        [
+            (name, "[Filtered]" if name in _CREDENTIAL_PARAMS else value)
+            for name, value in pairs
+        ]
+    )
 
 
 def _cors_headers(scope) -> list:
@@ -278,22 +367,11 @@ class RustEnvelopeHandler:
         with sentry_sdk.isolation_scope() as sentry_scope:
             sentry_scope.clear()
             try:
-                sentry_scope.set_tag("rust_ingest.project_id", str(project_id))
-                sentry_scope.set_context(
-                    "request",
-                    {
-                        "method": scope.get("method"),
-                        "url": scope.get("path"),
-                        "query_string": _KEY_QS_RE.sub(
-                            r"\1[Filtered]",
-                            scope.get("query_string", b"").decode("latin1"),
-                        ),
-                    },
-                )
-                await self._handle(scope, receive, send, project_id)
+                await self._handle(scope, receive, send, project_id, sentry_scope)
             except Exception as e:
                 # Same contract as Django's handler: an unexpected failure is a
                 # 500, reported, never a dropped connection.
+                _describe_request(sentry_scope, scope, project_id)
                 sentry_sdk.capture_exception(e)
                 logger.exception("Rust ingest path failed on %s", scope.get("path", ""))
                 try:
@@ -307,7 +385,9 @@ class RustEnvelopeHandler:
                     # Response already started — nothing more to send.
                     pass
 
-    async def _handle(self, scope, receive, send, project_id: int) -> None:
+    async def _handle(
+        self, scope, receive, send, project_id: int, sentry_scope
+    ) -> None:
         from django.conf import settings
         from gt_rust.ingest import IngestSession
 
@@ -352,25 +432,46 @@ class RustEnvelopeHandler:
 
         result = await session.finish()
         if result[0] == "fallback":
-            await self._replay(scope, result[1], receive, send)
+            # Drop the Rust-side buffers (the raw body, and its decompressed
+            # copy for a Content-Encoded envelope) before the replay builds
+            # its own: the Django handler is about to hold the same bytes
+            # again, and this path is the module's largest allocation.
+            fallback_body = result[1]
+            del session, result
+            await self._replay(scope, fallback_body, receive, send)
             return
 
         _, status, body, headers, anomalies = result
         await _send_response(send, status, headers, body)
         if anomalies:
+            _describe_request(sentry_scope, scope, project_id)
             _report_anomalies(anomalies, scope.get("path", ""))
 
     async def _replay(self, scope, body: bytes, receive, send) -> None:
-        """Re-dispatch the buffered request through the Django ingest app."""
-        replayed = False
+        """Re-dispatch the buffered request through the Django ingest app.
+
+        The body is handed back in chunks rather than as one message.
+        Django's ``read_body`` spools into a ``SpooledTemporaryFile`` and only
+        moves the write off the event loop once that file has already rolled
+        over to disk — so a single large message performs the whole
+        multi-megabyte rollover copy inline on the loop, stalling every other
+        request. Chunking keeps each inline write small and lets everything
+        past the rollover threshold be written off-loop.
+        """
+        offset = 0
 
         async def replay_receive():
-            nonlocal replayed
-            if not replayed:
-                replayed = True
-                return {"type": "http.request", "body": body, "more_body": False}
-            # The real body is consumed; behave like a quiet connection so
-            # Django's disconnect listener idles until the response is done.
+            nonlocal offset
+            if offset < len(body):
+                chunk = body[offset : offset + _REPLAY_CHUNK_SIZE]
+                offset += len(chunk)
+                return {
+                    "type": "http.request",
+                    "body": chunk,
+                    "more_body": offset < len(body),
+                }
+            # The real body is consumed; delegate so Django's disconnect
+            # listener sees a genuine disconnect rather than a synthetic one.
             return await receive()
 
         await self._fallback_app(scope, replay_receive, send)

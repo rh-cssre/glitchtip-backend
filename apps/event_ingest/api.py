@@ -29,11 +29,6 @@ router = Router(auth=event_auth)
 
 class EventIngestOut(Schema):
     event_id: str
-    task_id: str | None = None  # For debug purposes only
-
-
-class EnvelopeIngestOut(Schema):
-    id: str | None = None
 
 
 def get_ip_address(request: EventAuthHttpRequest) -> str | None:
