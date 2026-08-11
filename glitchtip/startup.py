@@ -102,6 +102,18 @@ RETIRED_ENV_VARS = {
         "WSGI serving is removed; GlitchTip only runs as an ASGI application, "
         "so there is no synchronous mode to switch to"
     ),
+    "GLITCHTIP_EMBED_WORKER": (
+        "the task worker and scheduler always run in this process; the "
+        "variable is ignored, including when set to false"
+    ),
+    "IS_WORKER": (
+        "there is no worker-only mode; every process serves HTTP and consumes "
+        "the task queue"
+    ),
+    "SERVER_ROLE": (
+        "there is only one role; bin/start.sh refuses a role other than web "
+        "rather than starting the wrong thing"
+    ),
 }
 
 

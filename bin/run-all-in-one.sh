@@ -1,10 +1,16 @@
 #!/usr/bin/env sh
 set -e
 
+# INFO by default: this is the only serving entrypoint, and the settings
+# default (WARNING) is meant for management commands.
+export LOG_LEVEL=${LOG_LEVEL:-INFO}
+
 . "$(dirname "$0")/tune-malloc.sh"
 
-# Run initialization commands unless SKIP_INIT is set
-# Set SKIP_INIT=true when running migrations as a pre-deploy hook
+# Run initialization commands unless SKIP_INIT is set.
+# Set SKIP_INIT=true when running migrations as a pre-deploy hook — required
+# when running more than one replica, since Django takes no migration lock and
+# concurrent runs race on DDL.
 if [ "${SKIP_INIT}" != "True" ] && [ "${SKIP_INIT}" != "true" ] && [ "${SKIP_INIT}" != "1" ]; then
     if [ -n "$MAINTENANCE_DATABASE_URL" ]; then
         DB_FLAG="--database maintenance"

@@ -317,9 +317,9 @@ except ImportError:
     # serving this app under another ASGI server)
     pass
 
-# Outermost so lifespan startup reaches it even in embed-worker mode (the
-# vtasks wrapper consumes lifespan without forwarding it inward): a pod
-# receiving no HTTP traffic still starts its trim timer. Periodically
+# Outermost so lifespan startup reaches it at all (the vtasks wrapper consumes
+# lifespan without forwarding it inward): a pod receiving no HTTP traffic still
+# starts its trim timer. Periodically
 # returns freed memory to the OS in every ASGI process — the scheduled
 # maintenance task only trims the one pod that runs it.
 application = PeriodicMemoryTrim(application)

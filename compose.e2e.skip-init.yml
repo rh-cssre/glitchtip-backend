@@ -1,0 +1,31 @@
+# Override: migrations run as their own step and the server starts with
+# SKIP_INIT, which is how a deployment running more than one replica has to do
+# it — Django takes no migration lock, so every replica initialising itself
+# races on DDL.
+services:
+  migrate:
+    build: .
+    command: ./bin/run-migrate.sh
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      VALKEY_URL: redis://valkey:6379
+      SECRET_KEY: change_me
+
+  glitchtip:
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      VALKEY_URL: redis://valkey:6379
+      SECRET_KEY: change_me
+      ENABLE_ORGANIZATION_CREATION: "true"
+      ENABLE_TEST_API: "true"
+      DEBUG: "true"
+      EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
+      ENABLE_OBSERVABILITY_API: "true"
+      LOG_LEVEL: INFO
+      SKIP_INIT: "true"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully

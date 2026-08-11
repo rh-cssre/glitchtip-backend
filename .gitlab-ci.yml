@@ -163,6 +163,9 @@ e2e:
       - COMPOSE_FILES: "-f compose.e2e.yml"
       # Without valkey (postgres for cache/tasks)
       - COMPOSE_FILES: "-f compose.e2e.yml -f compose.e2e.no-valkey.yml"
+      # Migrations as a separate step, server started with SKIP_INIT — the
+      # shape a multi-replica deployment has to use
+      - COMPOSE_FILES: "-f compose.e2e.yml -f compose.e2e.skip-init.yml"
 
 lint:
   image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.14-$BASE_LAYER

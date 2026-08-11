@@ -48,7 +48,7 @@ services:
     build: .
     user: root # Allows for usage of ipdb, apt, etc in dev
     command: ./bin/run-all-in-one.sh --reload --reload-ignore-worker-failure
-    #command: ./bin/run-granian.sh --reload --reload-ignore-worker-failure --access-log
+    #command: ./bin/run-all-in-one.sh --reload --reload-ignore-worker-failure --access-log
     #command: python app.py
     #command: ./manage.py runserver 0.0.0.0:8000
     depends_on: *default-depends_on
