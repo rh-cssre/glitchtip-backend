@@ -22,9 +22,6 @@ if [ "${SKIP_INIT}" != "True" ] && [ "${SKIP_INIT}" != "true" ] && [ "${SKIP_INI
     python -c "import os, django; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'glitchtip.settings'); django.setup(); from django.conf import settings; from django.core.management import call_command; call_command('createcachetable') if 'django.contrib.sessions' in settings.INSTALLED_APPS else None"
 fi
 
-# Enable embedded worker
-export GLITCHTIP_EMBED_WORKER=true
-
 # Granian settings
 
 WORKERS=${GRANIAN_WORKERS:-${WEB_CONCURRENCY:-1}}
