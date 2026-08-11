@@ -28,8 +28,8 @@ CLIENT_IP = "93.184.216.34"
 class AsgiIngestTestMixin:
     """Drive envelope requests at the ASGI seam — ``IngestDispatcher`` — the
     exact layer production traffic enters: matching envelope POSTs are
-    served by the Rust handler; everything else (non-POST, minidump
-    fallbacks) lands on the minimal-middleware Django ingest handler."""
+    served by the Rust handler; what it declines (non-POST, minidump
+    handbacks) lands on the minimal-middleware Django ingest handler."""
 
     def _dispatcher(self):
         from django.core.asgi import get_asgi_application

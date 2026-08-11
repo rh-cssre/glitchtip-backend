@@ -21,11 +21,10 @@ class EnvelopeAPITestCase(EventIngestTestCase):
     """
     Integration tests for the Django envelope view.
 
-    Production envelope POSTs are served by the Rust pipeline (see
-    test_rust_ingest.py / test_ingest_parity.py, which drive the ASGI
-    dispatcher); the Django test client used here reaches the view via URL
-    routing, exercising the fallback path directly — the code that serves
-    minidump-envelope handbacks and non-dispatcher deployments.
+    Envelope POSTs are served by the Rust pipeline (see test_rust_ingest.py /
+    test_ingest_parity.py, which drive the ASGI dispatcher); the Django test
+    client used here reaches the view via URL routing, exercising the fallback
+    path directly — the code that serves minidump-envelope handbacks.
     Use test_process_issue_events.py for testing Event Ingest more specifically.
     """
 

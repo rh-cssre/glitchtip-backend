@@ -15,11 +15,13 @@ django_cache table and the db_queuedtask broker instead. Nothing
 per-request is allocated on the Python heap beyond the ASGI messages
 themselves.
 
-Envelopes the Rust pipeline cannot fully own — SDK minidump submissions,
-whose minidump-to-event conversion is implemented in Python (the
-``minidump`` package plus the Python ingest schemas) and has not been
-ported — come back as a fallback and are replayed through the regular
-(minimal-middleware) Django ingest handler before any side effect happened.
+Envelopes carrying an SDK minidump attachment come back as a fallback and
+are replayed through the regular (minimal-middleware) Django ingest handler
+before any side effect happened, because the minidump-to-event conversion is
+implemented in Python (the ``minidump`` package plus the Python ingest
+schemas). Minidump ingest is in-progress groundwork that does not work end
+to end and is not supported; the handback keeps it reachable rather than
+claiming the path is finished.
 """
 
 import logging

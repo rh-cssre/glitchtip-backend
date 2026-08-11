@@ -277,8 +277,10 @@ class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
 
     async def test_minidump_envelope_falls_back_to_django_view(self):
         # A garbage minidump exercises the pre-side-effect fallback: the
-        # Rust path hands the buffered request to the Django view, which
-        # owns the minidump -> event conversion.
+        # Rust path hands the buffered request to the Django view, which is
+        # where the (in-progress, not end-to-end) minidump -> event
+        # conversion lives. What is pinned here is the handback and the
+        # 200 — not minidump support.
         status, _, body = await self._post(self.MINIDUMP_ENVELOPE)
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body), {})

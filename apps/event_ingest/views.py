@@ -83,13 +83,17 @@ def handle_supported_payload_error(
 async def event_envelope_view(request: EventAuthHttpRequest, project_id: int):
     """Django fallback for envelope ingest.
 
-    Production envelope POSTs are served by the Rust pipeline
-    (``glitchtip.rust_ingest``); this view handles what that pipeline does
-    not own: envelopes carrying an SDK minidump attachment (handed back
-    pre-side-effect, because turning a minidump into an event is implemented
-    in Python — the ``minidump`` package plus the schemas below — and has not
-    been ported), non-POST methods, and deployments whose entrypoint
-    bypasses ``IngestDispatcher`` (WSGI, ``runserver``).
+    Every envelope POST is served by the Rust pipeline
+    (``glitchtip.rust_ingest``). What is left for this view is what that
+    pipeline declines: non-POST methods (405, below), and envelopes carrying
+    an SDK minidump attachment, which Rust hands back before any side effect
+    because turning a minidump into an event is implemented in Python (the
+    ``minidump`` package plus the schemas below).
+
+    That minidump branch is groundwork, not a feature: minidump ingest does
+    not work end to end and is not supported. It is kept reachable for the
+    work to build on, so treat it as in-progress rather than as a path with
+    behavior worth preserving.
     """
     if request.method != "POST":
         return JsonResponse({"detail": "Method not allowed"}, status=405)
