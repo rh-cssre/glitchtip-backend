@@ -342,9 +342,15 @@ class StacktraceProcessor:
             # Image base priority: debug_meta image_addr, then per-frame
             # image_addr, then heuristic estimation as a last resort.
             estimated_base = 0
-            if image_addr_from_meta is not None:
-                # SDK-provided base from debug_meta is more reliable than guessing.
-                estimated_base = _parse_addr_or_none(image_addr_from_meta) or 0
+            meta_base = (
+                _parse_addr_or_none(image_addr_from_meta)
+                if image_addr_from_meta is not None
+                else None
+            )
+            if meta_base is not None:
+                # An SDK-supplied base beats guessing. An unparseable value
+                # falls through so estimation still runs.
+                estimated_base = meta_base
             elif frames and not any(f.get("image_addr") for f in frames if f):
                 parsed = (
                     _parse_addr_or_none(f.get("instruction_addr"))
