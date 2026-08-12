@@ -22,6 +22,9 @@ UINT64_MAX = 0xFFFFFFFFFFFFFFFF
 # decides how many addresses there are, so score against a bounded sample.
 MAX_SCORED_ADDRS = 32
 
+# Debug image types that carry a native image_addr (mirrors NativeDebugImage).
+NATIVE_IMAGE_TYPES = frozenset({"macho", "elf", "pe", "pe_dotnet", "wasm"})
+
 
 def _parse_addr_or_none(value) -> int | None:
     """parse_addr, treating an unparseable event-supplied address as absent.
@@ -256,6 +259,8 @@ class StacktraceProcessor:
             norm_debug_id = normalize_debug_id(str(debug_id))
             images = (event.get("debug_meta") or {}).get("images") or []
             for image in images:
+                if image.get("type") not in NATIVE_IMAGE_TYPES:
+                    continue
                 img_id = image.get("debug_id")
                 if img_id and normalize_debug_id(str(img_id)) == norm_debug_id:
                     image_addr_from_meta = image.get("image_addr")
