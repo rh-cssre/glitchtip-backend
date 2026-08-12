@@ -23,6 +23,12 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
+    replaces = [
+        ("uptime", "0001_squashed_0008_statuspage_statuspage_unique_organization_slug"),
+        ("uptime", "0009_alter_monitor_interval_alter_monitor_monitor_type_and_more"),
+        ("uptime", "0010_auto_20240712_1900"),
+    ]
+
     initial = True
 
     dependencies = [

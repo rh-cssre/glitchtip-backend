@@ -17,6 +17,10 @@ class Migration(migrations.Migration):
     dependencies = [
         ("files", "0001_squashed_0009_alter_file_size"),
         ("organizations_ext", "0001_squashed_0008_merge_20250210_1625"),
+        # ReleaseProject.project and the Release.projects through table both
+        # reference projects_project, which leaf ordering happened to create
+        # first; name it so the order is required rather than lucky.
+        ("projects", "0001_squashed_0016_auto_20250125_1733"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

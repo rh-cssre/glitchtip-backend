@@ -1,5 +1,4 @@
 import django.db.models.deletion
-import django.utils.timezone
 from django.db import migrations, models
 
 
@@ -96,7 +95,6 @@ class Migration(migrations.Migration):
                 (
                     "price",
                     models.ForeignKey(
-                        default="",
                         on_delete=django.db.models.deletion.RESTRICT,
                         to="stripe.stripeprice",
                     ),
@@ -112,7 +110,7 @@ class Migration(migrations.Migration):
                         max_length=20,
                     ),
                 ),
-                ("start_date", models.DateTimeField(default=django.utils.timezone.now)),
+                ("start_date", models.DateTimeField()),
                 (
                     "status",
                     models.CharField(

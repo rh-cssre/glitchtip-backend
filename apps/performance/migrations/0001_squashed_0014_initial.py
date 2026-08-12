@@ -12,6 +12,12 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
+    replaces = [
+        ("performance", "0001_squashed_0012_alter_span_op"),
+        ("performance", "0013_alter_transactionevent_options_and_more"),
+        ("performance", "0014_initial"),
+    ]
+
     initial = True
 
     dependencies = [
