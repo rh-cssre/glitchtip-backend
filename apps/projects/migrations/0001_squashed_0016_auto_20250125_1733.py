@@ -323,8 +323,4 @@ class Migration(migrations.Migration):
             model_name="TransactionEventProjectHourlyStatistic",
             name="default",
         ),
-        migrations.RunSQL(
-            sql='CREATE OR REPLACE FUNCTION get_project_auth_info(p_project_id BIGINT, p_sentry_key UUID)\nRETURNS TABLE (\n    project_id BIGINT,\n    project_scrub_ip_addresses BOOLEAN,\n    project_event_throttle_rate SMALLINT,\n    organization_id BIGINT,\n    organization_is_accepting_events BOOLEAN,\n    organization_event_throttle_rate SMALLINT,\n    organization_scrub_ip_addresses BOOLEAN\n)\nAS $$\nBEGIN\n    RETURN QUERY\n    SELECT\n        "projects_project"."id",\n        "projects_project"."scrub_ip_addresses",\n        "projects_project"."event_throttle_rate",\n        "projects_project"."organization_id",\n        "organizations_ext_organization"."is_accepting_events",\n        "organizations_ext_organization"."event_throttle_rate",\n        "organizations_ext_organization"."scrub_ip_addresses"\n    FROM\n        "projects_project"\n    INNER JOIN\n        "projects_projectkey" ON ("projects_project"."id" = "projects_projectkey"."project_id")\n    INNER JOIN\n        "organizations_ext_organization" ON ("projects_project"."organization_id" = "organizations_ext_organization"."id")\n    WHERE\n        "projects_project"."id" = p_project_id\n        AND "projects_projectkey"."public_key" = p_sentry_key;\nEND;\n$$ LANGUAGE plpgsql;\n',
-            reverse_sql="DROP FUNCTION IF EXISTS get_project_auth_info(INTEGER, UUID);",
-        ),
     ]

@@ -54,7 +54,7 @@ def noop(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("performance", "0021_detach_old_partitions"),
+        ("performance", "0020_alter_transactionevent_duration_and_more"),
         ("organizations_ext", "0001_squashed_0008_merge_20250210_1625"),
     ]
 

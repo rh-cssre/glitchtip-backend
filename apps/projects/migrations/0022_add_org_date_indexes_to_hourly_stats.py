@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     """
 
     dependencies = [
-        ("projects", "0021_drop_default_partitions"),
+        ("projects", "0020_add_log_statistics_and_quota"),
     ]
 
     operations = [
