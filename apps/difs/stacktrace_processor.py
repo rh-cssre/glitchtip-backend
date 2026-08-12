@@ -39,6 +39,19 @@ def _parse_addr_or_none(value) -> int | None:
         return None
 
 
+def _normalize_debug_id_or_none(value) -> str | None:
+    """normalize_debug_id, returning None for an id it can't parse.
+
+    The DIF's own debug_id is not schema-validated, so it may not normalize.
+    """
+    if not value:
+        return None
+    try:
+        return normalize_debug_id(str(value))
+    except Exception:
+        return None
+
+
 class ResolvedStacktrace:
     def __init__(self, score=0, frames=None):
         self.score = score
@@ -255,8 +268,8 @@ class StacktraceProcessor:
         # Use the SDK's image_addr from debug_meta if present; it's more
         # reliable than guessing the base.
         image_addr_from_meta = None
-        if debug_id:
-            norm_debug_id = normalize_debug_id(str(debug_id))
+        norm_debug_id = _normalize_debug_id_or_none(debug_id)
+        if norm_debug_id:
             images = (event.get("debug_meta") or {}).get("images") or []
             for image in images:
                 if image.get("type") not in NATIVE_IMAGE_TYPES:
