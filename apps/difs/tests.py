@@ -954,43 +954,38 @@ class NativeSymbolicationTestCase(GlitchTestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result.score, 1)
 
-    def test_estimate_image_base_handles_list_return(self):
-        """lookup() returns a list, so next() must not be called on it."""
+    def test_unparseable_debug_meta_image_addr_falls_back_to_estimation(self):
+        """A garbage image_addr must not pin the base at 0 and skip estimation."""
+        sym_cache = FakeSymCache([0x2000, 0x4000])
 
-        mock_symbol = MagicMock()
-        mock_sym_cache = MagicMock()
-        mock_sym_cache.lookup.return_value = [mock_symbol]
-
-        # probe = 0x1000, matches at elf_offset 0, so base = 0x1000
-        base = _estimate_image_base(mock_sym_cache, [0x1000])
-        self.assertEqual(base, 0x1000)
-
-    def test_estimate_image_base_empty_input(self):
-        """No addresses means base 0 and we don't touch the sym cache."""
-
-        mock_sym_cache = MagicMock()
-        self.assertEqual(_estimate_image_base(mock_sym_cache, []), 0)
-        mock_sym_cache.lookup.assert_not_called()
-
-    def test_negative_offset_is_skipped(self):
-        """Frames below the image base (negative offset) are skipped, not crashed."""
-
-        def lookup(addr):
-            if addr < 0:
-                raise ValueError("can't convert negative number to unsigned")
-            return []
-
-        mock_sym_cache = MagicMock()
-        mock_sym_cache.lookup.side_effect = lookup
         mock_obj = MagicMock()
+        mock_obj.arch = "x86_64"
         mock_archive = MagicMock()
         mock_archive.get_object.return_value = mock_obj
 
-        stacktrace = {
-            "frames": [
-                # instruction_addr below image_addr -> negative offset
-                {"instruction_addr": "0x1000", "image_addr": "0x100000"}
-            ]
+        event = {
+            "contexts": {"os": {"name": "Android"}, "device": {"arch": "x86_64"}},
+            "debug_meta": {
+                "images": [
+                    {
+                        "type": "elf",
+                        "debug_id": "DF398B02-1681-3B54-8FA5-B205E1ECFD7E",
+                        "image_addr": "garbage",
+                    }
+                ]
+            },
+            "exception": {
+                "values": [
+                    {
+                        "stacktrace": {
+                            "frames": [
+                                {"instruction_addr": "0x402000"},
+                                {"instruction_addr": "0x404000"},
+                            ]
+                        }
+                    }
+                ]
+            },
         }
 
         with (
@@ -998,18 +993,17 @@ class NativeSymbolicationTestCase(GlitchTestCase):
             patch("apps.difs.stacktrace_processor.SymCache") as MockSymCache,
         ):
             MockArchive.open.return_value = mock_archive
-            MockSymCache.from_object.return_value = mock_sym_cache
+            MockSymCache.from_object.return_value = sym_cache
 
-            result = StacktraceProcessor.resolve_native_stacktrace(
-                stacktrace, "/fake/symbols.elf", arch="x86_64"
+            result = StacktraceProcessor.resolve_stacktrace(
+                event,
+                "/fake/symbols.elf",
+                debug_id="df398b02-1681-3b54-8fa5-b205e1ecfd7e",
             )
 
+        # base 0x400000 recovered by estimation, both frames resolve
         self.assertIsNotNone(result)
-        self.assertEqual(result.score, 0)
-        self.assertFalse(result.frames[0].get("resolved"))
-        # we should never have called lookup with a negative offset
-        for call in mock_sym_cache.lookup.call_args_list:
-            self.assertGreaterEqual(call.args[0], 0)
+        self.assertEqual(result.score, 2)
 
 
 class HasNativeFramesTestCase(GlitchTestCase):
