@@ -339,8 +339,8 @@ class StacktraceProcessor:
             score = 0
             resolved_frames = []
 
-            # Image base priority: debug_meta image_addr, then per-frame
-            # image_addr, then heuristic estimation as a last resort.
+            # A frame's own image_addr wins. For frames without one, fall back
+            # to the base debug_meta supplies, and only then to estimation.
             estimated_base = 0
             meta_base = (
                 _parse_addr_or_none(image_addr_from_meta)
