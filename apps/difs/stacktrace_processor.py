@@ -253,18 +253,13 @@ class StacktraceProcessor:
         # reliable than guessing the base.
         image_addr_from_meta = None
         if debug_id:
-            try:
-                norm_debug_id = normalize_debug_id(str(debug_id))
-                images = (event.get("debug_meta") or {}).get("images") or []
-                for image in images:
-                    img_id = image.get("debug_id")
-                    if img_id and normalize_debug_id(str(img_id)) == norm_debug_id:
-                        image_addr_from_meta = image.get("image_addr")
-                        break
-            except Exception as e:
-                getLogger().warning(
-                    f"StacktraceProcessor: debug_meta lookup failed: {e}"
-                )
+            norm_debug_id = normalize_debug_id(str(debug_id))
+            images = (event.get("debug_meta") or {}).get("images") or []
+            for image in images:
+                img_id = image.get("debug_id")
+                if img_id and normalize_debug_id(str(img_id)) == norm_debug_id:
+                    image_addr_from_meta = image.get("image_addr")
+                    break
 
         return cls.resolve_native_stacktrace(
             stacktrace,
