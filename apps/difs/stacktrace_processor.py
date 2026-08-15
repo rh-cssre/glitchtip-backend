@@ -22,6 +22,9 @@ UINT64_MAX = 0xFFFFFFFFFFFFFFFF
 # decides how many addresses there are, so score against a bounded sample.
 MAX_SCORED_ADDRS = 32
 
+# Debug image types that carry a native image_addr (mirrors NativeDebugImage).
+NATIVE_IMAGE_TYPES = frozenset({"macho", "elf", "pe", "pe_dotnet", "wasm"})
+
 
 def _parse_addr_or_none(value) -> int | None:
     """parse_addr, treating an unparseable event-supplied address as absent.
@@ -33,6 +36,19 @@ def _parse_addr_or_none(value) -> int | None:
     try:
         return parse_addr(value)
     except (ValueError, OverflowError):
+        return None
+
+
+def _normalize_debug_id_or_none(value) -> str | None:
+    """normalize_debug_id, returning None for an id it can't parse.
+
+    The DIF's own debug_id is not schema-validated, so it may not normalize.
+    """
+    if not value:
+        return None
+    try:
+        return normalize_debug_id(str(value))
+    except Exception:
         return None
 
 
@@ -249,8 +265,27 @@ class StacktraceProcessor:
         if is_android and not native_frames:
             return cls.resolve_proguard_stacktrace(stacktrace, symbol_file)
 
+        # Use the SDK's image_addr from debug_meta if present; it's more
+        # reliable than guessing the base.
+        image_addr_from_meta = None
+        norm_debug_id = _normalize_debug_id_or_none(debug_id)
+        if norm_debug_id:
+            images = (event.get("debug_meta") or {}).get("images") or []
+            for image in images:
+                if image.get("type") not in NATIVE_IMAGE_TYPES:
+                    continue
+                img_id = image.get("debug_id")
+                if img_id and normalize_debug_id(str(img_id)) == norm_debug_id:
+                    image_addr_from_meta = image.get("image_addr")
+                    break
+
         return cls.resolve_native_stacktrace(
-            stacktrace, symbol_file, arch=arch, project_id=project_id, debug_id=debug_id
+            stacktrace,
+            symbol_file,
+            arch=arch,
+            project_id=project_id,
+            debug_id=debug_id,
+            image_addr_from_meta=image_addr_from_meta,
         )
 
     @classmethod
@@ -293,7 +328,13 @@ class StacktraceProcessor:
 
     @classmethod
     def resolve_native_stacktrace(
-        cls, stacktrace, symbol_file, arch=None, project_id=None, debug_id=None
+        cls,
+        stacktrace,
+        symbol_file,
+        arch=None,
+        project_id=None,
+        debug_id=None,
+        image_addr_from_meta=None,
     ):
         # Open symbol file
         try:
@@ -311,11 +352,19 @@ class StacktraceProcessor:
             score = 0
             resolved_frames = []
 
-            # When frames lack image_addr (e.g. Flutter Android without
-            # debug_meta), estimate the image base so relative offsets
-            # land inside the symbol cache.
+            # A frame's own image_addr wins. For frames without one, fall back
+            # to the base debug_meta supplies, and only then to estimation.
             estimated_base = 0
-            if frames and not any(f.get("image_addr") for f in frames if f):
+            meta_base = (
+                _parse_addr_or_none(image_addr_from_meta)
+                if image_addr_from_meta is not None
+                else None
+            )
+            if meta_base is not None:
+                # An SDK-supplied base beats guessing. An unparseable value
+                # falls through so estimation still runs.
+                estimated_base = meta_base
+            elif frames and not any(f.get("image_addr") for f in frames if f):
                 parsed = (
                     _parse_addr_or_none(f.get("instruction_addr"))
                     for f in frames
