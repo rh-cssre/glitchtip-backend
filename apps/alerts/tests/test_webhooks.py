@@ -388,6 +388,48 @@ class WebhookTestCase(GlitchTipTestCase):
         self.assertIn(f'"text": "{self.expected_message_up}"', json_data)
 
     @mock.patch("aiohttp.ClientSession")
+    def test_send_uptime_events_feishu_webhook(self, MockSession):
+        mock_constructor, mock_post = _mock_aiohttp_session()
+        MockSession.side_effect = mock_constructor
+
+        recipient = baker.make(
+            AlertRecipient,
+            recipient_type=RecipientType.FEISHU,
+            url=FEISHU_TEST_URL,
+        )
+
+        transitions = (
+            (True, "red", self.expected_message_down),
+            (False, "green", self.expected_message_up),
+        )
+        for went_down, template, expected_message in transitions:
+            with self.subTest(went_down=went_down):
+                mock_post.reset_mock()
+                async_to_sync(send_uptime_as_webhook)(
+                    recipient,
+                    self.monitor_check.id,
+                    went_down,
+                    datetime.now(),
+                )
+
+                mock_post.assert_called_once()
+                payload = mock_post.call_args.kwargs["json"]
+                self.assertEqual(payload["msg_type"], "interactive")
+                self.assertEqual(payload["card"]["header"]["template"], template)
+                self.assertEqual(
+                    payload["card"]["header"]["title"]["content"],
+                    self.expected_subject,
+                )
+                self.assertEqual(
+                    payload["card"]["elements"][0]["text"]["content"],
+                    f"**{self.monitor.name}**\n{expected_message}",
+                )
+                self.assertEqual(
+                    payload["card"]["elements"][1]["actions"][0]["url"],
+                    self.monitor.get_detail_url(),
+                )
+
+    @mock.patch("aiohttp.ClientSession")
     def test_send_uptime_events_google_chat_webhook(self, MockSession):
         mock_constructor, mock_post = _mock_aiohttp_session()
         MockSession.side_effect = mock_constructor
