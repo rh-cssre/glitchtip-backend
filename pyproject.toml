@@ -8,7 +8,7 @@ requires-python = ">=3.12"
 dependencies = [
     "django>=6.0,<6.1",
     "django-vtasks[valkey]~=3.1.0",
-    "django-allauth-async[mfa,socialaccount]==65.16.1.7",
+    "django-allauth-async[mfa,socialaccount]==65.19.1.1",
     "django-cors-headers~=4.0",
     "django-environ~=0.11",
     "django-extensions~=4.0",
