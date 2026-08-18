@@ -29,11 +29,20 @@ class StripeBaseAdmin(admin.ModelAdmin):
 class StripePriceInline(admin.StackedInline):
     model = StripePrice
     extra = 0
-    readonly_fields = ["stripe_id", "nickname", "no_throttle", "price"]
+    readonly_fields = ["stripe_id", "nickname", "no_throttle", "price", "active"]
 
 
 class StripeProductAdmin(StripeBaseAdmin):
-    list_display = ["stripe_id", "name", "events", "default_price", "is_public"]
+    list_display = [
+        "stripe_id",
+        "name",
+        "events",
+        "uptime_monitors",
+        "default_price",
+        "is_public",
+        "active",
+    ]
+    list_filter = ["active", "is_public", "is_overage"]
     inlines = [StripePriceInline]
 
 

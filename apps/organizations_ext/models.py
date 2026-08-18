@@ -247,6 +247,16 @@ class Organization(SharedBaseModel, OrganizationBase):
         default=True,
         help_text="Default for whether projects should script IP Addresses",
     )
+    metered_billing_enabled = models.BooleanField(
+        default=False,
+        help_text="Opt-in: charge for billable events above plan quota via "
+        "Stripe metered billing, up to overage_spend_cap_cents.",
+    )
+    overage_spend_cap_cents = models.PositiveIntegerField(
+        default=0,
+        help_text="Max overage spend per billing cycle, in cents. Metered "
+        "billing stops reporting (and throttling resumes) once reached.",
+    )
     stripe_customer_id = models.CharField(max_length=28, blank=True)
     stripe_primary_subscription = models.ForeignKey(
         "stripe.StripeSubscription",
@@ -298,6 +308,9 @@ class Organization(SharedBaseModel, OrganizationBase):
             "admin",
             "status_page",
             "__debug__",
+            # /login/<org slug> is the per-organization login page; "finalize"
+            # would shadow the /login/finalize social-auth callback route.
+            "finalize",
         ]
         slug = slugify(content)
         if slug in reserved_words:
@@ -376,6 +389,19 @@ class Organization(SharedBaseModel, OrganizationBase):
 
         owner_changed.send(sender=self, old=old_owner, new=new_owner)
 
+    async def achange_owner(self, new_owner):
+        """Async version of ``change_owner``."""
+        # Fetch the owner explicitly; the lazy ``self.owner`` accessor would
+        # raise SynchronousOnlyOperation when not already loaded.
+        owner = await self._org_owner_model.objects.select_related(
+            "organization_user"
+        ).aget(organization=self)
+        old_owner = owner.organization_user
+        owner.organization_user = new_owner
+        await owner.asave()
+
+        await owner_changed.asend(sender=self, old=old_owner, new=new_owner)
+
     def is_owner(self, user):
         """
         Returns True is user is the organization's owner, otherwise false
@@ -443,3 +469,10 @@ class OrganizationSocialApp(models.Model):
 
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
     social_app = models.OneToOneField(SocialApp, on_delete=models.CASCADE)
+    is_public = models.BooleanField(
+        default=False,
+        help_text="Show this sign-in option on the instance-wide login page, "
+        "alongside the instance's own providers. When false it appears only on "
+        "the organization's own login page. Settable here only — the "
+        "organization API never writes it.",
+    )

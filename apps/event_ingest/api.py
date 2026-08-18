@@ -29,11 +29,6 @@ router = Router(auth=event_auth)
 
 class EventIngestOut(Schema):
     event_id: str
-    task_id: str | None = None  # For debug purposes only
-
-
-class EnvelopeIngestOut(Schema):
-    id: str | None = None
 
 
 def get_ip_address(request: EventAuthHttpRequest) -> str | None:
@@ -83,11 +78,8 @@ async def event_store(
         update_first_event=request.auth.first_event is None,
         uuid=primary_id.hex,
     )
-    task_result = await ingest_event.aenqueue(serialize_for_vtasks(asdict(issue_event)))
-    result = {"event_id": payload.event_id.hex}
-    if settings.IS_LOAD_TEST:
-        result["task_id"] = task_result.task_id
-    return result
+    await ingest_event.aenqueue(serialize_for_vtasks(asdict(issue_event)))
+    return {"event_id": payload.event_id.hex}
 
 
 @router.post("/{project_id}/security/")

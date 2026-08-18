@@ -19,7 +19,7 @@ from pydantic import ValidationError
 from apps.organizations_ext.models import Organization
 from apps.organizations_ext.tasks import check_organization_throttle
 
-from .client import mark_welcome_sent, stripe_get
+from .client import fetch_v2_event, mark_welcome_sent, stripe_get
 from .constants import ACTIVE_SUBSCRIPTION_STATUSES
 from .email import SupportLicenseWelcomeEmail
 from .models import (
@@ -27,56 +27,55 @@ from .models import (
     StripeProduct,
     StripeSubscription,
 )
-from .schema import Customer, Price, Product, StripeEvent, Subscription
-from .utils import compute_cycle, unix_to_datetime
+from .schema import (
+    Customer,
+    Price,
+    Product,
+    StripeEvent,
+    Subscription,
+    ThinEvent,
+)
+from .utils import (
+    compute_cycle,
+    is_metered_price,
+    is_syncable_product,
+    price_kwargs,
+    product_kwargs,
+    select_subscription_items,
+    unix_to_datetime,
+)
 
 logger = logging.getLogger(__name__)
 
 
 async def update_product(product: Product):
-    metadata = product.metadata
-    if "events" not in metadata:
-        return
-    if metadata.get("product_type", "").lower() != "hosted":
+    """Apply a product.created/updated webhook.
+
+    Archiving a product in Stripe arrives as product.updated with active=False,
+    so it now takes effect within seconds instead of at the next nightly sync.
+    The field mapping is shared with that sync so the two writers can't disagree
+    about what a product row means.
+    """
+    if not is_syncable_product(product):
         return
 
     await StripeProduct.objects.aupdate_or_create(
-        stripe_id=product.id,
-        defaults={
-            "name": product.name,
-            "description": product.description,
-            "events": metadata["events"],
-            "is_public": metadata.get("is_public") == "true",
-            "marketing_features": [
-                f["name"] for f in product.marketing_features if f.get("name")
-            ],
-        },
+        stripe_id=product.id, defaults=product_kwargs(product)
     )
 
 
 async def update_price(price: Price):
+    metered = is_metered_price(price)
+    # Metered prices have no flat unit_amount (cost lives in tiers); only flat
+    # prices require one. Either way the product must already be known locally.
     if (
-        not price.unit_amount
-        or not await StripeProduct.objects.filter(stripe_id=price.product).aexists()
-    ):
+        not price.unit_amount and not metered
+    ) or not await StripeProduct.objects.filter(stripe_id=price.product).aexists():
         return
-
-    metadata = price.metadata or {}
-    no_throttle = metadata.get("no_throttle", "").lower() == "true"
-    is_public = metadata.get("is_public", "").lower() == "true"
 
     await StripePrice.objects.aupdate_or_create(
         stripe_id=price.id,
-        defaults={
-            "product_id": price.product,
-            "nickname": price.nickname or "",
-            "price": price.unit_amount / 100,
-            "no_throttle": no_throttle,
-            "is_public": is_public,
-            "interval": (
-                price.recurring.get("interval", "month") if price.recurring else "month"
-            ),
-        },
+        defaults={"product_id": price.product, **price_kwargs(price)},
     )
 
 
@@ -154,9 +153,7 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
         # handled (welcome email) without an org; otherwise it's a real anomaly.
         if await handle_support_subscription(subscription, customer_obj):
             return
-        logger.warning(
-            f"Customer {customer_obj.id} has no organization_id", exc_info=True
-        )
+        logger.warning("Customer %s has no organization_id", customer_obj.id)
         return
 
     # Check region, is it this region or should it be forwarded
@@ -174,31 +171,35 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
                 "Content-Type": "application/json",
                 "From-Region": settings.STRIPE_REGION,
             }
-            async with aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session:
-                async with session.post(
+            async with (
+                aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session,
+                session.post(
                     forward_url, data=request.body, headers=headers, ssl=True
-                ) as response:
-                    await response.read()
+                ) as response,
+            ):
+                await response.read()
         return
 
     organization = await Organization.objects.filter(id=organization_id).afirst()
     if not organization:
         return
 
-    if (price_id := subscription.items.data[0].price.id) is None:
+    # The base licensed item drives quota/cycle; a second metered item (if any)
+    # is the overage price. Don't assume items.data[0] is the base plan.
+    base_item, metered_item = select_subscription_items(subscription.items)
+    if base_item is None or base_item.price.id is None:
         return
+    price_id = base_item.price.id
 
-    current_period_start = unix_to_datetime(
-        subscription.items.data[0].current_period_start
-    )
-    current_period_end = unix_to_datetime(subscription.items.data[0].current_period_end)
-    price = subscription.items.data[0].price
+    current_period_start = unix_to_datetime(base_item.current_period_start)
+    current_period_end = unix_to_datetime(base_item.current_period_end)
+    price = base_item.price
     is_annual = bool(price.recurring and price.recurring.get("interval") == "year")
     cycle_start, cycle_end = compute_cycle(
         current_period_start, current_period_end, is_annual
     )
 
-    stripe_subscription, created = await StripeSubscription.objects.aupdate_or_create(
+    stripe_subscription, _created = await StripeSubscription.objects.aupdate_or_create(
         stripe_id=subscription.id,
         defaults={
             "created": unix_to_datetime(subscription.created),
@@ -211,6 +212,7 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
             "collection_method": subscription.collection_method,
             "subscription_cycle_start": cycle_start,
             "subscription_cycle_end": cycle_end,
+            "metered_item_id": metered_item.id if metered_item else "",
         },
     )
     if stripe_subscription.status in ACTIVE_SUBSCRIPTION_STATUSES:
@@ -230,6 +232,61 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
     elif stripe_subscription.stripe_id == organization.stripe_primary_subscription_id:
         organization.stripe_primary_subscription = None
         await organization.asave(update_fields=["stripe_primary_subscription"])
+
+
+async def handle_meter_error_event(payload: bytes) -> HttpResponse:
+    """Surface asynchronous meter-event ingestion failures reported by Stripe.
+
+    Meter events mostly validate asynchronously: submission returns 200 and
+    failures (unknown customer, archived meter, bad timestamps) surface later
+    as v1.billing.meter.error_report_triggered on a v2 event destination. By
+    then the local overage counter has already advanced, so a report here means
+    real usage going unbilled — log it loudly for the operator to reconcile in
+    Stripe; the counter is deliberately not rewound (the report is a sampled
+    aggregate, not a complete list of failed events).
+    """
+    try:
+        event = ThinEvent.model_validate_json(payload)
+    except ValidationError as e:
+        logger.warning("Invalid Stripe meter webhook payload.", exc_info=e)
+        return HttpResponse(status=200)
+
+    if not event.type.startswith("v1.billing.meter."):
+        logger.info(f"Unhandled Stripe meter event type: {event.type}")
+        return HttpResponse(status=200)
+
+    dedup_key = "stripe" + event.id
+    if not await cache.aadd(dedup_key, None, 600):
+        return HttpResponse(status=200)
+
+    try:
+        data = event.data
+        if data is None:
+            # Thin payload style delivers only ids; fetch the error summary.
+            data = (await fetch_v2_event(event.id)).data
+    except Exception:
+        # Release the dedup key so Stripe's retry can reprocess this event
+        await cache.adelete(dedup_key)
+        raise
+
+    meter_id = event.related_object.id if event.related_object else "unknown"
+    summary = data.developer_message_summary if data else ""
+    reason = data.reason if data else None
+    codes = samples = ""
+    if reason:
+        codes = ", ".join(f"{t.code} x{t.error_count}" for t in reason.error_types)
+        samples = "; ".join(
+            s.error_message for t in reason.error_types for s in t.sample_errors[:2]
+        )
+    logger.error(
+        "Stripe rejected meter events for meter %s (%s): %s [%s] %s",
+        meter_id,
+        event.type,
+        summary,
+        codes,
+        samples,
+    )
+    return HttpResponse(status=200)
 
 
 @csrf_exempt
@@ -254,11 +311,13 @@ async def stripe_webhook_view(request: HttpRequest, event_type: str | None = Non
     except ValueError as e:
         logger.error(f"Error during signature verification: {e}")
         return HttpResponseForbidden("Invalid payload")
-    except Exception as e:
-        logger.exception(
-            f"Unexpected error verifying signature: {e}"
-        )  # Catch unexpected exceptions
+    except Exception:
+        # Catch unexpected exceptions
+        logger.exception("Unexpected error verifying signature")
         return HttpResponseServerError("Internal Server Error")
+
+    if event_type == "meter":
+        return await handle_meter_error_event(payload)
 
     try:
         event = StripeEvent.model_validate_json(payload)
@@ -310,13 +369,13 @@ def verify_stripe_signature(payload, sig_header, event_type: str):
         ValueError: if the signature header is malformed.
     """
 
-    webhook_secret = (
-        settings.STRIPE_WEBHOOK_SECRET_SUBSCRIPTION
-        if event_type == "subscription"
-        else settings.STRIPE_WEBHOOK_SECRET
-    )
+    secret_setting = {
+        "subscription": "STRIPE_WEBHOOK_SECRET_SUBSCRIPTION",
+        "meter": "STRIPE_WEBHOOK_SECRET_METER",
+    }.get(event_type, "STRIPE_WEBHOOK_SECRET")
+    webhook_secret = getattr(settings, secret_setting)
     if not webhook_secret:
-        logger.error("STRIPE_WEBHOOK_SECRET not configured in settings.")
+        logger.error(f"{secret_setting} not configured in settings.")
         #  Return False/raise exception based on desired behavior (security vs. failing fast).
         #  Returning False is generally safer.
         return False
@@ -358,6 +417,6 @@ def verify_stripe_signature(payload, sig_header, event_type: str):
 
     except ValueError:
         raise
-    except Exception as e:
-        logger.exception(f"Error in verify_stripe_signature: {e}")
+    except Exception:
+        logger.exception("Error in verify_stripe_signature")
         return False

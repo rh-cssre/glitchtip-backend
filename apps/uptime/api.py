@@ -3,12 +3,15 @@ from uuid import UUID
 
 from asgiref.sync import sync_to_async
 from django.db import connection
+from django.db.models import Prefetch
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Status
+from ninja.errors import HttpError
 from ninja.pagination import paginate
 
 from apps.organizations_ext.models import Organization
+from apps.organizations_ext.utils import get_uptime_monitor_limit
 from apps.projects.models import Project
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.pagination import AsyncLinkHeaderPagination
@@ -42,6 +45,27 @@ class MonitorPagination(AsyncLinkHeaderPagination):
         return page
 
 
+class StatusPagePagination(AsyncLinkHeaderPagination):
+    """Attach checks to the monitors nested within each paginated status page.
+
+    MonitorSchema reads each monitor's checks (a reverse relation); without
+    this the async serializer would trigger a synchronous ORM query per
+    monitor and raise SynchronousOnlyOperation.
+    """
+
+    async def apaginate_queryset(
+        self, queryset, pagination, request, response, **params
+    ):
+        page = await super().apaginate_queryset(
+            queryset, pagination, request, response, **params
+        )
+        monitors = [
+            monitor for status_page in page for monitor in status_page.monitors.all()
+        ]
+        await attach_checks_to_monitors(monitors)
+        return page
+
+
 def get_monitor_queryset(user_id: int, organization_slug: str):
     """Get monitors with annotations but WITHOUT checks prefetch."""
     return (
@@ -53,17 +77,32 @@ def get_monitor_queryset(user_id: int, organization_slug: str):
 
 async def fetch_checks_lateral(
     monitor_ids: list[int],
-    organization_ids: list[int],
+    organization_id: int,
     limit: int = 60,
 ) -> dict[int, list[MonitorCheck]]:
     """
     Efficiently fetch top N checks per monitor using LATERAL JOIN.
 
     This is much faster than window functions because:
-    - Uses the (monitor_id, start_check DESC) index efficiently
+    - Uses the (monitor_id, id DESC) index efficiently
     - Stops scanning after `limit` rows per monitor (early termination)
     - No need to process all historical checks
     - Filters by organization_id for partition pruning
+
+    Ordering by ``id`` is ordering by the check's start time, because that
+    timestamp is what the UUIDv7 encodes -- and ``id`` is also the RANGE
+    partition key. That is what lets Postgres plan an ordered Append, walking
+    partitions newest-first and stopping once ``limit`` rows are in hand,
+    instead of a Merge Append that has to open an index scan on every partition
+    to find out which holds the newest row.
+
+    ``organization_id`` is a single value rather than one per monitor because
+    every caller is scoped to one organization, and that lets the planner prune
+    the HASH dimension instead of deferring it to execution. Pruning at plan
+    time is what keeps the relation locks down: with the org supplied per row
+    the planner must consider every hash bucket of every partition, which
+    measured 6,602 locks against a 16-bucket install -- more than a stock
+    cluster's entire shared lock table. As a single value it is 118.
 
     Returns a dict mapping monitor_id -> list of MonitorCheck instances.
     """
@@ -71,18 +110,18 @@ async def fetch_checks_lateral(
         return {}
 
     sql = """
-        SELECT c.id, c.organization_id, c.monitor_id, c.start_check,
+        SELECT c.id, c.organization_id, c.monitor_id,
                c.response_time, c.reason, c.is_up, c.is_change, c.data
-        FROM unnest(%(monitor_ids)s::int[], %(organization_ids)s::int[]) AS m(id, org_id)
+        FROM unnest(%(monitor_ids)s::int[]) AS m(id)
         CROSS JOIN LATERAL (
-            SELECT id, organization_id, monitor_id, start_check,
+            SELECT id, organization_id, monitor_id,
                    response_time, reason, is_up, is_change, data
             FROM uptime_monitorcheck
-            WHERE monitor_id = m.id AND organization_id = m.org_id
-            ORDER BY start_check DESC
+            WHERE monitor_id = m.id AND organization_id = %(organization_id)s
+            ORDER BY id DESC
             LIMIT %(limit)s
         ) c
-        ORDER BY c.monitor_id, c.start_check DESC
+        ORDER BY c.monitor_id, c.id DESC
     """
 
     def execute_query():
@@ -91,7 +130,7 @@ async def fetch_checks_lateral(
                 sql,
                 {
                     "monitor_ids": monitor_ids,
-                    "organization_ids": organization_ids,
+                    "organization_id": organization_id,
                     "limit": limit,
                 },
             )
@@ -106,7 +145,6 @@ async def fetch_checks_lateral(
             id=row["id"],
             organization_id=row["organization_id"],
             monitor_id=row["monitor_id"],
-            start_check=row["start_check"],
             response_time=row["response_time"],
             reason=row["reason"],
             is_up=row["is_up"],
@@ -124,9 +162,23 @@ async def attach_checks_to_monitors(
     """Fetch and attach checks to a list of monitors using LATERAL JOIN."""
     if not monitors:
         return monitors
-    monitor_ids = [m.id for m in monitors]
-    organization_ids = [m.organization_id for m in monitors]
-    checks_by_monitor = await fetch_checks_lateral(monitor_ids, organization_ids, limit)
+    # Fetch once per distinct monitor: the same monitor can appear multiple
+    # times (e.g. shared across status pages), and duplicate ids in the
+    # unnest() would run the LATERAL subquery once per copy and double the
+    # returned checks. Attach the result to every instance below.
+    #
+    # Grouped by organization so each query can name a single organization_id,
+    # which the planner needs in order to prune hash partitions (see
+    # fetch_checks_lateral). Every caller is org-scoped, so this is one group.
+    monitor_ids_by_org: dict[int, set[int]] = defaultdict(set)
+    for monitor in monitors:
+        monitor_ids_by_org[monitor.organization_id].add(monitor.id)
+
+    checks_by_monitor: dict[int, list[MonitorCheck]] = {}
+    for organization_id, monitor_ids in monitor_ids_by_org.items():
+        checks_by_monitor.update(
+            await fetch_checks_lateral(sorted(monitor_ids), organization_id, limit)
+        )
     for monitor in monitors:
         # Use Django's prefetch cache so serializers see the checks
         monitor._prefetched_objects_cache = {
@@ -233,6 +285,18 @@ async def create_monitor(
     organization = await aget_object_or_404(
         Organization, slug=organization_slug, users=user_id
     )
+    limit = await get_uptime_monitor_limit(organization)
+    if limit is not None:
+        # Deliberately advisory: two concurrent creates can both see a count
+        # below the limit and both succeed. That is acceptable for a ceiling
+        # whose job is to stop unbounded growth, not to bill exactly.
+        monitor_count = await Monitor.objects.filter(organization=organization).acount()
+        if monitor_count >= limit:
+            raise HttpError(
+                403,
+                f"This organization is limited to {limit} uptime monitors. "
+                "Delete an existing monitor or contact support to raise the limit.",
+            )
     data = payload.dict(exclude_defaults=True)
     if project_id := data.pop("project", None):
         data["project"] = await organization.projects.filter(id=project_id).afirst()
@@ -296,8 +360,10 @@ async def list_monitor_checks(
             monitor__organization__slug=organization_slug,
             monitor__organization__users=request.auth.user_id,
         )
-        .only("is_up", "start_check", "reason", "response_time")
-        .order_by("-start_check")
+        .only("is_up", "reason", "response_time")
+        # By the partition key, so paging deeper walks partitions newest-first
+        # instead of re-opening every one per page. See MonitorCheck.Meta.
+        .order_by("-id")
     )
     if is_change is not None:
         checks = checks.filter(is_change=is_change)
@@ -309,14 +375,24 @@ async def list_monitor_checks(
     response=list[StatusPageSchema],
     by_alias=True,
 )
-@paginate
+@paginate(StatusPagePagination)
 async def list_status_pages(
     request: AuthHttpRequest, response: HttpResponse, organization_slug: str
 ):
     """List status pages, used for showing the current status of an uptime monitor"""
     return StatusPage.objects.filter(
         organization__users=request.auth.user_id
-    ).prefetch_related("monitors")
+    ).prefetch_related(
+        # MonitorSchema reads the check annotations (is_up/last_change) and the
+        # organization (heartbeat URL) and project (project_name); load them
+        # eagerly so async serialization does not fall back to sync queries.
+        Prefetch(
+            "monitors",
+            queryset=Monitor.objects.with_check_annotations().select_related(
+                "organization", "project"
+            ),
+        )
+    )
 
 
 @router.post(

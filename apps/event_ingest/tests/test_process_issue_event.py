@@ -5,14 +5,16 @@ import tempfile
 import uuid
 import zipfile
 from hashlib import sha1
+from unittest import mock
 
 from django.core.files import File as DjangoFile
+from django.db.utils import IntegrityError
 from django.tasks import task_backends
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
+from gt_rust.symbolic import Archive, normalize_debug_id
 from model_bakery import baker
-from symbolic import Archive, normalize_debug_id
 
 from apps.difs.tasks import event_difs_resolve_stacktrace
 from apps.event_ingest.tests.utils import generate_event
@@ -37,7 +39,7 @@ from ..schema import (
     IssueTaskMessage,
     SecuritySchema,
 )
-from .utils import EventIngestTestCase, run_async_closing
+from .utils import EventIngestTestCase, fake_integrity_error, run_async_closing
 
 
 def _process_issue_events(*args, **kwargs):
@@ -60,6 +62,29 @@ class IssueEventIngestTestCase(EventIngestTestCase):
     - Default, Error, and CSP types
     - Graceful failure such as duplicate event ids or invalid data
     """
+
+    def test_copy_fallback_on_duplicate(self):
+        """A unique-violation COPY falls back to the conflict-tolerant INSERT."""
+        with mock.patch(
+            "apps.event_ingest.process_event.copy_rows",
+            side_effect=fake_integrity_error("23505"),
+        ) as copy_mock:
+            self.process_events([{}, {}])
+        copy_mock.assert_called_once()
+        self.assertEqual(IssueEvent.objects.count(), 2)
+
+    def test_copy_non_unique_integrity_error_propagates(self):
+        """A non-conflict IntegrityError (e.g. a missing partition, 23514)
+        must not retry through the INSERT — it would fail identically."""
+        with (
+            mock.patch(
+                "apps.event_ingest.process_event.copy_rows",
+                side_effect=fake_integrity_error("23514"),
+            ),
+            self.assertRaises(IntegrityError),
+        ):
+            self.process_events([{}, {}])
+        self.assertEqual(IssueEvent.objects.count(), 0)
 
     def test_two_events(self):
         # TODO: re-add assertNumQueries once unit tests run on the async
@@ -1044,7 +1069,7 @@ class SentryCompatTestCase(EventIngestTestCase):
         """Sentry OSS uses ... while GlitchTip uses unicode …"""
         if value[-1] == "…":
             return value[:-3]
-        return value.strip("...")
+        return value.strip(".")
 
     def upgrade_metadata(self, value: dict):
         value["title"] = self.upgrade_title(value["title"])
@@ -1110,7 +1135,7 @@ class SentryCompatTestCase(EventIngestTestCase):
         return data
 
     def test_template_error(self):
-        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+        sdk_error, _sentry_json, sentry_data = self.get_json_test_data(
             "django_template_error"
         )
         event = self.submit_event(sdk_error)
@@ -1203,7 +1228,7 @@ class SentryCompatTestCase(EventIngestTestCase):
         )
 
     def test_php_message_event(self):
-        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+        sdk_error, _sentry_json, sentry_data = self.get_json_test_data(
             "php_message_event"
         )
         event = self.submit_event(sdk_error)
@@ -1225,7 +1250,7 @@ class SentryCompatTestCase(EventIngestTestCase):
         )
 
     def test_django_message_params(self):
-        sdk_error, sentry_json, sentry_data = self.get_json_test_data(
+        sdk_error, _sentry_json, sentry_data = self.get_json_test_data(
             "django_message_params"
         )
         event = self.submit_event(sdk_error)
@@ -1259,7 +1284,7 @@ class SentryCompatTestCase(EventIngestTestCase):
 
     def test_python_logging(self):
         """Test Sentry SDK logging integration based event"""
-        sdk_error, sentry_json, sentry_data = self.get_json_test_data("python_logging")
+        sdk_error, _sentry_json, sentry_data = self.get_json_test_data("python_logging")
         event = self.submit_event(sdk_error, event_type="default")
 
         res = self.client.get(self.get_project_events_detail(event.id))
@@ -1515,7 +1540,7 @@ class SentryCompatTestCase(EventIngestTestCase):
 
     def test_small_js_error(self):
         """A small example to test stacktraces"""
-        sdk_error, sentry_json, sentry_data = self.get_json_test_data("small_js_error")
+        sdk_error, sentry_json, _sentry_data = self.get_json_test_data("small_js_error")
         event = self.submit_event(sdk_error, event_type="default")
         event_json = self.get_event_json(event)
         self.assertCompareData(

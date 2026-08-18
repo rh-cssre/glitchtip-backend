@@ -2,13 +2,13 @@ from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.contrib.auth import aget_user
 from django.core.cache import cache
+from django.db.utils import IntegrityError
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Status
 from ninja.errors import HttpError, Throttled, ValidationError
 from ninja.pagination import paginate
 from organizations.backends import invitation_backend
-from organizations.signals import owner_changed
 
 from apps.teams.models import Team
 from apps.teams.schema import OrganizationDetailSchema
@@ -32,7 +32,7 @@ from .schema import (
     OrganizationUserSchema,
     OrganizationUserUpdateSchema,
 )
-from .utils import is_organization_creation_open
+from .utils import is_member_guard_violation, is_organization_creation_open
 
 router = Router()
 
@@ -300,7 +300,16 @@ async def delete_organization_member(
         org_user.user and org_user.user.id == user_id
     ):
         raise HttpError(403, "Forbidden")
-    await org_user.adelete()
+    try:
+        await org_user.adelete()
+    except IntegrityError as err:
+        if is_member_guard_violation(err):
+            raise HttpError(
+                400,
+                "Cannot remove the last member of an organization. "
+                "Delete the organization instead.",
+            )
+        raise
 
     return Status(204, None)
 
@@ -368,16 +377,17 @@ async def set_organization_owner(
     organization = new_owner.organization
     old_owner = organization.owner.organization_user
     if not (
-        old_owner.pk is user_id
+        old_owner.user_id == user_id
         or await organization.organization_users.filter(
             user=user_id, role=OrganizationUserRole.OWNER
         ).aexists()
     ):
         raise HttpError(403, "Only owner may set organization owner.")
 
+    await organization.achange_owner(new_owner)
+    # achange_owner saves a freshly loaded owner row; sync the cached
+    # relation so resolve_is_owner reflects the change in the response.
     organization.owner.organization_user = new_owner
-    await organization.owner.asave()
-    owner_changed.send(sender=organization, old=old_owner, new=new_owner)
     return new_owner
 
 

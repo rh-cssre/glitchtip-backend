@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from asgiref.sync import sync_to_async
@@ -137,7 +137,9 @@ async def get_event(
 
     qs = IssueEvent.objects.filter(
         organization__users=user_id,
-    ).select_related("issue", "issue__project")
+    ).select_related(
+        "issue", "issue__project", "issue__index", "issue__resolved_in_release"
+    )
     if organization_slug:
         qs = qs.filter(organization__slug=organization_slug)
     qs = _apply_compliance_filter(qs)
@@ -180,7 +182,7 @@ async def get_event(
                 return await _attach_issue(cold_event, user_id)
     else:
         # UUIDv4 (sentry SDK event_id): scan recent cold storage with time bound
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start_dt = now - timedelta(days=90)
         for org_id in org_ids:
             cold_events = await sync_to_async(query_cold_events)(
@@ -203,7 +205,7 @@ async def _attach_issue(cold_event, user_id: int):
             id=cold_event.issue_id,
             project__organization__users=user_id,
         )
-        .select_related("project")
+        .select_related("project", "index", "resolved_in_release")
         .afirst()
     )
     if not issue:
@@ -263,7 +265,7 @@ async def get_logs(
     """Query logs from hot+cold storage via the existing combined query."""
     org_id = await _get_org_id(user_id, organization_slug)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start_dt = start or (now - timedelta(days=7))
     end_dt = end or now
 
@@ -362,7 +364,7 @@ async def get_transaction_spans(
     if not group:
         return []
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = start_dt or (now - timedelta(days=7))
     end = end_dt or now
 
@@ -389,7 +391,7 @@ async def get_n_plus_one_patterns(
 
     org_id = await _get_org_id(user_id, organization_slug)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = start_dt or (now - timedelta(days=7))
     end = end_dt or now
 
@@ -423,7 +425,7 @@ async def get_transaction_trend(
     if not group:
         return []
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = start_dt or (now - timedelta(days=7))
     end = end_dt or now
 
@@ -450,7 +452,7 @@ async def get_span_groups(
 
     org_id = await _get_org_id(user_id, organization_slug)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = start_dt or (now - timedelta(days=7))
     end = end_dt or now
 

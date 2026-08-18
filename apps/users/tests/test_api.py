@@ -1,6 +1,8 @@
 from urllib.parse import unquote
 
 from allauth.mfa.models import Authenticator
+from allauth.mfa.recovery_codes.internal.auth import RecoveryCodes
+from allauth_async.mfa.adapter import AsyncDefaultMFAAdapter
 from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -11,6 +13,17 @@ from apps.projects.models import UserProjectAlert
 from glitchtip.test_utils.test_case import GlitchTestCase
 
 from ..models import User
+
+
+class ReversingCipherMFAAdapter(AsyncDefaultMFAAdapter):
+    """A non-identity encrypt()/decrypt() pair, as installs that protect MFA
+    secrets at rest configure."""
+
+    def encrypt(self, text: str) -> str:
+        return text[::-1]
+
+    def decrypt(self, encrypted_text: str) -> str:
+        return encrypted_text[::-1]
 
 
 class UserRegistrationTestCase(TestCase):
@@ -437,3 +450,22 @@ class UsersTestCase(GlitchTestCase):
         )
         self.assertEqual(res.status_code, 204)
         self.assertTrue(await Authenticator.objects.filter(user=self.user).aexists())
+
+    @override_settings(
+        MFA_ADAPTER="apps.users.tests.test_api.ReversingCipherMFAAdapter"
+    )
+    async def test_generate_recovery_codes_with_encrypting_adapter(self):
+        """The previewed codes must be the codes that go live even when the
+        MFA adapter's encrypt()/decrypt() is not the default identity
+        function (the seed is stored encrypted on the authenticator)."""
+        url = reverse("api:generate_recovery_codes")
+        res = await self.async_client.get(url)
+        previewed = res.json()["codes"]
+        res = await self.async_client.post(
+            url, {"code": previewed[0]}, content_type="application/json"
+        )
+        self.assertEqual(res.status_code, 204)
+        authenticator = await Authenticator.objects.aget(
+            user=self.user, type=Authenticator.Type.RECOVERY_CODES
+        )
+        self.assertEqual(RecoveryCodes(authenticator).generate_codes(), previewed)

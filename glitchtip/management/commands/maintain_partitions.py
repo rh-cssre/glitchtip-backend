@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
@@ -14,12 +14,11 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         manager = PartitionManager(db_connection=settings.MAINTENANCE_DATABASE_ALIAS)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # 1. Daily UUIDv7 partitions (Events + SpanStaging)
         daily_v7_models = [
             ("issue_events_issueevent", None),  # Use settings
-            ("uptime_monitorcheck", None),
             ("logs_logevent", None),
             ("performance_spanstaging", None),
         ]
@@ -61,6 +60,45 @@ class Command(BaseCommand):
                 f"Cleaning up old partitions for {table} (retention: {max_days} days)..."
             )
             dropped = manager.drop_old_partitions(table, max_days)
+            if dropped > 0:
+                self.stdout.write(self.style.SUCCESS(f"Dropped {dropped} partitions."))
+
+        # 1b. Weekly UUIDv7 partitions (uptime checks)
+        #
+        # Weekly rather than daily because the cost of a partitioned table is
+        # paid in relation locks, and locks scale with the number of RANGE
+        # nodes, not with the rows in them. A monitors page load takes one lock
+        # per partition it plans over: at 90-day retention that is 97 daily
+        # partitions, measured at 1,946 locks on a default install and 6,602 on
+        # a 16-bucket one -- past a stock cluster's entire shared lock table.
+        # Weekly brings the same query to 118. Uptime check volume is orders of
+        # magnitude below event volume, so daily granularity was buying nothing
+        # but a coarser retention boundary (a week's data may be kept up to 7
+        # days past retention before its partition is dropped).
+        start_of_week_v7 = start_date_daily - timedelta(days=start_date_daily.weekday())
+        for table in ("uptime_monitorcheck",):
+            if not manager.is_table_partitioned(table):
+                self.stdout.write(f"Skipping {table} (not partitioned yet)...")
+                continue
+            self.stdout.write(f"Maintaining weekly UUIDv7 partitions for {table}...")
+            manager.create_partitions_for_date_range(
+                parent_table=table,
+                start_date=start_of_week_v7,
+                end_date=start_of_week_v7 + timedelta(weeks=3),
+                partition_interval="WEEK",
+                hash_buckets=None,
+                hash_column="organization_id",
+                key_type="uuid7",
+            )
+            max_days = settings.GLITCHTIP_UPTIME_RETENTION_DAYS
+            self.stdout.write(
+                f"Cleaning up old partitions for {table} (retention: {max_days} days)..."
+            )
+            # partition_interval_days=7 so a week is only dropped once its whole
+            # range is past retention, never mid-week.
+            dropped = manager.drop_old_partitions(
+                table, max_days, partition_interval_days=7
+            )
             if dropped > 0:
                 self.stdout.write(self.style.SUCCESS(f"Dropped {dropped} partitions."))
 

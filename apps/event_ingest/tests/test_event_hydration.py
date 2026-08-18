@@ -70,7 +70,7 @@ class EventHydrationTestCase(EventIngestTestCase):
 
         self.assertNotIn("exception", event.data)
         # Or if it's there it should be None or empty
-        if "exception" in event.data and event.data["exception"]:
+        if event.data.get("exception"):
             self.assertIsNone(event.data["exception"])
 
     def test_hydration_priority_thread_id(self):

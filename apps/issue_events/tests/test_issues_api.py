@@ -12,6 +12,7 @@ from django.utils import timezone
 from freezegun import freeze_time
 from model_bakery import baker
 
+from apps.organizations_ext.constants import OrganizationUserRole
 from glitchtip.test_utils.issue import amake_issue, arefresh_issue
 from glitchtip.test_utils.test_case import (
     APIPermissionTestCase,
@@ -237,6 +238,37 @@ class IssueAPITestCase(GlitchTestCase):
             self.assertEqual(res2.status_code, 200)
             page2 = [item["id"] for item in res2.json()]
             self.assertEqual(sorted(page1 + page2), sorted(str(i.id) for i in issues))
+
+    async def test_priority_sort_paginated_count(self):
+        """Sorting the issue list by ``priority`` while the result spans more
+        than one page must not 500 on the X-Hits count.
+
+        ``priority`` is a non-aggregate annotation
+        (LOG(10, index.count) + index.last_seen epoch / 300000), added on top of
+        the list's ``num_comments`` Count aggregate. Having a following page
+        triggers ``_aitems_count``, which wraps the sliced queryset in
+        ``SELECT COUNT(*) FROM (...)``. That subquery used to keep the priority
+        expression in its SELECT while ``index.count`` was absent from the
+        aggregate-forced GROUP BY, so Postgres rejected it with a 42803
+        ("must appear in the GROUP BY clause") error.
+        """
+        for _ in range(3):
+            await baker.amake("issue_events.Issue", project=self.project)
+
+        for sort in ("priority", "-priority"):
+            res = await self.async_client.get(self.list_url + f"?limit=2&sort={sort}")
+            self.assertEqual(res.status_code, 200, msg=f"sort={sort!r}: {res.content}")
+            # A following page is what makes the paginator run the count query.
+            self.assertIn('rel="next"; results="true"', res["Link"])
+            # X-Hits is the total match count produced by _aitems_count.
+            self.assertEqual(res["X-Hits"], "3", msg=f"sort={sort!r}")
+
+            # The next page must also load (the count runs again there).
+            next_url = re.search(r'<([^>]+)>; rel="next"', res["Link"]).group(1)
+            res2 = await self.async_client.get(next_url)
+            self.assertEqual(
+                res2.status_code, 200, msg=f"sort={sort!r}: {res2.content}"
+            )
 
     async def _set_search_document(self, issue, text):
         """Populate an issue's IssueIndex row (the full-text store).
@@ -1110,14 +1142,13 @@ class IssueAPITestCase(GlitchTestCase):
     def test_db_constraint_rejects_both_user_and_team(self):
         from django.db import IntegrityError, transaction
 
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                baker.make(
-                    "issue_events.Issue",
-                    project=self.project,
-                    assigned_to_org_user=self.org_user,
-                    assigned_to_team=self.team,
-                )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            baker.make(
+                "issue_events.Issue",
+                project=self.project,
+                assigned_to_org_user=self.org_user,
+                assigned_to_team=self.team,
+            )
 
     @freeze_time("2025-06-19T17:47:00Z")
     async def test_issue_stats_endpoint(self):
@@ -1386,6 +1417,7 @@ class IssueEventTagsAPITestCase(GlitchTestCase):
         await baker.amake(
             "issue_events.IssueTag",
             issue=issue,
+            organization=self.organization,
             tag_key=key_foo,
             tag_value=value_bar,
             count=2,
@@ -1393,6 +1425,7 @@ class IssueEventTagsAPITestCase(GlitchTestCase):
         await baker.amake(
             "issue_events.IssueTag",
             issue=issue,
+            organization=self.organization,
             tag_key=key_foo,
             tag_value=value_bar,
             count=1,
@@ -1400,12 +1433,14 @@ class IssueEventTagsAPITestCase(GlitchTestCase):
         await baker.amake(
             "issue_events.IssueTag",
             issue=issue,
+            organization=self.organization,
             tag_key=key_animal,
             tag_value=value_cat,
         )
         await baker.amake(
             "issue_events.IssueTag",
             issue=issue,
+            organization=self.organization,
             tag_key=key_animal,
             tag_value=value_dog,
             count=4,
@@ -1413,6 +1448,7 @@ class IssueEventTagsAPITestCase(GlitchTestCase):
         await baker.amake(
             "issue_events.IssueTag",
             issue=issue,
+            organization=self.organization,
             tag_key=key_foo,
             tag_value=value_cat,
             count=4,
@@ -1446,12 +1482,14 @@ class IssueEventTagsAPITestCase(GlitchTestCase):
         await baker.amake(
             "issue_events.IssueTag",
             issue=issue,
+            organization=self.organization,
             tag_key__key="foo",
             tag_value=value_bar,
         )
         await baker.amake(
             "issue_events.IssueTag",
             issue=issue,
+            organization=self.organization,
             tag_key__key="lol",
             tag_value=value_bar,
         )
@@ -1519,3 +1557,165 @@ class IssueEventTagsAPITestCase(GlitchTestCase):
             self.client.get(url)
             end = timer()
         logger.info(end - start)
+
+
+class OrganizationScopedIssueAPITestCase(GlitchTestCase):
+    """Org-scoped twins of the bare ``/issues/{id}/`` routes.
+
+    Each twin must scope on the slug in the path, not merely on membership.
+    ``other_organization`` is one the user *is* a member of, so a result
+    leaking through it proves the slug is being ignored rather than merely
+    proving that membership filtering works.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.create_user()
+        cls.other_organization = baker.make("organizations_ext.Organization")
+        cls.other_organization.add_user(cls.user, OrganizationUserRole.ADMIN)
+
+    def setUp(self):
+        self.async_client.force_login(self.user)
+
+    def detail_url(self, organization_slug: str, issue_id: int) -> str:
+        return reverse(
+            "api:get_organization_issue",
+            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+        )
+
+    def commits_url(self, organization_slug: str, issue_id: int) -> str:
+        return reverse(
+            "api:list_organization_issue_commits",
+            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+        )
+
+    def delete_url(self, organization_slug: str, issue_id: int) -> str:
+        return reverse(
+            "api:delete_organization_issue",
+            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+        )
+
+    def tags_url(self, organization_slug: str, issue_id: int) -> str:
+        return reverse(
+            "api:list_organization_issue_tags",
+            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+        )
+
+    async def test_retrieve(self):
+        issue = await amake_issue(project=self.project, short_id=1)
+        res = await self.async_client.get(
+            self.detail_url(self.organization.slug, issue.id)
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["id"], str(issue.id))
+
+    async def test_retrieve_wrong_organization(self):
+        issue = await amake_issue(project=self.project, short_id=1)
+        res = await self.async_client.get(
+            self.detail_url(self.other_organization.slug, issue.id)
+        )
+        self.assertEqual(res.status_code, 404)
+
+    async def test_retrieve_unaffiliated_organization(self):
+        issue = await amake_issue(project=self.project, short_id=1)
+        unaffiliated = await baker.amake("organizations_ext.Organization")
+        res = await self.async_client.get(self.detail_url(unaffiliated.slug, issue.id))
+        self.assertEqual(res.status_code, 404)
+
+    async def test_retrieve_not_my_issue(self):
+        not_my_issue = await amake_issue()
+        res = await self.async_client.get(
+            self.detail_url(self.organization.slug, not_my_issue.id)
+        )
+        self.assertEqual(res.status_code, 404)
+
+    async def test_list_commits(self):
+        release = await baker.amake(
+            "releases.Release",
+            organization=self.organization,
+            data={"commits": [{"id": "abc123", "message": "fix: login bug"}]},
+        )
+        issue = await baker.amake(
+            "issue_events.Issue",
+            project=self.project,
+            short_id=1,
+            first_release=release,
+        )
+        res = await self.async_client.get(
+            self.commits_url(self.organization.slug, issue.id)
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["id"], "abc123")
+
+    async def test_list_commits_wrong_organization(self):
+        release = await baker.amake(
+            "releases.Release",
+            organization=self.organization,
+            data={"commits": [{"id": "abc123", "message": "fix: login bug"}]},
+        )
+        issue = await baker.amake(
+            "issue_events.Issue",
+            project=self.project,
+            short_id=1,
+            first_release=release,
+        )
+        res = await self.async_client.get(
+            self.commits_url(self.other_organization.slug, issue.id)
+        )
+        self.assertEqual(res.status_code, 404)
+
+    async def test_delete(self):
+        issue = await baker.amake("issue_events.Issue", project=self.project)
+        res = await self.async_client.delete(
+            self.delete_url(self.organization.slug, issue.id)
+        )
+        self.assertEqual(res.status_code, 204)
+
+    async def test_delete_wrong_organization(self):
+        """A mismatched slug must 404 *and* leave the issue intact."""
+        issue = await baker.amake("issue_events.Issue", project=self.project)
+        res = await self.async_client.delete(
+            self.delete_url(self.other_organization.slug, issue.id)
+        )
+        self.assertEqual(res.status_code, 404)
+        await issue.arefresh_from_db()
+        self.assertFalse(issue.is_deleted)
+
+    async def test_tags(self):
+        issue = await baker.amake("issue_events.Issue", project=self.project)
+        key_foo = await baker.amake("issue_events.TagKey", key="foo")
+        value_bar = await baker.amake("issue_events.TagValue", value="bar")
+        await baker.amake(
+            "issue_events.IssueTag",
+            issue=issue,
+            organization=self.organization,
+            tag_key=key_foo,
+            tag_value=value_bar,
+            count=2,
+        )
+        res = await self.async_client.get(
+            self.tags_url(self.organization.slug, issue.id)
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["key"], "foo")
+        self.assertEqual(data[0]["totalValues"], 2)
+
+    async def test_tags_wrong_organization(self):
+        issue = await baker.amake("issue_events.Issue", project=self.project)
+        key_foo = await baker.amake("issue_events.TagKey", key="foo")
+        value_bar = await baker.amake("issue_events.TagValue", value="bar")
+        await baker.amake(
+            "issue_events.IssueTag",
+            issue=issue,
+            tag_key=key_foo,
+            tag_value=value_bar,
+            count=2,
+        )
+        res = await self.async_client.get(
+            self.tags_url(self.other_organization.slug, issue.id)
+        )
+        self.assertEqual(res.status_code, 404)

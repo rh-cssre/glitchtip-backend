@@ -5,7 +5,7 @@ import re
 import subprocess
 import sys
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import patch
 from uuid import UUID
 
@@ -72,22 +72,16 @@ class SettingsTestCase(TestCase):
                 "socialaccount.socialapp",
                 provider=provider,
             )
-        # OIDC discovery is cached; pre-populate to avoid a real outbound
-        # request and to assert the cached value is consumed.
-        from django.core.cache import cache
-
-        from glitchtip.oidc_discovery import _cache_key
-
-        await cache.aset(
-            _cache_key("https://example.com"),
-            {"authorization_endpoint": "https://example.com/authorize"},
-        )
-        try:
+        # Serializing an app must never reach the network: this endpoint is
+        # unauthenticated and lists every app, so an outbound call per app
+        # would let one anonymous request fan out across the IdPs they name.
+        with patch("aiohttp.ClientSession.get", side_effect=AssertionError) as no_http:
             res = await self.async_client.get(self.url)
-        finally:
-            await cache.adelete(_cache_key("https://example.com"))
+        no_http.assert_not_called()
         self.assertContains(res, social_app.name)
-        self.assertContains(res, "https://example.com/authorize")
+        # OIDC apps report provider_id, which is what the headless redirect
+        # needs to tell several apps of the same brand apart.
+        self.assertContains(res, "my-openid")
 
 
 class InstanceLicenseTestCase(TestCase):
@@ -232,7 +226,7 @@ class UUID7HelperTestCase(TestCase):
 
     def test_from_datetime(self):
         """UUIDv7 encodes timestamp in first 48 bits"""
-        dt = datetime(2025, 1, 15, 12, 30, 45, tzinfo=timezone.utc)
+        dt = datetime(2025, 1, 15, 12, 30, 45, tzinfo=UTC)
         uuid_val = UUID7Helper.from_datetime(dt)
 
         self.assertEqual(uuid_val.version, 7)
@@ -246,7 +240,7 @@ class UUID7HelperTestCase(TestCase):
     def test_from_datetime_naive(self):
         """Naive datetime is treated as UTC"""
         dt_naive = datetime(2025, 1, 15, 12, 0, 0)
-        dt_aware = dt_naive.replace(tzinfo=timezone.utc)
+        dt_aware = dt_naive.replace(tzinfo=UTC)
 
         uuid_naive = UUID7Helper.from_datetime(dt_naive)
         uuid_aware = UUID7Helper.from_datetime(dt_aware)
@@ -260,14 +254,14 @@ class UUID7HelperTestCase(TestCase):
 
     def test_extract_datetime(self):
         """Extract datetime from UUIDv7"""
-        original_dt = datetime(2025, 6, 15, 9, 15, 30, tzinfo=timezone.utc)
+        original_dt = datetime(2025, 6, 15, 9, 15, 30, tzinfo=UTC)
         uuid_val = UUID7Helper.from_datetime(original_dt)
 
         extracted_dt = UUID7Helper.extract_datetime(uuid_val)
 
         # Should be timezone-aware UTC
         self.assertIsNotNone(extracted_dt.tzinfo)
-        self.assertEqual(extracted_dt.tzinfo, timezone.utc)
+        self.assertEqual(extracted_dt.tzinfo, UTC)
 
         # Timestamps should match within millisecond precision
         delta = abs((extracted_dt - original_dt).total_seconds())
@@ -286,8 +280,8 @@ class UUID7HelperTestCase(TestCase):
 
     def test_get_range_for_date(self):
         """UUID range covers full date"""
-        start = datetime(2025, 1, 15, 0, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2025, 1, 16, 0, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2025, 1, 15, 0, 0, 0, tzinfo=UTC)
+        end = datetime(2025, 1, 16, 0, 0, 0, tzinfo=UTC)
 
         start_uuid, end_uuid = UUID7Helper.get_range_for_date(start, end)
 
@@ -307,9 +301,9 @@ class UUID7HelperTestCase(TestCase):
 
     def test_temporal_ordering(self):
         """UUIDv7s maintain temporal ordering"""
-        dt1 = datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
-        dt2 = datetime(2025, 1, 15, 11, 0, 0, tzinfo=timezone.utc)
-        dt3 = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        dt1 = datetime(2025, 1, 15, 10, 0, 0, tzinfo=UTC)
+        dt2 = datetime(2025, 1, 15, 11, 0, 0, tzinfo=UTC)
+        dt3 = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
 
         uuid1 = UUID7Helper.from_datetime(dt1)
         uuid2 = UUID7Helper.from_datetime(dt2)
@@ -322,9 +316,9 @@ class UUID7HelperTestCase(TestCase):
 
     def test_pre_epoch_date_clamped(self):
         """Dates before Unix epoch produce valid UUIDs (clamped to epoch)"""
-        pre_epoch = datetime.min.replace(tzinfo=timezone.utc)
+        pre_epoch = datetime.min.replace(tzinfo=UTC)
         start_uuid, end_uuid = UUID7Helper.get_range_for_date(
-            pre_epoch, datetime(2025, 1, 1, tzinfo=timezone.utc)
+            pre_epoch, datetime(2025, 1, 1, tzinfo=UTC)
         )
         self.assertEqual(start_uuid.version, 7)
         self.assertEqual(end_uuid.version, 7)
@@ -341,8 +335,8 @@ class PartitionManagerTestCase(TestCase):
         sqls = manager.create_time_partition(
             parent_table="issue_events_issueaggregate",
             partition_name="issue_events_issueaggregate_20250115",
-            start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
-            end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+            start_date=datetime(2025, 1, 15, tzinfo=UTC),
+            end_date=datetime(2025, 1, 16, tzinfo=UTC),
             hash_buckets=4,
             hash_column="organization_id",
             key_type="datetime",
@@ -376,8 +370,8 @@ class PartitionManagerTestCase(TestCase):
         sqls = manager.create_time_partition(
             parent_table="issue_events_issueevent",
             partition_name="issue_events_issueevent_20250115",
-            start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
-            end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+            start_date=datetime(2025, 1, 15, tzinfo=UTC),
+            end_date=datetime(2025, 1, 16, tzinfo=UTC),
             hash_buckets=16,
             hash_column="organization_id",
             key_type="uuid7",
@@ -411,8 +405,8 @@ class PartitionManagerTestCase(TestCase):
         sqls = manager.create_time_partition(
             parent_table="test_table",
             partition_name="test_20250115",
-            start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
-            end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+            start_date=datetime(2025, 1, 15, tzinfo=UTC),
+            end_date=datetime(2025, 1, 16, tzinfo=UTC),
             hash_buckets=2,
         )
 
@@ -428,8 +422,8 @@ class PartitionManagerTestCase(TestCase):
             sqls = manager.create_time_partition(
                 parent_table="test_table",
                 partition_name=f"test_b{bucket_count}",
-                start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
-                end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+                start_date=datetime(2025, 1, 15, tzinfo=UTC),
+                end_date=datetime(2025, 1, 16, tzinfo=UTC),
                 hash_buckets=bucket_count,
             )
 
@@ -448,8 +442,8 @@ class PartitionManagerTestCase(TestCase):
         sqls = manager.create_time_partition(
             parent_table="test_table",
             partition_name="test_custom_hash",
-            start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
-            end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+            start_date=datetime(2025, 1, 15, tzinfo=UTC),
+            end_date=datetime(2025, 1, 16, tzinfo=UTC),
             hash_buckets=4,
             hash_column="project_id",
         )
@@ -485,8 +479,8 @@ class PartitionManagerTestCase(TestCase):
         sqls_aware = manager.create_time_partition(
             parent_table="test_table",
             partition_name="test_aware",
-            start_date=datetime(2025, 1, 15, 0, 0, 0, tzinfo=timezone.utc),
-            end_date=datetime(2025, 1, 16, 0, 0, 0, tzinfo=timezone.utc),
+            start_date=datetime(2025, 1, 15, 0, 0, 0, tzinfo=UTC),
+            end_date=datetime(2025, 1, 16, 0, 0, 0, tzinfo=UTC),
             hash_buckets=2,
             key_type="datetime",
         )
@@ -502,8 +496,8 @@ class PartitionManagerTestCase(TestCase):
         sqls = manager.create_time_partition(
             parent_table="issue_events_issueaggregate",
             partition_name="issue_events_issueaggregate_20250115",
-            start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
-            end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
+            start_date=datetime(2025, 1, 15, tzinfo=UTC),
+            end_date=datetime(2025, 1, 16, tzinfo=UTC),
             hash_buckets=4,
         )
 
@@ -587,8 +581,8 @@ class PartitionCreationDDLTestCase(TransactionTestCase):
         set is already complete and must be left intact.
         """
         partition_name = f"{self.PARENT}_20260629"
-        start = datetime(2026, 6, 29, tzinfo=timezone.utc)
-        end = datetime(2026, 6, 30, tzinfo=timezone.utc)
+        start = datetime(2026, 6, 29, tzinfo=UTC)
+        end = datetime(2026, 6, 30, tzinfo=UTC)
 
         # Pre-create the range partition with 4 hash buckets (old bucket count).
         created = self.manager.execute_partition_creation(
@@ -622,6 +616,105 @@ class PartitionCreationDDLTestCase(TransactionTestCase):
             logs.output,
         )
 
+    def test_fills_incomplete_legacy_set_at_its_own_modulus(self):
+        """
+        A partition left with an INCOMPLETE hash set at an older modulus must be
+        repaired at that modulus, even though it differs from the configured
+        bucket count. The missing remainder tiles none of the keyspace, so rows
+        hashing there are rejected with 23514 — and since lowering the
+        configured count makes every legacy partition take the differing-modulus
+        path, bailing out here would leave a slice of organizations unable to
+        ingest for the rest of the partition's retention window.
+        """
+        partition_name = f"{self.PARENT}_20260703"
+        start = datetime(2026, 7, 3, tzinfo=UTC)
+        end = datetime(2026, 7, 4, tzinfo=UTC)
+
+        # A legacy modulus-4 set that is missing remainder 3.
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"""
+                CREATE TABLE {partition_name} PARTITION OF {self.PARENT}
+                FOR VALUES FROM ('2026-07-03') TO ('2026-07-04')
+                PARTITION BY HASH (organization_id);
+                """
+            )
+            for remainder in range(3):
+                cursor.execute(
+                    f"""
+                    CREATE TABLE {partition_name}_h{remainder}
+                    PARTITION OF {partition_name}
+                    FOR VALUES WITH (MODULUS 4, REMAINDER {remainder});
+                    """
+                )
+
+        # Configured count is 2 — it cannot be applied to a modulus-4 set, but
+        # the gap still has to be filled.
+        with self._assert_partition_logs("WARNING") as logs:
+            result = self.manager.execute_partition_creation(
+                parent_table=self.PARENT,
+                partition_name=partition_name,
+                start_date=start,
+                end_date=end,
+                hash_buckets=2,
+                key_type="datetime",
+            )
+
+        self.assertEqual(result, 1)
+        self.assertEqual(len(self.manager.list_partitions(partition_name)), 4)
+        # Repaired at the set's own modulus, not the configured one.
+        self.assertEqual(self._child_moduli(partition_name), [4])
+        self.assertTrue(
+            any("incomplete" in message for message in logs.output), logs.output
+        )
+
+        # Every organization can now be routed. Without the missing remainder
+        # some of these rows raise 23514 "no partition of relation found".
+        with connection.cursor() as cursor:
+            for organization_id in range(1, 40):
+                cursor.execute(
+                    f"INSERT INTO {self.PARENT} (date, organization_id) "
+                    f"VALUES ('2026-07-03', %s);",
+                    [organization_id],
+                )
+
+    def test_skips_plain_leaf_range_partition(self):
+        """
+        A range partition created as a plain leaf (hash_buckets=0, as the legacy
+        event importer does) must be left alone rather than have hash children
+        forced onto it — that raises 42P17 and would abort the whole maintenance
+        run, starving later tables of their partitions.
+        """
+        partition_name = f"{self.PARENT}_20260704"
+        start = datetime(2026, 7, 4, tzinfo=UTC)
+        end = datetime(2026, 7, 5, tzinfo=UTC)
+
+        self.manager.execute_partition_creation(
+            parent_table=self.PARENT,
+            partition_name=partition_name,
+            start_date=start,
+            end_date=end,
+            hash_buckets=0,
+            key_type="datetime",
+        )
+        self.assertFalse(self.manager.is_table_partitioned(partition_name))
+
+        with self._assert_partition_logs("WARNING") as logs:
+            result = self.manager.execute_partition_creation(
+                parent_table=self.PARENT,
+                partition_name=partition_name,
+                start_date=start,
+                end_date=end,
+                hash_buckets=2,
+                key_type="datetime",
+            )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(self.manager.list_partitions(partition_name), [])
+        self.assertTrue(
+            any("plain leaf" in message for message in logs.output), logs.output
+        )
+
     def test_fills_genuinely_missing_bucket_at_matching_modulus(self):
         """
         The healthy gap-fill path still works: if a range partition has hash
@@ -629,8 +722,8 @@ class PartitionCreationDDLTestCase(TransactionTestCase):
         missing bucket is created.
         """
         partition_name = f"{self.PARENT}_20260630"
-        start = datetime(2026, 6, 30, tzinfo=timezone.utc)
-        end = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        start = datetime(2026, 6, 30, tzinfo=UTC)
+        end = datetime(2026, 7, 1, tzinfo=UTC)
 
         # Create the range partition plus 3 of the 4 hash children, leaving
         # remainder 3 missing.
@@ -671,8 +764,8 @@ class PartitionCreationDDLTestCase(TransactionTestCase):
     def test_matching_modulus_complete_set_is_noop(self):
         """A complete set at the configured modulus creates nothing."""
         partition_name = f"{self.PARENT}_20260701"
-        start = datetime(2026, 7, 1, tzinfo=timezone.utc)
-        end = datetime(2026, 7, 2, tzinfo=timezone.utc)
+        start = datetime(2026, 7, 1, tzinfo=UTC)
+        end = datetime(2026, 7, 2, tzinfo=UTC)
 
         self.manager.execute_partition_creation(
             parent_table=self.PARENT,
@@ -701,8 +794,8 @@ class PartitionCreationDDLTestCase(TransactionTestCase):
         left untouched rather than have hash children forced onto it.
         """
         partition_name = f"{self.PARENT}_20260702"
-        start = datetime(2026, 7, 2, tzinfo=timezone.utc)
-        end = datetime(2026, 7, 3, tzinfo=timezone.utc)
+        start = datetime(2026, 7, 2, tzinfo=UTC)
+        end = datetime(2026, 7, 3, tzinfo=UTC)
 
         # Build a range partition that is itself sub-partitioned by LIST, with
         # one list child — so its children carry no hash "modulus" bound.
@@ -756,16 +849,9 @@ class DatabaseSettingsTestCase(TestCase):
         self.assertEqual(db_settings.get("DISABLE_SERVER_SIDE_CURSORS"), True)
         # In TESTING mode, pool is explicitly set to False
         self.assertEqual(db_settings.get("OPTIONS", {}).get("pool"), False)
-        # Guard against a typo or accidental SQLite fallback. The default is
-        # the async-backend (psycopg); gt_rust.django_backend is the opt-in
-        # Rust driver selected via DATABASE_ENGINE. Both are valid.
-        self.assertIn(
-            db_settings.get("ENGINE"),
-            {
-                "django_async_backend.db.backends.postgresql",
-                "gt_rust.django_backend",
-            },
-        )
+        # Guard against a typo or accidental SQLite fallback. The Rust
+        # driver is the only supported database engine.
+        self.assertEqual(db_settings.get("ENGINE"), "gt_rust.django_backend")
 
 
 class IsSelfReferencingDsnTestCase(TestCase):
@@ -979,9 +1065,11 @@ class InternalTransportTestCase(TestCase):
             },
         )
 
-        with patch.object(transport, "_process_envelope", spy_process):
-            with patch("apps.event_ingest.tasks.ingest_event"):
-                transport.capture_envelope(envelope)
+        with (
+            patch.object(transport, "_process_envelope", spy_process),
+            patch("apps.event_ingest.tasks.ingest_event"),
+        ):
+            transport.capture_envelope(envelope)
 
         self.assertEqual(observed_values, [True])
         # After return, contextvar should be reset
@@ -1027,9 +1115,11 @@ class BeforeSendSelfRefTestCase(TestCase):
         _UNSAFE_MODULES = ("apps.event_ingest", "apps.logs.process")
 
         def before_send(event, hint):
-            if "log_record" in hint:
-                if hint["log_record"].name == "django.security.DisallowedHost":
-                    return None
+            if (
+                "log_record" in hint
+                and hint["log_record"].name == "django.security.DisallowedHost"
+            ):
+                return None
             if "exc_info" in hint:
                 _, exc_value, _ = hint["exc_info"]
                 if isinstance(exc_value, UnreadablePostError):
@@ -1037,11 +1127,10 @@ class BeforeSendSelfRefTestCase(TestCase):
             if is_self_ref:
                 if _processing_internal.get():
                     return None
-                if "log_record" in hint:
-                    if hint["log_record"].name.startswith(
-                        ("apps.event_ingest", "apps.logs")
-                    ):
-                        return None
+                if "log_record" in hint and hint["log_record"].name.startswith(
+                    ("apps.event_ingest", "apps.logs")
+                ):
+                    return None
                 for exc_val in event.get("exception", {}).get("values", []):
                     for frame in exc_val.get("stacktrace", {}).get("frames", []):
                         if frame.get("module", "").startswith(_UNSAFE_MODULES):
@@ -1183,6 +1272,7 @@ json.dump({
     "cache_options": settings.CACHES["default"].get("OPTIONS", {}),
     "task_backend": settings.TASKS["default"]["BACKEND"],
     "session_engine": settings.SESSION_ENGINE,
+    "database_engine": settings.DATABASE_ENGINE,
 }, __import__("sys").stdout)
 """
 
@@ -1218,6 +1308,7 @@ class CacheConfigTestCase(TestCase):
             text=True,
             env=env,
             timeout=30,
+            check=False,
         )
         self.assertEqual(
             result.returncode,
@@ -1328,16 +1419,24 @@ class CacheConfigTestCase(TestCase):
         )
         self.assertEqual(info["cache_options"]["ssl_cert_reqs"], "none")
 
-    def test_no_tls_options_means_no_options_key(self):
-        """Without TLS env vars, OPTIONS is not set (empty dict from probe)."""
+    def test_no_tls_options_means_default_driver_only(self):
+        """Without TLS env vars, OPTIONS carries only the gt_rust driver
+        routing — always present: the cache and task broker run on gt_rust's
+        single shared tokio runtime, and that wiring is not configurable."""
         info = self._probe({"VALKEY_URL": "redis://valkey:6379/0"})
-        self.assertEqual(info["cache_options"], {})
+        self.assertEqual(
+            info["cache_options"],
+            {"DRIVER_CLASS": "gt_rust.valkey.RustValkeyDriver"},
+        )
 
     def test_empty_valkey_url_falls_back_to_db(self):
-        """VALKEY_URL="" → database cache + DB task backend."""
+        """VALKEY_URL="" → database cache + DB task backend. The Rust DB
+        engine (which also carries the Rust ingest path's cache and broker
+        ops in this shape) is unconditional."""
         info = self._probe({"VALKEY_URL": ""})
         self.assertEqual(info["cache_backend"], self.DB_CACHE_BACKEND)
         self.assertEqual(info["task_backend"], self.VTASKS_DB)
+        self.assertEqual(info["database_engine"], "gt_rust.django_backend")
 
     def test_no_valkey_env_defaults_to_vcache(self):
         """When no VALKEY_URL/REDIS_URL is set at all, settings.py defaults to
@@ -1356,6 +1455,7 @@ class CacheConfigTestCase(TestCase):
             text=True,
             env=env,
             timeout=30,
+            check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         lines = result.stdout.strip().splitlines()
@@ -1404,6 +1504,7 @@ def _load_deploy_settings(
         capture_output=True,
         text=True,
         timeout=60,
+        check=False,
     )
 
 

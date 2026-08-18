@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from apps.organizations_ext.models import Organization
 from apps.stripe.constants import SubscriptionStatus
+from apps.stripe.exceptions import StripeError
 from apps.stripe.models import StripePrice, StripeProduct, StripeSubscription
 from apps.stripe.schema import (
     EventData,
@@ -19,6 +20,7 @@ from apps.stripe.schema import (
     Subscription,
     SubscriptionItem,
     SubscriptionItems,
+    ThinEvent,
 )
 from apps.stripe.views import stripe_webhook_view
 
@@ -196,6 +198,7 @@ class TestStripeWebhookView(TestCase):
                         "events": "1",
                         "is_public": "true",
                         "product_type": "hosted",
+                        "sso": "true",
                     },
                     "name": "Test Product",
                     "statement_descriptor": None,
@@ -221,6 +224,66 @@ class TestStripeWebhookView(TestCase):
         self.assertEqual(product.name, "Test Product")
         self.assertEqual(product.description, "Test Description")
         self.assertEqual(product.events, 1)
+        self.assertTrue(product.active)
+        self.assertTrue(product.allow_sso)
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_product_archived(self):
+        """Archiving a product in Stripe arrives as product.updated with
+        active=False and must deactivate the row immediately, rather than
+        leaving it live until the nightly sync."""
+        await StripeProduct.objects.acreate(
+            stripe_id="prod_archive_me",
+            name="Retiring Plan",
+            description="",
+            events=1000,
+            is_public=True,
+        )
+
+        payload = {
+            "type": "product.updated",
+            "id": "evt_archive",
+            "data": {
+                "object": {
+                    "object": "product",
+                    "id": "prod_archive_me",
+                    "active": False,
+                    "attributes": [],
+                    "created": 1678886400,
+                    "default_price": None,
+                    "description": "",
+                    "images": [],
+                    "livemode": False,
+                    "marketing_features": [],
+                    "metadata": {
+                        "events": "1000",
+                        "is_public": "true",
+                        "product_type": "hosted",
+                    },
+                    "name": "Retiring Plan",
+                    "statement_descriptor": None,
+                    "tax_code": None,
+                    "type": "service",
+                    "unit_label": None,
+                    "updated": 1678886400,
+                    "url": None,
+                }
+            },
+            "api_version": "",
+            "created": 1678886401,
+            "livemode": False,
+            "pending_webhooks": 1,
+            "request": {"id": "req_test", "idemoptency_key": "test_key"},
+        }
+        response = await stripe_webhook_view(self.generate_stripe_request(payload))
+        self.assertEqual(response.status_code, 200)
+
+        product = await StripeProduct.objects.aget(stripe_id="prod_archive_me")
+        self.assertFalse(product.active)
 
     @override_settings(
         STRIPE_WEBHOOK_SECRET="test_webhook_secret",
@@ -571,7 +634,7 @@ class TestStripeWebhookView(TestCase):
             mock_stripe_get.side_effect = Exception(
                 "Stripe API Error: 429 - lock_timeout"
             )
-            with self.assertRaises(Exception):
+            with self.assertRaisesRegex(Exception, "lock_timeout"):
                 await stripe_webhook_view(first_request)
 
         # The retry of the same event must not be silently deduped.
@@ -585,3 +648,126 @@ class TestStripeWebhookView(TestCase):
 
         subscription = await StripeSubscription.objects.aget(stripe_id=subscription_id)
         self.assertEqual(subscription.status, SubscriptionStatus.ACTIVE)
+
+
+METER_ERROR_EVENT = {
+    "id": "evt_meter_1",
+    "object": "v2.core.event",
+    "type": "v1.billing.meter.error_report_triggered",
+    "data": {
+        "developer_message_summary": "There is 1 invalid event",
+        "reason": {
+            "error_count": 1,
+            "error_types": [
+                {
+                    "code": "meter_event_customer_not_found",
+                    "error_count": 1,
+                    "sample_errors": [
+                        {"error_message": "Customer cus_x does not exist."}
+                    ],
+                }
+            ],
+        },
+    },
+    "related_object": {
+        "id": "mtr_1",
+        "type": "billing.meter",
+        "url": "/v1/billing/meters/mtr_1",
+    },
+}
+
+
+@override_settings(STRIPE_WEBHOOK_SECRET_METER="meter_secret")
+class TestStripeMeterWebhookView(TestCase):
+    """Meter error reports arrive on a v2 event destination with its own secret."""
+
+    def setUp(self):
+        cache.clear()
+        self.factory = RequestFactory()
+        self.url = reverse("stripe_webhook_with_type", args=["meter"])
+
+    def _request(self, payload, secret="meter_secret"):
+        payload_bytes = json.dumps(payload).encode("utf-8")
+        timestamp = int(time.time())
+        signed_payload = f"{timestamp}.{payload_bytes.decode('utf-8')}"
+        signature = hmac.new(
+            secret.encode("utf-8"), signed_payload.encode("utf-8"), digestmod="sha256"
+        ).hexdigest()
+        headers = {"HTTP_STRIPE_SIGNATURE": f"t={timestamp},v1={signature}"}
+        return self.factory.post(
+            self.url, data=payload_bytes, content_type="application/json", **headers
+        )
+
+    async def test_error_report_is_logged(self):
+        request = self._request(METER_ERROR_EVENT)
+        with self.assertLogs("apps.stripe.views", level="ERROR") as logs:
+            response = await stripe_webhook_view(request, event_type="meter")
+        self.assertEqual(response.status_code, 200)
+        output = "\n".join(logs.output)
+        self.assertIn("mtr_1", output)
+        self.assertIn("meter_event_customer_not_found", output)
+        self.assertIn("cus_x does not exist", output)
+
+    async def test_thin_payload_fetches_details(self):
+        thin = {k: v for k, v in METER_ERROR_EVENT.items() if k != "data"}
+        full = ThinEvent.model_validate(METER_ERROR_EVENT)
+        with (
+            patch(
+                "apps.stripe.views.fetch_v2_event", new=AsyncMock(return_value=full)
+            ) as mock_fetch,
+            self.assertLogs("apps.stripe.views", level="ERROR") as logs,
+        ):
+            response = await stripe_webhook_view(
+                self._request(thin), event_type="meter"
+            )
+        self.assertEqual(response.status_code, 200)
+        mock_fetch.assert_awaited_once_with("evt_meter_1")
+        self.assertIn("meter_event_customer_not_found", "\n".join(logs.output))
+
+    async def test_duplicate_event_processed_once(self):
+        with self.assertLogs("apps.stripe.views", level="ERROR"):
+            await stripe_webhook_view(
+                self._request(METER_ERROR_EVENT), event_type="meter"
+            )
+        with self.assertNoLogs("apps.stripe.views", level="ERROR"):
+            response = await stripe_webhook_view(
+                self._request(METER_ERROR_EVENT), event_type="meter"
+            )
+        self.assertEqual(response.status_code, 200)
+
+    async def test_wrong_secret_rejected(self):
+        request = self._request(METER_ERROR_EVENT, secret="wrong")
+        response = await stripe_webhook_view(request, event_type="meter")
+        self.assertEqual(response.status_code, 403)
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET_METER=None, STRIPE_WEBHOOK_SECRET="classic"
+    )
+    async def test_unset_meter_secret_does_not_fall_back(self):
+        # Event destinations carry their own signing secrets; the classic
+        # secret can never verify these deliveries, so no fallback.
+        request = self._request(METER_ERROR_EVENT, secret="classic")
+        response = await stripe_webhook_view(request, event_type="meter")
+        self.assertEqual(response.status_code, 403)
+
+    async def test_fetch_failure_releases_dedup_for_retry(self):
+        thin = {k: v for k, v in METER_ERROR_EVENT.items() if k != "data"}
+        with (
+            patch(
+                "apps.stripe.views.fetch_v2_event",
+                new=AsyncMock(side_effect=StripeError("boom", status=503)),
+            ),
+            self.assertRaises(StripeError),
+        ):
+            await stripe_webhook_view(self._request(thin), event_type="meter")
+
+        # The dedup key was released, so Stripe's retry processes the event.
+        full = ThinEvent.model_validate(METER_ERROR_EVENT)
+        with (
+            patch("apps.stripe.views.fetch_v2_event", new=AsyncMock(return_value=full)),
+            self.assertLogs("apps.stripe.views", level="ERROR"),
+        ):
+            response = await stripe_webhook_view(
+                self._request(thin), event_type="meter"
+            )
+        self.assertEqual(response.status_code, 200)

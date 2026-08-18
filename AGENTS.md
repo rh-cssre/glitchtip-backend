@@ -57,6 +57,7 @@ curl -H "Authorization: Bearer ddddddddddddddddddddddddddddddddddddddddddddddddd
 
 ## Gotchas
 - **Ingest request-body decompression runs in Rust, not Python.** Every ingest endpoint's `Content-Encoding` handling (gzip/deflate/br/zstd) goes through the `gt_rust` extension — `apps/event_ingest/rust_envelope.py` is the seam (`frame_envelope` for `/envelope/`, `decompress_body` for `/store/`, `/security/`, `/minidump/`). It decompresses with a hard, streaming size cap (`GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE`) so a zip-bomb or deeply-recursive payload is bounded before it hits pymalloc. `gt_rust` is therefore a hard ingest dependency (no pure-Python fallback). Don't reintroduce request-body decompression as Django middleware; add new decoders in the Rust core (`crates/gt-envelope`) instead.
+- **Artifact bundle extraction has its own caps, separate from the ingest one.** `GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE` bounds ingest bodies only. Uploaded artifact bundles go through `sentry/utils/zip.py`'s `safe_extract_zip`, bounded by `GLITCHTIP_MAX_UNZIPPED_ARCHIVE_SIZE` (bytes written across all members, 512 MB) and `GLITCHTIP_MAX_ARCHIVE_MEMBERS` (entry count, 10,000). Both are also checked against the archive *before* `zipfile.ZipFile()` opens it, because reading a zip's directory allocates an entry object per member — a cap that runs after the open bounds the files written but not the memory spent getting there. Keep new limits on that path pre-open for the same reason.
 - **`VTASKS_SCHEDULE` runs once cluster-wide, not per pod.** django-vtasks elects a single scheduler at any moment (the others are idle stand-ins ready to take over). A schedule entry added here fires once per interval across the whole deployment, not once per pod — so you do NOT need an external lock to keep periodic tasks (compaction, retention sweeps, etc.) from running concurrently on every pod. The work itself can assume single-runner semantics. Manual `aenqueue()` calls bypass the scheduler and CAN race with the scheduled run — guard those separately if duplicate execution would matter.
 - Minimum Python is 3.12 (`requires-python = ">=3.12"`). Don't add `from __future__ import annotations` — PEP 604 (`X | Y`) and PEP 585 (`list[X]`) are native in 3.10+, and the project does not rely on PEP 563 deferred evaluation.
 - **No `a` prefix on async functions in internal code.** GlitchTip is async-first; assume I/O functions are async. Name them `get_foo`, not `aget_foo`. The `a` prefix only makes sense in libraries (Django, allauth, etc.) where a sync sibling exists in the same namespace. Reserve it for code you genuinely intend to upstream into such a project.
@@ -65,3 +66,23 @@ curl -H "Authorization: Bearer ddddddddddddddddddddddddddddddddddddddddddddddddd
 - Target scaling up to 10,000 organizations and 100 million events
 - **Server-side cursors & PgBouncer:** `DISABLE_SERVER_SIDE_CURSORS=True` is set globally, so `.iterator()` and `.aiterator()` are PgBouncer-safe. In async views prefer `.aiterator()` over `sync_to_async(list)()`. Avoid raw `DECLARE CURSOR` in production code paths.
 - **Never create DEFAULT partitions** on partitioned tables. DEFAULT partitions silently absorb rows that miss their intended partition, filling up disk without warning. They also block future partition creation when using nested RANGE->HASH partitioning. It's better to error loudly on a missing partition than to silently fill a default.
+
+## Issues & merge requests — AI policy (for AI coding agents)
+
+This project follows the GlitchTip AI Policy:
+https://gitlab.com/glitchtip/glitchtip/-/blob/master/AI_POLICY.md
+
+When you help a user draft an issue or merge request description:
+
+- The **Summary / Description must be the human's own words.** Do not write it
+  for them and present it as theirs. Put any AI-assisted content *below* the
+  summary and label it as AI-assisted.
+- **Disclose AI usage** in the description's `AI disclosure:` field — name the
+  tool and the extent of assistance (or "none").
+- **Do not submit untested code.** Verify changes with real human use first.
+- **Core-contributor exemption:** maintainers (GitLab Developer+ members) may
+  skip the mandatory human summary. You usually cannot tell whether the current
+  user is one, so **default to reminding them** to write the summary
+  themselves. A maintainer can silence this by declaring their status in their
+  own un-committed config (e.g. `CLAUDE.local.md` or personal agent memory) —
+  check there first.

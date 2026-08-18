@@ -489,9 +489,12 @@ def enumerate_org_parquet_files(
         if not f.endswith(".parquet"):
             continue
         date_str = f.removesuffix(".parquet")
-        if start_dt is not None and end_dt is not None:
-            if not _date_in_range(date_str, start_dt, end_dt):
-                continue
+        if (
+            start_dt is not None
+            and end_dt is not None
+            and not _date_in_range(date_str, start_dt, end_dt)
+        ):
+            continue
         paths.append(f"{org_prefix}/{f}")
         compacted_dates.add(date_str)
 
@@ -499,9 +502,12 @@ def enumerate_org_parquet_files(
     for subdir in sorted(subdirs):
         if subdir in compacted_dates:
             continue
-        if start_dt is not None and end_dt is not None:
-            if not _date_in_range(subdir, start_dt, end_dt):
-                continue
+        if (
+            start_dt is not None
+            and end_dt is not None
+            and not _date_in_range(subdir, start_dt, end_dt)
+        ):
+            continue
         subdir_path = f"{org_prefix}/{subdir}"
         try:
             _, chunk_files = storage.listdir(subdir_path)
@@ -893,38 +899,39 @@ def archive_partition_per_org(
                 buf_rows = 0
 
                 raw_conn = cursor.connection
-                with raw_conn.cursor() as copy_cur:
-                    with copy_cur.copy(copy_sql) as copy_op:
-                        for line in copy_op:
-                            if header is None:
-                                header = bytes(line)
-                                csv_buf = bytearray(header)
-                                continue
+                with (
+                    raw_conn.cursor() as copy_cur,
+                    copy_cur.copy(copy_sql) as copy_op,
+                ):
+                    for line in copy_op:
+                        if header is None:
+                            header = bytes(line)
+                            csv_buf = bytearray(header)
+                            continue
 
-                            csv_buf.extend(line)
-                            buf_rows += 1
+                        csv_buf.extend(line)
+                        buf_rows += 1
 
-                            if (
-                                len(csv_buf) >= chunk_bytes_limit
-                                or buf_rows >= ARCHIVE_CHUNK_ROWS
-                            ):
-                                chunk_num, total_rows = _flush_csv_to_parquet(
-                                    storage,
-                                    csv_buf,
-                                    column_types,
-                                    table_name,
-                                    org_id,
-                                    date_str,
-                                    flat_path,
-                                    chunk_num,
-                                    total_rows,
-                                    buf_rows,
-                                    dictionary_columns=dictionary_columns,
-                                    max_row_group_size=max_row_group_size,
-                                )
-                                csv_buf = bytearray(header)
-                                buf_rows = 0
-
+                        if (
+                            len(csv_buf) >= chunk_bytes_limit
+                            or buf_rows >= ARCHIVE_CHUNK_ROWS
+                        ):
+                            chunk_num, total_rows = _flush_csv_to_parquet(
+                                storage,
+                                csv_buf,
+                                column_types,
+                                table_name,
+                                org_id,
+                                date_str,
+                                flat_path,
+                                chunk_num,
+                                total_rows,
+                                buf_rows,
+                                dictionary_columns=dictionary_columns,
+                                max_row_group_size=max_row_group_size,
+                            )
+                            csv_buf = bytearray(header)
+                            buf_rows = 0
                 # Flush remaining rows
                 if buf_rows > 0:
                     chunk_num, total_rows = _flush_csv_to_parquet(
@@ -1431,11 +1438,7 @@ def _query_cold_parquet_files_inner(
                     # file here would be data loss for any error that wasn't
                     # actual parquet damage.
                     raise
-                logger.error(
-                    "Corrupt parquet file skipped: %s",
-                    relative_path,
-                    exc_info=True,
-                )
+                logger.exception("Corrupt parquet file skipped: %s", relative_path)
                 # Delete confirmed-corrupt files so they don't cause repeated
                 # failures. The data is unrecoverable and each failed read
                 # wastes memory.

@@ -1,12 +1,13 @@
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from operator import itemgetter
 from uuid import UUID
 
 import orjson
+from django.db.utils import IntegrityError
 
-from apps.shared.raw_sql import execute_unnest
+from apps.shared.raw_sql import copy_rows, execute_unnest, is_unique_violation
 from glitchtip.partition_manager import UUID7Helper
 
 from .constants import LEVEL_MAP, LogLevel
@@ -150,7 +151,7 @@ async def process_log_events(messages: list) -> int:
     if not messages:
         return 0
 
-    server_time = datetime.now(timezone.utc)
+    server_time = datetime.now(UTC)
 
     # Collect all log events to insert
     log_rows = []
@@ -173,12 +174,10 @@ async def process_log_events(messages: list) -> int:
             timestamp_val = log_item.get("timestamp")
             if isinstance(timestamp_val, (int, float)):
                 # Unix timestamp with fractional seconds
-                log_timestamp = datetime.fromtimestamp(timestamp_val, tz=timezone.utc)
+                log_timestamp = datetime.fromtimestamp(timestamp_val, tz=UTC)
             elif isinstance(timestamp_val, str):
                 # ISO format string
-                log_timestamp = datetime.fromisoformat(
-                    timestamp_val.replace("Z", "+00:00")
-                )
+                log_timestamp = datetime.fromisoformat(timestamp_val)
             else:
                 # No timestamp provided - use server time
                 log_timestamp = server_time
@@ -281,25 +280,58 @@ async def process_log_events(messages: list) -> int:
     if not log_rows:
         return 0
 
-    # Bulk insert via column-major UNNEST — one round-trip, one statement
-    # shape regardless of batch size, and avoids the 65535 bind-param cap
-    # that VALUES would hit on wide schemas. ``ON CONFLICT DO NOTHING``
-    # tolerates the rare duplicate id when two clients emit the same
-    # UUIDv7 timestamp+random in the same microsecond.
-    await execute_unnest(
-        sql=(
-            "INSERT INTO logs_logevent "
-            "(id, trace_id, organization_id, project_id, span_id, level, "
-            "severity_number, body, service, environment, host, data) "
-            "SELECT * FROM unnest("
-            "%s::uuid[], %s::uuid[], %s::bigint[], %s::bigint[], "
-            "%s::bigint[], %s::smallint[], %s::smallint[], %s::text[], "
-            "%s::text[], %s::text[], %s::text[], %s::jsonb[]"
-            ") "
-            "ON CONFLICT DO NOTHING"
-        ),
-        value_params=log_rows,
-    )
+    # Log bodies and attributes can be large; stream the batch with COPY
+    # so it never sits whole in the connection's wire buffer and the
+    # server skips parsing a megabyte statement (see copy_rows). COPY
+    # cannot express ON CONFLICT, so a duplicate id aborts the whole
+    # batch — retry it through the conflict-tolerant INSERT below, which
+    # no-ops the duplicates and keeps the rest. Only a genuine unique
+    # violation takes that path; any other IntegrityError (e.g. a
+    # missing partition — log ids embed the client timestamp, so a
+    # partition-gap incident is the realistic member of this class)
+    # would fail the INSERT identically, so it propagates at once.
+    try:
+        await copy_rows(
+            "logs_logevent",
+            [
+                "id",
+                "trace_id",
+                "organization_id",
+                "project_id",
+                "span_id",
+                "level",
+                "severity_number",
+                "body",
+                "service",
+                "environment",
+                "host",
+                "data",
+            ],
+            log_rows,
+        )
+    except IntegrityError as e:
+        if not is_unique_violation(e):
+            raise
+        logger.info(
+            "Log event COPY hit a unique violation; "
+            "retrying with conflict-tolerant INSERT"
+        )
+        # Column-major UNNEST sidesteps the 65535 bind-param cap;
+        # ``ON CONFLICT DO NOTHING`` tolerates duplicate ids.
+        await execute_unnest(
+            sql=(
+                "INSERT INTO logs_logevent "
+                "(id, trace_id, organization_id, project_id, span_id, level, "
+                "severity_number, body, service, environment, host, data) "
+                "SELECT * FROM unnest("
+                "%s::uuid[], %s::uuid[], %s::bigint[], %s::bigint[], "
+                "%s::bigint[], %s::smallint[], %s::smallint[], %s::text[], "
+                "%s::text[], %s::text[], %s::text[], %s::jsonb[]"
+                ") "
+                "ON CONFLICT DO NOTHING"
+            ),
+            value_params=log_rows,
+        )
 
     await update_log_statistics(project_hourly_stats)
     await update_resource_lookup(unique_resources)

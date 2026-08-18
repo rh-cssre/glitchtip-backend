@@ -3,6 +3,7 @@
 Uses django-async-backend's native async cursor via ``async_connections``.
 """
 
+from collections.abc import Iterable
 from typing import Any
 
 from django_async_backend.db import async_connections
@@ -63,12 +64,7 @@ async def fetchall_mogrified_values(
     conn = async_connections[db_alias]
     parts: list[str] = []
     for row in value_params:
-        # compose_sql may return bytes (psycopg2-style) or str
-        # (psycopg3 ClientCursor). Normalise before joining.
-        part = await conn.ops.compose_sql(values_fragment, row)
-        if isinstance(part, (bytes, bytearray)):
-            part = part.decode()
-        parts.append(part)
+        parts.append(await conn.ops.compose_sql(values_fragment, row))
     final = sql_template.format(values=",".join(parts))
     async with await conn.cursor() as cursor:
         await cursor.execute(final)
@@ -88,10 +84,7 @@ async def execute_mogrified_values(
     conn = async_connections[db_alias]
     parts: list[str] = []
     for row in value_params:
-        part = await conn.ops.compose_sql(values_fragment, row)
-        if isinstance(part, (bytes, bytearray)):
-            part = part.decode()
-        parts.append(part)
+        parts.append(await conn.ops.compose_sql(values_fragment, row))
     final = sql_template.format(values=",".join(parts))
     async with await conn.cursor() as cursor:
         await cursor.execute(final)
@@ -127,3 +120,70 @@ async def fetchall_unnest(
         return [], []
     columns = [list(c) for c in zip(*value_params)]
     return await fetchall(sql, columns, db_alias=db_alias)
+
+
+async def copy_rows(
+    table: str,
+    columns: list[str],
+    rows: Iterable[tuple],
+    db_alias: str = "default",
+) -> int:
+    """COPY ``rows`` into ``table`` (text format, streamed row-by-row).
+
+    Unlike a composed INSERT statement — which stages the entire batch in
+    the connection's libpq output buffer and permanently grows it to the
+    largest batch ever sent — COPY streams in small chunks, so connection
+    memory stays bounded regardless of batch size. It also skips composing
+    the batch into one SQL string in Python.
+
+    COPY cannot express ON CONFLICT: a conflicting row aborts the whole
+    batch (raised as ``django.db.IntegrityError``). Callers that need
+    conflict tolerance must catch it, confirm the conflict with
+    :func:`is_unique_violation`, and fall back to their INSERT path.
+    Must run in autocommit (the async-backend default) — inside a
+    transaction a failed COPY leaves it aborted, so a fallback INSERT
+    would fail too.
+
+    The gt_rust cursor exposes the psycopg-shaped ``copy()`` context
+    manager; ``write_rows()`` encodes the whole batch in Rust (C-API field
+    access, one Python↔Rust crossing per ~64 KiB chunk) — measurably less
+    CPU per batch than a per-row loop.
+    """
+    quoted = [table, *columns]
+    cols = ", ".join('"' + c.replace('"', '""') + '"' for c in quoted[1:])
+    stmt = 'COPY "' + table.replace('"', '""') + f'" ({cols}) FROM STDIN'
+    count = 0
+    async with await async_connections[db_alias].cursor() as cursor:
+        # Go straight to the driver cursor: the wrapper's attribute proxy
+        # doesn't wrap exceptions (handled here so callers see Django's
+        # IntegrityError), and the psycopg debug wrapper's ``copy``
+        # override is an async generator built for COPY TO iteration — it
+        # can't serve as the COPY FROM context manager.
+        with cursor.db.wrap_database_errors:
+            async with cursor.cursor.copy(stmt) as copy:
+                if not isinstance(rows, (list, tuple)):
+                    rows = list(rows)
+                await copy.write_rows(rows)
+                count = len(rows)
+    return count
+
+
+UNIQUE_VIOLATION = "23505"
+
+
+def is_unique_violation(exc: Exception) -> bool:
+    """True when a Django ``IntegrityError`` wraps a unique violation.
+
+    ``IntegrityError`` covers all of SQLSTATE class 23 — unique violation,
+    but also e.g. a missing partition (23514) or a foreign-key violation —
+    and only the unique violation is worth retrying through a
+    conflict-tolerant INSERT; the rest would fail identically. The gt_rust
+    driver exposes the psycopg-shaped ``sqlstate`` attribute on the
+    underlying DB-API exception (Django chains it as ``__cause__``); a
+    ``sqlstate`` of None means a client-side error — known non-conflict,
+    fail closed.
+    """
+    cause = exc.__cause__
+    if cause is None:
+        return False
+    return getattr(cause, "sqlstate", None) == UNIQUE_VIOLATION

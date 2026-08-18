@@ -1,3 +1,4 @@
+import logging
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -28,12 +29,14 @@ from apps.performance.histogram import (
 )
 from apps.performance.parameterize import parameterize_description
 from apps.shared.raw_sql import (
+    copy_rows,
     execute,
     execute_mogrified_values,
     execute_unnest,
     fetchall,
     fetchall_mogrified_values,
     fetchall_unnest,
+    is_unique_violation,
 )
 from apps.sourcecode.models import DebugSymbolBundle
 from glitchtip.cold_storage import is_duckdb_available
@@ -61,6 +64,8 @@ from .schema import (
     ValueEventException,
 )
 from .utils import generate_hash, remove_bad_chars, transform_parameterized_message
+
+logger = logging.getLogger(__name__)
 
 
 def _truncate_string(s: str | None, max_len: int) -> str:
@@ -156,24 +161,21 @@ def get_search_vector(event: ProcessingEvent) -> str:
         parts.add(_truncate_string(transaction, MAX_SEARCH_PART_LENGTH))
 
     payload = event.payload
-    if request := payload.request:
-        # Simplify URL to keep concise
-        if url := request.url:
-            try:
-                parsed_url: ParseResult = urlparse(url)
-                truncated_path = _truncate_string(
-                    parsed_url.path, MAX_SEARCH_PART_LENGTH
-                )
-                scheme_netloc = ""
-                if parsed_url.scheme and parsed_url.netloc:
-                    scheme_netloc = f"{parsed_url.scheme}://{parsed_url.netloc}"
-                elif parsed_url.netloc:  # Fallback
-                    scheme_netloc = parsed_url.netloc
-                if scheme_netloc or truncated_path:  # Only add if we have something
-                    simplified_url = f"{scheme_netloc}{truncated_path}"
-                    parts.add(_truncate_string(simplified_url, MAX_SEARCH_PART_LENGTH))
-            except ValueError:
-                parts.add(_truncate_string(url, MAX_SEARCH_PART_LENGTH))
+    # Simplify URL to keep concise
+    if (request := payload.request) and (url := request.url):
+        try:
+            parsed_url: ParseResult = urlparse(url)
+            truncated_path = _truncate_string(parsed_url.path, MAX_SEARCH_PART_LENGTH)
+            scheme_netloc = ""
+            if parsed_url.scheme and parsed_url.netloc:
+                scheme_netloc = f"{parsed_url.scheme}://{parsed_url.netloc}"
+            elif parsed_url.netloc:  # Fallback
+                scheme_netloc = parsed_url.netloc
+            if scheme_netloc or truncated_path:  # Only add if we have something
+                simplified_url = f"{scheme_netloc}{truncated_path}"
+                parts.add(_truncate_string(simplified_url, MAX_SEARCH_PART_LENGTH))
+        except ValueError:
+            parts.add(_truncate_string(url, MAX_SEARCH_PART_LENGTH))
 
     # Add stacktrace filenames
     filenames_to_add: list[str] = []
@@ -358,16 +360,13 @@ def generate_tags(event: TaskIssueEvent) -> dict[str, str]:
 
     if contexts := event.contexts:
         # Assume contexts are already normalized to typed objects
-        if browser := contexts.get("browser"):
-            if isinstance(browser, BrowserContext):
-                tags["browser.name"] = browser.name
-                tags["browser"] = f"{browser.name} {browser.version}"
-        if os := contexts.get("os"):
-            if isinstance(os, OSContext):
-                tags["os.name"] = os.name
-        if device := contexts.get("device"):
-            if isinstance(device, DeviceContext) and device.model:
-                tags["device"] = device.model
+        if isinstance(browser := contexts.get("browser"), BrowserContext):
+            tags["browser.name"] = browser.name
+            tags["browser"] = f"{browser.name} {browser.version}"
+        if isinstance(os := contexts.get("os"), OSContext):
+            tags["os.name"] = os.name
+        if isinstance(device := contexts.get("device"), DeviceContext) and device.model:
+            tags["device"] = device.model
 
     if user := event.user:
         if user.id:
@@ -666,10 +665,9 @@ async def _create_issue_and_hash(
             )
             short_id = cursor.fetchone()[0]
         try:
-            with transaction.atomic():
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        """
+            with transaction.atomic(), conn.cursor() as cursor:
+                cursor.execute(
+                    """
                         INSERT INTO issue_events_issue (
                             project_id, type, title, metadata,
                             first_seen, first_release_id,
@@ -682,30 +680,30 @@ async def _create_issue_and_hash(
                         )
                         RETURNING id
                         """,
-                        [
-                            project_id,
-                            issue_defaults["type"],
-                            issue_defaults["title"],
-                            Jsonb(issue_defaults["metadata"]),
-                            issue_defaults["first_seen"],
-                            issue_defaults.get("first_release_id"),
-                            short_id,
-                        ],
-                    )
-                    issue_id = cursor.fetchone()[0]
-                    cursor.execute(
-                        """
+                    [
+                        project_id,
+                        issue_defaults["type"],
+                        issue_defaults["title"],
+                        Jsonb(issue_defaults["metadata"]),
+                        issue_defaults["first_seen"],
+                        issue_defaults.get("first_release_id"),
+                        short_id,
+                    ],
+                )
+                issue_id = cursor.fetchone()[0]
+                cursor.execute(
+                    """
                         INSERT INTO issue_events_issuehash (issue_id, project_id, value)
                         VALUES (%s, %s, %s::uuid)
                         """,
-                        [issue_id, project_id, processing_event.issue_hash],
-                    )
-                    # Write the IssueIndex leaf: the hot/queryable projection
-                    # of the issue (count/last_seen/status/level/last_release)
-                    # plus the sole full-text document. count starts at 1;
-                    # status defaults UNRESOLVED.
-                    cursor.execute(
-                        """
+                    [issue_id, project_id, processing_event.issue_hash],
+                )
+                # Write the IssueIndex leaf: the hot/queryable projection
+                # of the issue (count/last_seen/status/level/last_release)
+                # plus the sole full-text document. count starts at 1;
+                # status defaults UNRESOLVED.
+                cursor.execute(
+                    """
                         INSERT INTO issue_events_issueindex (
                             issue_id, organization_id, last_release_id, last_seen,
                             count, status, level, fts_document
@@ -714,16 +712,16 @@ async def _create_issue_and_hash(
                             %s, %s, %s, %s, 1, %s, %s, to_tsvector('english', %s)
                         )
                         """,
-                        [
-                            issue_id,
-                            processing_event.organization_id,
-                            issue_defaults.get("last_release_id"),
-                            issue_defaults["last_seen"],
-                            EventStatus.UNRESOLVED,
-                            issue_defaults.get("level", LogLevel.ERROR),
-                            search_vector_str,
-                        ],
-                    )
+                    [
+                        issue_id,
+                        processing_event.organization_id,
+                        issue_defaults.get("last_release_id"),
+                        issue_defaults["last_seen"],
+                        EventStatus.UNRESOLVED,
+                        issue_defaults.get("level", LogLevel.ERROR),
+                        search_vector_str,
+                    ],
+                )
             check_set_issue_id(
                 processing_events,
                 project_id,
@@ -1165,46 +1163,84 @@ async def process_issue_events(
             [reopen_ids],
         )
 
-    # ignore_conflicts because we could have an invalid duplicate event_id, received
     if issue_events:
-        # IssueEvent.hashes is text[] but each row carries exactly one hash
-        # (built at line 1049 above), so unnest a flat text[] and wrap with
-        # ARRAY[hash] in the SELECT — the column-major form sidesteps the
-        # 65535 bind-param cap and skips per-row mogrify.
-        await execute_unnest(
-            sql=(
-                "INSERT INTO issue_events_issueevent "
-                "(id, event_id, timestamp, issue_id, organization_id, release_id, "
-                "type, level, title, transaction, data, tags, hashes) "
-                "SELECT id, event_id, ts, issue_id, organization_id, release_id, "
-                "type, level, title, transaction, data, tags, ARRAY[hash] "
-                "FROM unnest("
-                "%s::uuid[], %s::uuid[], %s::timestamptz[], %s::bigint[], "
-                "%s::bigint[], %s::bigint[], %s::smallint[], %s::smallint[], "
-                "%s::text[], %s::text[], %s::jsonb[], %s::jsonb[], %s::text[]"
-                ") AS t(id, event_id, ts, issue_id, organization_id, release_id, "
-                "type, level, title, transaction, data, tags, hash) "
-                "ON CONFLICT DO NOTHING"
-            ),
-            value_params=[
-                (
-                    e.id,
-                    e.event_id,
-                    e.timestamp,
-                    e.issue_id,
-                    e.organization_id,
-                    e.release_id,
-                    e.type,
-                    e.level,
-                    e.title,
-                    e.transaction,
-                    Jsonb(e.data),
-                    Jsonb(e.tags),
-                    e.hashes[0] if e.hashes else "",
-                )
-                for e in issue_events
-            ],
-        )
+        # Each row carries exactly one hash (built at line 1049 above), so the
+        # rows hold a scalar hash and each write path shapes it for the text[]
+        # column itself.
+        value_params = [
+            (
+                e.id,
+                e.event_id,
+                e.timestamp,
+                e.issue_id,
+                e.organization_id,
+                e.release_id,
+                e.type,
+                e.level,
+                e.title,
+                e.transaction,
+                Jsonb(e.data),
+                Jsonb(e.tags),
+                e.hashes[0] if e.hashes else "",
+            )
+            for e in issue_events
+        ]
+        # Event payloads are the largest values ingest writes; stream
+        # them with COPY so the batch never sits whole in the
+        # connection's wire buffer and the server skips parsing a
+        # megabyte statement (see copy_rows). COPY cannot express ON
+        # CONFLICT, so a duplicate id aborts the whole batch — retry it
+        # through the conflict-tolerant INSERT below, which no-ops the
+        # duplicates and keeps the rest. Only a genuine unique violation
+        # takes that path; any other IntegrityError (e.g. a missing
+        # partition) would fail the INSERT identically, so it propagates
+        # at once.
+        try:
+            await copy_rows(
+                "issue_events_issueevent",
+                [
+                    "id",
+                    "event_id",
+                    "timestamp",
+                    "issue_id",
+                    "organization_id",
+                    "release_id",
+                    "type",
+                    "level",
+                    "title",
+                    "transaction",
+                    "data",
+                    "tags",
+                    "hashes",
+                ],
+                ((*row[:-1], [row[-1]]) for row in value_params),
+            )
+        except IntegrityError as e:
+            if not is_unique_violation(e):
+                raise
+            logger.info(
+                "Issue event COPY hit a unique violation; "
+                "retrying with conflict-tolerant INSERT"
+            )
+            # Column-major unnest sidesteps the 65535 bind-param cap;
+            # ON CONFLICT DO NOTHING tolerates duplicate ids.
+            await execute_unnest(
+                sql=(
+                    "INSERT INTO issue_events_issueevent "
+                    "(id, event_id, timestamp, issue_id, organization_id, release_id, "
+                    "type, level, title, transaction, data, tags, hashes) "
+                    "SELECT id, event_id, ts, issue_id, organization_id, release_id, "
+                    "type, level, title, transaction, data, tags, ARRAY[hash] "
+                    "FROM unnest("
+                    "%s::uuid[], %s::uuid[], %s::timestamptz[], %s::bigint[], "
+                    "%s::bigint[], %s::bigint[], %s::smallint[], %s::smallint[], "
+                    "%s::text[], %s::text[], %s::jsonb[], %s::jsonb[], %s::text[]"
+                    ") AS t(id, event_id, ts, issue_id, organization_id, release_id, "
+                    "type, level, title, transaction, data, tags, hash) "
+                    "ON CONFLICT DO NOTHING"
+                ),
+                value_params=value_params,
+            )
 
     await update_tags(processing_events)
     await update_statistics(
@@ -1427,7 +1463,7 @@ async def update_tags(processing_events: list[ProcessingEvent]):
             ]
             for key, value in processing_event.event_tags.items()
         }
-    keys = sorted({key for d in processing_events for key in d.event_tags.keys()})
+    keys = sorted({key for d in processing_events for key in d.event_tags})
     values = sorted(
         {value for d in processing_events for value in d.event_tags.values()}
     )
@@ -1700,9 +1736,7 @@ async def process_transaction_events(
 
         # Bucket by server-received time (like issue events) so a backdated
         # client clock can't push usage out of the billing window.
-        hour_received = ingest_event.received.replace(
-            minute=0, second=0, microsecond=0
-        )
+        hour_received = ingest_event.received.replace(minute=0, second=0, microsecond=0)
         project_stats = data_stats[hour_received][ingest_event.project_id]
         project_stats["count"] += 1
         project_stats["organization_id"] = ingest_event.organization_id

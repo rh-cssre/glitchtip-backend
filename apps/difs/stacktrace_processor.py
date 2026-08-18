@@ -3,16 +3,59 @@ import copy
 import logging
 import zipfile
 
-import cxxfilt
-from symbolic import Archive, ProguardMapper, SymCache, normalize_debug_id, parse_addr
+from gt_rust.symbolic import (
+    Archive,
+    ProguardMapper,
+    SymCache,
+    demangle,
+    normalize_debug_id,
+    parse_addr,
+)
 
 alternative_arch = {"x86": ["x86", "x86_64"]}
 
+# SymCache lookups take a uint64 address; anything outside this range cannot be
+# probed at all and raises rather than returning no match.
+UINT64_MAX = 0xFFFFFFFFFFFFFFFF
+
+# Scoring one candidate base costs a lookup per address, and the event payload
+# decides how many addresses there are, so score against a bounded sample.
+MAX_SCORED_ADDRS = 32
+
+# Debug image types that carry a native image_addr (mirrors NativeDebugImage).
+NATIVE_IMAGE_TYPES = frozenset({"macho", "elf", "pe", "pe_dotnet", "wasm"})
+
+
+def _parse_addr_or_none(value) -> int | None:
+    """parse_addr, treating an unparseable event-supplied address as absent.
+
+    parse_addr rejects magnitudes beyond i128 that unbounded int() parsing
+    accepted; such values could never pass the uint64 range check anyway, so
+    they should cost the event that one frame, not the whole stacktrace.
+    """
+    try:
+        return parse_addr(value)
+    except (ValueError, OverflowError):
+        return None
+
+
+def _normalize_debug_id_or_none(value) -> str | None:
+    """normalize_debug_id, returning None for an id it can't parse.
+
+    The DIF's own debug_id is not schema-validated, so it may not normalize.
+    """
+    if not value:
+        return None
+    try:
+        return normalize_debug_id(str(value))
+    except Exception:
+        return None
+
 
 class ResolvedStacktrace:
-    def __init__(self, score=0, frames=[]):
+    def __init__(self, score=0, frames=None):
         self.score = score
-        self.frames = frames
+        self.frames = frames if frames is not None else []
 
 
 def find_arch_object(archive, arch):
@@ -23,14 +66,11 @@ def find_arch_object(archive, arch):
             return obj
         return None
 
-    if arch in alternative_arch:
-        arch_list = alternative_arch[arch]
-    else:
-        arch_list = [arch]
+    arch_list = alternative_arch.get(arch, [arch])
 
-    for arch in arch_list:
+    for candidate_arch in arch_list:
         try:
-            object = archive.get_object(arch=arch)
+            object = archive.get_object(arch=candidate_arch)
             return object
         except Exception:
             pass
@@ -46,7 +86,6 @@ def digest_symbol(symbol):
         return item
     except Exception as e:
         getLogger().info(f"digest_symbol: exception {e}, symbol={symbol}")
-        pass
 
 
 def getLogger():
@@ -80,16 +119,18 @@ def extract_source_from_bundle(source_bundle, file_path):
     try:
         from apps.difs.tasks import difs_concat_file_blobs_to_disk
 
-        with difs_concat_file_blobs_to_disk([source_bundle.file.blob]) as temp_file:
-            with zipfile.ZipFile(temp_file.name, "r") as zf:
-                # Source bundles store files with a 'files/' prefix
-                bundle_path = f"files{file_path}"
+        with (
+            difs_concat_file_blobs_to_disk([source_bundle.file.blob]) as temp_file,
+            zipfile.ZipFile(temp_file.name, "r") as zf,
+        ):
+            # Source bundles store files with a 'files/' prefix
+            bundle_path = f"files{file_path}"
 
-                if bundle_path in zf.namelist():
-                    content = zf.read(bundle_path).decode("utf-8")
-                    return content.splitlines()
-                else:
-                    return None
+            if bundle_path in zf.namelist():
+                content = zf.read(bundle_path).decode("utf-8")
+                return content.splitlines()
+            else:
+                return None
     except Exception as e:
         getLogger().error(f"extract_source_from_bundle: Error extracting source: {e}")
         return None
@@ -131,17 +172,19 @@ def open_source_bundle(source_bundle_dif):
     """
     from apps.difs.tasks import difs_concat_file_blobs_to_disk
 
-    with difs_concat_file_blobs_to_disk([source_bundle_dif.file.blob]) as temp_file:
-        with zipfile.ZipFile(temp_file.name, "r") as zf:
-            namelist = set(zf.namelist())
+    with (
+        difs_concat_file_blobs_to_disk([source_bundle_dif.file.blob]) as temp_file,
+        zipfile.ZipFile(temp_file.name, "r") as zf,
+    ):
+        namelist = set(zf.namelist())
 
-            def get_source_lines(file_path):
-                bundle_path = f"files{file_path}"
-                if bundle_path in namelist:
-                    return zf.read(bundle_path).decode("utf-8").splitlines()
-                return None
+        def get_source_lines(file_path):
+            bundle_path = f"files{file_path}"
+            if bundle_path in namelist:
+                return zf.read(bundle_path).decode("utf-8").splitlines()
+            return None
 
-            yield get_source_lines
+        yield get_source_lines
 
 
 def _estimate_image_base(sym_cache, instruction_addrs):
@@ -156,20 +199,26 @@ def _estimate_image_base(sym_cache, instruction_addrs):
         return 0
 
     probe = instruction_addrs[0]
+    sample = instruction_addrs[:MAX_SCORED_ADDRS]
     best_base = 0
     best_score = 0
-    threshold = max(len(instruction_addrs) // 2, 1)
+    threshold = max(len(sample) // 2, 1)
 
     for elf_offset in range(0, 0x500000, 0x1000):
-        if next(sym_cache.lookup(elf_offset), None) is None:
+        # SymCache.lookup returns a (possibly empty) list of SourceLocation.
+        if not sym_cache.lookup(elf_offset):
             continue
         candidate_base = probe - elf_offset
         if candidate_base < 0:
-            continue
+            # elf_offset only grows, so no later candidate can be valid either.
+            break
         score = sum(
             1
-            for addr in instruction_addrs
-            if next(sym_cache.lookup(addr - candidate_base), None) is not None
+            for addr in sample
+            # An address outside the base's addressable range is not part of
+            # this image and cannot be probed.
+            if candidate_base <= addr <= candidate_base + UINT64_MAX
+            and sym_cache.lookup(addr - candidate_base)
         )
         if score > best_score:
             best_score = score
@@ -216,8 +265,27 @@ class StacktraceProcessor:
         if is_android and not native_frames:
             return cls.resolve_proguard_stacktrace(stacktrace, symbol_file)
 
+        # Use the SDK's image_addr from debug_meta if present; it's more
+        # reliable than guessing the base.
+        image_addr_from_meta = None
+        norm_debug_id = _normalize_debug_id_or_none(debug_id)
+        if norm_debug_id:
+            images = (event.get("debug_meta") or {}).get("images") or []
+            for image in images:
+                if image.get("type") not in NATIVE_IMAGE_TYPES:
+                    continue
+                img_id = image.get("debug_id")
+                if img_id and normalize_debug_id(str(img_id)) == norm_debug_id:
+                    image_addr_from_meta = image.get("image_addr")
+                    break
+
         return cls.resolve_native_stacktrace(
-            stacktrace, symbol_file, arch=arch, project_id=project_id, debug_id=debug_id
+            stacktrace,
+            symbol_file,
+            arch=arch,
+            project_id=project_id,
+            debug_id=debug_id,
+            image_addr_from_meta=image_addr_from_meta,
         )
 
     @classmethod
@@ -260,7 +328,13 @@ class StacktraceProcessor:
 
     @classmethod
     def resolve_native_stacktrace(
-        cls, stacktrace, symbol_file, arch=None, project_id=None, debug_id=None
+        cls,
+        stacktrace,
+        symbol_file,
+        arch=None,
+        project_id=None,
+        debug_id=None,
+        image_addr_from_meta=None,
     ):
         # Open symbol file
         try:
@@ -278,16 +352,25 @@ class StacktraceProcessor:
             score = 0
             resolved_frames = []
 
-            # When frames lack image_addr (e.g. Flutter Android without
-            # debug_meta), estimate the image base so relative offsets
-            # land inside the symbol cache.
+            # A frame's own image_addr wins. For frames without one, fall back
+            # to the base debug_meta supplies, and only then to estimation.
             estimated_base = 0
-            if frames and not any(f.get("image_addr") for f in frames if f):
-                addrs = [
-                    parse_addr(f.get("instruction_addr"))
+            meta_base = (
+                _parse_addr_or_none(image_addr_from_meta)
+                if image_addr_from_meta is not None
+                else None
+            )
+            if meta_base is not None:
+                # An SDK-supplied base beats guessing. An unparseable value
+                # falls through so estimation still runs.
+                estimated_base = meta_base
+            elif frames and not any(f.get("image_addr") for f in frames if f):
+                parsed = (
+                    _parse_addr_or_none(f.get("instruction_addr"))
                     for f in frames
                     if f and f.get("instruction_addr")
-                ]
+                )
+                addrs = [addr for addr in parsed if addr is not None]
                 estimated_base = _estimate_image_base(sym_cache, addrs)
 
             for frame in frames:
@@ -298,12 +381,22 @@ class StacktraceProcessor:
 
                 raw_image_addr = frame.get("image_addr")
                 image_addr = (
-                    parse_addr(raw_image_addr)
+                    _parse_addr_or_none(raw_image_addr)
                     if raw_image_addr is not None
                     else estimated_base
                 )
-                instruction_addr = parse_addr(frame.get("instruction_addr"))
+                instruction_addr = _parse_addr_or_none(frame.get("instruction_addr"))
+                if image_addr is None or instruction_addr is None:
+                    # Unparseable addresses can't resolve; keep the frame as-is.
+                    resolved_frames.append(frame)
+                    continue
                 addr = instruction_addr - image_addr
+                if not 0 <= addr <= UINT64_MAX:
+                    # The frame is outside this image - another object, or no
+                    # instruction_addr at all, which parse_addr reports as 0.
+                    # Probing it would abort the whole stacktrace.
+                    resolved_frames.append(frame)
+                    continue
                 symbol = sym_cache.lookup(addr)
                 digested_symbol = digest_symbol(symbol)
 
@@ -311,12 +404,9 @@ class StacktraceProcessor:
                     frame["resolved"] = True
                     frame["filename"] = digested_symbol.full_path
                     frame["lineno"] = digested_symbol.line
-                    try:
-                        frame["function"] = cxxfilt.demangle(digested_symbol.symbol)
-                    except cxxfilt.InvalidName:
-                        frame["function"] = (
-                            digested_symbol.symbol
-                        )  # Keep original if demangling fails
+                    # demangle returns the input unchanged when it can't
+                    # demangle, so there is no failure case to handle.
+                    frame["function"] = demangle(digested_symbol.symbol)
                     score = score + 1
 
                     # Extract source context from source bundle if available
@@ -359,7 +449,6 @@ class StacktraceProcessor:
             event.data = data
         except Exception as e:
             getLogger().error(f"StacktraceProcessor: Unexpected error: {e}")
-            pass
 
     @classmethod
     def has_native_frames(cls, event):

@@ -74,6 +74,14 @@ if [ -z "$GRANIAN_WORKERS_MAX_RSS" ]; then
     export GRANIAN_WORKERS_MAX_RSS=$RSS_LIMIT
 fi
 
+# Bound the respawn overlap. Granian's kill timeout is disabled by default,
+# and it both waits on the old worker forever and skips the SIGKILL escalation
+# when unset -- so a worker that doesn't stop on SIGTERM keeps its memory
+# alongside its replacement until the cgroup OOM killer resolves it. That turns
+# the RSS recycle above into the thing that triggers the OOM. 60s is well beyond
+# a normal in-flight drain while still capping the window at 2x RSS.
+export GRANIAN_WORKERS_KILL_TIMEOUT=${GRANIAN_WORKERS_KILL_TIMEOUT:-60}
+
 # Run Granian
 
 exec granian --interface asgi glitchtip.asgi:application --host $HOST --port $PORT --workers $WORKERS --log-level $G_LOG_LEVEL --no-ws "$@"

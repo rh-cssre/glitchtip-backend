@@ -35,26 +35,22 @@ class TestPeriodicSync(TestCase):
 
         subscription = await StripeSubscription.objects.acreate(
             stripe_id="sub_outdated",
-            created=datetime.datetime.fromtimestamp(start_ts, tz=datetime.timezone.utc),
+            created=datetime.datetime.fromtimestamp(start_ts, tz=datetime.UTC),
             current_period_start=datetime.datetime.fromtimestamp(
-                start_ts, tz=datetime.timezone.utc
+                start_ts, tz=datetime.UTC
             ),
-            current_period_end=datetime.datetime.fromtimestamp(
-                end_ts, tz=datetime.timezone.utc
-            ),
+            current_period_end=datetime.datetime.fromtimestamp(end_ts, tz=datetime.UTC),
             price=price,
             organization=organization,
             status=SubscriptionStatus.ACTIVE,
-            start_date=datetime.datetime.fromtimestamp(
-                start_ts, tz=datetime.timezone.utc
-            ),
+            start_date=datetime.datetime.fromtimestamp(start_ts, tz=datetime.UTC),
             collection_method="charge_automatically",
             subscription_cycle_start=datetime.datetime.fromtimestamp(
-                start_ts, tz=datetime.timezone.utc
+                start_ts, tz=datetime.UTC
             ),
             # Cycle end was 1 month after start
             subscription_cycle_end=datetime.datetime.fromtimestamp(
-                start_ts, tz=datetime.timezone.utc
+                start_ts, tz=datetime.UTC
             )
             + relativedelta(months=1),
         )

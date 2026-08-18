@@ -1,5 +1,5 @@
 import json
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 from urllib.parse import urlparse
 
 from pydantic import WrapValidator, field_validator, model_validator
@@ -25,38 +25,6 @@ def _truncate_var_value(value: str | dict | list) -> str | dict | list:
     except (TypeError, ValueError):
         pass
     return value
-
-
-class PosixSignal(LaxIngestSchema):
-    number: int
-    code: int | None
-    name: str | None
-    code_name: str | None
-
-
-class MachException(LaxIngestSchema):
-    number: int
-    code: int
-    subcode: int
-    name: str | None
-
-
-class NSError(LaxIngestSchema):
-    code: int
-    domain: str
-
-
-class Errno(LaxIngestSchema):
-    number: int
-    name: str | None
-
-
-class MechanismMeta(LaxIngestSchema):
-    posix_signal: PosixSignal | None = None
-    match_exception: MachException | None = None
-    ns_error: NSError | None = None
-    errno: Errno | None = None
-    relevant_address: str | None = None
 
 
 class ExceptionMechanism(LaxIngestSchema):
@@ -97,7 +65,7 @@ class StackTraceFrame(LaxIngestSchema):
     in_app: bool | None = None
     stack_start: bool | None = None
     lock: LockReason | None = None
-    vars: dict[str, Union[str, dict, list]] | None = None
+    vars: dict[str, str | dict | list] | None = None
     instruction_addr: str | None = None
     addr_mode: str | None = None
     symbol_addr: str | None = None
@@ -151,12 +119,6 @@ class EventException(LaxIngestSchema):
 
 class ValueEventException(LaxIngestSchema):
     values: list[EventException]
-
-
-class ExceptionEntryData(LaxIngestSchema):
-    values: dict
-    exc_omitted: None = None
-    has_system_frames: bool
 
 
 class ExceptionEntry(LaxIngestSchema):

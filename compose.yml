@@ -7,7 +7,6 @@ x-environment: &default-environment
   DEBUG: "true"
   EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
   ENABLE_OBSERVABILITY_API: "true"
-  #IS_LOAD_TEST: "true"
   VTASKS_CONCURRENCY: 4
   LOG_LEVEL: INFO
   GLITCHTIP_ENABLE_MCP: "true"
@@ -35,6 +34,11 @@ services:
       - postgres
       - -c
       - max_connections=300
+      # A query Postgres can't narrow to one partition locks every partition
+      # and every index on it, so the default of 64 is too low. Matches what
+      # the install docs recommend to self-hosters.
+      - -c
+      - max_locks_per_transaction=512
   valkey:
     image: valkey/valkey:9
   web:

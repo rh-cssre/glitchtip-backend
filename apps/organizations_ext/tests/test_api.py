@@ -24,9 +24,7 @@ class OrganizationsAPITestCase(TestCase):
         self.assertContains(res, self.organization.slug)
         self.assertNotContains(res, not_my_organization.slug)
         self.assertIsInstance(res.json()[0]["id"], str)
-        self.assertFalse(
-            "teams" in res.json()[0].keys(), "List view shouldn't contain teams"
-        )
+        self.assertFalse("teams" in res.json()[0], "List view shouldn't contain teams")
 
     async def test_organizations_retrieve(self):
         project = await baker.amake("projects.Project", organization=self.organization)
@@ -37,13 +35,11 @@ class OrganizationsAPITestCase(TestCase):
         self.assertContains(res, self.organization.name)
         self.assertContains(res, project.name)
         data = res.json()
-        self.assertTrue("teams" in data.keys(), "Retrieve view should contain teams")
-        self.assertTrue(
-            "projects" in data.keys(), "Retrieve view should contain projects"
-        )
+        self.assertTrue("teams" in data, "Retrieve view should contain teams")
+        self.assertTrue("projects" in data, "Retrieve view should contain projects")
         self.assertContains(res, team.slug)
         self.assertTrue(
-            "teams" in data["projects"][0].keys(),
+            "teams" in data["projects"][0],
             "Org projects should contain teams id/name",
         )
 

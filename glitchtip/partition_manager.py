@@ -12,7 +12,7 @@ and multi-tenant query performance.
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -48,10 +48,10 @@ class UUID7Helper:
         import os
 
         if dt is None:
-            dt = datetime.now(timezone.utc)
+            dt = datetime.now(UTC)
 
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
 
         # Convert datetime to milliseconds since Unix epoch
         timestamp_ms = int(dt.timestamp() * 1000)
@@ -96,7 +96,7 @@ class UUID7Helper:
 
         # Convert to datetime
         timestamp_sec = timestamp_ms / 1000.0
-        return datetime.fromtimestamp(timestamp_sec, tz=timezone.utc)
+        return datetime.fromtimestamp(timestamp_sec, tz=UTC)
 
     @staticmethod
     def get_range_for_date(
@@ -120,9 +120,9 @@ class UUID7Helper:
             Tuple of (start_uuid, end_uuid)
         """
         if start_date.tzinfo is None:
-            start_date = start_date.replace(tzinfo=timezone.utc)
+            start_date = start_date.replace(tzinfo=UTC)
         if end_date.tzinfo is None:
-            end_date = end_date.replace(tzinfo=timezone.utc)
+            end_date = end_date.replace(tzinfo=UTC)
 
         # Generate deterministic UUID bounds for partition ranges
         # Use minimum possible UUID (all random bits = 0) for start
@@ -147,7 +147,7 @@ class UUID7Helper:
             UUIDv7 with deterministic random bits
         """
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
 
         # Convert datetime to milliseconds since Unix epoch
         # UUIDv7 uses a 48-bit unsigned timestamp, so clamp to [0, 2^48 - 1]
@@ -189,7 +189,7 @@ class PartitionManager:
             partition_name="issue_events_issueaggregate_20250115",
             start_date=datetime(2025, 1, 15, tzinfo=timezone.utc),
             end_date=datetime(2025, 1, 16, tzinfo=timezone.utc),
-            hash_buckets=16,
+            hash_buckets=2,
             key_type="datetime",
         )
 
@@ -230,7 +230,7 @@ class PartitionManager:
         2. Child hash partitions (HASH on organization_id)
 
         Hash Buckets:
-        - If `hash_buckets` is None, it reads from settings.PARTITION_HASH_BUCKETS (default: 16).
+        - If `hash_buckets` is None, it reads from settings.PARTITION_HASH_BUCKETS.
         - If `hash_buckets` is 0, it creates a simple leaf partition (no hash sub-partitioning).
         - If `hash_buckets` > 0, it creates that many sub-partitions.
 
@@ -240,8 +240,8 @@ class PartitionManager:
             PARTITION BY HASH (organization_id);
 
           CREATE TABLE events_2025_01_15_h0 PARTITION OF events_2025_01_15
-            FOR VALUES WITH (MODULUS 16, REMAINDER 0);
-          ... (h1 through h15)
+            FOR VALUES WITH (MODULUS 2, REMAINDER 0);
+          ... (h1)
 
         Example for uuid7 mode:
           CREATE TABLE events_2025_01_15 PARTITION OF events
@@ -271,9 +271,9 @@ class PartitionManager:
 
         # Ensure timezone-aware datetimes
         if start_date.tzinfo is None:
-            start_date = start_date.replace(tzinfo=timezone.utc)
+            start_date = start_date.replace(tzinfo=UTC)
         if end_date.tzinfo is None:
-            end_date = end_date.replace(tzinfo=timezone.utc)
+            end_date = end_date.replace(tzinfo=UTC)
 
         # Calculate range bounds based on key type
         if key_type == "uuid7":
@@ -370,7 +370,7 @@ FOR VALUES FROM ({range_from}) TO ({range_to});"""
         from datetime import timedelta
 
         partitions = self.list_partitions(parent_table)
-        threshold_date = datetime.now(timezone.utc).date() - timedelta(days=max_days)
+        threshold_date = datetime.now(UTC).date() - timedelta(days=max_days)
         dropped_count = 0
         interval = timedelta(days=partition_interval_days)
 
@@ -500,18 +500,31 @@ FOR VALUES FROM ({range_from}) TO ({range_to});"""
         # Check what already exists to avoid unnecessary heavy locks.
         range_exists = self.table_exists(partition_name)
         if range_exists and hash_buckets > 0:
+            if not self.is_table_partitioned(partition_name):
+                # The range partition was created as a plain leaf (with
+                # hash_buckets=0, as import_legacy_events does). CREATE TABLE
+                # ... PARTITION OF against it raises 42P17, which would abort
+                # the whole maintenance run and leave later tables without
+                # their partitions. Leave it alone instead.
+                logger.warning(
+                    f"Partition {partition_name} is a plain leaf, not "
+                    f"sub-partitioned by hash; leaving as-is (cannot add "
+                    f"{hash_buckets} hash children to it)"
+                )
+                return 0
             existing_children = self.list_partitions(partition_name)
         else:
             existing_children = []
 
-        # A hash partition set always tiles the entire keyspace at a single
-        # modulus, and that modulus cannot be changed online (no incremental
-        # bucket add without detach + rewrite). If a range partition already
-        # has hash children at a *different* modulus than the configured
-        # bucket count, it is already 100% complete — every row maps somewhere
-        # — so attempting to create buckets at the new modulus would overlap
-        # the existing ones ("partition ... would overlap partition ..."). In
-        # that case the only correct action is to leave the existing set alone.
+        # A hash partition set tiles the entire keyspace at a single modulus,
+        # and that modulus cannot be changed online (no incremental bucket add
+        # without detach + rewrite). So when a range partition already has
+        # hash children at a *different* modulus than the configured bucket
+        # count, creating buckets at the new modulus would overlap the existing
+        # ones ("partition ... would overlap partition ...") and the existing
+        # set must be left alone — but only once it is actually complete. A set
+        # missing a remainder tiles nothing of the gap, and rows hashing there
+        # are rejected outright, so completeness is checked rather than assumed.
         existing_modulus = None
         if existing_children:
             moduli = set()
@@ -543,11 +556,34 @@ FOR VALUES FROM ({range_from}) TO ({range_to});"""
                 return 0
 
         if existing_modulus is not None and existing_modulus != hash_buckets:
-            # The range partition is already fully tiled at a modulus that
-            # differs from the configured bucket count. A hash set always
-            # covers the whole keyspace at its modulus, and that modulus
-            # cannot be changed online (detach + rewrite required), so do
-            # nothing here regardless of how many children are present.
+            if len(existing_children) < existing_modulus:
+                # Incomplete set at the old modulus: rows whose hash lands on a
+                # missing remainder have nowhere to go and are rejected with
+                # 23514. Repair it at the modulus the set already uses — those
+                # children cannot overlap the existing ones — rather than
+                # leaving a slice of organizations unable to ingest until the
+                # partition ages out. Recursing with the existing modulus takes
+                # the name-based gap fill below.
+                logger.warning(
+                    f"Partition {partition_name} has an incomplete "
+                    f"{existing_modulus}-bucket hash set "
+                    f"({len(existing_children)} of {existing_modulus} present); "
+                    f"filling the gaps at that modulus, since the configured "
+                    f"count ({hash_buckets}) cannot be applied to it"
+                )
+                return self.execute_partition_creation(
+                    parent_table=parent_table,
+                    partition_name=partition_name,
+                    start_date=start_date,
+                    end_date=end_date,
+                    hash_buckets=existing_modulus,
+                    hash_column=hash_column,
+                    key_type=key_type,
+                    partition_column=partition_column,
+                )
+
+            # Complete set at a differing modulus: it already covers the whole
+            # keyspace, so there is nothing to do and nothing to warn about.
             logger.info(
                 f"Partition {partition_name} has a {existing_modulus}-bucket "
                 f"hash set; configured count ({hash_buckets}) differs, leaving "
@@ -591,11 +627,13 @@ FOR VALUES FROM ({range_from}) TO ({range_to});"""
             )
             return 0
 
-        with transaction.atomic(using=self.db_connection.alias):
-            with self.db_connection.cursor() as cursor:
-                for sql in sqls_to_execute:
-                    logger.debug(f"Executing partition SQL: {sql[:100]}...")
-                    cursor.execute(sql)
+        with (
+            transaction.atomic(using=self.db_connection.alias),
+            self.db_connection.cursor() as cursor,
+        ):
+            for sql in sqls_to_execute:
+                logger.debug(f"Executing partition SQL: {sql[:100]}...")
+                cursor.execute(sql)
 
         logger.debug(
             f"Verified partition {partition_name} with {hash_buckets} hash buckets "
@@ -648,8 +686,7 @@ FOR VALUES FROM ({range_from}) TO ({range_to});"""
 
         while current_date < end_date:
             next_date = current_date + interval
-            if next_date > end_date:
-                next_date = end_date
+            next_date = min(next_date, end_date)
 
             # Generate partition name: parent_table_YYYYMMDD
             date_suffix = current_date.strftime("%Y%m%d")

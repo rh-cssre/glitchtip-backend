@@ -13,6 +13,12 @@ class MonitorType(models.TextChoices):
 
 HTTP_MONITOR_TYPES = (MonitorType.PING, MonitorType.GET, MonitorType.POST)
 
+# Fallback ceiling on monitors per organization, applied only on billing-enabled
+# installs whose plan sets no `uptime_monitors` Stripe product metadata value.
+# High enough that a real user should never meet it; a plan that needs more says
+# so in Stripe.
+DEFAULT_MAX_MONITORS_PER_ORGANIZATION = 100
+
 
 class MonitorCheckReason(models.IntegerChoices):
     UNKNOWN = 0, _("Unknown")

@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Literal
 
+from allauth.socialaccount.models import SocialApp
 from django.conf import settings
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from ninja import Field, ModelSchema
 from pydantic import ConfigDict, EmailStr
 
@@ -127,6 +128,84 @@ class OrganizationUserInviteSchema(OrganizationUserSchema):
         token = InvitationTokenGenerator().make_token(obj)
         return settings.GLITCHTIP_URL.geturl() + reverse(
             "invitations_register", args=[obj.pk, token]
+        )
+
+
+class OrganizationSocialAppBase(CamelSchema):
+    name: str = Field(min_length=1, max_length=40)
+    server_url: str | None = Field(default=None, max_length=500)
+    """OIDC issuer or discovery document URL. Required for provider
+    openid_connect; ignored for preconfigured providers."""
+    client_id: str = Field(min_length=1, max_length=191)
+
+
+class OrganizationSocialAppIn(OrganizationSocialAppBase):
+    """Create an organization-managed social app.
+
+    Every choice runs on the OpenID Connect machinery — each app gets its own
+    provider_id-scoped callback URL, which is what makes several apps of the
+    same brand (one per organization) coexist. Non-OIDC providers share one
+    callback URL per provider and cannot be disambiguated per organization.
+    """
+
+    provider: Literal["openid_connect", "google"] = "openid_connect"
+    """"google" preconfigures the issuer; "openid_connect" is bring-your-own."""
+    client_secret: str = Field(min_length=1, max_length=191)
+
+
+class OrganizationSocialAppUpdateIn(OrganizationSocialAppBase):
+    """Update an organization-managed social app.
+
+    provider is absent deliberately: it fixes the callback URL, which is
+    already registered at the identity provider, so it cannot change after
+    creation.
+    """
+
+    client_secret: str | None = Field(default=None, min_length=1, max_length=191)
+    """Omit to keep the existing secret."""
+
+
+class OrganizationSocialAppSchema(CamelSchema, ModelSchema):
+    server_url: str | None
+    brand: str
+    """Identity provider brand for display (e.g. "google"); falls back to the
+    allauth provider name."""
+    callback_url: str | None
+    """Redirect URI to register with the identity provider."""
+    login_url: str
+    """The organization's login page, which lists this sign-in option."""
+
+    class Meta:
+        model = SocialApp
+        fields = ["id", "name", "provider", "provider_id", "client_id"]
+
+    @staticmethod
+    def resolve_server_url(obj):
+        return (obj.settings or {}).get("server_url")
+
+    @staticmethod
+    def resolve_brand(obj):
+        return (obj.settings or {}).get("brand") or obj.provider
+
+    @staticmethod
+    def resolve_callback_url(obj):
+        try:
+            if obj.provider == "openid_connect":
+                path = reverse(
+                    "openid_connect_callback", kwargs={"provider_id": obj.provider_id}
+                )
+            else:
+                path = reverse(f"{obj.provider}_callback")
+        except NoReverseMatch:
+            return None
+        return settings.GLITCHTIP_URL.geturl().rstrip("/") + path
+
+    @staticmethod
+    def resolve_login_url(obj):
+        return (
+            settings.GLITCHTIP_URL.geturl().rstrip("/")
+            + "/login/"
+            + obj.organizationsocialapp.organization.slug
         )
 
 

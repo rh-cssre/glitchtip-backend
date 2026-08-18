@@ -6,12 +6,13 @@ lazy daily roll → trend rollups → split-retention cleanup → DuckDB reads,
 plus the process-wide DuckDB concurrency bound.
 """
 
+import logging
 import os
 import shutil
 import tempfile
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest import mock
 
 from asgiref.sync import async_to_sync
@@ -31,6 +32,7 @@ from apps.performance.cold_storage import (
 )
 from apps.performance.models import SpanStaging
 from apps.performance.promotion import (
+    _duckdb_copy,
     _write_chunk_parquet,
     compact_span_chunks,
     promote_spans,
@@ -55,7 +57,7 @@ def _make_span_staging_row(
     transaction_id: str = "txn001",
 ):
     if timestamp is None:
-        timestamp = datetime.now(timezone.utc) - timedelta(minutes=10)
+        timestamp = datetime.now(UTC) - timedelta(minutes=10)
     return SpanStaging(
         id=UUID7Helper.from_datetime(timestamp),
         organization_id=org_id,
@@ -86,13 +88,33 @@ def _row(org_id, project_id, ts, **kw):
     )
 
 
+class PhantomListingStorage(FileSystemStorage):
+    """Storage whose ``listdir`` reports files that are not really there.
+
+    Reproduces the production symptom: an object listing hands compaction an
+    input key, and the subsequent read of that key 404s. ``exists()`` stays
+    honest, so it is the phantom that a tolerant compaction must drop.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.phantom_files: dict[str, list[str]] = {}
+
+    def listdir(self, path):
+        dirs, files = super().listdir(path)
+        extra = [f for f in self.phantom_files.get(path, []) if f not in files]
+        return dirs, files + extra
+
+
 class ColdStorageTestMixin:
     """Temp dir + cold-storage backend patched to it."""
+
+    storage_class = FileSystemStorage
 
     def setUp(self):
         super().setUp()
         self.cold_dir = tempfile.mkdtemp()
-        self.storage = FileSystemStorage(location=self.cold_dir)
+        self.storage = self.storage_class(location=self.cold_dir)
         self.duckdb_patch = mock.patch(
             "apps.performance.cold_storage.is_duckdb_available", return_value=True
         )
@@ -143,7 +165,7 @@ class PromoteSpansTestCase(ColdStorageTestMixin, TestCase):
 
     async def test_promote_writes_hour_bucketed_chunk(self):
         """Promotion writes chunks under {date}/{HH}/ and clears staging."""
-        ts = datetime.now(timezone.utc) - timedelta(minutes=10)
+        ts = datetime.now(UTC) - timedelta(minutes=10)
         await SpanStaging.objects.abulk_create(
             [
                 _make_span_staging_row(
@@ -172,7 +194,7 @@ class PromoteSpansTestCase(ColdStorageTestMixin, TestCase):
 
     @freeze_time("2026-02-23 12:00:00")
     async def test_promote_skips_recent_rows(self):
-        recent = datetime(2026, 2, 23, 11, 59, 0, tzinfo=timezone.utc)
+        recent = datetime(2026, 2, 23, 11, 59, 0, tzinfo=UTC)
         await SpanStaging.objects.abulk_create(
             [_make_span_staging_row(self.org.id, self.project.id, timestamp=recent)]
         )
@@ -182,10 +204,10 @@ class PromoteSpansTestCase(ColdStorageTestMixin, TestCase):
 
     async def test_promote_drops_and_consumes_garbage(self):
         """Far-future spans are dropped but still consumed from staging."""
-        ts_ok = datetime.now(timezone.utc) - timedelta(minutes=10)
+        ts_ok = datetime.now(UTC) - timedelta(minutes=10)
         # Older than raw retention — selected by promotion (old UUID7 id),
         # then dropped by the garbage guard.
-        ts_old = datetime.now(timezone.utc) - timedelta(days=365)
+        ts_old = datetime.now(UTC) - timedelta(days=365)
         await SpanStaging.objects.abulk_create(
             [
                 _make_span_staging_row(self.org.id, self.project.id, timestamp=ts_ok),
@@ -208,7 +230,7 @@ class CompactSpansTestCase(ColdStorageTestMixin, TestCase):
         )
         self.org = self.project.organization
         # A fixed hour well in the past.
-        self.hour = datetime(2026, 5, 10, 2, 0, 0, tzinfo=timezone.utc)
+        self.hour = datetime(2026, 5, 10, 2, 0, 0, tzinfo=UTC)
 
     def _seed_hour(self, n_chunks=3, rows_per=3):
         for c in range(n_chunks):
@@ -351,6 +373,220 @@ class CompactSpansTestCase(ColdStorageTestMixin, TestCase):
         self.assertEqual(row[1], self.hour.replace(tzinfo=None))
 
 
+class CompactionMissingInputTestCase(ColdStorageTestMixin, TestCase):
+    """A cold-storage input that vanished must not wedge a date forever.
+
+    Compaction builds its input list from a directory listing and only
+    deletes the source directory *after* a successful copy. So if the
+    listing names an object the read then 404s on, the copy fails, the
+    source directory survives, and the next run lists the same missing key
+    and fails identically — permanently, without ever making progress.
+    """
+
+    storage_class = PhantomListingStorage
+
+    # Shaped like a real pre-hour-tiering chunk name, which lives directly in
+    # the date directory rather than under an {HH}/ subdirectory.
+    PHANTOM = "chunk_1777896579649605123_1062465.parquet"
+
+    def setUp(self):
+        super().setUp()
+        self.project = baker.make(
+            "projects.Project", organization__scrub_ip_addresses=False
+        )
+        self.org = self.project.organization
+        self.date_path = f"{RAW}/org_{self.org.id}/20260510"
+        self.day_file = f"{RAW}/org_{self.org.id}/20260510.parquet"
+
+    def _seed_hour(self, hour, rows=2):
+        dt = datetime(2026, 5, 10, hour, 0, 0, tzinfo=UTC)
+        self._write_chunk(
+            self.org.id,
+            dt,
+            [
+                _row(
+                    self.org.id,
+                    self.project.id,
+                    dt + timedelta(seconds=j),
+                    span_id=f"s{hour}_{j}",
+                )
+                for j in range(rows)
+            ],
+        )
+
+    def _add_phantom(self, directory, name):
+        self.storage.phantom_files.setdefault(directory, []).append(name)
+
+    def _strict_copy(self, calls=None):
+        """Make DuckDB reads fail on a missing input the way S3 does.
+
+        DuckDB's local-filesystem reader treats each input path as a glob and
+        silently drops one that matches nothing, so a temp dir cannot
+        reproduce the production failure on its own. Its httpfs reader
+        instead raises ``HTTP 404`` on the individual key. This wrapper
+        forces the S3 behaviour, and optionally records the input list of
+        every copy attempt.
+        """
+        real = _duckdb_copy
+
+        def strict(storage, inputs, output):
+            if calls is not None:
+                calls.append(list(inputs))
+            for rel in inputs:
+                if not os.path.exists(os.path.join(self.cold_dir, rel)):
+                    raise OSError(
+                        "HTTP Error: HTTP GET error reading "
+                        f"'{rel}' in region '' (HTTP 404 Not Found)"
+                    )
+            return real(storage, inputs, output)
+
+        return mock.patch("apps.performance.promotion._duckdb_copy", side_effect=strict)
+
+    def _mkdir(self, rel):
+        os.makedirs(os.path.join(self.cold_dir, rel), exist_ok=True)
+
+    def _day_row_count(self):
+        path = get_duckdb_parquet_path(self.storage, self.day_file)
+        conn = get_duckdb_connection(self.storage)
+        try:
+            return conn.execute(
+                f"SELECT count(*) FROM read_parquet('{path}')"
+            ).fetchone()[0]
+        finally:
+            conn.close()
+
+    def test_day_roll_skips_missing_input_and_keeps_the_rest(self):
+        """One unreadable input must not cost the day its readable ones."""
+        self._seed_hour(2, rows=2)
+        self._seed_hour(3, rows=3)
+        self._add_phantom(self.date_path, self.PHANTOM)
+
+        # settings.py globally disables WARNING-and-below while testing;
+        # lift it so the operator-facing skip warning is assertable.
+        previous_disable = logging.root.manager.disable
+        logging.disable(logging.NOTSET)
+        self.addCleanup(logging.disable, previous_disable)
+
+        with (
+            self._strict_copy(),
+            freeze_time("2026-05-11T01:00:00Z"),
+            self.assertLogs("apps.performance.promotion", level="WARNING") as logs,
+        ):
+            compact_span_chunks()
+
+        self.assertTrue(self._exists(self.day_file))
+        self.assertEqual(self._day_row_count(), 5)
+        # Cleaned up, so the missing key is never listed again.
+        self.assertFalse(self._exists(self.date_path))
+        self.assertTrue(
+            any("1 of 3 input files are missing" in line for line in logs.output),
+            logs.output,
+        )
+
+    def test_day_roll_with_every_input_missing_cleans_up(self):
+        """Nothing left to compact is a cleanup, not a failure."""
+        self._mkdir(self.date_path)
+        self._add_phantom(self.date_path, self.PHANTOM)
+        self._add_phantom(self.date_path, "chunk_1777896579649605124_1062465.parquet")
+
+        with self._strict_copy(), freeze_time("2026-05-11T01:00:00Z"):
+            compact_span_chunks()
+
+        self.assertFalse(self._exists(self.day_file))
+        self.assertFalse(self._exists(self.date_path))
+
+    def test_second_run_does_not_retry_the_missing_input(self):
+        """The actual bug: without cleanup the same missing key is retried
+        every run, forever. Two passes over one broken fixture — the second
+        must not touch the missing input at all."""
+        self._seed_hour(2, rows=2)
+        self._add_phantom(self.date_path, self.PHANTOM)
+
+        calls: list[list[str]] = []
+
+        with self._strict_copy(calls):
+            with freeze_time("2026-05-11T01:00:00Z"):
+                compact_span_chunks()
+            first_pass = len(calls)
+            self.assertTrue(
+                any(self.PHANTOM in " ".join(c) for c in calls),
+                "fixture never exercised the missing input",
+            )
+            with freeze_time("2026-05-12T01:00:00Z"):
+                compact_span_chunks()
+
+        retried = [c for c in calls[first_pass:] if any(self.PHANTOM in p for p in c)]
+        self.assertEqual(retried, [], "second run re-attempted the missing input")
+        self.assertTrue(self._exists(self.day_file))
+
+    def test_hour_seal_skips_missing_chunk(self):
+        """Same tolerance on the hour-seal path, which has the same
+        delete-only-after-success shape."""
+        self._seed_hour(2, rows=2)
+        chunk_dir = f"{self.date_path}/02"
+        self._add_phantom(chunk_dir, self.PHANTOM)
+
+        with self._strict_copy(), freeze_time("2026-05-10T04:00:00Z"):
+            compact_span_chunks()
+
+        self.assertTrue(self._exists(f"{self.date_path}/02.parquet"))
+        self.assertFalse(self._exists(chunk_dir))
+
+    def test_hour_seal_with_every_chunk_missing_cleans_up(self):
+        self._mkdir(f"{self.date_path}/02")
+        self._add_phantom(f"{self.date_path}/02", self.PHANTOM)
+
+        with self._strict_copy(), freeze_time("2026-05-10T04:00:00Z"):
+            self.assertEqual(compact_span_chunks(), 0)
+
+        self.assertFalse(self._exists(f"{self.date_path}/02.parquet"))
+        self.assertFalse(self._exists(f"{self.date_path}/02"))
+
+    def test_unreadable_input_that_still_exists_leaves_the_directory_intact(self):
+        """A file that is present but unreadable is not data we may throw
+        away, so the date is left for an operator rather than cleaned up."""
+        self._seed_hour(2, rows=2)
+        with freeze_time("2026-05-11T01:00:00Z"):
+            compact_span_chunks()  # seals hour 02 into 02.parquet, rolls the day
+        # Corrupt the rolled day file's source state: re-create the date dir
+        # with a non-Parquet file that exists but cannot be read.
+        self._mkdir(self.date_path)
+        os.remove(os.path.join(self.cold_dir, self.day_file))
+        with open(os.path.join(self.cold_dir, self.date_path, "05.parquet"), "w") as f:
+            f.write("not parquet")
+
+        with freeze_time("2026-05-12T01:00:00Z"):
+            compact_span_chunks()
+
+        self.assertFalse(self._exists(self.day_file))
+        self.assertTrue(self._exists(f"{self.date_path}/05.parquet"))
+
+    def test_legacy_chunk_in_date_dir_is_rolled_in_not_discarded(self):
+        """Pins the legacy-layout decision. A ``chunk_*.parquet`` sitting
+        directly in the date directory is pre-hour-tiering span data, not an
+        hour file — but it is readable, so the day roll folds it in. Only
+        inputs that are actually gone get skipped."""
+        self._seed_hour(2, rows=2)
+        self._seed_hour(3, rows=3)
+        # Relocate hour 03's chunk to the legacy flat layout.
+        hour_dir = os.path.join(self.cold_dir, self.date_path, "03")
+        (name,) = os.listdir(hour_dir)
+        os.rename(
+            os.path.join(hour_dir, name),
+            os.path.join(self.cold_dir, self.date_path, f"legacy_{name}"),
+        )
+        os.rmdir(hour_dir)
+        self._add_phantom(self.date_path, self.PHANTOM)
+
+        with self._strict_copy(), freeze_time("2026-05-11T01:00:00Z"):
+            compact_span_chunks()
+
+        # 2 sealed-hour rows + 3 legacy-chunk rows; the phantom contributes
+        # nothing and costs nothing.
+        self.assertEqual(self._day_row_count(), 5)
+        self.assertFalse(self._exists(self.date_path))
+
+
 class EnumerateSpanFilesTestCase(ColdStorageTestMixin, TestCase):
     def setUp(self):
         super().setUp()
@@ -358,9 +594,9 @@ class EnumerateSpanFilesTestCase(ColdStorageTestMixin, TestCase):
             "projects.Project", organization__scrub_ip_addresses=False
         )
         self.org = self.project.organization
-        self.hour = datetime(2026, 5, 10, 2, 0, 0, tzinfo=timezone.utc)
-        self.start = datetime(2026, 5, 10, tzinfo=timezone.utc)
-        self.end = datetime(2026, 5, 11, tzinfo=timezone.utc)
+        self.hour = datetime(2026, 5, 10, 2, 0, 0, tzinfo=UTC)
+        self.start = datetime(2026, 5, 10, tzinfo=UTC)
+        self.end = datetime(2026, 5, 11, tzinfo=UTC)
 
     def _enum(self):
         return enumerate_span_files(self.storage, self.org.id, self.start, self.end)
@@ -449,7 +685,7 @@ class QueryColdStorageTestCase(ColdStorageTestMixin, TestCase):
             "projects.Project", organization__scrub_ip_addresses=False
         )
         self.org = self.project.organization
-        self.ts = datetime(2026, 2, 20, 12, 0, 0, tzinfo=timezone.utc)
+        self.ts = datetime(2026, 2, 20, 12, 0, 0, tzinfo=UTC)
 
     def _write(self, rows):
         self._write_chunk(self.org.id, self.ts, rows)
@@ -467,8 +703,8 @@ class QueryColdStorageTestCase(ColdStorageTestMixin, TestCase):
                 for i in range(5)
             ]
         )
-        start = datetime(2026, 2, 20, tzinfo=timezone.utc)
-        end = datetime(2026, 2, 21, tzinfo=timezone.utc)
+        start = datetime(2026, 2, 20, tzinfo=UTC)
+        end = datetime(2026, 2, 21, tzinfo=UTC)
         results = query_span_groups_for_transaction(
             self.org.id, "/api/test/", start, end
         )
@@ -490,8 +726,8 @@ class QueryColdStorageTestCase(ColdStorageTestMixin, TestCase):
                 for i in range(5)
             ]
         )
-        start = datetime(2026, 2, 20, tzinfo=timezone.utc)
-        end = datetime(2026, 2, 21, tzinfo=timezone.utc)
+        start = datetime(2026, 2, 20, tzinfo=UTC)
+        end = datetime(2026, 2, 21, tzinfo=UTC)
         results = query_span_groups(self.org.id, None, start, end)
         self.assertEqual({r["op"] for r in results}, {"db", "http.client"})
 
@@ -510,8 +746,8 @@ class QueryColdStorageTestCase(ColdStorageTestMixin, TestCase):
                     )
                 )
         self._write(rows)
-        start = datetime(2026, 2, 20, tzinfo=timezone.utc)
-        end = datetime(2026, 2, 21, tzinfo=timezone.utc)
+        start = datetime(2026, 2, 20, tzinfo=UTC)
+        end = datetime(2026, 2, 21, tzinfo=UTC)
         results = query_n_plus_one_patterns(
             self.org.id, None, start, end, threshold=5.0
         )
@@ -521,8 +757,8 @@ class QueryColdStorageTestCase(ColdStorageTestMixin, TestCase):
 
     def test_query_transaction_trend_reads_rollup(self):
         """Trend reads the rollup tier produced by compaction."""
-        day1 = datetime(2026, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
-        day2 = datetime(2026, 5, 2, 12, 0, 0, tzinfo=timezone.utc)
+        day1 = datetime(2026, 5, 1, 12, 0, 0, tzinfo=UTC)
+        day2 = datetime(2026, 5, 2, 12, 0, 0, tzinfo=UTC)
         self._write_chunk(
             self.org.id,
             day1,
@@ -558,8 +794,8 @@ class QueryColdStorageTestCase(ColdStorageTestMixin, TestCase):
         results = query_transaction_trend(
             self.org.id,
             "/api/test/",
-            datetime(2026, 5, 1, tzinfo=timezone.utc),
-            datetime(2026, 5, 3, tzinfo=timezone.utc),
+            datetime(2026, 5, 1, tzinfo=UTC),
+            datetime(2026, 5, 3, tzinfo=UTC),
         )
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0]["count"], 3)
@@ -568,8 +804,8 @@ class QueryColdStorageTestCase(ColdStorageTestMixin, TestCase):
         self.assertAlmostEqual(results[1]["avg_duration"], 20.0, places=0)
 
     def test_query_empty_org(self):
-        start = datetime(2026, 2, 20, tzinfo=timezone.utc)
-        end = datetime(2026, 2, 21, tzinfo=timezone.utc)
+        start = datetime(2026, 2, 20, tzinfo=UTC)
+        end = datetime(2026, 2, 21, tzinfo=UTC)
         self.assertEqual(query_span_groups(self.org.id, None, start, end), [])
 
 
@@ -649,8 +885,8 @@ class DeletionTestCase(ColdStorageTestMixin, TestCase):
         )
         self._p1.start()
         self._p2.start()
-        self.hour = datetime(2026, 5, 10, 2, 0, 0, tzinfo=timezone.utc)
-        self.open_hour = datetime(2026, 5, 10, 5, 0, 0, tzinfo=timezone.utc)
+        self.hour = datetime(2026, 5, 10, 2, 0, 0, tzinfo=UTC)
+        self.open_hour = datetime(2026, 5, 10, 5, 0, 0, tzinfo=UTC)
 
     def tearDown(self):
         self._p1.stop()

@@ -5,7 +5,7 @@ import os
 
 import django.contrib.postgres.fields
 import apps.issue_events.models
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 
 from django.db import migrations, models
 from django.db.migrations import RunSQL, SeparateDatabaseAndState
@@ -25,7 +25,7 @@ def create_initial_partitions(apps, schema_editor):
 
     event_limit = int(os.environ.get("GLITCHTIP_MIGRATION_EVENT_LIMIT", "1000"))
     manager = PartitionManager(db_connection=schema_editor.connection.alias)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Default start date is today
     start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -61,7 +61,7 @@ def create_initial_partitions(apps, schema_editor):
                 if min_received:
                     # If we found data, ensure start_date covers it
                     if min_received.tzinfo is None:
-                        min_received = min_received.replace(tzinfo=timezone.utc)
+                        min_received = min_received.replace(tzinfo=UTC)
                     # Subtract 1 day as a safety buffer to ensure all rows are covered
                     min_date = (min_received - timedelta(days=1)).replace(
                         hour=0, minute=0, second=0, microsecond=0
@@ -87,8 +87,7 @@ def create_initial_partitions(apps, schema_editor):
     target_end = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(
         days=7
     )
-    if end_date < target_end:
-        end_date = target_end
+    end_date = max(end_date, target_end)
 
     manager.create_partitions_for_date_range(
         parent_table="issue_events_issueevent",
@@ -135,7 +134,7 @@ def migrate_legacy_data(apps, schema_editor):
         print(f"Migrating up to {event_limit} recent legacy events...")
 
         # Determine valid date range for partitions (matches create_initial_partitions)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
         cursor.execute(
@@ -153,12 +152,11 @@ def migrate_legacy_data(apps, schema_editor):
         min_received = cursor.fetchone()[0]
         if min_received:
             if min_received.tzinfo is None:
-                min_received = min_received.replace(tzinfo=timezone.utc)
+                min_received = min_received.replace(tzinfo=UTC)
             min_date = (min_received - timedelta(days=1)).replace(
                 hour=0, minute=0, second=0, microsecond=0
             )
-            if min_date < start_date:
-                start_date = min_date
+            start_date = min(start_date, min_date)
 
         end_date = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(
             days=7
@@ -220,7 +218,7 @@ def migrate_legacy_data(apps, schema_editor):
                     continue
 
                 if received.tzinfo is None:
-                    received = received.replace(tzinfo=timezone.utc)
+                    received = received.replace(tzinfo=UTC)
 
                 if received < start_date or received >= end_date:
                     skipped_count += 1
@@ -281,9 +279,7 @@ def drop_initial_partitions(apps, schema_editor):
     """
     Reverse migration: drop the partitions we created.
     """
-    start_date = datetime.now(timezone.utc).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    start_date = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
     with schema_editor.connection.cursor() as cursor:
         for day in range(7):

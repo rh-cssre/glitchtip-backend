@@ -1,12 +1,11 @@
 from enum import StrEnum
-from typing import Union
 
 from django.db import migrations, models
 
 
 class FromStringIntegerChoices(models.IntegerChoices):
     @classmethod
-    def from_string(cls, string: Union[str, StrEnum]):
+    def from_string(cls, string: str | StrEnum):
         for status in cls:
             if status.label == string:
                 return status

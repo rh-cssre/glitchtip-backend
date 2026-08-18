@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from django.utils.timezone import now
 from ninja import Field, ModelSchema, Schema
@@ -11,8 +10,8 @@ from .models import Deploy, Release
 
 
 class ReleaseUpdate(Schema):
-    ref: Optional[str] = None
-    released: Optional[datetime] = Field(alias="dateReleased", default_factory=now)
+    ref: str | None = None
+    released: datetime | None = Field(alias="dateReleased", default_factory=now)
 
 
 class ReleaseBase(ReleaseUpdate):
@@ -30,7 +29,7 @@ class ReleaseRepositorySchema(CamelSchema):
 
 class ReleaseSchema(CamelSchema, ReleaseBase, ModelSchema):
     created: datetime = Field(serialization_alias="dateCreated")
-    released: Optional[datetime] = Field(serialization_alias="dateReleased")
+    released: datetime | None = Field(serialization_alias="dateReleased")
     short_version: str = Field(validation_alias="version")
     projects: list[NameSlugProjectSchema]
     repository: ReleaseRepositorySchema | None = Field(

@@ -18,6 +18,10 @@ from apps.projects.resources import ProjectKeyResource, ProjectResource
 from apps.teams.resources import TeamResource
 from apps.users.models import User
 from apps.users.resources import UserResource
+from glitchtip.ssrf_protection import (
+    request_with_validated_redirects,
+    safe_session,
+)
 
 from .exceptions import ImporterException
 
@@ -71,9 +75,16 @@ class GlitchTipImporter:
         data = []
         next_url = url
         pages_fetched = 0
-        async with aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session:
+        allow_private = settings.GLITCHTIP_ALLOW_PRIVATE_IPS
+        async with safe_session(allow_private) as session:
             while next_url:
-                async with session.get(next_url, headers=self.headers) as res:
+                async with await request_with_validated_redirects(
+                    session,
+                    "GET",
+                    next_url,
+                    headers=self.headers,
+                    allow_private=allow_private,
+                ) as res:
                     response_data = await res.json()
                     if not isinstance(response_data, list):
                         return response_data
@@ -242,8 +253,17 @@ class GlitchTipImporter:
         await sync_to_async(resource.import_data)(dataset, raise_errors=True)
 
     async def check_auth(self):
-        async with aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session:
-            async with session.get(self.url + "/api/0/", headers=self.headers) as res:
-                data = await res.json()
-                if res.status != 200 or not data["user"]:
-                    raise ImporterException("Bad auth token")
+        allow_private = settings.GLITCHTIP_ALLOW_PRIVATE_IPS
+        async with (
+            safe_session(allow_private) as session,
+            await request_with_validated_redirects(
+                session,
+                "GET",
+                self.url + "/api/0/",
+                headers=self.headers,
+                allow_private=allow_private,
+            ) as res,
+        ):
+            data = await res.json()
+            if res.status != 200 or not data["user"]:
+                raise ImporterException("Bad auth token")

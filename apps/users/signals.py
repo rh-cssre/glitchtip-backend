@@ -1,38 +1,30 @@
 import logging
 
 from allauth.account.signals import user_logged_in
-from allauth.socialaccount.models import SocialAccount, SocialApp
-from django.db.models import Prefetch, Q
+from allauth.socialaccount.models import SocialAccount
+from django.db.models import Prefetch
 from django.dispatch import receiver
 
 from apps.organizations_ext.models import (
     OrganizationUser,
 )
+from apps.users.utils import org_social_apps_for_provider
 
 logger = logging.getLogger(__name__)
 
 
 @receiver(user_logged_in)
-def add_user_to_socialapp_organization(request, user, **kwargs):
+async def add_user_to_socialapp_organization(request, user, **kwargs):
     """
     Add user to organization if organization-social app exists
     """
+    # Lazy queryset: composes into the SocialApp filter as a SQL subquery,
+    # so no standalone query runs here (async-safe either way).
     user_providers = SocialAccount.objects.filter(user=user).values_list(
         "provider", flat=True
     )
     social_apps = (
-        SocialApp.objects.filter(
-            # Check for provider_id or provider if the former is not set
-            (
-                ~(Q(provider_id__isnull=True) | Q(provider_id__exact=""))
-                & Q(provider_id__in=user_providers)
-            )
-            | (
-                (Q(provider_id__isnull=True) | Q(provider_id__exact=""))
-                & Q(provider__in=user_providers)
-            )
-        )
-        .exclude(organizationsocialapp=None)
+        org_social_apps_for_provider(user_providers)
         .select_related("organizationsocialapp__organization")
         .prefetch_related(
             Prefetch(
@@ -43,9 +35,11 @@ def add_user_to_socialapp_organization(request, user, **kwargs):
         )
         .all()
     )
-    for social_app in social_apps:
-        if not social_app.organizationsocialapp.organization.matched_user:  # type: ignore
-            social_app.organizationsocialapp.organization.add_user(user)  # type: ignore
-            logger.info(
-                f"Added {social_app.organizationsocialapp.organization} to {user}"
-            )  # type: ignore
+    async for social_app in social_apps:
+        organization = social_app.organizationsocialapp.organization  # type: ignore
+        if not organization.matched_user:
+            # Note the first member of a memberless organization becomes its
+            # OWNER (aadd_user) -- deliberate, so a fresh org set up with only
+            # a social app bootstraps on first SSO login.
+            await organization.aadd_user(user)
+            logger.info(f"Added {organization} to {user}")

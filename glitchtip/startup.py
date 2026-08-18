@@ -3,6 +3,7 @@ GlitchTip startup banner display.
 """
 
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,26 @@ def format_banner(info: dict) -> str:
     return "\n".join(output_lines)
 
 
+# Environment variables that no longer do anything. Setting one used to
+# change behavior, so staying silent would turn an upgrade into a silent
+# behavior swap for the operator who deliberately set it.
+RETIRED_ENV_VARS = {
+    "GLITCHTIP_RUST_INGEST": (
+        "envelope ingest is always served by the Rust pipeline; the variable "
+        "is ignored, including when set to false"
+    ),
+}
+
+
+def warn_retired_env_vars():
+    """Log a warning for each retired environment variable still present."""
+    for name, explanation in RETIRED_ENV_VARS.items():
+        if name in os.environ:
+            logger.warning(
+                "%s is set but no longer has any effect: %s", name, explanation
+            )
+
+
 def print_startup_banner():
     """Print the GlitchTip startup banner."""
     try:
@@ -96,6 +117,7 @@ def print_startup_banner():
         banner = format_banner(info)
         # Print directly to ensure it appears in logs
         print(banner, flush=True)
+        warn_retired_env_vars()
     except Exception as e:
         # Don't let banner errors prevent startup
         logger.debug(f"Could not print startup banner: {e}")

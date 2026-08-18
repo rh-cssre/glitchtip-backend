@@ -3,6 +3,7 @@ from unittest import mock
 from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, override_settings
 
+from glitchtip.test_utils.dns import resolution_fails, resolves_to
 from glitchtip.url_validation import (
     check_url_safe,
     is_ip_blocked,
@@ -53,12 +54,14 @@ class ValidatePublicURLTests(SimpleTestCase):
         validate_public_url("http://127.0.0.1/", allow_private=True)
 
     def test_blocks_hostname_resolving_to_loopback(self):
-        with mock.patch(
-            "glitchtip.url_validation.socket.getaddrinfo",
-            return_value=[(0, 0, 0, "", ("127.0.0.1", 0))],
+        with (
+            mock.patch(
+                "glitchtip.url_validation.socket.getaddrinfo",
+                return_value=[(0, 0, 0, "", ("127.0.0.1", 0))],
+            ),
+            self.assertRaises(ValueError),
         ):
-            with self.assertRaises(ValueError):
-                validate_public_url("http://localhost.evil.example/")
+            validate_public_url("http://localhost.evil.example/")
 
     def test_dns_failure_is_permissive(self):
         # DNS failure defers to the runtime async check so that typos don't
@@ -93,6 +96,23 @@ class CheckURLSafeAsyncTests(SimpleTestCase):
         ):
             self.assertFalse(
                 async_to_sync(check_url_safe)("http://public-name.example/")
+            )
+
+    def test_hostname_resolving_to_public_allowed(self):
+        with resolves_to():
+            self.assertTrue(
+                async_to_sync(check_url_safe)("http://public-name.example/")
+            )
+
+    def test_unresolvable_hostname_allowed(self):
+        # Deliberate: a name that cannot be resolved cannot be connected to
+        # either, so the fetch fails on its own and the guard stays out of the
+        # way. The SSRF redirect tests used to lean on this path implicitly by
+        # using names they assumed would never resolve; it is asserted here
+        # instead so pinning DNS in those tests does not drop the coverage.
+        with resolution_fails():
+            self.assertTrue(
+                async_to_sync(check_url_safe)("http://no-such-host.invalid/")
             )
 
 
@@ -214,9 +234,31 @@ class WebhookRuntimeGuardTests(SimpleTestCase):
         mock_session.__aexit__ = mock.AsyncMock(return_value=False)
 
         with mock.patch(
-            "apps.alerts.webhooks.aiohttp.ClientSession",
+            "apps.alerts.webhooks.safe_session",
             mock.MagicMock(return_value=mock_session),
         ):
             async_to_sync(send_webhook)("http://127.0.0.1/", "msg")
 
         mock_session.post.assert_called_once()
+
+    def test_send_webhook_disables_redirect_following(self):
+        # A webhook must not follow a 3xx into internal space; redirects are off.
+        from apps.alerts.webhooks import send_webhook
+
+        mock_response = mock.AsyncMock()
+        mock_response.__aenter__ = mock.AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = mock.AsyncMock(return_value=False)
+        mock_session = mock.AsyncMock()
+        mock_session.post = mock.MagicMock(return_value=mock_response)
+        mock_session.__aenter__ = mock.AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = mock.AsyncMock(return_value=False)
+
+        with mock.patch(
+            "apps.alerts.webhooks.safe_session",
+            mock.MagicMock(return_value=mock_session),
+        ):
+            # 8.8.8.8 is public, so _is_url_allowed passes without DNS.
+            async_to_sync(send_webhook)("https://8.8.8.8/hook", "msg")
+
+        _, kwargs = mock_session.post.call_args
+        self.assertIs(kwargs.get("allow_redirects"), False)

@@ -4,6 +4,7 @@ from django.utils import timezone
 
 from apps.uptime.models import Monitor, MonitorCheck
 from glitchtip.base_commands import MakeSampleCommand
+from glitchtip.partition_manager import UUID7Helper
 
 
 class Command(MakeSampleCommand):
@@ -60,7 +61,11 @@ class Command(MakeSampleCommand):
                         organization=self.organization,
                         is_up=is_up,
                         is_change=is_first,
-                        start_check=start_time + timezone.timedelta(minutes=time_i),
+                        # The id carries the check's start time; partitions for
+                        # this range were ensured above.
+                        id=UUID7Helper.from_datetime(
+                            start_time + timezone.timedelta(minutes=time_i)
+                        ),
                         response_time=randrange(1, 5000),
                     )
                 )
@@ -71,4 +76,4 @@ class Command(MakeSampleCommand):
         if checks:
             MonitorCheck.objects.bulk_create(checks)
 
-        self.success_message('Successfully created "%s" monitors' % monitor_quantity)
+        self.success_message(f'Successfully created "{monitor_quantity}" monitors')

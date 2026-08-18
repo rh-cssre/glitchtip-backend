@@ -1,6 +1,5 @@
 import logging
-from datetime import datetime
-from datetime import timezone as dt_timezone
+from datetime import UTC, datetime
 
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
@@ -29,13 +28,103 @@ def get_stripe_link(stripe_id: str) -> str:
     return f"{base}{path}{stripe_id}"
 
 
+def is_metered_price(price) -> bool:
+    """True if a Stripe Price schema object is usage-based (meter-backed)."""
+    recurring = getattr(price, "recurring", None) or {}
+    return recurring.get("usage_type") == "metered" or bool(recurring.get("meter"))
+
+
+def price_kwargs(price) -> dict:
+    """Map a Stripe Price (schema object) to StripePrice field values.
+
+    Shared by both sync paths. Tiered/metered prices have ``unit_amount=None``
+    (the per-unit cost lives in tiers, not on the price), so ``price`` is stored
+    as 0 and the graduated schedule in settings is the source of truth for cost.
+    """
+    meta = price.metadata or {}
+    recurring = price.recurring or {}
+    return {
+        "active": price.active,
+        "price": price.unit_amount / 100 if price.unit_amount is not None else 0,
+        "nickname": price.nickname or "",
+        "no_throttle": meta.get("no_throttle", "").lower() == "true",
+        "is_public": meta.get("is_public", "").lower() == "true",
+        "is_metered": is_metered_price(price),
+        "meter_id": recurring.get("meter") or "",
+        "interval": recurring.get("interval", "month"),
+    }
+
+
+def is_syncable_product(product) -> bool:
+    """True for products GlitchTip stores locally.
+
+    Hosted plans carry an ``events`` quota; the metered overage product
+    (product_type=overage) has no quota but must be synced so its tiered price
+    can be attached as a second subscription item. Everything else in the
+    account — notably self-host support licenses — is deliberately not stored.
+    """
+    product_type = product.metadata.get("product_type", "").lower()
+    if product_type == "overage":
+        return True
+    return product_type == "hosted" and "events" in product.metadata
+
+
+def product_kwargs(product) -> dict:
+    """Map a Stripe Product (schema object) to StripeProduct field values.
+
+    Shared by the periodic sync and the product webhook so the two can't drift.
+    """
+    metadata = product.metadata
+    is_overage = metadata.get("product_type", "").lower() == "overage"
+    return {
+        "name": product.name,
+        "description": product.description or "",
+        "active": product.active,
+        # The overage product has no quota. NULL says "quota is not a concept
+        # here", which 0 ("a plan that allows no events") cannot express.
+        "events": None if is_overage else int(metadata.get("events", 0)),
+        # Optional: absent metadata leaves the plan silent so the instance
+        # default applies. A malformed value raises, as a bad `events` does,
+        # rather than silently becoming an unintended limit.
+        "uptime_monitors": (
+            None
+            if not metadata.get("uptime_monitors")
+            else int(metadata["uptime_monitors"])
+        ),
+        "is_public": metadata.get("is_public", "").lower() == "true",
+        "is_overage": is_overage,
+        "allow_sso": metadata.get("sso", "").lower() == "true",
+        "marketing_features": [
+            f["name"] for f in product.marketing_features if f.get("name")
+        ],
+    }
+
+
+def select_subscription_items(items):
+    """Split a subscription's items into (base_item, metered_item).
+
+    The base licensed plan drives quota and billing-cycle dates; the metered
+    item (if present) is the overage price. Stripe doesn't guarantee item order,
+    so callers must not assume ``items.data[0]`` is the base plan.
+    """
+    base = metered = None
+    for item in items.data:
+        if is_metered_price(item.price):
+            metered = metered or item
+        else:
+            base = base or item
+    if base is None and items.data:
+        base = items.data[0]
+    return base, metered
+
+
 def unix_to_datetime(timestamp: int) -> datetime:
     """Convert a POSIX timestamp from Stripe into an aware UTC datetime.
 
     Uses an explicit UTC tzinfo so the result does not depend on the
     process's local timezone (``$TZ``).
     """
-    return datetime.fromtimestamp(timestamp, tz=dt_timezone.utc)
+    return datetime.fromtimestamp(timestamp, tz=UTC)
 
 
 def compute_cycle(period_start: datetime, period_end: datetime, is_annual: bool):

@@ -1,5 +1,3 @@
-from typing import Optional
-
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
@@ -118,7 +116,7 @@ class DetailEmail(SingleObjectMixin, GlitchTipEmail):
         self.object = self.get_object()
         super().send_users_email(users)
 
-    def send_email(self, email: Optional[str] = None):
+    def send_email(self, email: str | None = None):
         """Send just one email"""
         self.object = self.get_object()
         context = self.get_context_data()

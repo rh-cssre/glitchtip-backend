@@ -7,13 +7,14 @@ import shutil
 import tempfile
 from enum import Enum
 from os import path
+from uuid import UUID
 
 from django.core.cache import cache
 
 from apps.organizations_ext.models import Organization
 from apps.releases.models import Release
 from apps.sourcecode.models import DebugSymbolBundle
-from sentry.utils.zip import safe_extract_zip
+from sentry.utils.zip import ZipExtractionLimitExceeded, safe_extract_zip
 
 from .exceptions import AssembleChecksumMismatch
 from .models import File, FileBlob
@@ -46,12 +47,10 @@ def _get_cache_key(task, scope, checksum):
     ``checksum`` should be the SHA1 hash of the main file that is being
     assembled.
     """
-    return (
-        "assemble-status:%s"
-        % hashlib.sha1(
-            ("%s|%s|%s" % (scope, checksum.encode("ascii"), task)).encode()
-        ).hexdigest()
-    )
+    digest = hashlib.sha1(
+        f"{scope}|{checksum.encode('ascii')}|{task}".encode()
+    ).hexdigest()
+    return f"assemble-status:{digest}"
 
 
 def set_assemble_status(
@@ -64,9 +63,47 @@ def set_assemble_status(
     cache.set(cache_key, (state, detail), 600)
 
 
+def get_assemble_status(task: AssembleTask, scope, checksum):
+    """
+    Returns the ``(state, detail)`` tuple for an assembling task, or None once
+    it has expired or was never started.
+    """
+    return cache.get(_get_cache_key(task, scope, checksum))
+
+
+def parse_debug_id(value) -> str | None:
+    """
+    Canonical form of a client-supplied debug id, or None when it is absent or
+    unusable.
+
+    The value comes from an uploaded manifest, so it can be any JSON type or a
+    malformed uuid. ``DebugSymbolBundle.debug_id`` is a UUIDField: passing one
+    of those through would raise during insert and abort the whole upload.
+    """
+    if not value:
+        return None
+    try:
+        return str(UUID(str(value)))
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
 def assemble_artifacts(
     organization: Organization, version: str | None, checksum: str, chunks: list[str]
 ):
+    """
+    Turn an uploaded artifact bundle into File rows and debug symbol bundles.
+
+    This module is deliberately sync, against the async-first rule: the work
+    is dominated by blocking filesystem and CPU steps with no async
+    counterpart — zip extraction, a read per artifact, SHA-1 hashing, and
+    storage writes through django-storages, which has no async API (see the
+    note in maintenance.py). Declaring it async would make none of that
+    non-blocking. Every storage call would still need its own thread hop, and
+    the hashing and extraction would run on the event loop unless hopped off
+    it as well. One coarse sync_to_async at the task boundary (tasks.py) is
+    cheaper than many fine-grained ones, and cannot stall the loop.
+    """
     set_assemble_status(
         AssembleTask.ARTIFACTS, organization.pk, checksum, ChunkFileState.ASSEMBLING
     )
@@ -102,6 +139,20 @@ def assemble_artifacts(
 
     try:
         safe_extract_zip(temp_file, scratchpad, strip_toplevel=False)
+    except ZipExtractionLimitExceeded as err:
+        # An over-sized bundle is a rejected upload, not a server fault. Record
+        # it on the assemble status and log the reason. The assemble endpoints
+        # answer before this task runs and do not read the status back, so for
+        # now the log is what an operator has to go on.
+        logger.warning(
+            "assemble_artifacts: bundle over extraction limits for org %s "
+            "checksum %s: %s",
+            organization.pk,
+            checksum,
+            err,
+        )
+        _fail_and_cleanup(f"Failed to extract bundle: {err}")
+        return
     except Exception:
         # Catch broadly: zipfile raises BadZipFile, but other I/O errors are
         # possible. All mean the uploaded blob is not a usable zip bundle.
@@ -157,7 +208,11 @@ def assemble_artifacts(
 
         artifact_url = artifact.get("url", rel_path)
         artifact_basename = artifact_url.rsplit("/", 1)[-1]
-        headers = artifact.get("headers", {})
+        headers = artifact.get("headers")
+        if not isinstance(headers, dict):
+            # An explicit ``"headers": null`` returns None from .get(), and the
+            # manifest is client-supplied, so the value can be any JSON type.
+            headers = {}
 
         file = File.objects.create(
             name=artifact_basename,
@@ -169,12 +224,31 @@ def assemble_artifacts(
         with open(full_path, "rb") as fp:
             file.putfile(fp)
 
+    # Parse debug ids once per artifact, in canonical form. Two spellings of
+    # one uuid (upper case, or unhyphenated) would otherwise be distinct here
+    # but collide in the unique index at insert time.
+    debug_ids: dict[int, str] = {}
+    for file in files:
+        if parsed := parse_debug_id(file.headers.get("debug-id")):
+            debug_ids[file.id] = parsed
+
     # Build bundles, deduplicating by debug_id. When a minified_source and its
     # source_map share the same debug-id, keep only the minified_source bundle
     # (which carries the sourcemap_file reference).
     bundles_by_debug_id: dict[str, DebugSymbolBundle] = {}
     bundles_without_debug_id: list[DebugSymbolBundle] = []
+    unreferenceable_files: list[File] = []
     for file in files:
+        debug_id = debug_ids.get(file.id)
+        if debug_id is None and release is None:
+            # Nothing could ever resolve this artifact: bundles are looked up
+            # by debug_id, or by release plus file name. Storing it is also
+            # rejected by the debug_id_or_release_required check constraint,
+            # which would abort the whole bulk insert and lose the rest of
+            # the upload.
+            unreferenceable_files.append(file)
+            continue
+
         sourcemap_file = None
         if file.type == "minified_source":
             try:
@@ -186,9 +260,7 @@ def assemble_artifacts(
                         file.headers.get("sourcemap", file.headers.get("Sourcemap"))
                         == value.name
                         or (
-                            value.headers.get("debug-id")
-                            and value.headers.get("debug-id")
-                            == file.headers.get("debug-id")
+                            debug_id is not None and debug_ids.get(value.id) == debug_id
                         )
                     )
                 )
@@ -197,18 +269,31 @@ def assemble_artifacts(
 
         bundle = DebugSymbolBundle(
             organization=organization,
-            debug_id=file.headers.get("debug-id"),
+            debug_id=debug_id,
             release=release,
             sourcemap_file=sourcemap_file,
             file=file,
         )
-        debug_id = bundle.debug_id
         if debug_id is None:
             bundles_without_debug_id.append(bundle)
         elif debug_id not in bundles_by_debug_id or sourcemap_file is not None:
             bundles_by_debug_id[debug_id] = bundle
 
     bundles = list(bundles_by_debug_id.values()) + bundles_without_debug_id
+
+    if unreferenceable_files:
+        # One aggregate line per upload, not one per artifact: a large bundle
+        # can hold thousands of files. Symbolication silently not working is
+        # otherwise hard to trace back to the upload.
+        logger.warning(
+            "assemble_artifacts: skipped %d artifact(s) for org %s checksum %s: "
+            "no debug-id header and no release, so they could never be matched "
+            "to an event. Upload with a release version, or use an SDK build "
+            "that emits debug ids.",
+            len(unreferenceable_files),
+            organization.pk,
+            checksum,
+        )
 
     # Split bundles: complete bundles (with sourcemap_file) can upsert to
     # replace stale data. Incomplete bundles (no sourcemap_file) should only
@@ -243,12 +328,18 @@ def assemble_artifacts(
             ignore_conflicts=True,
         )
 
-    # Clean up replaced files
-    if old_file_ids:
+    # Clean up replaced files, plus the skipped artifacts uploaded above. Both
+    # run only once the inserts have succeeded, and only for files no surviving
+    # bundle points at — a skipped source map can still be another bundle's
+    # sourcemap_file. Deleting the File row moves its blob from the multi-day
+    # retention pass onto the 24 hour orphan pass in maintenance.py.
+    if old_file_ids or unreferenceable_files:
         new_file_ids = {b.file_id for b in bundles if b.file_id} | {
             b.sourcemap_file_id for b in bundles if b.sourcemap_file_id
         }
-        orphaned_ids = old_file_ids - new_file_ids
+        orphaned_ids = (
+            old_file_ids | {f.id for f in unreferenceable_files}
+        ) - new_file_ids
         if orphaned_ids:
             File.objects.filter(id__in=orphaned_ids).delete()
 
@@ -297,7 +388,7 @@ def assemble_file(
 
     # Sanity check.  In case not all blobs exist at this point we have a
     # race condition.
-    if set(x[1] for x in file_blobs) != set(chunks):
+    if {x[1] for x in file_blobs} != set(chunks):
         set_assemble_status(
             task,
             organization.id,

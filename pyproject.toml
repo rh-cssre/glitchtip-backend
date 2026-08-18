@@ -6,9 +6,9 @@ authors = ["David Burke"]
 license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
-    "django~=6.0",
-    "django-vtasks[valkey]~=2.1.2",
-    "django-allauth[mfa,socialaccount]~=65.0",
+    "django>=6.0,<6.1",
+    "django-vtasks[valkey]~=3.1.0",
+    "django-allauth-async[mfa,socialaccount]==65.19.1.1",
     "django-cors-headers~=4.0",
     "django-environ~=0.11",
     "django-extensions~=4.0",
@@ -17,19 +17,20 @@ dependencies = [
     "uWSGI~=2.0",
     "whitenoise~=6.0",
     "sentry-sdk~=2.20",
-    "cxxfilt~=0.3.0",
     "django-anymail~=15.0",
     "user-agents~=2.1",
     "django-ipware~=7.0",
     "anonymizeip~=1.0",
-    "symbolic~=13.8.0",
     "aiohttp~=3.7",
     "google-cloud-logging~=3.0",
     "django-prometheus~=2.2",
     "uwsgi-chunked~=0.1",
     "django-import-export~=4.1",
-    "psycopg[c,pool]~=3.1",
-    "django-ninja~=1.5",
+    # Library-only: psycopg.sql composition and Jsonb/Json parameter
+    # wrappers, plus the import Django's stock postgresql backend performs.
+    # No database I/O flows through psycopg
+    "psycopg~=3.1",
+    "django-ninja~=1.6",
     "boto3~=1.34",
     "orjson~=3.9",
     "pydantic[email]~=2.11",
@@ -37,21 +38,32 @@ dependencies = [
     "django-postgres-partition>=0.1.4",
     "pyyaml>=6.0.2", # allauth openapi spec
     "granian[reload,uvloop]>=2.6.0",
-    "django-vcache>=2.2.0",
-    "glitchtip-rust>=0.3.1",
+    "django-vcache>=3.0.0",
+    "glitchtip-rust>=0.9.0",
     "uuid6>=2024.1.12",
     "mcp[cli]>=1.9",
     "duckdb>=1.2.0",
     "minidump>=0.0.24",
     "arro3-core~=0.8",
     "arro3-io~=0.8",
-    "django-async-backend~=6.0",
+    # Matches Django major/minor
+    "django-async-backend>=6.0,<6.1",
     "opentelemetry-proto~=1.0",
 ]
 
 [dependency-groups]
+# CI's lint job installs only this group, so the linters it runs are the ones
+# pinned in uv.lock — there is no second version to keep in sync by hand.
+# ruff is pinned to a patch range on purpose: pre-1.0 it changes its *default*
+# rule selection across minor versions, so `~=0.16` would let a routine
+# `uv lock --upgrade` drop hundreds of new findings into an unrelated
+# dependency MR. Widening this is a deliberate edit plus a tree sweep.
+lint = [
+    "ruff~=0.16.0",
+    "vulture~=2.16",
+]
 dev = [
-    "locust~=2.10",
+    {include-group = "lint"},
     "freezegun~=1.1",
     "model-bakery-async~=1.23",
     "django-debug-toolbar~=7.0",
@@ -59,18 +71,48 @@ dev = [
     "django-sslserver~=0.22",
     "aioresponses~=0.7",
     "memray~=1.9",
-    "ruff~=0.6",
     "tblib~=3.0",                         # Needed for test --parallel
     "ipython>=8.32.0",
-    "vulture>=2.14",
     "coverage>=7.13.4",
 ]
 
 [tool.ruff.lint]
 extend-select = ["I"]
+ignore = [
+    # Django's declarative style is built on mutable class attributes
+    # (`Meta.ordering`, `fields`, `list_display`, serializer/schema config).
+    # Annotating every one with `ClassVar` adds noise without catching bugs.
+    "RUF012",
+    # Ingest, alert delivery and maintenance tasks deliberately swallow broad
+    # exceptions so one bad payload or one unreachable endpoint cannot take
+    # down a batch. Each site is a considered choice, not an oversight.
+    "BLE001",
+    "S110",
+    # Naive datetimes are used on purpose for date-bucket keys, partition
+    # boundaries and test fixtures. Django's `USE_TZ` handling covers the
+    # stored values; blanket-flagging every `datetime(...)` is noise.
+    "DTZ001",
+    "DTZ005",
+    "DTZ007",
+    # Long-lived file handles (cold storage writers, streaming uploads) are
+    # closed explicitly rather than scoped to a `with` block.
+    "SIM115",
+    # File-mode rules depend on the checkout's permission bits, which git does
+    # not track for these files; they fire differently per developer machine.
+    "EXE001",
+    "EXE002",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "*/migrations/*.py" = ["I"]
+# The module name is the management command name (`manage.py import`), so it
+# cannot avoid shadowing the keyword.
+"apps/importer/management/commands/import.py" = ["N999"]
+
+[tool.ruff.lint.flake8-bugbear]
+# django-ninja declares request parsing in argument defaults; that is the
+# framework's API, not an accidental shared mutable default.
+extend-immutable-calls = ["ninja.File", "ninja.Form", "ninja.Query"]
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main"]

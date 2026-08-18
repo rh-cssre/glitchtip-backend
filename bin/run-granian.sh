@@ -11,6 +11,12 @@ WORKERS=${GRANIAN_WORKERS:-${WEB_CONCURRENCY:-1}}
 HOST=${GRANIAN_HOST:-0.0.0.0}
 PORT=${GRANIAN_PORT:-${PORT:-8000}}
 
+# Granian's kill timeout is disabled by default, which makes it wait on a
+# stopping worker forever and skip the SIGKILL escalation. A worker that does
+# not stop on SIGTERM then blocks respawns (--workers-lifetime, HUP) and
+# shutdown indefinitely. 60s is well beyond a normal in-flight drain.
+export GRANIAN_WORKERS_KILL_TIMEOUT=${GRANIAN_WORKERS_KILL_TIMEOUT:-60}
+
 # Serve static files by default if the directory exists
 # If GRANIAN_STATIC_PATH_MOUNT is explicitly set, we respect it (and let Granian fail if it's missing)
 # If it's NOT set, we check for the default 'static' directory.

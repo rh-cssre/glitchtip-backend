@@ -8,6 +8,7 @@ from apps.alerts.webhooks import (
     GoogleChatCard,
     WebhookAttachment,
     send_discord_webhook,
+    send_feishu_webhook,
     send_googlechat_webhook,
     send_ntfy,
     send_teams_webhook,
@@ -31,12 +32,12 @@ async def _resolve_monitor_check(monitor_check_id):
     return await qs.aget(id=monitor_check_id)
 
 
-async def _send_uptime_generic(recipient, monitor, subject, message):
+async def _send_uptime_generic(recipient, monitor, subject, message, _went_down):
     attachment = WebhookAttachment(monitor.name, monitor.get_detail_url(), message)
     return await send_webhook(recipient.url, subject, [attachment])
 
 
-async def _send_uptime_googlechat(recipient, monitor, subject, message):
+async def _send_uptime_googlechat(recipient, monitor, subject, message, _went_down):
     card = GoogleChatCard().construct_uptime_card(
         title=subject,
         subtitle=monitor.name,
@@ -46,7 +47,7 @@ async def _send_uptime_googlechat(recipient, monitor, subject, message):
     return await send_googlechat_webhook(recipient.url, [card])
 
 
-async def _send_uptime_discord(recipient, monitor, subject, message):
+async def _send_uptime_discord(recipient, monitor, subject, message, _went_down):
     embed = DiscordEmbed(
         title=monitor.name,
         description=message,
@@ -57,7 +58,7 @@ async def _send_uptime_discord(recipient, monitor, subject, message):
     return await send_discord_webhook(recipient.url, subject, [embed])
 
 
-async def _send_uptime_ntfy(recipient, monitor, subject, message):
+async def _send_uptime_ntfy(recipient, monitor, subject, message, _went_down):
     return await send_ntfy(
         recipient.url,
         title=subject,
@@ -67,7 +68,7 @@ async def _send_uptime_ntfy(recipient, monitor, subject, message):
     )
 
 
-async def _send_uptime_teams(recipient, monitor, subject, message):
+async def _send_uptime_teams(recipient, monitor, subject, message, _went_down):
     body = [
         {"type": "TextBlock", "size": "Large", "weight": "Bolder", "text": subject},
         {"type": "TextBlock", "weight": "Bolder", "text": monitor.name},
@@ -83,7 +84,7 @@ async def _send_uptime_teams(recipient, monitor, subject, message):
     return await send_teams_webhook(recipient.url, body, actions)
 
 
-async def _send_uptime_zulip(recipient, monitor, subject, message):
+async def _send_uptime_zulip(recipient, monitor, subject, message, _went_down):
     config = recipient.config or {}
     content = f"## {subject}\n\n**{monitor.name}**\n{message}\n\n[View Monitor]({monitor.get_detail_url()})"
     return await send_zulip_message(
@@ -96,9 +97,46 @@ async def _send_uptime_zulip(recipient, monitor, subject, message):
     )
 
 
+async def _send_uptime_feishu(recipient, monitor, subject, message, went_down):
+    payload = {
+        "msg_type": "interactive",
+        "card": {
+            "header": {
+                "title": {"tag": "plain_text", "content": subject},
+                "template": "red" if went_down else "green",
+            },
+            "elements": [
+                {
+                    "tag": "div",
+                    "text": {
+                        "tag": "lark_md",
+                        "content": f"**{monitor.name}**\n{message}",
+                    },
+                },
+                {
+                    "tag": "action",
+                    "actions": [
+                        {
+                            "tag": "button",
+                            "text": {
+                                "tag": "plain_text",
+                                "content": "View Monitor",
+                            },
+                            "url": monitor.get_detail_url(),
+                            "type": "primary",
+                        }
+                    ],
+                },
+            ],
+        },
+    }
+    return await send_feishu_webhook(recipient.url, payload)
+
+
 UPTIME_NOTIFICATION_HANDLERS = {
     RecipientType.GENERAL_WEBHOOK: _send_uptime_generic,
     RecipientType.DISCORD: _send_uptime_discord,
+    RecipientType.FEISHU: _send_uptime_feishu,
     RecipientType.GOOGLE_CHAT: _send_uptime_googlechat,
     RecipientType.NTFY: _send_uptime_ntfy,
     RecipientType.MICROSOFT_TEAMS: _send_uptime_teams,
@@ -128,4 +166,4 @@ async def send_uptime_as_webhook(
     handler = UPTIME_NOTIFICATION_HANDLERS.get(
         recipient.recipient_type, _send_uptime_generic
     )
-    return await handler(recipient, monitor, subject, message)
+    return await handler(recipient, monitor, subject, message, went_down)

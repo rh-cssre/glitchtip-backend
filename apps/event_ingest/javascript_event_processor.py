@@ -5,12 +5,14 @@ from os.path import splitext
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
-from symbolic import SourceMapCache
+from gt_rust.symbolic import SourceMapCache
 
 from apps.sourcecode.models import DebugSymbolBundle
 
 if TYPE_CHECKING:
-    from .schema import EventException, IssueEventSchema, StackTraceFrame
+    from apps.shared.schema.exception import EventException, StackTraceFrame
+
+    from .schema import IssueEventSchema
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +29,9 @@ CLEAN_MODULE_RE = re.compile(
 )/)+|
 (?:[-\.][a-f0-9]{7,}$)  # Ending in a commitish
 """,
-    re.X | re.I,
+    re.VERBOSE | re.IGNORECASE,
 )
-VERSION_RE = re.compile(r"^[a-f0-9]{32}|[a-f0-9]{40}$", re.I)
+VERSION_RE = re.compile(r"^[a-f0-9]{32}|[a-f0-9]{40}$", re.IGNORECASE)
 NODE_MODULES_RE = re.compile(r"\bnode_modules/")
 
 
@@ -47,8 +49,7 @@ def generate_module(src):
         return UNKNOWN_MODULE
 
     filename, _ = splitext(urlsplit(src).path)
-    if filename.endswith(".min"):
-        filename = filename[:-4]
+    filename = filename.removesuffix(".min")
 
     tokens = filename.split("/")
     for idx, token in enumerate(tokens):

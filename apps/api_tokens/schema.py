@@ -11,7 +11,7 @@ from .models import APIToken
 
 def bitfield_to_internal_value(model, v: Any, info: ValidationInfo) -> int:
     if not info.field_name:
-        raise Exception("Improperly used bitfield_to_internal_value")
+        raise RuntimeError("Improperly used bitfield_to_internal_value")
 
     if isinstance(v, list):
         model_field = getattr(model, info.field_name)

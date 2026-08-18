@@ -1,7 +1,9 @@
 from allauth.account.models import EmailAddress
 from allauth.mfa.models import Authenticator
 from allauth.mfa.recovery_codes.internal.auth import RecoveryCodes
-from asgiref.sync import sync_to_async
+from allauth.mfa.utils import encrypt
+from allauth_async.account.internal.flows.email_verification import asend_confirmation
+from allauth_async.mfa.recovery_codes.internal.auth import AsyncRecoveryCodes
 from django.core.cache import cache
 from django.db.utils import IntegrityError
 from django.http import Http404, HttpResponse
@@ -10,6 +12,7 @@ from ninja import Router, Status
 from ninja.errors import HttpError
 from ninja.pagination import paginate
 
+from apps.organizations_ext.utils import is_member_guard_violation
 from apps.shared.types import MeID
 from glitchtip.api.authentication import AuthHttpRequest
 
@@ -45,7 +48,7 @@ PUT /users/<me_id>/notifications/
 
 
 def generate_user_seed_key(user_id: int):
-    return f"seed{user_id}"
+    return f"users:recovery-seed:{user_id}"
 
 
 def get_user_queryset(user_id: int, add_details=False):
@@ -85,9 +88,22 @@ async def delete_user(request: AuthHttpRequest, user_id: MeID):
         raise Http404
     user_id = request.auth.user_id
     queryset = get_user_queryset(user_id=user_id)
-    result, _ = await queryset.filter(
-        organizations_ext_organizationuser__organizationowner__isnull=True
-    ).adelete()
+    try:
+        # exclude, not filter(isnull=True): the filter form matches a user as
+        # soon as ANY of their memberships lacks an owner record, letting an
+        # owner of one org delete their account through a plain membership in
+        # another and orphan the org they own.
+        result, _ = await queryset.exclude(
+            organizations_ext_organizationuser__organizationowner__isnull=False
+        ).adelete()
+    except IntegrityError as err:
+        if is_member_guard_violation(err):
+            raise HttpError(
+                400,
+                "User is the only member of an organization. "
+                "Delete the organization or add another member first.",
+            )
+        raise
     if result:
         return Status(204, None)
     if await queryset.aexists():
@@ -154,7 +170,7 @@ async def create_email(
             400,
             "Email already exists",
         )
-    await sync_to_async(email_address.send_confirmation)(request, signup=False)
+    await asend_confirmation(request, email_address, signup=False)
     return Status(201, email_address)
 
 
@@ -199,7 +215,7 @@ async def send_confirm_email(
     email_address = await aget_object_or_404(
         get_email_queryset(user_id, verified=False), email=payload.email
     )
-    await sync_to_async(email_address.send_confirmation)(request)
+    await asend_confirmation(request, email_address)
     return Status(204, None)
 
 
@@ -229,18 +245,25 @@ async def update_notifications(
     return user
 
 
+def _preview_recovery_codes(seed: str) -> list[str]:
+    # Pure preview, nothing saved. The seed is stored encrypt()-ed on real
+    # authenticators, so the preview must encrypt too (see the
+    # preview-then-confirm walkthrough in allauth_async's recovery-codes
+    # module) -- otherwise the previewed codes only match the persisted ones
+    # when MFA_KEY_DERIVATION is the default identity function.
+    authenticator = Authenticator(data={"seed": encrypt(seed), "used_mask": 0})
+    return RecoveryCodes(authenticator).generate_codes()
+
+
 @router.get("/generate-recovery-codes/", response=RecoveryCodesSchema)
 async def generate_recovery_codes(request: AuthHttpRequest):
     """
     Extension of django-allauth headless API to pre-generate recovery codes before saving
     """
-    authenticator = Authenticator(data={"seed": RecoveryCodes.generate_seed()})
-    codes = RecoveryCodes(authenticator).generate_codes()
-    await cache.aset(
-        generate_user_seed_key(request.auth.user_id), authenticator.data["seed"]
-    )
+    seed = RecoveryCodes.generate_seed()
+    await cache.aset(generate_user_seed_key(request.auth.user_id), seed)
     return {
-        "codes": codes,
+        "codes": _preview_recovery_codes(seed),
     }
 
 
@@ -253,16 +276,18 @@ async def set_recovery_codes(request: AuthHttpRequest, payload: RecoveryCodeSche
     seed = await cache.aget(generate_user_seed_key(user_id))
     if not seed:
         raise HttpError(400, "No recovery codes set, use GET first")
-    authenticator = Authenticator(
-        type=Authenticator.Type.RECOVERY_CODES,
-        user_id=user_id,
-        data={"seed": seed, "used_mask": 0},
-    )
-    for code in RecoveryCodes(authenticator).generate_codes():
-        if code == payload.code:
-            await Authenticator.objects.filter(
-                type=Authenticator.Type.RECOVERY_CODES, user_id=user_id
-            ).adelete()
-            await authenticator.asave()
-            return Status(204, None)
-    raise HttpError(400, "Invalid code")
+    if payload.code not in _preview_recovery_codes(seed):
+        raise HttpError(400, "Invalid code")
+    user = await aget_object_or_404(User, id=user_id)
+    await Authenticator.objects.filter(
+        type=Authenticator.Type.RECOVERY_CODES, user_id=user_id
+    ).adelete()
+    try:
+        await AsyncRecoveryCodes.aactivate(user, seed=seed)
+    except (IntegrityError, ValueError):
+        # A concurrent confirm won the delete/activate race (IntegrityError on
+        # the unique-type insert, or ValueError from aactivate spotting the
+        # winner's row); the codes the user holds are live either way.
+        raise HttpError(400, "Recovery codes were already set, use GET first")
+    await cache.adelete(generate_user_seed_key(user_id))
+    return Status(204, None)

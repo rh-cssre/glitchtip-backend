@@ -22,8 +22,9 @@ Why Rust owns this:
 
 Two entry points, by endpoint shape:
 
-  - ``frame_envelope`` — the ``/envelope/`` hot path: decompress **and** frame
-    in one pass (``parse_envelope``).
+  - ``frame_envelope`` — the ``/envelope/`` fallback view (production envelope
+    POSTs are served whole by ``glitchtip.rust_ingest``): decompress **and**
+    frame in one pass (``parse_envelope``).
   - ``decompress_body`` — the non-envelope endpoints (``/store/``,
     ``/security/``, ``/minidump/``): decompress only, hand the raw bytes to the
     endpoint's own parser.
@@ -32,8 +33,6 @@ Both take the raw (still-compressed) request body plus its ``Content-Encoding``;
 nothing decompresses the body upstream of the view.
 """
 
-from urllib.parse import urlparse
-
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from gt_rust.envelope import (
@@ -41,16 +40,14 @@ from gt_rust.envelope import (
     ParsedEnvelope,
     decompress,
     parse_envelope,
-    parse_envelope_header,
 )
 
 __all__ = [
     "EnvelopeTooBig",
-    "request_content_encoding",
-    "frame_envelope",
     "decompress_body",
-    "sentry_key_from_envelope_body",
     "envelope_error_response",
+    "frame_envelope",
+    "request_content_encoding",
 ]
 
 # Content-Encoding values gt_rust can decode. Anything else (absent,
@@ -91,26 +88,6 @@ def decompress_body(body: bytes, content_encoding: str | None) -> bytes:
     the decompressed size exceeds ``GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE``.
     """
     return decompress(body, content_encoding, _max_unzipped())
-
-
-def sentry_key_from_envelope_body(
-    body: bytes, content_encoding: str | None = None
-) -> str | None:
-    """Lift the DSN public key from the envelope header, or ``None``.
-
-    Reads only the first framed line (no full-body framing). Returns the public
-    key string (``urlparse(dsn).username``, matching ``embed_auth``), suitable
-    for the same ``UUID(...)`` parse the query/header auth paths use. Never
-    raises — a malformed/oversized body just means "no key here", and the normal
-    Invalid-DSN rejection takes over.
-    """
-    try:
-        header = parse_envelope_header(body, content_encoding, _max_unzipped())
-    except (ValueError, EnvelopeTooBig):
-        return None
-    if not header.dsn:
-        return None
-    return urlparse(header.dsn).username or None
 
 
 def envelope_error_response(exc: Exception) -> HttpResponse | None:

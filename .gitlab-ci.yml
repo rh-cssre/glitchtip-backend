@@ -14,6 +14,9 @@ include:
   - template: SAST.gitlab-ci.yml
   - template: Dependency-Scanning.gitlab-ci.yml
   - template: Secret-Detection.gitlab-ci.yml
+  # Shared AI-policy check (fork MRs must disclose AI usage). See AI_POLICY.md.
+  - project: 'glitchtip/glitchtip'
+    file: '/ci/ai-policy-check.yml'
 
 workflow:
   rules:
@@ -31,7 +34,10 @@ workflow:
     - if: $CI_PIPELINE_SOURCE == 'web'
     - if: $CI_PIPELINE_SOURCE == 'schedule'
 
-# Minimum supported: Python 3.12, PostgreSQL 14, Redis
+# Lowest tested stack: Python 3.12, PostgreSQL 15, Redis.
+# PostgreSQL 14 is still supported and still works; this lane moved to 15
+# because Django 6.1 drops PostgreSQL 14, and the floor we test against
+# should lead the floor we document rather than trail it.
 test-min:
   image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.12-$BASE_LAYER
   variables:
@@ -41,7 +47,7 @@ test-min:
     ENABLE_OPEN_USER_REGISTRATION: "true"
     VALKEY_URL: "redis://redis:6379"
   services:
-    - postgres:14
+    - postgres:15
     - name: redis:7
       alias: redis
   cache:
@@ -53,6 +59,34 @@ test-min:
   script:
     - uv sync --frozen --no-install-project
     - uv run ./manage.py test
+    - uv cache prune --ci
+  rules:
+    - if: $CI_PIPELINE_SOURCE != "schedule"
+
+# Postgres-only lane: no Valkey at all (VALKEY_URL=""), so the Rust ingest
+# path's cache ops run against the django_cache table and enqueue goes to
+# the db_queuedtask broker. The parity suite skips itself here (broker
+# batch order); RustIngestTestCase covers the lane end-to-end.
+test-postgres-only:
+  image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.14-$BASE_LAYER
+  variables:
+    SECRET_KEY: testing
+    DATABASE_URL: "postgres://postgres:postgres@postgres:5432/postgres"
+    ENABLE_TEST_API: "true"
+    ENABLE_OPEN_USER_REGISTRATION: "true"
+    VALKEY_URL: ""
+  services:
+    - name: postgres:18
+      alias: postgres
+  cache:
+    - key:
+        files:
+          - uv.lock
+      paths:
+        - $UV_CACHE_DIR
+  script:
+    - uv sync --frozen --no-install-project
+    - uv run ./manage.py test apps.event_ingest glitchtip
     - uv cache prune --ci
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
@@ -133,11 +167,12 @@ e2e:
       - COMPOSE_FILES: "-f compose.e2e.yml -f compose.e2e.web-worker.yml"
 
 lint:
-  image: python:3.14-slim
+  image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.14-$BASE_LAYER
   script:
-    - pip install ruff vulture
-    - ruff check glitchtip/ apps/
-    - vulture apps/ glitchtip/ vulture_whitelist.py --min-confidence 100 --exclude "*/migrations/*,glitchtip/test_runner.py,apps/organizations_ext/api.py"
+    # Install linters from the lockfile via `lint` dependency group
+    - uv sync --only-group lint --frozen --no-install-project
+    - uv run --no-sync ruff check glitchtip/ apps/
+    - uv run --no-sync vulture apps/ glitchtip/ vulture_whitelist.py --min-confidence 100 --exclude "*/migrations/*,glitchtip/test_runner.py,apps/organizations_ext/api.py"
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 
@@ -313,7 +348,7 @@ release_manifest_merge:
     - if: '$CI_COMMIT_TAG =~ /^v\d+.\d+.\d+/ && $CI_COMMIT_REF_PROTECTED == "true"'
 
 update_deps:
-  image: renovate/renovate:43
+  image: renovate/renovate:44
   variables:
     RENOVATE_PLATFORM: gitlab
     RENOVATE_ENDPOINT: https://gitlab.com/api/v4

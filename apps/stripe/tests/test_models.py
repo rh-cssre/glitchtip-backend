@@ -38,10 +38,137 @@ test_price = Price(
 )
 
 
+def make_product(**overrides) -> ProductExpandedPrice:
+    """A hosted-plan entry as list_products() yields it; override what matters."""
+    defaults = {
+        "object": "product",
+        "id": "prod_1",
+        "active": True,
+        "attributes": [],
+        "created": 1678886400,
+        "default_price": test_price,
+        "description": "Description",
+        "images": [],
+        "livemode": False,
+        "marketing_features": [],
+        "metadata": {"events": "123", "is_public": "true", "product_type": "hosted"},
+        "name": "Product",
+        "package_dimensions": None,
+        "shippable": None,
+        "statement_descriptor": None,
+        "tax_code": None,
+        "type": "service",
+        "unit_label": None,
+        "updated": 1678886400,
+        "url": None,
+    }
+    return ProductExpandedPrice(**{**defaults, **overrides})
+
+
 class StripeTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.org = baker.make("organizations_ext.Organization")
+
+    @staticmethod
+    def _page(*products):
+        async def generator():
+            yield list(products)
+
+        return generator()
+
+    @patch("apps.stripe.models.list_products")
+    async def test_sync_deactivates_archived_product(self, mock_list_products):
+        """Archiving in Stripe deactivates the row rather than deleting it, so
+        subscriptions still pointing at the product keep rendering."""
+        mock_list_products.return_value = self._page(
+            make_product(id="prod_archived", active=False)
+        )
+        await StripeProduct.sync_from_stripe()
+
+        product = await StripeProduct.objects.aget(stripe_id="prod_archived")
+        self.assertFalse(product.active)
+
+    @patch("apps.stripe.models.list_products")
+    async def test_sync_reactivates_unarchived_product(self, mock_list_products):
+        """Un-archiving flows back the same way; active isn't write-once."""
+        await StripeProduct.objects.acreate(
+            stripe_id="prod_back", name="Back", events=1, is_public=True, active=False
+        )
+        mock_list_products.return_value = self._page(make_product(id="prod_back"))
+        await StripeProduct.sync_from_stripe()
+
+        product = await StripeProduct.objects.aget(stripe_id="prod_back")
+        self.assertTrue(product.active)
+
+    @patch("apps.stripe.models.list_products")
+    async def test_sync_round_trips_price_active(self, mock_list_products):
+        archived_price = test_price.model_copy(
+            update={"id": "price_archived", "active": False}
+        )
+        mock_list_products.return_value = self._page(
+            make_product(id="prod_with_archived_price", default_price=archived_price)
+        )
+        await StripeProduct.sync_from_stripe()
+
+        price = await StripePrice.objects.aget(stripe_id="price_archived")
+        self.assertFalse(price.active)
+
+    @patch("apps.stripe.models.list_products")
+    async def test_sync_stores_overage_quota_as_null(self, mock_list_products):
+        """The overage product has no quota; NULL keeps that distinct from 0."""
+        mock_list_products.return_value = self._page(
+            make_product(
+                id="prod_overage",
+                metadata={"product_type": "overage"},
+                default_price=test_price.model_copy(update={"id": "price_overage"}),
+            )
+        )
+        await StripeProduct.sync_from_stripe()
+
+        product = await StripeProduct.objects.aget(stripe_id="prod_overage")
+        self.assertIsNone(product.events)
+        self.assertTrue(product.is_overage)
+
+    @patch("apps.stripe.models.list_products")
+    async def test_sync_stores_uptime_monitor_limit(self, mock_list_products):
+        mock_list_products.return_value = self._page(
+            make_product(
+                id="prod_monitors",
+                metadata={
+                    "events": "123",
+                    "is_public": "true",
+                    "product_type": "hosted",
+                    "uptime_monitors": "500",
+                },
+                default_price=test_price.model_copy(update={"id": "price_monitors"}),
+            )
+        )
+        await StripeProduct.sync_from_stripe()
+
+        product = await StripeProduct.objects.aget(stripe_id="prod_monitors")
+        self.assertEqual(product.uptime_monitors, 500)
+
+    @patch("apps.stripe.models.list_products")
+    async def test_sync_leaves_uptime_monitor_limit_null(self, mock_list_products):
+        """No metadata means the plan is silent, not that it is unlimited."""
+        mock_list_products.return_value = self._page(make_product())
+        await StripeProduct.sync_from_stripe()
+
+        product = await StripeProduct.objects.aget(stripe_id="prod_1")
+        self.assertIsNone(product.uptime_monitors)
+
+    @patch("apps.stripe.models.list_products")
+    async def test_sync_skips_support_products(self, mock_list_products):
+        """Self-host support licenses share the account but are never stored."""
+        mock_list_products.return_value = self._page(
+            make_product(id="prod_support", metadata={"product_type": "support"})
+        )
+        await StripeProduct.sync_from_stripe()
+
+        self.assertFalse(
+            await StripeProduct.objects.filter(stripe_id="prod_support").aexists()
+        )
 
     @patch("apps.stripe.models.list_products")
     async def test_sync_product(self, mock_list_products):
@@ -90,9 +217,13 @@ class StripeTestCase(TestCase):
     ):
         """A product Stripe no longer lists must not be deleted while a
         subscription still references one of its prices. StripeSubscription.price
-        is RESTRICT, so deleting it would raise RestrictedError and abort sync."""
-        # An archived product (absent from Stripe's response) with a price that a
-        # live subscription still points at.
+        is RESTRICT, so deleting it would raise RestrictedError and abort sync.
+
+        Archiving no longer produces this case (archived products are still
+        listed, just inactive); a metadata edit that de-qualifies the product
+        does."""
+        # A de-qualified product (absent from Stripe's response) with a price
+        # that a live subscription still points at.
         old_product = await StripeProduct.objects.acreate(
             stripe_id="prod_old", name="Old", events=1000, is_public=False
         )

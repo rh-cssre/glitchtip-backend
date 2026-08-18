@@ -1,7 +1,7 @@
 # Generated manually for Storage Engine V2
 # Replaces IssueAggregate with V2 schema (Range -> Hash partitioning)
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from django.db import migrations, models
 from django.db.migrations import RunSQL, SeparateDatabaseAndState
 from apps.shared.migration_utils import get_sql_content
@@ -15,7 +15,7 @@ def create_initial_partitions(apps, schema_editor):
     from glitchtip.partition_manager import PartitionManager
 
     # Start from current week start (Monday)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start_of_week = now - timedelta(days=now.weekday())
     start_date = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
 

@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import IntegrityError, models
-from django.db.models.expressions import OuterRef, Subquery
+from django.db.models.expressions import F, OuterRef, Subquery
 from django.utils import timezone
 
 from apps.organizations_ext.models import Organization
@@ -22,7 +22,14 @@ from .constants import (
     SubscriptionStatus,
 )
 from .exceptions import StripeResourceNotFound
-from .utils import compute_cycle, unix_to_datetime
+from .utils import (
+    compute_cycle,
+    is_syncable_product,
+    price_kwargs,
+    product_kwargs,
+    select_subscription_items,
+    unix_to_datetime,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +38,16 @@ def _warn_duplicate_public_prices(prices):
     """Warn if any (product, interval) pair has more than one public price.
 
     The frontend's price-selection invariant assumes at most one
-    is_public=True price per (product, interval). This check is per-page only;
-    duplicates split across pages are caught by StripeProduct.sync_from_stripe,
-    which loads default prices in a single pass per product.
+    is_public=True price per (product, interval). Archived prices are ignored:
+    replacing a public price leaves the retired one in place (grandfathered
+    subscriptions still point at it), which is expected, not a duplicate. This
+    check is per-page only; duplicates split across pages are caught by
+    StripeProduct.sync_from_stripe, which loads default prices in a single pass
+    per product.
     """
     grouped = defaultdict(list)
     for p in prices:
-        if p.is_public:
+        if p.is_public and p.active:
             grouped[(p.product_id, p.interval)].append(p.stripe_id)
     for (product_id, interval), price_ids in grouped.items():
         if len(price_ids) > 1:
@@ -62,8 +72,35 @@ class StripeProduct(StripeModel):
     default_price = models.ForeignKey(
         "StripePrice", on_delete=models.CASCADE, blank=True, null=True
     )
-    events = models.PositiveBigIntegerField()
+    events = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text="Monthly event quota. NULL when the product has no quota "
+        "(the metered overage product), which is distinct from a quota of 0.",
+    )
+    uptime_monitors = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Maximum uptime monitors per organization (Stripe metadata "
+        "`uptime_monitors`). NULL means the plan expresses no opinion and the "
+        "built-in default applies.",
+    )
     is_public = models.BooleanField()
+    active = models.BooleanField(
+        default=True,
+        help_text="Mirrors Stripe's `active`. Archived products stay here so "
+        "existing subscriptions still render, but are excluded everywhere the "
+        "product is offered or acted on.",
+    )
+    is_overage = models.BooleanField(
+        default=False,
+        help_text="Metered overage product (Stripe metadata product_type=overage).",
+    )
+    allow_sso = models.BooleanField(
+        default=False,
+        help_text="Plan includes custom per-organization SSO "
+        "(Stripe metadata sso=true).",
+    )
     marketing_features = models.JSONField(default=list, blank=True)
 
     def __str__(self):
@@ -75,49 +112,20 @@ class StripeProduct(StripeModel):
         async for products_page in list_products():
             logger.info(f"Found {len(products_page)} products in Stripe")
             products_page = [
-                product
-                for product in products_page
-                if "events" in product.metadata
-                and product.metadata.get("product_type", "").lower() == "hosted"
+                product for product in products_page if is_syncable_product(product)
             ]
             products = [
-                StripeProduct(
-                    stripe_id=product.id,
-                    name=product.name,
-                    description=product.description if product.description else "",
-                    events=product.metadata["events"],
-                    is_public=product.metadata.get("is_public", "").lower() == "true",
-                    marketing_features=[
-                        f["name"] for f in product.marketing_features if f.get("name")
-                    ],
-                )
+                StripeProduct(stripe_id=product.id, **product_kwargs(product))
                 for product in products_page
             ]
             prices = [
                 StripePrice(
                     stripe_id=product.default_price.id,
-                    price=product.default_price.unit_amount / 100,
-                    nickname=product.default_price.nickname or "",
                     product_id=product.id,
-                    no_throttle=product.default_price.metadata.get(
-                        "no_throttle", ""
-                    ).lower()
-                    == "true"
-                    if product.default_price.metadata
-                    else False,
-                    is_public=product.default_price.metadata.get(
-                        "is_public", ""
-                    ).lower()
-                    == "true"
-                    if product.default_price.metadata
-                    else False,
-                    interval=product.default_price.recurring.get("interval", "month")
-                    if product.default_price.recurring
-                    else "month",
+                    **price_kwargs(product.default_price),
                 )
                 for product in products_page
                 if product.default_price
-                and product.default_price.unit_amount is not None
             ]
             product_updated = await StripeProduct.objects.abulk_create(
                 products,
@@ -126,7 +134,11 @@ class StripeProduct(StripeModel):
                     "name",
                     "description",
                     "events",
+                    "uptime_monitors",
                     "is_public",
+                    "active",
+                    "is_overage",
+                    "allow_sso",
                     "marketing_features",
                 ],
                 unique_fields=["stripe_id"],
@@ -139,8 +151,11 @@ class StripeProduct(StripeModel):
                     "price",
                     "nickname",
                     "product_id",
+                    "active",
                     "no_throttle",
                     "is_public",
+                    "is_metered",
+                    "meter_id",
                     "interval",
                 ],
                 unique_fields=["stripe_id"],
@@ -159,12 +174,16 @@ class StripeProduct(StripeModel):
             for obj in product_updated:
                 stripe_ids.add(obj.stripe_id)
 
-        # Keep products whose prices are still referenced by a subscription.
-        # StripePrice.product cascades, but StripeSubscription.price is RESTRICT,
-        # so deleting a product archived in Stripe while a (often grandfathered)
-        # subscription still points at one of its prices raises RestrictedError
-        # and aborts the whole sync. Retaining those products is harmless — they
-        # simply stop appearing in Stripe's product list.
+        # Archiving no longer reaches this pass: list_products() returns archived
+        # products too, so they land above with active=False and keep rendering
+        # for the (often grandfathered) subscriptions that point at them.
+        #
+        # Absence now means deleted in Stripe — or, just as reachable, that a
+        # metadata edit (dropping product_type or events) made the product fail
+        # is_syncable_product. StripePrice.product cascades while
+        # StripeSubscription.price is RESTRICT, so deleting a product a live
+        # subscription still points at raises RestrictedError and aborts the
+        # whole sync. Retaining those is harmless — they simply stop being sold.
         referenced_product_ids = StripeSubscription.objects.values_list(
             "price__product_id", flat=True
         )
@@ -181,8 +200,20 @@ class StripePrice(StripeModel):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     nickname = models.CharField(max_length=255)
     product = models.ForeignKey(StripeProduct, on_delete=models.CASCADE)
+    active = models.BooleanField(
+        default=True,
+        help_text="Mirrors Stripe's `active`. Archived prices are kept — "
+        "grandfathered subscriptions still point at them — but can no longer "
+        "be purchased. Unrelated to is_public, which marks a current price "
+        "that simply isn't offered publicly (non-profit, grandfathered).",
+    )
     no_throttle = models.BooleanField(default=False)
     is_public = models.BooleanField(default=False)
+    is_metered = models.BooleanField(
+        default=False,
+        help_text="Usage-based price backed by a Stripe Billing Meter (tiered).",
+    )
+    meter_id = models.CharField(max_length=255, blank=True, default="")
     interval = models.CharField(max_length=20, default="month")
 
     def __str__(self):
@@ -200,21 +231,11 @@ class StripePrice(StripeModel):
             prices = [
                 StripePrice(
                     stripe_id=price.id,
-                    price=price.unit_amount / 100,
-                    nickname=price.nickname or "",
                     product_id=price.product,
-                    no_throttle=price.metadata.get("no_throttle", "").lower() == "true"
-                    if price.metadata
-                    else False,
-                    is_public=price.metadata.get("is_public", "").lower() == "true"
-                    if price.metadata
-                    else False,
-                    interval=price.recurring.get("interval", "month")
-                    if price.recurring
-                    else "month",
+                    **price_kwargs(price),
                 )
                 for price in prices_page
-                if price.unit_amount is not None and price.product in known_product_ids
+                if price.product in known_product_ids
             ]
             await StripePrice.objects.abulk_create(
                 prices,
@@ -223,8 +244,11 @@ class StripePrice(StripeModel):
                     "price",
                     "nickname",
                     "product_id",
+                    "active",
                     "no_throttle",
                     "is_public",
+                    "is_metered",
+                    "meter_id",
                     "interval",
                 ],
                 unique_fields=["stripe_id"],
@@ -254,6 +278,23 @@ class StripeSubscription(StripeModel):
     start_date = models.DateTimeField()
     subscription_cycle_start = models.DateTimeField(null=True, blank=True)
     subscription_cycle_end = models.DateTimeField(null=True, blank=True)
+    metered_item_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Stripe subscription item id for the metered overage price.",
+    )
+    overage_units_reported = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Cumulative billable overage events reported to the meter "
+        "this cycle. Meter events are additive, so we report deltas.",
+    )
+    overage_period_start = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Cycle anchor for overage_units_reported; counter resets when "
+        "the current cycle start moves past this.",
+    )
 
     def __str__(self):
         return f"{self.stripe_id}"
@@ -264,7 +305,7 @@ class StripeSubscription(StripeModel):
             await cls.objects.filter(
                 organization=organization, status__in=ACTIVE_SUBSCRIPTION_STATUSES
             )
-            .order_by("-price__product__events", "-created")
+            .order_by(F("price__product__events").desc(nulls_last=True), "-created")
             .afirst()
         )
 
@@ -290,7 +331,7 @@ class StripeSubscription(StripeModel):
             cls.objects.filter(
                 organization_id=OuterRef("pk"), status__in=ACTIVE_SUBSCRIPTION_STATUSES
             )
-            .order_by("-price__product__events", "-created")
+            .order_by(F("price__product__events").desc(nulls_last=True), "-created")
             .values("pk")[:1]
         )
 
@@ -320,20 +361,24 @@ class StripeSubscription(StripeModel):
                     f"Stripe did not return subscription for {subscription.stripe_id}"
                 )
                 continue
+            base_item, metered_item = select_subscription_items(fetched_sub.items)
+            if base_item is None:
+                continue
             subscription.status = fetched_sub.status
             subscription.created = unix_to_datetime(fetched_sub.created)
             subscription.current_period_start = unix_to_datetime(
-                fetched_sub.items.data[0].current_period_start
+                base_item.current_period_start
             )
             subscription.current_period_end = unix_to_datetime(
-                fetched_sub.items.data[0].current_period_end
+                base_item.current_period_end
             )
             subscription.start_date = unix_to_datetime(fetched_sub.start_date)
             subscription.collection_method = fetched_sub.collection_method
+            subscription.metered_item_id = metered_item.id if metered_item else ""
 
             is_annual = subscription.price.interval == "year" or bool(
-                fetched_sub.items.data[0].price.recurring
-                and fetched_sub.items.data[0].price.recurring.get("interval") == "year"
+                base_item.price.recurring
+                and base_item.price.recurring.get("interval") == "year"
             )
             (
                 subscription.subscription_cycle_start,
@@ -353,6 +398,7 @@ class StripeSubscription(StripeModel):
                     "collection_method",
                     "subscription_cycle_start",
                     "subscription_cycle_end",
+                    "metered_item_id",
                 ]
             )
 
@@ -391,12 +437,13 @@ class StripeSubscription(StripeModel):
                 except (ValueError, TypeError):
                     continue  # Skip if no organization ID in metadata
 
-                items = subscription.items.data
-                if not items or not items[0].price:
+                base_item, metered_item = select_subscription_items(subscription.items)
+                if base_item is None or not base_item.price:
                     continue  # Skip
 
-                price = items[0].price
+                price = base_item.price
                 price_id = price.id
+                metered_item_id = metered_item.id if metered_item else ""
 
                 # If unseen organization id, check if it exists
                 if organization_id not in organization_ids:
@@ -421,7 +468,9 @@ class StripeSubscription(StripeModel):
                                 defaults={
                                     "product_id": price.product,
                                     "nickname": price.nickname or "",
-                                    "price": price.unit_amount / 100,
+                                    "price": price.unit_amount / 100
+                                    if price.unit_amount is not None
+                                    else 0,
                                 },
                             )
                             known_price_ids.add(price_id)
@@ -435,12 +484,8 @@ class StripeSubscription(StripeModel):
                             )
                             continue
 
-                    period_start = unix_to_datetime(
-                        subscription.items.data[0].current_period_start
-                    )
-                    period_end = unix_to_datetime(
-                        subscription.items.data[0].current_period_end
-                    )
+                    period_start = unix_to_datetime(base_item.current_period_start)
+                    period_end = unix_to_datetime(base_item.current_period_end)
                     is_annual = bool(
                         price.recurring and price.recurring.get("interval") == "year"
                     )
@@ -461,6 +506,7 @@ class StripeSubscription(StripeModel):
                             collection_method=subscription.collection_method,
                             subscription_cycle_start=cycle_start,
                             subscription_cycle_end=cycle_end,
+                            metered_item_id=metered_item_id,
                         )
                     )
 
@@ -478,6 +524,7 @@ class StripeSubscription(StripeModel):
                     "collection_method",
                     "subscription_cycle_start",
                     "subscription_cycle_end",
+                    "metered_item_id",
                 ],
                 unique_fields=["stripe_id"],
             )

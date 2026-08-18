@@ -1,12 +1,13 @@
 import logging
 import typing
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 from urllib.parse import parse_qs
 
 from django.conf import settings
 from django.utils.timezone import now
+from gt_rust.symbolic import normalize_debug_id
 from ninja import Field
 from pydantic import (
     AliasChoices,
@@ -14,13 +15,11 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     JsonValue,
-    RootModel,
     ValidationError,
     WrapValidator,
     field_validator,
     model_validator,
 )
-from symbolic import normalize_debug_id
 
 from apps.issue_events.constants import IssueEventType
 from apps.shared.schema.error import EventProcessingError
@@ -58,15 +57,6 @@ resolve None correctly.
 def coerce_list(v: Any) -> Any:
     """Wrap non-list dict into list: {"a": 1} to [{"a": 1}]"""
     return v if not isinstance(v, dict) else [v]
-
-
-def truncate_str(v: Any) -> Any:
-    """
-    Truncates a string if its max_length is set.
-    """
-    if isinstance(v, str):
-        return v[:8192]
-    return v
 
 
 def truncate_on_error(v: Any, handler) -> str:
@@ -127,7 +117,6 @@ class EventTemplate(LaxIngestSchema):
     context_line: str
     pre_context: list[str] | None = None
     post_context: list[str] | None = None
-
 
 
 def _normalize_native_debug_id(v):
@@ -193,9 +182,11 @@ class DebugMeta(LaxIngestSchema):
     @model_validator(mode="after")
     def _warn_unknown_image_types(self):
         for image in self.images:
-            if isinstance(image, OtherDebugImage):
-                if image.type not in KNOWN_IGNORED_IMAGE_TYPES:
-                    logger.warning("Unknown debug image type: %s", image.type)
+            if (
+                isinstance(image, OtherDebugImage)
+                and image.type not in KNOWN_IGNORED_IMAGE_TYPES
+            ):
+                logger.warning("Unknown debug image type: %s", image.type)
         return self
 
 
@@ -217,14 +208,6 @@ class ClientSDKInfo(LaxIngestSchema):
     @field_validator("packages", mode="before")
     def name_must_contain_space(cls, v: Any) -> Any:
         return coerce_list(v)
-
-
-class RequestHeaders(LaxIngestSchema):
-    content_type: str | None
-
-
-class RequestEnv(LaxIngestSchema):
-    remote_addr: str | None
 
 
 QueryString = str | ListKeyValue | dict[str, str | dict[str, Any] | None]
@@ -443,7 +426,7 @@ class TransactionEventSchema(LaxIngestSchema):
         pollute hour bucketing) or backfill beyond retention.
         """
         if v.tzinfo is None:
-            v = v.replace(tzinfo=timezone.utc)
+            v = v.replace(tzinfo=UTC)
         current = now()
         if v < current - timedelta(days=settings.GLITCHTIP_TRANSACTION_RETENTION_DAYS):
             raise ValueError("Event time too old.")
@@ -512,7 +495,7 @@ class FeedbackPayload(LaxIngestSchema):
     contexts: dict[str, Any]
 
     def to_user_report_data(self) -> dict[str, Any]:
-        fb = FeedbackContext.model_validate((self.contexts.get("feedback") or {}))
+        fb = FeedbackContext.model_validate(self.contexts.get("feedback") or {})
         return {
             "event_id": fb.associated_event_id,
             "name": fb.name[:128],
@@ -547,14 +530,6 @@ class UserReportTaskMessage(LaxIngestSchema):
     name: str = ""
     email: str = ""
     comments: str = ""
-
-
-class EnvelopeSchema(RootModel[list[dict[str, Any]]]):
-    root: list[dict[str, Any]]
-    _header: EnvelopeHeaderSchema
-    _items: list[
-        tuple[ItemHeaderSchema, WebIngestIssueEvent | TransactionEventSchema]
-    ] = []
 
 
 class CSPReportSchema(LaxIngestSchema):
@@ -609,18 +584,6 @@ class TaskIssueEvent(BaseIssueEvent):
 
     # CSP-specific field
     csp: CSPReportSchema | None = None
-
-
-class TaskDefaultIssueEvent(TaskIssueEvent):
-    type: Literal[IssueEventType.DEFAULT] = IssueEventType.DEFAULT
-
-
-class TaskErrorIssueEvent(TaskIssueEvent):
-    type: Literal[IssueEventType.ERROR] = IssueEventType.ERROR
-
-
-class TaskCSPIssueEvent(TaskIssueEvent):
-    type: Literal[IssueEventType.CSP] = IssueEventType.CSP
 
 
 class IssueEventSchema(WebIngestIssueEvent):
@@ -734,9 +697,7 @@ class LogItemSchema(BaseModel):
         ts = values.get("timestamp")
         if isinstance(ts, str):
             try:
-                values["timestamp"] = datetime.fromisoformat(
-                    ts.replace("Z", "+00:00")
-                ).timestamp()
+                values["timestamp"] = datetime.fromisoformat(ts).timestamp()
             except ValueError:
                 pass  # let pydantic surface the float_parsing error
 
@@ -802,7 +763,7 @@ def _otel_severity_to_level(
     return "info"
 
 
-def _extract_otel_value(val: dict | str | int | float | bool | None) -> Any:
+def _extract_otel_value(val: dict | str | float | bool | None) -> Any:
     """Extract a plain value from an OTel AnyValue wrapper.
 
     OTel uses typed wrappers like ``{"string_value": "..."}`` or

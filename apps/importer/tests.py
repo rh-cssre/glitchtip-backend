@@ -1,9 +1,10 @@
 from aioresponses import aioresponses
 from asgiref.sync import sync_to_async
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from model_bakery import baker
+from pydantic import ValidationError
 
 from apps.projects.models import Project
 from apps.teams.models import Team
@@ -12,6 +13,7 @@ from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
 from .exceptions import ImporterException
 from .importer import MAX_IMPORTER_PAGES, GlitchTipImporter
+from .schema import ImportIn
 
 test_project = {"id": "1", "slug": "project", "name": "project"}
 test_key = {
@@ -145,10 +147,35 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertEqual(res.status_code, 400)
         other_user = await baker.amake("users.User")
         other_org = await baker.amake("Organization", name="foo")
-        await sync_to_async(other_org.add_user)(other_user)
+        await other_org.aadd_user(other_user)
         res = await self.async_client.post(url, data)
         self.assertEqual(res.status_code, 400)
-        await sync_to_async(other_org.add_user)(self.user)
+        await other_org.aadd_user(self.user)
         m.get(self.url + "api/0/", payload={"user": {"username": "foo"}})
         res = await self.async_client.post(url, data)
         self.assertEqual(res.status_code, 400)
+
+
+@override_settings(GLITCHTIP_ALLOW_PRIVATE_IPS=False)
+class ImportInValidationTests(SimpleTestCase):
+    """The import source URL is org-admin-supplied; reject internal targets."""
+
+    def _validate(self, url):
+        return ImportIn.model_validate(
+            {"url": url, "authToken": "t", "organizationSlug": "o"}
+        )
+
+    def test_rejects_metadata_url(self):
+        with self.assertRaises(ValidationError):
+            self._validate("http://169.254.169.254/latest/")
+
+    def test_rejects_loopback_url(self):
+        with self.assertRaises(ValidationError):
+            self._validate("http://127.0.0.1/api/0/")
+
+    def test_accepts_public_url(self):
+        self._validate("https://8.8.8.8/")  # public literal, no raise
+
+    @override_settings(GLITCHTIP_ALLOW_PRIVATE_IPS=True)
+    def test_allow_private_setting_permits_internal(self):
+        self._validate("http://127.0.0.1/")

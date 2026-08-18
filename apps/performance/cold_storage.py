@@ -78,7 +78,7 @@ def _execute_resilient_query(storage, duckdb_paths, sql_builder, params):
                 valid.append(p)
             except Exception:
                 close_duckdb_read_connection()
-                logger.error("Corrupt parquet file skipped: %s", p, exc_info=True)
+                logger.exception("Corrupt parquet file skipped: %s", p)
 
         if not valid:
             return []
@@ -89,7 +89,7 @@ def _execute_resilient_query(storage, duckdb_paths, sql_builder, params):
             return conn.execute(sql_builder(paths_list), params).fetchall()
         except Exception:
             close_duckdb_read_connection()
-            logger.error("Query failed even after file validation", exc_info=True)
+            logger.exception("Query failed even after file validation")
             return []
 
 

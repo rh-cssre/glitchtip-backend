@@ -262,9 +262,9 @@ class SupportWelcomeEmailTestCase(TestCase):
             patch(
                 "apps.stripe.views.mark_welcome_sent", new_callable=AsyncMock
             ) as mark,
+            self.assertRaises(RuntimeError),
         ):
-            with self.assertRaises(RuntimeError):
-                await update_subscription(build_subscription(), self.request)
+            await update_subscription(build_subscription(), self.request)
         self.assertEqual(len(mail.outbox), 0)
         mark.assert_not_awaited()
 
@@ -298,7 +298,7 @@ class SupportWelcomeEmailTestCase(TestCase):
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("stripe down"),
             ),
+            self.assertRaises(RuntimeError),
         ):
-            with self.assertRaises(RuntimeError):
-                await update_subscription(build_subscription(), self.request)
+            await update_subscription(build_subscription(), self.request)
         self.assertEqual(len(mail.outbox), 1)
