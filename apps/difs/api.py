@@ -1,5 +1,6 @@
 """Port of sentry.api.endpoints.debug_files.DifAssembleEndpoint"""
 
+import codecs
 import io
 import re
 import tempfile
@@ -130,6 +131,13 @@ def extract_proguard_id(name: str):
 # apart from arbitrary text, without parsing the rest of the file.
 _PROGUARD_CLASS_RECORD_RE = re.compile(r"^\S+ -> \S+:$")
 
+# Real mapping files put the first class record within the first few header
+# comment lines, so a small prefix is always enough to find it. Bounding the
+# sniff avoids decoding the whole file to `str`, which for a mapping in the
+# tens of MBs would itself allocate a comparable amount of RAM just to look
+# at the first line.
+_PROGUARD_SNIFF_BYTES = 64 * 1024
+
 
 def extract_proguard_metadata(content: bytes):
     """Cheaply sniff-check that this looks like a ProGuard mapping file.
@@ -141,16 +149,17 @@ def extract_proguard_metadata(content: bytes):
     below actually uses the parsed mapper. Real deobfuscation still goes
     through ProguardMapper in StacktraceProcessor.resolve_proguard_stacktrace.
     """
-    try:
-        text = content.decode("utf-8")
-    except UnicodeDecodeError:
-        return None
+    head = content[:_PROGUARD_SNIFF_BYTES].removeprefix(codecs.BOM_UTF8)
 
-    for line in text.splitlines():
+    for line in head.splitlines():
         stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
+        if not stripped or stripped.startswith(b"#"):
             continue
-        if _PROGUARD_CLASS_RECORD_RE.match(stripped) is None:
+        try:
+            decoded = stripped.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        if _PROGUARD_CLASS_RECORD_RE.match(decoded) is None:
             return None
         break
 

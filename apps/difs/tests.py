@@ -1,3 +1,4 @@
+import codecs
 import contextlib
 import json
 import tempfile
@@ -11,7 +12,7 @@ from django.urls import reverse
 from model_bakery import baker
 from pydantic import ValidationError
 
-from apps.difs.api import extract_proguard_metadata
+from apps.difs.api import _PROGUARD_SNIFF_BYTES, extract_proguard_metadata
 from apps.difs.stacktrace_processor import (
     MAX_SCORED_ADDRS,
     StacktraceProcessor,
@@ -89,6 +90,20 @@ class ExtractProguardMetadataTestCase(GlitchTestCase):
         # A member record can never legally appear before its class record.
         metadata = extract_proguard_metadata(b"    int field -> a\n")
         self.assertIsNone(metadata)
+
+    def test_accepts_content_with_bom(self):
+        content = codecs.BOM_UTF8 + b"com.example.Foo -> a.b.c:\n"
+        metadata = extract_proguard_metadata(content)
+        self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
+
+    def test_ignores_non_utf8_bytes_past_the_sniff_window(self):
+        # Only the first _PROGUARD_SNIFF_BYTES are inspected -- a valid class
+        # record within that window is enough, regardless of what a huge real
+        # mapping file contains further down (checked in full by the real
+        # ProguardMapper at resolve time instead).
+        content = b"com.example.Foo -> a.b.c:\n" + b"\xff" * (2 * _PROGUARD_SNIFF_BYTES)
+        metadata = extract_proguard_metadata(content)
+        self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
 
 
 class DifsAssembleAPITestCase(GlitchTestCase):
