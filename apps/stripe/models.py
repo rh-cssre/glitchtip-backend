@@ -78,6 +78,13 @@ class StripeProduct(StripeModel):
         help_text="Monthly event quota. NULL when the product has no quota "
         "(the metered overage product), which is distinct from a quota of 0.",
     )
+    uptime_monitors = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Maximum uptime monitors per organization (Stripe metadata "
+        "`uptime_monitors`). NULL means the plan expresses no opinion and the "
+        "built-in default applies.",
+    )
     is_public = models.BooleanField()
     active = models.BooleanField(
         default=True,
@@ -127,6 +134,7 @@ class StripeProduct(StripeModel):
                     "name",
                     "description",
                     "events",
+                    "uptime_monitors",
                     "is_public",
                     "active",
                     "is_overage",
