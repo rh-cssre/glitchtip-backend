@@ -7,9 +7,11 @@ from django.db.models import Prefetch
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Status
+from ninja.errors import HttpError
 from ninja.pagination import paginate
 
 from apps.organizations_ext.models import Organization
+from apps.organizations_ext.utils import get_uptime_monitor_limit
 from apps.projects.models import Project
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.pagination import AsyncLinkHeaderPagination
@@ -283,6 +285,18 @@ async def create_monitor(
     organization = await aget_object_or_404(
         Organization, slug=organization_slug, users=user_id
     )
+    limit = await get_uptime_monitor_limit(organization)
+    if limit is not None:
+        # Deliberately advisory: two concurrent creates can both see a count
+        # below the limit and both succeed. That is acceptable for a ceiling
+        # whose job is to stop unbounded growth, not to bill exactly.
+        monitor_count = await Monitor.objects.filter(organization=organization).acount()
+        if monitor_count >= limit:
+            raise HttpError(
+                403,
+                f"This organization is limited to {limit} uptime monitors. "
+                "Delete an existing monitor or contact support to raise the limit.",
+            )
     data = payload.dict(exclude_defaults=True)
     if project_id := data.pop("project", None):
         data["project"] = await organization.projects.filter(id=project_id).afirst()

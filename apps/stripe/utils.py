@@ -83,6 +83,14 @@ def product_kwargs(product) -> dict:
         # The overage product has no quota. NULL says "quota is not a concept
         # here", which 0 ("a plan that allows no events") cannot express.
         "events": None if is_overage else int(metadata.get("events", 0)),
+        # Optional: absent metadata leaves the plan silent so the instance
+        # default applies. A malformed value raises, as a bad `events` does,
+        # rather than silently becoming an unintended limit.
+        "uptime_monitors": (
+            None
+            if not metadata.get("uptime_monitors")
+            else int(metadata["uptime_monitors"])
+        ),
         "is_public": metadata.get("is_public", "").lower() == "true",
         "is_overage": is_overage,
         "allow_sso": metadata.get("sso", "").lower() == "true",
