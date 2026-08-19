@@ -8,7 +8,7 @@ from model_bakery import baker
 from apps.organizations_ext.constants import OrganizationUserRole
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
-from ..constants import RecipientType
+from ..constants import MAX_ALERT_ENVIRONMENTS, RecipientType
 from ..models import ProjectAlert
 
 
@@ -133,6 +133,24 @@ class AlertAPITestCase(GlitchTipTestCaseMixin, TestCase):
         )
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json()["environments"], [])
+
+    async def test_project_alerts_environments_cap(self):
+        """A caller cannot grow the array, or the IN clause built from it, without limit"""
+        url = reverse(
+            "api:create_project_alert", args=[self.organization.slug, self.project.slug]
+        )
+        data = {
+            "name": "foo",
+            "timespanMinutes": 60,
+            "quantity": 2,
+            "environments": [f"env-{i}" for i in range(MAX_ALERT_ENVIRONMENTS + 1)],
+        }
+        res = await self.async_client.post(url, data, content_type="application/json")
+        self.assertEqual(res.status_code, 422)
+
+        data["environments"] = data["environments"][:MAX_ALERT_ENVIRONMENTS]
+        res = await self.async_client.post(url, data, content_type="application/json")
+        self.assertEqual(res.status_code, 201)
 
     async def test_project_alerts_create_invalid_recipient_type(self):
         url = reverse(

@@ -11,13 +11,14 @@ from django.utils import timezone
 from freezegun import freeze_time
 from model_bakery import baker
 
+from apps.alerts.models import ProjectAlert
 from apps.organizations_ext.constants import OrganizationUserRole
 from apps.projects.models import ProjectAlertStatus
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
 from ..constants import MonitorType
 from ..models import Monitor, MonitorCheck
-from ..tasks import dispatch_checks, save_monitor_checks
+from ..tasks import dispatch_checks, save_monitor_checks, send_monitor_notification
 from ..utils import fetch_all
 from ..webhooks import send_uptime_as_webhook
 
@@ -299,6 +300,54 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         self.assertNotIn(user2.email, mail.outbox[0].to)
         self.assertIn(user3.email, mail.outbox[0].to)
         self.assertEqual(len(mail.outbox[0].to), 2)
+
+    @aioresponses()
+    def test_monitor_notification_environment_filter(self, mocked):
+        """An alert limited to environments only covers monitors set to one of them"""
+        self.create_user_and_project()
+        test_url = "https://example.com"
+        mocked.get(test_url, status=500)
+        with freeze_time("2020-01-01"):
+            monitor = baker.make(
+                Monitor,
+                name=test_url,
+                url=test_url,
+                monitor_type=MonitorType.GET,
+                project=self.project,
+                environment=baker.make("environments.Environment", name="staging"),
+            )
+            baker.make(
+                "alerts.AlertRecipient",
+                alert__uptime=True,
+                alert__project=self.project,
+                alert__environments=["production"],
+                recipient_type="email",
+            )
+        check = monitor.checks.first()
+
+        def notify():
+            async_to_sync(send_monitor_notification.func)(
+                monitor.id, [str(check.id), check.organization_id], True, None
+            )
+
+        notify()
+        self.assertEqual(len(mail.outbox), 0)
+
+        Monitor.objects.filter(id=monitor.id).update(
+            environment=baker.make("environments.Environment", name="production")
+        )
+        notify()
+        self.assertEqual(len(mail.outbox), 1)
+
+        # A monitor with no environment cannot satisfy an environment filter
+        Monitor.objects.filter(id=monitor.id).update(environment=None)
+        notify()
+        self.assertEqual(len(mail.outbox), 1)
+
+        # Clearing the filter restores alerts for every monitor
+        ProjectAlert.objects.update(environments=[])
+        notify()
+        self.assertEqual(len(mail.outbox), 2)
 
     @aioresponses()
     def test_user_project_alert_scope(self, mocked):

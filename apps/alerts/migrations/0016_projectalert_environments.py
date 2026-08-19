@@ -16,9 +16,10 @@ class Migration(migrations.Migration):
                 blank=True,
                 default=list,
                 help_text=(
-                    "Only alert on events from these environments. Empty matches "
-                    "every environment."
+                    "Only alert on events and uptime monitors from these "
+                    "environments. Empty matches every environment."
                 ),
+                size=100,
             ),
         ),
     ]

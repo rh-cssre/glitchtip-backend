@@ -7,7 +7,7 @@ from django.db import models
 from apps.issue_events.constants import MAX_TAG_LENGTH
 from glitchtip.base_models import CreatedModel
 
-from .constants import RecipientType
+from .constants import ENVIRONMENTS_HELP_TEXT, MAX_ALERT_ENVIRONMENTS, RecipientType
 from .email import send_email_notification
 from .webhooks import send_webhook_notification
 
@@ -26,12 +26,10 @@ class ProjectAlert(CreatedModel):
     )
     environments = ArrayField(
         models.CharField(max_length=MAX_TAG_LENGTH),
+        size=MAX_ALERT_ENVIRONMENTS,
         default=list,
         blank=True,
-        help_text=(
-            "Only alert on events from these environments. Empty matches every "
-            "environment."
-        ),
+        help_text=ENVIRONMENTS_HELP_TEXT,
     )
 
 
