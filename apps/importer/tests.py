@@ -11,7 +11,8 @@ from apps.teams.models import Team
 from glitchtip.test_utils import generators  # noqa: F401
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
-from .importer import GlitchTipImporter
+from .exceptions import ImporterException
+from .importer import MAX_IMPORTER_PAGES, GlitchTipImporter
 from .schema import ImportIn
 
 test_project = {"id": "1", "slug": "project", "name": "project"}
@@ -49,6 +50,58 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
             ],
         )
         m.get(self.url + "/api/0/teams/org/team/members/", payload=[])
+
+    @aioresponses()
+    async def test_get_follows_pagination(self, m):
+        first_url = self.url + self.importer.projects_url
+        next_url = first_url + "?cursor=abc"
+        m.get(
+            first_url,
+            payload=[{"id": "1"}],
+            headers={"Link": f'<{next_url}>; rel="next"; results="true"; cursor="abc"'},
+        )
+        m.get(
+            next_url,
+            payload=[{"id": "2"}],
+            headers={
+                "Link": f'<{first_url}>; rel="next"; results="false"',
+            },
+        )
+
+        data = await self.importer.get(first_url)
+
+        self.assertEqual(data, [{"id": "1"}, {"id": "2"}])
+
+    @aioresponses()
+    async def test_get_rejects_cross_origin_pagination(self, m):
+        first_url = self.url + self.importer.projects_url
+        next_url = "https://bad.example.com/api/0/organizations/org/projects/"
+        m.get(
+            first_url,
+            payload=[{"id": "1"}],
+            headers={"Link": f'<{next_url}>; rel="next"; results="true"'},
+        )
+
+        with self.assertRaises(ImporterException):
+            await self.importer.get(first_url)
+
+    @aioresponses()
+    async def test_get_stops_at_pagination_cap(self, m):
+        first_url = self.url + self.importer.projects_url
+        last_url = first_url
+        for index in range(MAX_IMPORTER_PAGES):
+            current_url = first_url if index == 0 else f"{first_url}?cursor={index}"
+            next_url = f"{first_url}?cursor={index + 1}"
+            last_url = next_url
+            m.get(
+                current_url,
+                payload=[{"id": str(index)}],
+                headers={"Link": f'<{next_url}>; rel="next"; results="true"'},
+            )
+        m.get(last_url, payload=[{"id": "not reached"}])
+
+        with self.assertRaises(ImporterException):
+            await self.importer.get(first_url)
 
     @aioresponses()
     def test_import_command(self, m):

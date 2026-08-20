@@ -1,3 +1,6 @@
+from urllib.parse import urljoin, urlparse
+
+import aiohttp
 import tablib
 from asgiref.sync import sync_to_async
 from django.conf import settings
@@ -21,6 +24,8 @@ from glitchtip.ssrf_protection import (
 )
 
 from .exceptions import ImporterException
+
+MAX_IMPORTER_PAGES = 100
 
 
 class GlitchTipImporter:
@@ -67,14 +72,66 @@ class GlitchTipImporter:
         await self.import_teams()
 
     async def get(self, url: str):
+        data = []
+        next_url = url
+        pages_fetched = 0
         allow_private = settings.GLITCHTIP_ALLOW_PRIVATE_IPS
-        async with (
-            safe_session(allow_private) as session,
-            await request_with_validated_redirects(
-                session, "GET", url, headers=self.headers, allow_private=allow_private
-            ) as res,
-        ):
-            return await res.json()
+        async with safe_session(allow_private) as session:
+            while next_url:
+                async with await request_with_validated_redirects(
+                    session,
+                    "GET",
+                    next_url,
+                    headers=self.headers,
+                    allow_private=allow_private,
+                ) as res:
+                    response_data = await res.json()
+                    if not isinstance(response_data, list):
+                        return response_data
+                    data.extend(response_data)
+                    pages_fetched += 1
+                    next_url = self.get_next_url(res, next_url)
+                    if next_url and pages_fetched >= MAX_IMPORTER_PAGES:
+                        raise ImporterException(
+                            f"Importer pagination exceeded {MAX_IMPORTER_PAGES} pages"
+                        )
+        return data
+
+    @staticmethod
+    def get_next_url(res: aiohttp.ClientResponse, current_url: str) -> str | None:
+        link_header = res.headers.get("Link")
+        if not link_header:
+            return None
+
+        for link in link_header.split(","):
+            parts = [part.strip() for part in link.split(";")]
+            if not parts or not parts[0].startswith("<") or not parts[0].endswith(">"):
+                continue
+            link_url = parts[0][1:-1]
+            params = {}
+            for part in parts[1:]:
+                key, _, value = part.partition("=")
+                params[key.lower()] = value.strip('"')
+            if params.get("rel") == "next" and params.get("results") == "true":
+                next_url = urljoin(current_url, link_url)
+                if not GlitchTipImporter.is_same_origin(current_url, next_url):
+                    raise ImporterException("Importer pagination changed hosts")
+                return next_url
+        return None
+
+    @staticmethod
+    def is_same_origin(current_url: str, next_url: str) -> bool:
+        current = urlparse(current_url)
+        next_parsed = urlparse(next_url)
+        return (
+            current.scheme,
+            current.hostname,
+            current.port,
+        ) == (
+            next_parsed.scheme,
+            next_parsed.hostname,
+            next_parsed.port,
+        )
 
     async def import_organization(self):
         resource = OrganizationResource()
