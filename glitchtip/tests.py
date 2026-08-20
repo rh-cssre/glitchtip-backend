@@ -1273,6 +1273,11 @@ json.dump({
     "task_backend": settings.TASKS["default"]["BACKEND"],
     "session_engine": settings.SESSION_ENGINE,
     "database_engine": settings.DATABASE_ENGINE,
+    "db_options": {
+        k: v
+        for k, v in settings.DATABASES["default"]["OPTIONS"].items()
+        if k == "prepare_threshold"
+    },
 }, __import__("sys").stdout)
 """
 
@@ -1462,6 +1467,65 @@ class CacheConfigTestCase(TestCase):
         info = json.loads(lines[-1])
         self.assertEqual(info["cache_backend"], self.VCACHE_BACKEND)
         self.assertEqual(info["cache_location"], "redis://redis:6379/0")
+
+
+class PrepareThresholdConfigTestCase(TestCase):
+    """DATABASE_PREPARE_THRESHOLD -> DATABASES["default"]["OPTIONS"].
+
+    The driver leaves server-side prepared statements off by default (matching
+    Django's postgresql backend), so GlitchTip has to opt in explicitly. These
+    boot settings.py in a subprocess the way CacheConfigTestCase does, because
+    the value is resolved at import time.
+    """
+
+    BASE_ENV = CacheConfigTestCase.BASE_ENV
+
+    def _probe(self, extra_env: dict) -> dict:
+        result = subprocess.run(
+            [sys.executable, "-c", _SETTINGS_PROBE],
+            capture_output=True,
+            text=True,
+            env={**self.BASE_ENV, **extra_env},
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout.strip().splitlines()[-1])
+
+    def test_default_opts_in_at_five(self):
+        # Unset must keep prepared statements on: the driver's own default is
+        # off, and losing them silently is a database-CPU regression.
+        info = self._probe({})
+        self.assertEqual(info["db_options"]["prepare_threshold"], 5)
+
+    def test_off_disables_prepared_statements(self):
+        # The transaction-mode-pooler setting. None is psycopg's spelling for
+        # "never prepare", and the driver honours it.
+        for value in ("off", "none", "false", "disabled", ""):
+            with self.subTest(value=value):
+                info = self._probe({"DATABASE_PREPARE_THRESHOLD": value})
+                self.assertIsNone(info["db_options"]["prepare_threshold"])
+
+    def test_integer_is_forwarded(self):
+        info = self._probe({"DATABASE_PREPARE_THRESHOLD": "20"})
+        self.assertEqual(info["db_options"]["prepare_threshold"], 20)
+
+    def test_zero_means_prepare_on_first_use(self):
+        # psycopg parity: 0 is "prepare immediately", NOT "disabled".
+        info = self._probe({"DATABASE_PREPARE_THRESHOLD": "0"})
+        self.assertEqual(info["db_options"]["prepare_threshold"], 0)
+
+    def test_garbage_fails_loudly(self):
+        result = subprocess.run(
+            [sys.executable, "-c", _SETTINGS_PROBE],
+            capture_output=True,
+            text=True,
+            env={**self.BASE_ENV, "DATABASE_PREPARE_THRESHOLD": "sometimes"},
+            timeout=30,
+            check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("DATABASE_PREPARE_THRESHOLD", result.stderr)
 
 
 # ----------------------------------------------------------------------------
