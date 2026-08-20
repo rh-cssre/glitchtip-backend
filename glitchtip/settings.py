@@ -962,11 +962,20 @@ for db_config in DATABASES.values():
     # statements millions of times and preparing them is worth roughly 15-40%
     # of query wall time and 1.3-2x less database CPU per statement.
     #
-    # Set DATABASE_PREPARE_THRESHOLD=off when the database sits behind a
-    # transaction-mode connection pooler (PgBouncer without
-    # max_prepared_statements, or a managed equivalent). A named prepared
-    # statement belongs to one backend session, and transaction pooling does
-    # not promise you the same session twice.
+    # A named prepared statement belongs to one backend session, and
+    # transaction pooling does not promise you the same session twice, so a
+    # connection pooler in front of the database decides whether this is safe:
+    #
+    # * PgBouncer >= 1.21 with max_prepared_statements > 0, or session pooling:
+    #   supported. GlitchTip requires one of these if PgBouncer is used at all.
+    # * PgBouncer older than 1.21, or max_prepared_statements = 0: every query
+    #   fails with 'prepared statement "sN" does not exist'. Set this to off.
+    # * RDS Proxy: supported since it learned to track protocol-level prepared
+    #   statements. It degrades (pins the session) rather than failing, and
+    #   this driver uses the protocol, not SQL-level PREPARE/DEALLOCATE, so no
+    #   change is needed.
+    #
+    # If unsure, off is always safe — it costs database CPU, not correctness.
     #
     # The other reason to turn it off: a prepared statement pins the result
     # shape its plan was built with, so a migration that changes what a SQL
