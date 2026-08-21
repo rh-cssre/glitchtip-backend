@@ -49,37 +49,52 @@ if [ "${ENABLE_OBSERVABILITY_API}" = "True" ] || [ "${ENABLE_OBSERVABILITY_API}"
     fi
 fi
 
-# Worker memory limit: restart workers that grow too large (likely fragmentation).
-# Granian spawns a new worker before terminating the old one, so traffic is not interrupted.
-# Skip if the operator has already set GRANIAN_WORKERS_MAX_RSS.
-if [ -z "$GRANIAN_WORKERS_MAX_RSS" ]; then
-    MEM_LIMIT_MB=0
-    if [ -f /sys/fs/cgroup/memory.max ]; then
-        MEM_LIMIT_BYTES=$(cat /sys/fs/cgroup/memory.max)
-        if [ "$MEM_LIMIT_BYTES" != "max" ] 2>/dev/null; then
-            MEM_LIMIT_MB=$(( MEM_LIMIT_BYTES / 1048576 ))
-        fi
-    fi
-    if [ "$MEM_LIMIT_MB" -gt 0 ] 2>/dev/null; then
-        # Use 50% of the cgroup limit, but no less than 1024 MiB.
-        # 50% leaves headroom for the brief overlap when granian runs
-        # both the old and new worker during a respawn.
-        RSS_LIMIT=$(( MEM_LIMIT_MB / 2 ))
-        if [ "$RSS_LIMIT" -lt 1024 ]; then
-            RSS_LIMIT=1024
-        fi
-    else
-        RSS_LIMIT=2048
-    fi
-    export GRANIAN_WORKERS_MAX_RSS=$RSS_LIMIT
-fi
+# Worker recycling is off unless an operator asks for it.
+#
+# Granian can respawn a worker when its resident memory crosses a threshold
+# (GRANIAN_WORKERS_MAX_RSS) or when it reaches an age
+# (GRANIAN_WORKERS_LIFETIME). This image sets neither.
+#
+# A memory-triggered respawn fires at peak RSS by definition: granian starts
+# the replacement while the old worker is still serving, so the instant the
+# process is at its largest is the instant a second copy appears beside it.
+# Under a container memory limit that overlap is what invokes the OOM killer,
+# and the killed worker takes its in-flight work with it -- an interrupted
+# worker loses whatever task batch it was draining.
+#
+# Memory is also the wrong signal for this workload. Resident memory is
+# dominated by bursts that scale with event volume and worker concurrency, not
+# by a leak: the working set climbs while a batch is in flight and falls back to
+# its floor when the batch completes. An RSS threshold cannot tell a busy worker
+# apart from a growing one, so it recycles the healthy case. An install small
+# enough to care about a tight memory budget is also small enough that those
+# bursts never happen.
+#
+# Operators who do want a backstop should prefer age over memory:
+#
+#     GRANIAN_WORKERS_LIFETIME=86400    # seconds; respawn on age
+#
+# An age-triggered respawn lands at whatever the worker's memory happens to be
+# when the timer expires, which on average is its average footprint rather than
+# its peak, so the headroom it needs is roughly one more typical worker instead
+# of twice a threshold.
+#
+# To bound growth by memory anyway, pair the threshold with a sample count --
+# granian samples every 30s (GRANIAN_RSS_SAMPLE_INTERVAL) and by default
+# respawns after a single sample over the line, which makes any burst a trigger:
+#
+#     GRANIAN_WORKERS_MAX_RSS=2048      # MiB, per worker
+#     GRANIAN_RSS_SAMPLES=10            # consecutive samples over the threshold
+#
+# Either way, leave room for one extra worker alongside the one being replaced.
 
-# Bound the respawn overlap. Granian's kill timeout is disabled by default,
-# and it both waits on the old worker forever and skips the SIGKILL escalation
-# when unset -- so a worker that doesn't stop on SIGTERM keeps its memory
-# alongside its replacement until the cgroup OOM killer resolves it. That turns
-# the RSS recycle above into the thing that triggers the OOM. 60s is well beyond
-# a normal in-flight drain while still capping the window at 2x RSS.
+# Bound the respawn overlap whenever a respawn does happen (an operator opting
+# into the settings above, or a rolling restart). Granian's kill timeout is
+# disabled by default, and it both waits on the old worker forever and skips the
+# SIGKILL escalation when unset -- so a worker that doesn't stop on SIGTERM
+# keeps its memory alongside its replacement indefinitely, until the OOM killer
+# resolves it. 60s is well beyond a normal in-flight drain while still capping
+# the window at 2x one worker.
 export GRANIAN_WORKERS_KILL_TIMEOUT=${GRANIAN_WORKERS_KILL_TIMEOUT:-60}
 
 # Run Granian
