@@ -1,27 +1,19 @@
 from django.db import migrations, models
 
 
-def truncate_refresh_tokens(apps, schema_editor):
-    """Drop all existing refresh tokens before replacing the token columns.
-
-    We're removing the plaintext ``token`` and ``access_token_key`` fields
-    and replacing them with a prefix plus a SHA-256 digest. Since the old
-    columns held the only copy of the plaintext that we could hash, we
-    just delete the rows: connected clients will see the next access-token
-    exchange fail and re-authorize via the OAuth flow, which is a
-    one-time user-visible reconnection rather than a breakage.
-    """
-    OAuthRefreshToken = apps.get_model("oauth", "OAuthRefreshToken")
-    OAuthRefreshToken.objects.all().delete()
-
-
 class Migration(migrations.Migration):
+    """Replace the plaintext refresh-token columns with a prefix plus digest.
+
+    The rows that held the only copy of the plaintext used to be deleted here,
+    forcing those clients to re-authorize. That delete is gone: every 6.x
+    install has already run it, and a fresh install has no tokens.
+    """
+
     dependencies = [
         ("oauth", "0002_allow_blank_client_secret"),
     ]
 
     operations = [
-        migrations.RunPython(truncate_refresh_tokens, migrations.RunPython.noop),
         migrations.RemoveField(
             model_name="oauthrefreshtoken",
             name="token",

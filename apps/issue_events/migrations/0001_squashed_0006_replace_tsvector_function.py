@@ -40,12 +40,8 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("organizations_ext", "0010_alter_organization_id"),
-        ("projects", "0014_auto_20240318_1449"),
-        ("projects", "0017_auto_20250627_1413"),
-        (
-            "releases",
-            "0001_squashed_0004_alter_release_id_alter_releasefile_id_and_more",
-        ),
+        ("projects", "0001_squashed_0016_auto_20250125_1733"),
+        ("releases", "0001_squashed_0005_alter_releasefile_unique_together_and_more"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
