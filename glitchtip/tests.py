@@ -1273,6 +1273,10 @@ json.dump({
     "task_backend": settings.TASKS["default"]["BACKEND"],
     "session_engine": settings.SESSION_ENGINE,
     "database_engine": settings.DATABASE_ENGINE,
+    # "absent" distinguishes "settings.py never set it" from an explicit None.
+    "prepare_threshold": settings.DATABASES["default"]["OPTIONS"].get(
+        "prepare_threshold", "absent"
+    ),
 }, __import__("sys").stdout)
 """
 
@@ -1462,6 +1466,45 @@ class CacheConfigTestCase(TestCase):
         info = json.loads(lines[-1])
         self.assertEqual(info["cache_backend"], self.VCACHE_BACKEND)
         self.assertEqual(info["cache_location"], "redis://redis:6379/0")
+
+
+class PrepareThresholdConfigTestCase(TestCase):
+    """DATABASE_PREPARE_THRESHOLD -> DATABASES["default"]["OPTIONS"].
+
+    Boots settings.py in a subprocess the way CacheConfigTestCase does,
+    because the value resolves at import time.
+    """
+
+    BASE_ENV = CacheConfigTestCase.BASE_ENV
+
+    def _probe(self, value: str | None) -> subprocess.CompletedProcess:
+        env = {} if value is None else {"DATABASE_PREPARE_THRESHOLD": value}
+        return subprocess.run(
+            [sys.executable, "-c", _SETTINGS_PROBE],
+            capture_output=True,
+            text=True,
+            env={**self.BASE_ENV, **env},
+            timeout=30,
+            check=False,
+        )
+
+    def test_prepare_threshold(self):
+        # Unset must stay opted in: the driver's own default is off, so losing
+        # this silently regresses database CPU. 0 is psycopg's "prepare on
+        # first use" rather than "disabled", so it has to survive the
+        # off-value check instead of being read as falsy.
+        for value, expected in ((None, 5), ("off", None), ("0", 0)):
+            with self.subTest(value=value):
+                result = self._probe(value)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                info = json.loads(result.stdout.strip().splitlines()[-1])
+                self.assertEqual(info["prepare_threshold"], expected)
+
+        # An unparseable value must abort startup and name the variable, not
+        # quietly fall back to a threshold nobody asked for.
+        result = self._probe("sometimes")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("DATABASE_PREPARE_THRESHOLD", result.stderr)
 
 
 # ----------------------------------------------------------------------------

@@ -956,6 +956,27 @@ for db_config in DATABASES.values():
         if _pool_max_lifetime > 0:
             options["pool"]["max_lifetime"] = _pool_max_lifetime
 
+    # Server-side prepared statements. The driver defaults them off to match
+    # Django's postgresql backend; GlitchTip opts in because the ingest path
+    # repeats the same statements and preparing them costs 1.3-2x less
+    # database CPU. Off is safe, just slower: use it behind a transaction-mode
+    # pooler that cannot track prepared statements (PgBouncer needs >= 1.21
+    # with max_prepared_statements), or where migrations change what a SQL
+    # function returns while old code is still serving ("cached plan must not
+    # change result type" until the connection is recycled).
+    _prepare_threshold = env.str("DATABASE_PREPARE_THRESHOLD", "5").strip().lower()
+    if _prepare_threshold in ("", "off", "none", "false", "disabled"):
+        options.setdefault("prepare_threshold", None)
+    else:
+        try:
+            options.setdefault("prepare_threshold", int(_prepare_threshold))
+        except ValueError:
+            raise ImproperlyConfigured(
+                "DATABASE_PREPARE_THRESHOLD must be an integer (prepare a "
+                "statement after N uses, 0 = on first use) or 'off' to "
+                f"disable prepared statements; got {_prepare_threshold!r}"
+            )
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Time in seconds to debounce some frequently run tasks
