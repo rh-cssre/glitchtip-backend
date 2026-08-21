@@ -956,32 +956,14 @@ for db_config in DATABASES.values():
         if _pool_max_lifetime > 0:
             options["pool"]["max_lifetime"] = _pool_max_lifetime
 
-    # Server-side prepared statements, independent of pooling. The driver
-    # follows Django's postgresql backend and leaves these off by default;
-    # GlitchTip opts in, because the ingest hot path runs the same handful of
-    # statements millions of times and preparing them is worth roughly 15-40%
-    # of query wall time and 1.3-2x less database CPU per statement.
-    #
-    # A named prepared statement belongs to one backend session, and
-    # transaction pooling does not promise you the same session twice, so a
-    # connection pooler in front of the database decides whether this is safe:
-    #
-    # * PgBouncer >= 1.21 with max_prepared_statements > 0, or session pooling:
-    #   supported. GlitchTip requires one of these if PgBouncer is used at all.
-    # * PgBouncer older than 1.21, or max_prepared_statements = 0: every query
-    #   fails with 'prepared statement "sN" does not exist'. Set this to off.
-    # * RDS Proxy: supported since it learned to track protocol-level prepared
-    #   statements. It degrades (pins the session) rather than failing, and
-    #   this driver uses the protocol, not SQL-level PREPARE/DEALLOCATE, so no
-    #   change is needed.
-    #
-    # If unsure, off is always safe — it costs database CPU, not correctness.
-    #
-    # The other reason to turn it off: a prepared statement pins the result
-    # shape its plan was built with, so a migration that changes what a SQL
-    # function returns makes cached statements fail with "cached plan must not
-    # change result type" until the connection is recycled. Deployments that
-    # run migrations while old code is still serving are exposed to that.
+    # Server-side prepared statements. The driver defaults them off to match
+    # Django's postgresql backend; GlitchTip opts in because the ingest path
+    # repeats the same statements and preparing them costs 1.3-2x less
+    # database CPU. Off is safe, just slower: use it behind a transaction-mode
+    # pooler that cannot track prepared statements (PgBouncer needs >= 1.21
+    # with max_prepared_statements), or where migrations change what a SQL
+    # function returns while old code is still serving ("cached plan must not
+    # change result type" until the connection is recycled).
     _prepare_threshold = env.str("DATABASE_PREPARE_THRESHOLD", "5").strip().lower()
     if _prepare_threshold in ("", "off", "none", "false", "disabled"):
         options.setdefault("prepare_threshold", None)
