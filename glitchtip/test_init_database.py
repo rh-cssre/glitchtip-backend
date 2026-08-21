@@ -44,6 +44,20 @@ class InitDatabaseTestCase(TestCase):
         self.assertEqual(steps, ["migrate", "maintain_partitions", "createcachetable"])
         self.assertFalse(self._lock_is_held())
 
+    def test_lock_is_released_when_a_step_fails(self):
+        # The lock is released by the transaction ending, so a process that
+        # dies mid-migration must not leave the next start locked out.
+        with (
+            patch(
+                "glitchtip.management.commands.init_database.call_command",
+                side_effect=RuntimeError("migration blew up"),
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            call_command("init_database")
+
+        self.assertFalse(self._lock_is_held())
+
     def test_refuses_to_run_alongside_another_process(self):
         with self.other.cursor() as cursor:
             cursor.execute("SELECT pg_advisory_lock(%s)", [LOCK_ID])
