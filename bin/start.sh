@@ -18,4 +18,16 @@ case "${SERVER_ROLE:-web}" in
         ;;
 esac
 
+# Heroku picked the role from the dyno name rather than SERVER_ROLE, so a
+# worker dyno needs the same refusal: without it, it silently becomes a second
+# web server that also migrates.
+case "${DYNO:-}" in
+    worker*)
+        echo "The $DYNO dyno cannot run a worker: GlitchTip runs one process" >&2
+        echo "that serves HTTP and consumes the task queue. Scale the web dyno" >&2
+        echo "and remove this one." >&2
+        exit 1
+        ;;
+esac
+
 . ./bin/run-all-in-one.sh

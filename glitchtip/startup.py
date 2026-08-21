@@ -111,19 +111,32 @@ RETIRED_ENV_VARS = {
         "the task queue"
     ),
     "SERVER_ROLE": (
-        "there is only one role; bin/start.sh refuses a role other than web "
-        "rather than starting the wrong thing"
+        "there is only one role; bin/start.sh refuses anything but web or "
+        "all_in_one rather than starting the wrong thing"
     ),
+}
+
+
+# Values whose old meaning is what GlitchTip now does anyway. The published
+# Helm chart sets GLITCHTIP_EMBED_WORKER=true and the sample compose file sets
+# SERVER_ROLE=all_in_one, and both keep working untouched — warning about them
+# would tell an operator their correct config is wrong, and they often cannot
+# change it without waiting for a chart release.
+RETIRED_ENV_VAR_NOOP_VALUES = {
+    "GLITCHTIP_EMBED_WORKER": {"true", "1", "yes", "on"},
+    "SERVER_ROLE": {"all_in_one"},
 }
 
 
 def warn_retired_env_vars():
     """Log a warning for each retired environment variable still present."""
     for name, explanation in RETIRED_ENV_VARS.items():
-        if name in os.environ:
-            logger.warning(
-                "%s is set but no longer has any effect: %s", name, explanation
-            )
+        value = os.environ.get(name)
+        if value is None:
+            continue
+        if value.strip().lower() in RETIRED_ENV_VAR_NOOP_VALUES.get(name, ()):
+            continue
+        logger.warning("%s is set but no longer has any effect: %s", name, explanation)
 
 
 def print_startup_banner():

@@ -1,7 +1,7 @@
 # Override: migrations run as their own step and the server starts with
-# SKIP_INIT, which is how a deployment running more than one replica has to do
-# it — Django takes no migration lock, so every replica initialising itself
-# races on DDL.
+# SKIP_INIT. Both paths are safe to run concurrently now that init_database
+# takes a lock, but keeping schema changes off the serving path is still the
+# better shape for a large install — so it gets test coverage.
 services:
   migrate:
     build: .
@@ -14,17 +14,9 @@ services:
       VALKEY_URL: redis://valkey:6379
       SECRET_KEY: change_me
 
+  # environment merges with compose.e2e.yml's, so only the difference goes here
   glitchtip:
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
-      VALKEY_URL: redis://valkey:6379
-      SECRET_KEY: change_me
-      ENABLE_ORGANIZATION_CREATION: "true"
-      ENABLE_TEST_API: "true"
-      DEBUG: "true"
-      EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
-      ENABLE_OBSERVABILITY_API: "true"
-      LOG_LEVEL: INFO
       SKIP_INIT: "true"
     depends_on:
       migrate:
