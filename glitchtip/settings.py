@@ -534,16 +534,7 @@ if SENTRY_DSN:
 
     release = "glitchtip@" + GLITCHTIP_VERSION if GLITCHTIP_VERSION else None
 
-    _is_worker = env.bool("IS_WORKER", False)
-    _embed_worker = os.environ.get("GLITCHTIP_EMBED_WORKER") == "true"
-    if _is_worker:
-        _default_service = "glitchtip-worker"
-    elif _embed_worker:
-        _default_service = "glitchtip"
-    else:
-        _default_service = "glitchtip-web"
-
-    SENTRY_SERVICE_NAME = env.str("SENTRY_SERVICE_NAME", _default_service)
+    SENTRY_SERVICE_NAME = env.str("SENTRY_SERVICE_NAME", "glitchtip")
 
     # Disable auto-discovered integrations that add overhead without value:
     # - ModulesIntegration: serializes all ~2600 sys.modules on every error event
@@ -619,16 +610,11 @@ AIOHTTP_CONFIG = {
 ENABLE_ADMIN = env.bool("ENABLE_ADMIN", True)
 ENABLE_OPENAPI = env.bool("ENABLE_OPENAPI", True)
 
-WEB_INSTALLED_APPS = [
+INSTALLED_APPS = [
+    *(["django.contrib.admin"] if ENABLE_ADMIN else []),
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "ninja",
-]
-if ENABLE_ADMIN:
-    WEB_INSTALLED_APPS.insert(0, "django.contrib.admin")
-
-
-INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.humanize",
@@ -680,10 +666,6 @@ INSTALLED_APPS += [
     "apps.oauth",
     "import_export",  # Contains import management command, keep under apps.importer
 ]
-
-IS_WORKER = env.bool("IS_WORKER", False)
-if not IS_WORKER:
-    INSTALLED_APPS = WEB_INSTALLED_APPS + INSTALLED_APPS
 
 # Ensure no one uses runsslserver in production
 if SECRET_KEY == "change_me" and DEBUG is True:

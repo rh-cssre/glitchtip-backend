@@ -1,6 +1,5 @@
-# Base e2e compose file for all-in-one mode with valkey
+# Base e2e compose file, with valkey
 # Override with compose.e2e.no-valkey.yml for postgres-only mode
-# Override with compose.e2e.web-worker.yml for separate web + worker mode
 
 x-environment: &default-environment
   DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres

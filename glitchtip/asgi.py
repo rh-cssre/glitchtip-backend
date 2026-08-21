@@ -30,11 +30,12 @@ from glitchtip.memory_trim import PeriodicMemoryTrim
 
 application = IngestDispatcher(application)
 
-_embed_worker = os.environ.get("GLITCHTIP_EMBED_WORKER") == "true"
-if _embed_worker:
-    from django_vtasks.asgi import get_worker_application
+# GlitchTip runs as a single process: the task worker and scheduler live in
+# this ASGI application, started from its lifespan. There is no separate
+# worker deployment to point at a different entrypoint.
+from django_vtasks.asgi import get_worker_application
 
-    application = get_worker_application(application)
+application = get_worker_application(application)
 
 
 class MCPDjangoDispatcher:
@@ -56,11 +57,10 @@ class MCPDjangoDispatcher:
     # but the Starlette app expects them at root level internally)
     _OAUTH_SUFFIXES = frozenset({"/authorize", "/token", "/register", "/revoke"})
 
-    def __init__(self, django_app, mcp_app, mcp_prefix="/mcp", django_lifespan=False):
+    def __init__(self, django_app, mcp_app, mcp_prefix="/mcp"):
         self.django_app = django_app
         self.mcp_app = mcp_app
         self.mcp_prefix = mcp_prefix
-        self._django_lifespan = django_lifespan
 
     # Well-known prefixes that should be routed to the MCP Starlette app
     _WELL_KNOWN_PREFIXES = (
@@ -103,19 +103,12 @@ class MCPDjangoDispatcher:
             await self.django_app(scope, receive, send)
 
     async def _handle_lifespan(self, scope, receive, send):
-        """Multiplex ASGI lifespan to sub-applications that need it.
+        """Multiplex ASGI lifespan to both sub-applications.
 
-        The MCP Starlette app always needs lifespan to initialise its
-        session-manager task group.  In all-in-one mode the django_app is
-        the django-vtasks wrapper which also needs lifespan to start the
-        background worker (set django_lifespan=True).  In web-only mode
-        django_app is Django's ASGIHandler which does not support lifespan.
+        The MCP Starlette app needs lifespan to initialise its session-manager
+        task group, and django_app is the django-vtasks wrapper, which needs it
+        to start the background worker.
         """
-        if not self._django_lifespan:
-            # Web-only mode: only MCP needs lifespan, forward directly.
-            await self.mcp_app(scope, receive, send)
-            return
-
         django_queue: asyncio.Queue = asyncio.Queue()
         mcp_queue: asyncio.Queue = asyncio.Queue()
         django_ok = asyncio.Event()
@@ -300,7 +293,6 @@ if settings.GLITCHTIP_ENABLE_MCP:
     application = MCPDjangoDispatcher(
         django_app=application,
         mcp_app=RecycleConnectionsMiddleware(_mcp_app),
-        django_lifespan=_embed_worker,
     )
 
 # Wrap application with granian proxy headers support
@@ -325,9 +317,9 @@ except ImportError:
     # serving this app under another ASGI server)
     pass
 
-# Outermost so lifespan startup reaches it even in embed-worker mode (the
-# vtasks wrapper consumes lifespan without forwarding it inward): a pod
-# receiving no HTTP traffic still starts its trim timer. Periodically
+# Outermost so lifespan startup reaches it at all (the vtasks wrapper consumes
+# lifespan without forwarding it inward): a pod receiving no HTTP traffic still
+# starts its trim timer. Periodically
 # returns freed memory to the OS in every ASGI process — the scheduled
 # maintenance task only trims the one pod that runs it.
 application = PeriodicMemoryTrim(application)

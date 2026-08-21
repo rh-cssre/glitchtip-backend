@@ -1,14 +1,7 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 set -e
 
-echo "Run Django migrations"
-if [ -n "$MAINTENANCE_DATABASE_URL" ]; then
-    DB_FLAG="--database maintenance"
-else
-    DB_FLAG=""
-fi
-./manage.py migrate --skip-checks $DB_FLAG
-echo "Create Django cache table, if needed"
-./manage.py createcachetable
-echo "Create and delete Postgres partitions"
-./manage.py maintain_partitions
+# Pre-deploy entrypoint: the same initialization the server runs on start, so
+# running it here and setting SKIP_INIT keeps schema changes off the serving
+# path. Both take the same lock, so the two can overlap harmlessly.
+exec ./manage.py init_database

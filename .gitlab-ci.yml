@@ -159,12 +159,12 @@ e2e:
     - if: $CI_PIPELINE_SOURCE != "schedule"
   parallel:
     matrix:
-      # All-in-one with valkey (default production-like setup)
+      # With valkey (default production-like setup)
       - COMPOSE_FILES: "-f compose.e2e.yml"
-      # All-in-one without valkey (postgres for cache/tasks)
+      # Without valkey (postgres for cache/tasks)
       - COMPOSE_FILES: "-f compose.e2e.yml -f compose.e2e.no-valkey.yml"
-      # Separate web + worker with valkey
-      - COMPOSE_FILES: "-f compose.e2e.yml -f compose.e2e.web-worker.yml"
+      # Migrations as a separate pre-deploy step, server started with SKIP_INIT
+      - COMPOSE_FILES: "-f compose.e2e.yml -f compose.e2e.skip-init.yml"
 
 lint:
   image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.14-$BASE_LAYER

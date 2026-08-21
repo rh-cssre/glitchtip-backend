@@ -97,14 +97,6 @@ class SilentLifespanApp:
             return
 
 
-class DjangoLikeApp:
-    """Mock that raises ValueError on non-http scope (like Django's ASGIHandler)."""
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
-            raise ValueError("Django can only handle ASGI/HTTP connections")
-
-
 class MCPDjangoDispatcherTestCase(SimpleTestCase):
     async def test_mcp_routing(self):
         mock_django = MockASGIApp()
@@ -131,12 +123,10 @@ class MCPDjangoDispatcherTestCase(SimpleTestCase):
         self.assertFalse(mock_mcp.called)
 
     async def test_lifespan_forwarded_to_both_apps(self):
-        """Both django_app and mcp_app receive lifespan when django_lifespan=True."""
+        """Both django_app and mcp_app receive lifespan."""
         django_app = LifespanApp()
         mcp_app = LifespanApp()
-        dispatcher = MCPDjangoDispatcher(
-            django_app, mcp_app, mcp_prefix="/mcp", django_lifespan=True
-        )
+        dispatcher = MCPDjangoDispatcher(django_app, mcp_app, mcp_prefix="/mcp")
 
         scope = {"type": "lifespan", "asgi": {"version": "3.0"}}
         messages = asyncio.Queue()
@@ -168,9 +158,7 @@ class MCPDjangoDispatcherTestCase(SimpleTestCase):
         """
         django_app = CrashingLifespanApp()
         mcp_app = LifespanApp()
-        dispatcher = MCPDjangoDispatcher(
-            django_app, mcp_app, mcp_prefix="/mcp", django_lifespan=True
-        )
+        dispatcher = MCPDjangoDispatcher(django_app, mcp_app, mcp_prefix="/mcp")
 
         scope = {"type": "lifespan", "asgi": {"version": "3.0"}}
         messages = asyncio.Queue()
@@ -193,9 +181,7 @@ class MCPDjangoDispatcherTestCase(SimpleTestCase):
         """A sub-app that returns without completing shutdown must not wedge it."""
         django_app = SilentLifespanApp()
         mcp_app = LifespanApp()
-        dispatcher = MCPDjangoDispatcher(
-            django_app, mcp_app, mcp_prefix="/mcp", django_lifespan=True
-        )
+        dispatcher = MCPDjangoDispatcher(django_app, mcp_app, mcp_prefix="/mcp")
 
         scope = {"type": "lifespan", "asgi": {"version": "3.0"}}
         messages = asyncio.Queue()
@@ -210,29 +196,6 @@ class MCPDjangoDispatcherTestCase(SimpleTestCase):
         await asyncio.wait_for(dispatcher(scope, messages.get, send), timeout=10)
 
         # Startup was reported, so shutdown must still complete rather than hang.
-        self.assertEqual(sent[0]["type"], "lifespan.startup.complete")
-        self.assertEqual(sent[1]["type"], "lifespan.shutdown.complete")
-
-    async def test_lifespan_web_only_mode(self):
-        """Lifespan only goes to MCP in web-only mode (django_lifespan=False)."""
-        django_app = DjangoLikeApp()
-        mcp_app = LifespanApp()
-        dispatcher = MCPDjangoDispatcher(django_app, mcp_app, mcp_prefix="/mcp")
-
-        scope = {"type": "lifespan", "asgi": {"version": "3.0"}}
-        messages = asyncio.Queue()
-        await messages.put({"type": "lifespan.startup"})
-        await messages.put({"type": "lifespan.shutdown"})
-
-        sent = []
-
-        async def send(msg):
-            sent.append(msg)
-
-        await dispatcher(scope, messages.get, send)
-
-        self.assertTrue(mcp_app.started)
-        self.assertTrue(mcp_app.stopped)
         self.assertEqual(sent[0]["type"], "lifespan.startup.complete")
         self.assertEqual(sent[1]["type"], "lifespan.shutdown.complete")
 
