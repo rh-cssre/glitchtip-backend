@@ -131,6 +131,34 @@ class StripeTestCase(TestCase):
         self.assertTrue(product.is_overage)
 
     @patch("apps.stripe.models.list_products")
+    async def test_sync_stores_uptime_monitor_limit(self, mock_list_products):
+        mock_list_products.return_value = self._page(
+            make_product(
+                id="prod_monitors",
+                metadata={
+                    "events": "123",
+                    "is_public": "true",
+                    "product_type": "hosted",
+                    "uptime_monitors": "500",
+                },
+                default_price=test_price.model_copy(update={"id": "price_monitors"}),
+            )
+        )
+        await StripeProduct.sync_from_stripe()
+
+        product = await StripeProduct.objects.aget(stripe_id="prod_monitors")
+        self.assertEqual(product.uptime_monitors, 500)
+
+    @patch("apps.stripe.models.list_products")
+    async def test_sync_leaves_uptime_monitor_limit_null(self, mock_list_products):
+        """No metadata means the plan is silent, not that it is unlimited."""
+        mock_list_products.return_value = self._page(make_product())
+        await StripeProduct.sync_from_stripe()
+
+        product = await StripeProduct.objects.aget(stripe_id="prod_1")
+        self.assertIsNone(product.uptime_monitors)
+
+    @patch("apps.stripe.models.list_products")
     async def test_sync_skips_support_products(self, mock_list_products):
         """Self-host support licenses share the account but are never stored."""
         mock_list_products.return_value = self._page(

@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 # Maximum allowed time difference between client timestamp and server time
 MAX_TIMESTAMP_DRIFT = timedelta(days=1)
 
+# Numeric timestamps above this cannot be epoch seconds (1e11 is roughly
+# year 5138); assume the client sent milli/micro/nanoseconds and rescale.
+MAX_EPOCH_SECONDS = 1e11
+
 
 async def update_log_statistics(
     stats_data: defaultdict[datetime, defaultdict[tuple[int, int, int, int], dict]],
@@ -113,6 +117,21 @@ def validate_timestamp(client_timestamp: datetime, server_time: datetime) -> boo
     return drift <= MAX_TIMESTAMP_DRIFT
 
 
+def strip_nul(value):
+    """Recursively remove NUL characters from strings in a JSON-shaped value.
+
+    PostgreSQL cannot store NUL in text or jsonb columns, and one such
+    value would fail the entire COPY batch at insert.
+    """
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, dict):
+        return {strip_nul(k): strip_nul(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [strip_nul(v) for v in value]
+    return value
+
+
 def parse_span_id(span_id_str: str | None) -> int | None:
     """
     Parse span_id from hex string to signed 64-bit integer.
@@ -170,17 +189,39 @@ async def process_log_events(messages: list) -> int:
         project_id = message.project_id
 
         for log_item in message.logs:
-            # Parse timestamp from the log item
+            # Parse timestamp from the log item. The value is client
+            # controlled, so a parse failure must reject the single log,
+            # not raise and fail every message batched in this task.
             timestamp_val = log_item.get("timestamp")
-            if isinstance(timestamp_val, (int, float)):
-                # Unix timestamp with fractional seconds
-                log_timestamp = datetime.fromtimestamp(timestamp_val, tz=UTC)
-            elif isinstance(timestamp_val, str):
-                # ISO format string
-                log_timestamp = datetime.fromisoformat(timestamp_val)
-            else:
-                # No timestamp provided - use server time
-                log_timestamp = server_time
+            try:
+                if isinstance(timestamp_val, (int, float)):
+                    # Unix timestamp with fractional seconds. Rescale values
+                    # sent as milli/micro/nanoseconds; anything still out of
+                    # range (e.g. inf, nan) fails fromtimestamp below.
+                    scaled = timestamp_val
+                    for _ in range(3):
+                        if abs(scaled) <= MAX_EPOCH_SECONDS:
+                            break
+                        scaled /= 1000
+                    log_timestamp = datetime.fromtimestamp(scaled, tz=UTC)
+                elif isinstance(timestamp_val, str):
+                    # ISO format string; treat a naive value as UTC so the
+                    # aware drift comparison below cannot raise TypeError.
+                    log_timestamp = datetime.fromisoformat(timestamp_val)
+                    if log_timestamp.tzinfo is None:
+                        log_timestamp = log_timestamp.replace(tzinfo=UTC)
+                else:
+                    # No timestamp provided - use server time
+                    log_timestamp = server_time
+            except (ValueError, OverflowError, OSError):
+                rejected_count += 1
+                # Lazy %r: the hostile value must not be formatted when
+                # debug logging is off, and a formatting error (e.g. an int
+                # too large to repr) must not escape this handler.
+                logger.debug(
+                    "Rejected log with unparseable timestamp %r", timestamp_val
+                )
+                continue
 
             # Validate timestamp is within acceptable range
             if not validate_timestamp(log_timestamp, server_time):
@@ -213,13 +254,20 @@ async def process_log_events(messages: list) -> int:
             # Parse span_id (convert hex string to integer)
             span_id = parse_span_id(log_item.get("span_id"))
 
-            # Get body and other fields
-            body = log_item.get("body", "")
+            # Get body and other fields. Postgres rejects NUL outright in
+            # text columns, and a single such row fails the whole COPY.
+            body = strip_nul(log_item.get("body", ""))
             severity_number = log_item.get("severity_number")
+            # OTel severity fits smallint; an out-of-range value would fail
+            # the row insert at the database and take the batch with it.
+            if not isinstance(severity_number, int) or not (
+                0 <= severity_number <= 32767
+            ):
+                severity_number = None
 
-            service = log_item.get("service", "")
-            environment = log_item.get("environment", "")
-            host = log_item.get("host", "")
+            service = strip_nul(log_item.get("service", ""))
+            environment = strip_nul(log_item.get("environment", ""))
+            host = strip_nul(log_item.get("host", ""))
 
             # Build data dict for any extra attributes
             data = {}
@@ -238,6 +286,14 @@ async def process_log_events(messages: list) -> int:
                 if key not in excluded_keys:
                     data[key] = value
 
+            data_json = orjson.dumps(data if data else {}).decode("utf-8")
+            # jsonb rejects the unicode escape NUL serializes to; clean and
+            # re-dump only when one is present. The substring check keeps
+            # the common path to one scan and tolerates rare false
+            # positives on literal backslash-u-0000 text.
+            if "\\u0000" in data_json:
+                data_json = orjson.dumps(strip_nul(data)).decode("utf-8")
+
             log_rows.append(
                 (
                     str(log_id),
@@ -251,7 +307,7 @@ async def process_log_events(messages: list) -> int:
                     service,
                     environment,
                     host,
-                    orjson.dumps(data if data else {}).decode("utf-8"),
+                    data_json,
                 )
             )
 
@@ -274,7 +330,8 @@ async def process_log_events(messages: list) -> int:
 
     if rejected_count > 0:
         logger.warning(
-            f"Rejected {rejected_count} logs due to timestamp drift > {MAX_TIMESTAMP_DRIFT}"
+            f"Rejected {rejected_count} logs with invalid timestamps "
+            f"(unparseable or drift > {MAX_TIMESTAMP_DRIFT})"
         )
 
     if not log_rows:

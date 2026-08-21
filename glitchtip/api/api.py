@@ -19,6 +19,7 @@ from apps.event_ingest.api import router as event_ingest_router
 from apps.event_ingest.embed_api import router as embed_router
 from apps.files.api import router as files_router
 from apps.importer.api import router as importer_router
+from apps.importer.exceptions import ImporterException
 from apps.issue_events.api import router as issue_events_router
 from apps.logs.api import router as logs_router
 from apps.organizations_ext.api import router as organizations_ext_router
@@ -118,6 +119,19 @@ def throttled(request: HttpRequest, exc: ThrottleException):
 @api.exception_handler(RequestDataTooBig)
 def request_too_big(request: HttpRequest, exc: RequestDataTooBig):
     return HttpResponse(str(exc), status=413, content_type="text/plain")
+
+
+@api.exception_handler(ImporterException)
+def importer_failed(request: HttpRequest, exc: ImporterException):
+    """Report a failed import as a client error.
+
+    Every way an import can fail describes the remote server the caller named --
+    a rejected token, a response that isn't the list of results it should be,
+    more pages than the importer will follow. None of them are faults in this
+    server, so answering 500 both misreports the cause and withholds the one
+    detail that would let the caller fix it.
+    """
+    return api.create_response(request, {"detail": str(exc)}, status=400)
 
 
 class SocialAppSchema(ModelSchema):

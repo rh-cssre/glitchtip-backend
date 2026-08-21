@@ -1,5 +1,6 @@
 from unittest import mock
 
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -125,6 +126,120 @@ class UptimeAPITestCase(GlitchTestCase):
         self.assertEqual(res.json()["confirmationThreshold"], 3)
         monitor = Monitor.objects.get()
         self.assertEqual(monitor.confirmation_threshold, 3)
+
+    def _monitor_payload(self, name="Test"):
+        return {
+            "monitorType": "Ping",
+            "name": name,
+            "url": "https://www.google.com",
+            "expectedStatus": 200,
+            "expectedBody": "",
+            "interval": 60,
+            "project": str(self.project.pk),
+            "timeout": 25,
+        }
+
+    @mock.patch(
+        "apps.organizations_ext.utils.DEFAULT_MAX_MONITORS_PER_ORGANIZATION",
+        2,
+    )
+    @mock.patch("apps.uptime.tasks.perform_checks")
+    def test_create_monitor_default_limit(self, mocked):
+        """An organization with no plan opinion is held to the instance default."""
+        baker.make("uptime.Monitor", organization=self.organization, _quantity=2)
+        res = self.client.post(
+            self.list_url, self._monitor_payload(), content_type="application/json"
+        )
+        self.assertEqual(res.status_code, 403)
+        self.assertIn("limited to 2 uptime monitors", res.json()["detail"])
+        self.assertEqual(Monitor.objects.count(), 2)
+
+    @mock.patch(
+        "apps.organizations_ext.utils.DEFAULT_MAX_MONITORS_PER_ORGANIZATION",
+        2,
+    )
+    @mock.patch("apps.uptime.tasks.perform_checks")
+    def test_create_monitor_under_default_limit(self, mocked):
+        baker.make("uptime.Monitor", organization=self.organization)
+        with self.captureOnCommitCallbacks(execute=True):
+            res = self.client.post(
+                self.list_url, self._monitor_payload(), content_type="application/json"
+            )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(Monitor.objects.count(), 2)
+
+    @mock.patch(
+        "apps.organizations_ext.utils.DEFAULT_MAX_MONITORS_PER_ORGANIZATION",
+        1,
+    )
+    @mock.patch("apps.uptime.tasks.perform_checks")
+    def test_create_monitor_plan_limit_overrides_default(self, mocked):
+        """Stripe product metadata raises the ceiling above the instance default."""
+        baker.make(
+            "stripe.StripeSubscription",
+            organization=self.organization,
+            price__product__uptime_monitors=3,
+        )
+        baker.make("uptime.Monitor", organization=self.organization, _quantity=2)
+        with self.captureOnCommitCallbacks(execute=True):
+            res = self.client.post(
+                self.list_url, self._monitor_payload(), content_type="application/json"
+            )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(Monitor.objects.count(), 3)
+
+    @mock.patch(
+        "apps.organizations_ext.utils.DEFAULT_MAX_MONITORS_PER_ORGANIZATION",
+        1,
+    )
+    @mock.patch("apps.uptime.tasks.perform_checks")
+    def test_create_monitor_plan_limit_enforced(self, mocked):
+        baker.make(
+            "stripe.StripeSubscription",
+            organization=self.organization,
+            price__product__uptime_monitors=3,
+        )
+        baker.make("uptime.Monitor", organization=self.organization, _quantity=3)
+        res = self.client.post(
+            self.list_url, self._monitor_payload(), content_type="application/json"
+        )
+        self.assertEqual(res.status_code, 403)
+        self.assertIn("limited to 3 uptime monitors", res.json()["detail"])
+
+    @mock.patch(
+        "apps.organizations_ext.utils.DEFAULT_MAX_MONITORS_PER_ORGANIZATION",
+        1,
+    )
+    @mock.patch("apps.uptime.tasks.perform_checks")
+    def test_create_monitor_inactive_subscription_ignored(self, mocked):
+        """A canceled plan cannot keep granting a raised limit."""
+        baker.make(
+            "stripe.StripeSubscription",
+            organization=self.organization,
+            status="canceled",
+            price__product__uptime_monitors=3,
+        )
+        baker.make("uptime.Monitor", organization=self.organization)
+        res = self.client.post(
+            self.list_url, self._monitor_payload(), content_type="application/json"
+        )
+        self.assertEqual(res.status_code, 403)
+
+    @override_settings(BILLING_ENABLED=False)
+    @mock.patch(
+        "apps.organizations_ext.utils.DEFAULT_MAX_MONITORS_PER_ORGANIZATION",
+        1,
+    )
+    @mock.patch("apps.uptime.tasks.perform_checks")
+    def test_create_monitor_uncapped_without_billing(self, mocked):
+        """Self-hosted installs choose who gets an account, so no cap applies."""
+        baker.make("uptime.Monitor", organization=self.organization, _quantity=5)
+        with self.captureOnCommitCallbacks(execute=True):
+            res = self.client.post(
+                self.list_url, self._monitor_payload(), content_type="application/json"
+            )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(Monitor.objects.count(), 6)
 
     @mock.patch("apps.uptime.tasks.perform_checks")
     def test_create_port_monitor(self, mocked):

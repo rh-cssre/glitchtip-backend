@@ -1,3 +1,6 @@
+from urllib.parse import urljoin, urlparse
+
+import aiohttp
 import tablib
 from asgiref.sync import sync_to_async
 from django.conf import settings
@@ -21,6 +24,8 @@ from glitchtip.ssrf_protection import (
 )
 
 from .exceptions import ImporterException
+
+MAX_IMPORTER_PAGES = 100
 
 
 class GlitchTipImporter:
@@ -67,14 +72,88 @@ class GlitchTipImporter:
         await self.import_teams()
 
     async def get(self, url: str):
+        data = []
+        next_url = url
+        seen_urls = {url}
+        pages_fetched = 0
         allow_private = settings.GLITCHTIP_ALLOW_PRIVATE_IPS
-        async with (
-            safe_session(allow_private) as session,
-            await request_with_validated_redirects(
-                session, "GET", url, headers=self.headers, allow_private=allow_private
-            ) as res,
-        ):
-            return await res.json()
+        async with safe_session(allow_private) as session:
+            while next_url:
+                async with await request_with_validated_redirects(
+                    session,
+                    "GET",
+                    next_url,
+                    headers=self.headers,
+                    allow_private=allow_private,
+                ) as res:
+                    response_data = await res.json()
+                    if not isinstance(response_data, list):
+                        if data:
+                            raise ImporterException(
+                                "Importer expected a list of results but got "
+                                f"{type(response_data).__name__}"
+                            )
+                        return response_data
+                    data.extend(response_data)
+                    pages_fetched += 1
+                    next_url = self.get_next_url(res, next_url)
+                    if next_url:
+                        if next_url in seen_urls:
+                            # The remote is pointing back at a page already
+                            # fetched. GlitchTip's own last page does exactly
+                            # this, so treat a repeat as the end of the results
+                            # rather than crawling until the page cap.
+                            break
+                        seen_urls.add(next_url)
+                        if pages_fetched >= MAX_IMPORTER_PAGES:
+                            raise ImporterException(
+                                "Importer pagination exceeded "
+                                f"{MAX_IMPORTER_PAGES} pages"
+                            )
+        return data
+
+    @staticmethod
+    def get_next_url(res: aiohttp.ClientResponse, current_url: str) -> str | None:
+        link_header = res.headers.get("Link")
+        if not link_header:
+            return None
+
+        for link in link_header.split(","):
+            parts = [part.strip() for part in link.split(";")]
+            if not parts or not parts[0].startswith("<") or not parts[0].endswith(">"):
+                continue
+            link_url = parts[0][1:-1]
+            params = {}
+            for part in parts[1:]:
+                key, _, value = part.partition("=")
+                params[key.lower()] = value.strip('"')
+            # A remote that omits the flag entirely still gets followed; only an
+            # explicit "false" means there is nothing after this page. The loop
+            # guard in get() is what bounds a remote whose flag never flips.
+            if params.get("rel") == "next" and params.get("results") != "false":
+                return GlitchTipImporter.rebase_url(current_url, link_url)
+        return None
+
+    @staticmethod
+    def rebase_url(current_url: str, link_url: str) -> str:
+        """Re-anchor a pagination link onto the origin we are already reading.
+
+        Pagination links are absolute, and a server builds them from whatever it
+        believes its own public address to be rather than from the address the
+        request arrived on -- a reverse proxy, a port-forward, or plain http in
+        front of an https-configured install is enough to make the two differ.
+        Following one verbatim would send the caller's auth token to a host the
+        operator never named, so take only the path and query from it. The first
+        page is fetched at the operator's own URL and every page after it is
+        anchored to the page before, so the token cannot leave that origin --
+        whether the difference was a misconfigured proxy or a hostile remote
+        trying to collect the token.
+        """
+        parsed = urlparse(link_url)
+        path_and_query = parsed.path
+        if parsed.query:
+            path_and_query = f"{path_and_query}?{parsed.query}"
+        return urljoin(current_url, path_and_query)
 
     async def import_organization(self):
         resource = OrganizationResource()
@@ -101,16 +180,21 @@ class GlitchTipImporter:
             dataset = tablib.Dataset()
             dataset.dict = users
             await sync_to_async(user_resource.import_data)(dataset, raise_errors=True)
+            # Resolve every imported user in one query. The rows were just
+            # written above, so look them up by the email the remote reported
+            # rather than trusting its primary keys.
+            user_ids_by_email = {
+                email: pk
+                async for email, pk in User.objects.filter(
+                    email__in=[user["email"] for user in users]
+                ).values_list("email", "pk")
+            }
 
         for org_user in org_users:
             org_user["organization"] = self.organization_id
             org_user["role"] = OrganizationUserRole.from_string(org_user["role"])
             if self.create_users:
-                org_user["user"] = (
-                    User.objects.filter(email=org_user["user"]["email"])
-                    .values_list("pk", flat=True)
-                    .first()
-                )
+                org_user["user"] = user_ids_by_email.get(org_user["user"]["email"])
             else:
                 org_user["user"] = None
         dataset = tablib.Dataset()

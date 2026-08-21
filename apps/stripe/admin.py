@@ -37,6 +37,7 @@ class StripeProductAdmin(StripeBaseAdmin):
         "stripe_id",
         "name",
         "events",
+        "uptime_monitors",
         "default_price",
         "is_public",
         "active",
