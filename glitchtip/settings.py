@@ -513,14 +513,23 @@ if SENTRY_DSN:
 
         return event
 
-    # Ignore whitenoise served static routes
+    # Ignore whitenoise served static routes. The path comes off the ASGI
+    # scope; STATIC_URL is stored without a leading slash, so it is compared
+    # against the request path in the rooted form the scope carries, including
+    # any BASE_PATH the app is mounted under. A prefix of "/" would match every
+    # request, so an unset or root STATIC_URL disables the filter instead.
+    _static_path_prefix = "/" + STATIC_URL.lstrip("/")
+    if _static_path_prefix == "/":
+        _static_path_prefix = None
+
     def traces_sampler(sampling_context):
-        if (
-            sampling_context.get("wsgi_environ", {})
-            .get("PATH_INFO", "")
-            .startswith(STATIC_URL)
-        ):
-            return 0.0
+        if _static_path_prefix:
+            scope = sampling_context.get("asgi_scope", {})
+            # The scope's path already carries root_path, so the prefix has to
+            # as well when the app is mounted under a sub-path.
+            prefix = scope.get("root_path", "") + _static_path_prefix
+            if scope.get("path", "").startswith(prefix):
+                return 0.0
         return SENTRY_TRACES_SAMPLE_RATE
 
     release = "glitchtip@" + GLITCHTIP_VERSION if GLITCHTIP_VERSION else None
@@ -739,8 +748,6 @@ TEMPLATES = [
         },
     },
 ]
-
-WSGI_APPLICATION = "glitchtip.wsgi.application"
 
 # Defaults to True because Sentry SDKs send events from arbitrary user domains.
 # Set to False and configure CORS_ORIGIN_WHITELIST only if you control all client origins.
@@ -1024,18 +1031,6 @@ VTASKS_TASK_CONTEXT = "glitchtip.vtasks_context.sentry_task_scope"
 
 # Maximum number of issues send in a single alert payload
 MAX_ISSUES_PER_ALERT = env.int("MAX_ISSUES_PER_ALERT", 3)
-
-# Support running in WSGI mode (uWSGI or Granian WSGI)
-# We need to use a different cache backend for WSGI to avoid async loop issues
-try:
-    import uwsgi  # noqa
-
-    HAS_UWSGI = True
-except ImportError:
-    HAS_UWSGI = False
-
-# Default to True for now, but if running under uWSGI or Granian WSGI, we might need to switch
-USE_ASYNC_SERVER = env.bool("USE_ASYNC_SERVER", True)
 
 # VALKEY_URL drives both cache and task broker. Empty string disables valkey.
 # TLS: use rediss:// or valkeys:// URL scheme. For custom CA or mTLS, set

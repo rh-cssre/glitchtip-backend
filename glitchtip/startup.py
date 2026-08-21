@@ -98,6 +98,10 @@ RETIRED_ENV_VARS = {
         "envelope ingest is always served by the Rust pipeline; the variable "
         "is ignored, including when set to false"
     ),
+    "USE_ASYNC_SERVER": (
+        "WSGI serving is removed; GlitchTip only runs as an ASGI application, "
+        "so there is no synchronous mode to switch to"
+    ),
 }
 
 
