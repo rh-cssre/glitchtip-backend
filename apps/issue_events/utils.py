@@ -1,8 +1,11 @@
+import logging
 import string
 
 from sentry.interfaces.stacktrace import get_context
 
 from .constants import IssueEventType
+
+logger = logging.getLogger(__name__)
 
 digs = string.digits + string.ascii_uppercase
 
@@ -57,12 +60,25 @@ def to_camel_with_lower_id(string: str) -> str:
 
 def get_entries(data):
     entries = []
-    if exception := data.get("exception"):
-        if isinstance(exception, list):  # Old format, delete after 2025
-            exception = {"values": exception, "hasSystemFrames": False}
-        elif isinstance(exception, dict):
-            exception["hasSystemFrames"] = False
-        # https://gitlab.com/glitchtip/sentry-open-source/sentry/-/blob/master/src/sentry/interfaces/stacktrace.py#L487
+    # ``exception`` and ``breadcrumbs`` are stored in the shape ingest
+    # normalizes to, ``{"values": [...]}``. Events ingested before that
+    # normalization existed (5.1 and earlier) stored a bare list instead;
+    # such a row can only exist on an install that kept it through the whole
+    # 6.x series, so it is skipped rather than adapted. The check is for the
+    # whole shape, values included: an entry without them renders as undefined
+    # in the frontend, which is worse than the section being absent.
+    exception = data.get("exception")
+    if exception and not (
+        isinstance(exception, dict) and isinstance(exception.get("values"), list)
+    ):
+        # Only reachable for a row written before 5.2.0 normalized the shape.
+        # Log the shape, never the content: it is user-submitted event data.
+        logger.warning(
+            "Skipping event exception stored in an unsupported shape: %s",
+            type(exception).__name__,
+        )
+    elif isinstance(exception, dict) and isinstance(exception.get("values"), list):
+        exception["hasSystemFrames"] = False
         # if any frame is "in_app" set this to True
         for value in exception["values"]:
             if (
@@ -92,9 +108,8 @@ def get_entries(data):
 
         entries.append({"type": "exception", "data": exception})
 
-    if breadcrumbs := data.get("breadcrumbs"):
-        if isinstance(breadcrumbs, list):  # Old format, delete after 2025
-            breadcrumbs = {"values": breadcrumbs}
+    breadcrumbs = data.get("breadcrumbs")
+    if isinstance(breadcrumbs, dict) and isinstance(breadcrumbs.get("values"), list):
         entries.append({"type": "breadcrumbs", "data": breadcrumbs})
 
     if logentry := data.get("logentry"):
