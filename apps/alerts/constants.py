@@ -6,8 +6,12 @@ ISSUE_IDS_KEY = "alert_issue_ids"
 
 class RecipientType(models.TextChoices):
     EMAIL = "email", _("Email")
-    GENERAL_WEBHOOK = "webhook", _("General Slack-compatible webhook")
+    GENERAL_WEBHOOK = (
+        "webhook",
+        _("Generic webhook (Mattermost, Rocket.Chat, and more)"),
+    )
     DISCORD = "discord", _("Discord")
+    SLACK = "slack", _("Slack")
     GOOGLE_CHAT = "googlechat", _("Google Chat webhook")
     NTFY = "ntfy", _("ntfy")
     MICROSOFT_TEAMS = "teams", _("Microsoft Teams")

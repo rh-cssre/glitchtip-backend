@@ -23,6 +23,7 @@ from ..webhooks import (
     send_issue_as_feishu_webhook,
     send_issue_as_googlechat_webhook,
     send_issue_as_ntfy,
+    send_issue_as_slack_webhook,
     send_issue_as_teams_webhook,
     send_issue_as_webhook,
     send_issue_as_zulip,
@@ -37,6 +38,9 @@ GOOGLE_CHAT_TEST_URL = "https://chat.googleapis.com/v1/spaces/space_id/messages?
 NTFY_TEST_URL = "https://ntfy.sh/glitchtip-test-topic"
 TEAMS_TEST_URL = "https://example.webhook.office.com/webhookb2/test"
 FEISHU_TEST_URL = "https://open.feishu.cn/open-apis/bot/v2/hook/not_real_token"
+SLACK_TEST_URL = (
+    "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
+)
 ZULIP_TEST_URL = "https://zulip.example.com"
 ZULIP_TEST_CONFIG = {
     "bot_email": "bot@zulip.example.com",
@@ -998,6 +1002,197 @@ class WebhookTestCase(GlitchTipTestCase):
         json_data = json.dumps(payload)
         self.assertIn("GlitchTip Test Notification", json_data)
         self.assertIn(self.project.name, json_data)
+
+    @mock.patch("aiohttp.ClientSession")
+    def test_send_issue_as_slack_webhook(self, MockSession):
+        mock_constructor, mock_post = _mock_aiohttp_session()
+        MockSession.side_effect = mock_constructor
+
+        issue = self.generate_issue_with_tags()
+        async_to_sync(send_issue_as_slack_webhook)(SLACK_TEST_URL, [issue])
+
+        mock_post.assert_called_once()
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertEqual(payload["blocks"][0]["type"], "header")
+        self.assertEqual(payload["blocks"][0]["text"]["text"], "GlitchTip Alert")
+        # text is the notification preview, not rendered in-channel
+        self.assertIn("GlitchTip Alert", payload["text"])
+        json_data = json.dumps(payload)
+        self.assertIn(str(issue), json_data)
+        self.assertIn(issue.get_detail_url(), json_data)
+        self.assertIn(issue.project.name, json_data)
+        self.assertIn(self.environment_name, json_data)
+        self.assertIn(self.release_name, json_data)
+
+    @mock.patch("aiohttp.ClientSession")
+    def test_send_issue_as_slack_webhook_with_tags_to_add(self, MockSession):
+        mock_constructor, mock_post = _mock_aiohttp_session()
+        MockSession.side_effect = mock_constructor
+
+        issue = self.generate_issue_with_tags()
+        async_to_sync(send_issue_as_slack_webhook)(
+            SLACK_TEST_URL, [issue], 1, tags_to_add=["custom_tag"]
+        )
+
+        mock_post.assert_called_once()
+        json_data = json.dumps(mock_post.call_args.kwargs["json"])
+        self.assertIn("custom_value", json_data)
+
+    @mock.patch("aiohttp.ClientSession")
+    def test_send_issue_as_slack_webhook_multiple_issues(self, MockSession):
+        mock_constructor, mock_post = _mock_aiohttp_session()
+        MockSession.side_effect = mock_constructor
+
+        issue = self.generate_issue_with_tags()
+        issue2 = make_issue(level=LogLevel.ERROR, short_id=2)
+        async_to_sync(send_issue_as_slack_webhook)(SLACK_TEST_URL, [issue, issue2], 2)
+
+        mock_post.assert_called_once()
+        payload = mock_post.call_args.kwargs["json"]
+        json_data = json.dumps(payload)
+        self.assertIn("GlitchTip Alert (2 issues)", json_data)
+        # A divider separates the issues, but does not lead the message
+        self.assertEqual(
+            [block["type"] for block in payload["blocks"]],
+            ["header", "section", "context", "divider", "section", "context"],
+        )
+
+    @mock.patch("aiohttp.ClientSession")
+    def test_send_issue_as_slack_webhook_escapes_mrkdwn(self, MockSession):
+        """Angle brackets in issue text must not be parsed as Slack link syntax."""
+        mock_constructor, mock_post = _mock_aiohttp_session()
+        MockSession.side_effect = mock_constructor
+
+        issue = make_issue(
+            level=LogLevel.ERROR,
+            title="TypeError <anonymous> & friends",
+            culprit="render(<Foo>)",
+        )
+        async_to_sync(send_issue_as_slack_webhook)(SLACK_TEST_URL, [issue])
+
+        mock_post.assert_called_once()
+        payload = mock_post.call_args.kwargs["json"]
+        section = payload["blocks"][1]["text"]["text"]
+        self.assertIn("TypeError &lt;anonymous&gt; &amp; friends", section)
+        self.assertIn("render(&lt;Foo&gt;)", section)
+        # The only unescaped angle brackets are the ones forming the issue link
+        self.assertEqual(section.count("<"), 1)
+        self.assertEqual(section.count(">"), 1)
+        # The fallback text is mrkdwn as well, so it carries no link syntax
+        self.assertIn("TypeError &lt;anonymous&gt; &amp; friends", payload["text"])
+        self.assertEqual(payload["text"].count("<"), 0)
+        self.assertEqual(payload["text"].count(">"), 0)
+
+    @mock.patch("aiohttp.ClientSession")
+    def test_send_issue_as_slack_webhook_caps_context_elements(self, MockSession):
+        """Slack rejects a context block with more than 10 elements."""
+        mock_constructor, mock_post = _mock_aiohttp_session()
+        MockSession.side_effect = mock_constructor
+
+        issue = self.generate_issue_with_tags()
+        extra_tags = []
+        for i in range(12):
+            key = baker.make("issue_events.TagKey", key=f"extra_{i}")
+            value = baker.make("issue_events.TagValue", value=f"extra_value_{i}")
+            baker.make(
+                "issue_events.IssueTag", issue=issue, tag_key=key, tag_value=value
+            )
+            extra_tags.append(f"extra_{i}")
+
+        async_to_sync(send_issue_as_slack_webhook)(
+            SLACK_TEST_URL, [issue], 1, tags_to_add=extra_tags
+        )
+
+        mock_post.assert_called_once()
+        context = mock_post.call_args.kwargs["json"]["blocks"][2]
+        self.assertEqual(len(context["elements"]), 10)
+
+    @mock.patch("aiohttp.ClientSession")
+    def test_send_issue_as_slack_webhook_caps_section_text(self, MockSession):
+        """Slack rejects a section whose text exceeds 3000 characters.
+
+        Escaping quintuples "&", so a title plus culprit that are individually
+        under the limit can still overrun it once escaped.
+        """
+        mock_constructor, mock_post = _mock_aiohttp_session()
+        MockSession.side_effect = mock_constructor
+
+        issue = make_issue(level=LogLevel.ERROR, title="&" * 255, culprit="&" * 1024)
+        async_to_sync(send_issue_as_slack_webhook)(SLACK_TEST_URL, [issue])
+
+        mock_post.assert_called_once()
+        section = mock_post.call_args.kwargs["json"]["blocks"][1]["text"]["text"]
+        self.assertEqual(len(section), 3000)
+
+    @mock.patch("aiohttp.ClientSession")
+    def test_send_test_notification_with_issue_slack(self, MockSession):
+        """Test notification uses the Slack handler when issues exist."""
+        mock_constructor, mock_post = _mock_aiohttp_session()
+        MockSession.side_effect = mock_constructor
+
+        issue = self.generate_issue_with_tags()
+        async_to_sync(send_test_notification)(
+            SLACK_TEST_URL, RecipientType.SLACK, issue.project
+        )
+        mock_post.assert_called_once()
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertEqual(payload["blocks"][0]["type"], "header")
+        self.assertIn(str(issue), json.dumps(payload))
+
+    @mock.patch("aiohttp.ClientSession")
+    def test_send_test_notification_no_issues_slack(self, MockSession):
+        """Fallback test notification for Slack."""
+        mock_constructor, mock_post = _mock_aiohttp_session()
+        MockSession.side_effect = mock_constructor
+
+        async_to_sync(send_test_notification)(
+            SLACK_TEST_URL, RecipientType.SLACK, self.project
+        )
+        mock_post.assert_called_once()
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertEqual(payload["blocks"][0]["type"], "header")
+        json_data = json.dumps(payload)
+        self.assertIn("GlitchTip Test Notification", json_data)
+        self.assertIn(self.project.name, json_data)
+
+    @mock.patch("aiohttp.ClientSession")
+    def test_send_uptime_events_slack_webhook(self, MockSession):
+        mock_constructor, mock_post = _mock_aiohttp_session()
+        MockSession.side_effect = mock_constructor
+
+        recipient = baker.make(
+            AlertRecipient, recipient_type=RecipientType.SLACK, url=SLACK_TEST_URL
+        )
+
+        async_to_sync(send_uptime_as_webhook)(
+            recipient,
+            self.monitor_check.id,
+            True,
+            datetime.now(),
+        )
+
+        mock_post.assert_called_once()
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertEqual(payload["blocks"][0]["text"]["text"], self.expected_subject)
+        json_data = json.dumps(payload)
+        self.assertIn(":rotating_light:", json_data)
+        self.assertIn(self.monitor.name, json_data)
+        self.assertIn(self.expected_message_down, json_data)
+        self.assertIn(self.project.name, json_data)
+
+        mock_post.reset_mock()
+
+        async_to_sync(send_uptime_as_webhook)(
+            recipient,
+            self.monitor_check.id,
+            False,
+            datetime.now(),
+        )
+
+        mock_post.assert_called_once()
+        json_data = json.dumps(mock_post.call_args.kwargs["json"])
+        self.assertIn(":large_green_circle:", json_data)
+        self.assertIn(self.expected_message_up, json_data)
 
     def test_webhook_payload_excludes_none_values(self):
         """Test WebhookPayload excludes keys with None values."""
