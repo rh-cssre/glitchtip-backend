@@ -676,7 +676,9 @@ async def send_issue_as_slack_webhook(
             {"type": "context", "elements": elements[:SLACK_MAX_CONTEXT_ELEMENTS]}
         )
 
-    text = f"{title}: {issues[0]}" if issues else title
+    # The fallback text is mrkdwn too, so it needs the same escaping as the
+    # blocks -- an unescaped issue title could otherwise open link syntax.
+    text = f"{title}: {escape_slack_mrkdwn(str(issues[0]))}" if issues else title
     return await send_slack_webhook(url, text, blocks)
 
 

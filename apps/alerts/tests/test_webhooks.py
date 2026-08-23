@@ -1071,12 +1071,17 @@ class WebhookTestCase(GlitchTipTestCase):
         async_to_sync(send_issue_as_slack_webhook)(SLACK_TEST_URL, [issue])
 
         mock_post.assert_called_once()
-        section = mock_post.call_args.kwargs["json"]["blocks"][1]["text"]["text"]
+        payload = mock_post.call_args.kwargs["json"]
+        section = payload["blocks"][1]["text"]["text"]
         self.assertIn("TypeError &lt;anonymous&gt; &amp; friends", section)
         self.assertIn("render(&lt;Foo&gt;)", section)
         # The only unescaped angle brackets are the ones forming the issue link
         self.assertEqual(section.count("<"), 1)
         self.assertEqual(section.count(">"), 1)
+        # The fallback text is mrkdwn as well, so it carries no link syntax
+        self.assertIn("TypeError &lt;anonymous&gt; &amp; friends", payload["text"])
+        self.assertEqual(payload["text"].count("<"), 0)
+        self.assertEqual(payload["text"].count(">"), 0)
 
     @mock.patch("aiohttp.ClientSession")
     def test_send_issue_as_slack_webhook_caps_context_elements(self, MockSession):

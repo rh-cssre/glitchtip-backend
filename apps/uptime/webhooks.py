@@ -177,7 +177,9 @@ async def _send_uptime_slack(recipient, alert: UptimeAlert):
             }
         )
     return await send_slack_webhook(
-        recipient.url, f"{alert.subject}: {monitor.name} — {alert.message}", blocks
+        recipient.url,
+        f"{alert.subject}: {name} — {escape_slack_mrkdwn(alert.message)}",
+        blocks,
     )
 
 
