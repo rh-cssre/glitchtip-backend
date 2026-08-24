@@ -83,12 +83,16 @@ if "GLITCHTIP_INSTANCE_NAME" in os.environ:
     GLITCHTIP_INSTANCE_NAME = env.str("GLITCHTIP_INSTANCE_NAME", None, multiline=True)
 
 # Used in email and DSN generation. Set to full domain such as https://glitchtip.example.com
+# GLITCHTIP_DOMAIN is the original name, still what install.md documents.
 default_url = env.str(
     "APP_URL", env.str("GLITCHTIP_DOMAIN", "http://localhost:8000")
 )  # DigitalOcean App Platform uses APP_URL
 GLITCHTIP_URL = env.url("GLITCHTIP_URL", default_url)
 if GLITCHTIP_URL.scheme not in ["http", "https"]:
-    raise ImproperlyConfigured("GLITCHTIP_DOMAIN must start with http or https")
+    raise ImproperlyConfigured(
+        "The GlitchTip URL must start with http or https "
+        "(set via GLITCHTIP_URL, GLITCHTIP_DOMAIN, or APP_URL)"
+    )
 
 # If True, use a relative URL in chunk upload responses.
 GLITCHTIP_CHUNK_UPLOAD_USE_RELATIVE_URL = env.bool(
@@ -192,21 +196,15 @@ PARTITION_HASH_BUCKETS = env.int("PARTITION_HASH_BUCKETS", 2)
 
 # ── Retention settings ──────────────────────────────────────────────
 # More retention days means more partitions, which spends the same lock budget.
-# Master default; falls back to legacy GLITCHTIP_MAX_EVENT_LIFE_DAYS
-GLITCHTIP_RETENTION_DAYS = env.int(
-    "GLITCHTIP_RETENTION_DAYS",
-    default=env.int("GLITCHTIP_MAX_EVENT_LIFE_DAYS", default=90),
-)
+# Master default for every per-type retention below.
+GLITCHTIP_RETENTION_DAYS = env.int("GLITCHTIP_RETENTION_DAYS", default=90)
 
 # Per-type total retention (hot + cold combined)
 GLITCHTIP_EVENT_RETENTION_DAYS = env.int(
     "GLITCHTIP_EVENT_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
 )
 GLITCHTIP_TRANSACTION_RETENTION_DAYS = env.int(
-    "GLITCHTIP_TRANSACTION_RETENTION_DAYS",
-    default=env.int(
-        "GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS", default=GLITCHTIP_RETENTION_DAYS
-    ),
+    "GLITCHTIP_TRANSACTION_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
 )
 # Reject transaction/span events whose timestamp is further in the future
 # than this (clearly-broken clients) — bounds garbage so cold-storage
@@ -224,18 +222,13 @@ GLITCHTIP_SPAN_RAW_RETENTION_DAYS = env.int(
     "GLITCHTIP_SPAN_RAW_RETENTION_DAYS", default=30
 )
 GLITCHTIP_UPTIME_RETENTION_DAYS = env.int(
-    "GLITCHTIP_UPTIME_RETENTION_DAYS",
-    default=env.int(
-        "GLITCHTIP_MAX_UPTIME_CHECK_LIFE_DAYS", default=GLITCHTIP_RETENTION_DAYS
-    ),
+    "GLITCHTIP_UPTIME_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
 )
 GLITCHTIP_FILE_RETENTION_DAYS = env.int(
-    "GLITCHTIP_FILE_RETENTION_DAYS",
-    default=env.int("GLITCHTIP_MAX_FILE_LIFE_DAYS", default=GLITCHTIP_RETENTION_DAYS),
+    "GLITCHTIP_FILE_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
 )
 GLITCHTIP_LOG_RETENTION_DAYS = env.int(
-    "GLITCHTIP_LOG_RETENTION_DAYS",
-    default=env.int("GLITCHTIP_LOGS_COLD_DAYS", default=GLITCHTIP_RETENTION_DAYS),
+    "GLITCHTIP_LOG_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
 )
 GLITCHTIP_RELEASE_RETENTION_DAYS = env.int(
     "GLITCHTIP_RELEASE_RETENTION_DAYS", default=365
@@ -305,14 +298,8 @@ GLITCHTIP_ALLOW_PRIVATE_IPS = env.bool("GLITCHTIP_ALLOW_PRIVATE_IPS", False)
 
 
 # Hot storage (PostgreSQL retention before archival to cold)
-GLITCHTIP_EVENT_HOT_DAYS = env.int(
-    "GLITCHTIP_EVENT_HOT_DAYS",
-    default=env.int("GLITCHTIP_EVENTS_HOT_DAYS", default=30),
-)
-GLITCHTIP_LOG_HOT_DAYS = env.int(
-    "GLITCHTIP_LOG_HOT_DAYS",
-    default=env.int("GLITCHTIP_LOGS_HOT_DAYS", default=7),
-)
+GLITCHTIP_EVENT_HOT_DAYS = env.int("GLITCHTIP_EVENT_HOT_DAYS", default=30)
+GLITCHTIP_LOG_HOT_DAYS = env.int("GLITCHTIP_LOG_HOT_DAYS", default=7)
 
 # DuckDB extension directory (pre-installed in Docker image at /opt/duckdb/extensions)
 DUCKDB_EXTENSION_DIRECTORY = env.str("DUCKDB_EXTENSION_DIRECTORY", None)
@@ -432,7 +419,8 @@ EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
 
 
 STATIC_URL = "static/"
-# Base HREF, such as example.com/glitchtip/ where BASE_PATH would be "/glitchtip"
+# Base HREF, such as example.com/glitchtip/ where BASE_PATH would be "/glitchtip".
+# FORCE_SCRIPT_NAME is Django's own name for this setting and is accepted too.
 if "BASE_PATH" in os.environ or "FORCE_SCRIPT_NAME" in os.environ:
     FORCE_SCRIPT_NAME = env.str("BASE_PATH", env.str("FORCE_SCRIPT_NAME", ""))
 
@@ -1236,9 +1224,7 @@ ENABLE_USER_REGISTRATION = env.bool("ENABLE_USER_REGISTRATION", True)
 ENABLE_SOCIAL_APPS_USER_REGISTRATION = env.bool(
     "ENABLE_SOCIAL_APPS_USER_REGISTRATION", ENABLE_USER_REGISTRATION
 )
-ENABLE_ORGANIZATION_CREATION = env.bool(
-    "ENABLE_OPEN_USER_REGISTRATION", env.bool("ENABLE_ORGANIZATION_CREATION", False)
-)
+ENABLE_ORGANIZATION_CREATION = env.bool("ENABLE_ORGANIZATION_CREATION", False)
 
 AUTHENTICATION_BACKENDS = (
     # Needed to login by username in Django admin, regardless of `allauth`.

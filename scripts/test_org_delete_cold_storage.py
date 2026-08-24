@@ -11,14 +11,14 @@ Run with minio + postgres up:
   docker compose -f compose.yml -f compose.minio.yml up -d
   docker compose -f compose.yml -f compose.minio.yml run --rm \
     -e GLITCHTIP_ENABLE_DUCKDB=true \
-    -e GLITCHTIP_EVENTS_HOT_DAYS=0 \
+    -e GLITCHTIP_EVENT_HOT_DAYS=0 \
     web python manage.py shell < scripts/test_org_delete_cold_storage.py
 
 Or with filesystem cold storage:
   docker compose -f compose.yml -f compose.cold-volume.yml up -d
   docker compose -f compose.yml -f compose.cold-volume.yml run --rm \
     -e GLITCHTIP_ENABLE_DUCKDB=true \
-    -e GLITCHTIP_EVENTS_HOT_DAYS=0 \
+    -e GLITCHTIP_EVENT_HOT_DAYS=0 \
     web python manage.py shell < scripts/test_org_delete_cold_storage.py
 """
 

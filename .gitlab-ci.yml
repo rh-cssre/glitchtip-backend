@@ -44,7 +44,7 @@ test-min:
     SECRET_KEY: testing
     DATABASE_URL: "postgres://postgres:postgres@postgres:5432/postgres"
     ENABLE_TEST_API: "true"
-    ENABLE_OPEN_USER_REGISTRATION: "true"
+    ENABLE_ORGANIZATION_CREATION: "true"
     VALKEY_URL: "redis://redis:6379"
   services:
     - postgres:15
@@ -73,7 +73,7 @@ test-postgres-only:
     SECRET_KEY: testing
     DATABASE_URL: "postgres://postgres:postgres@postgres:5432/postgres"
     ENABLE_TEST_API: "true"
-    ENABLE_OPEN_USER_REGISTRATION: "true"
+    ENABLE_ORGANIZATION_CREATION: "true"
     VALKEY_URL: ""
   services:
     - name: postgres:18
@@ -98,7 +98,7 @@ test-latest:
     SECRET_KEY: testing
     DATABASE_URL: "postgres://postgres:postgres@postgres:5432/postgres"
     ENABLE_TEST_API: "true"
-    ENABLE_OPEN_USER_REGISTRATION: "true"
+    ENABLE_ORGANIZATION_CREATION: "true"
     VALKEY_URL: "redis://redis:6379"
     GLITCHTIP_ENABLE_DUCKDB: "true"
     GLITCHTIP_COLD_STORAGE_BUCKET: glitchtip-cold

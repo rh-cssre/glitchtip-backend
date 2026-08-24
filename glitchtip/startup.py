@@ -93,6 +93,10 @@ def format_banner(info: dict) -> str:
 # Environment variables that no longer do anything. Setting one used to
 # change behavior, so staying silent would turn an upgrade into a silent
 # behavior swap for the operator who deliberately set it.
+#
+# A removed name is ignored, never fatal: an install that still sets one keeps
+# booting on the default. Where that default is destructive the warning has to
+# say so, because the warning is the only thing the operator gets.
 RETIRED_ENV_VARS = {
     "GLITCHTIP_RUST_INGEST": (
         "envelope ingest is always served by the Rust pipeline; the variable "
@@ -113,6 +117,44 @@ RETIRED_ENV_VARS = {
     "SERVER_ROLE": (
         "there is only one role; bin/start.sh refuses anything but web or "
         "all_in_one rather than starting the wrong thing"
+    ),
+    "GLITCHTIP_MAX_EVENT_LIFE_DAYS": (
+        "renamed to GLITCHTIP_RETENTION_DAYS. This value is ignored, so retention "
+        "has fallen back to its default and the next maintenance run will drop "
+        "partitions older than that. Set GLITCHTIP_RETENTION_DAYS to keep it"
+    ),
+    "GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS": (
+        "renamed to GLITCHTIP_TRANSACTION_RETENTION_DAYS. This value is ignored, "
+        "so transaction retention has fallen back to its default and the next "
+        "maintenance run will drop older data"
+    ),
+    "GLITCHTIP_MAX_UPTIME_CHECK_LIFE_DAYS": (
+        "renamed to GLITCHTIP_UPTIME_RETENTION_DAYS. This value is ignored, so "
+        "uptime check retention has fallen back to its default and the next "
+        "maintenance run will drop older data"
+    ),
+    "GLITCHTIP_MAX_FILE_LIFE_DAYS": (
+        "renamed to GLITCHTIP_FILE_RETENTION_DAYS. This value is ignored, so file "
+        "retention has fallen back to its default and the next maintenance run "
+        "will delete older files"
+    ),
+    "GLITCHTIP_LOGS_COLD_DAYS": (
+        "renamed to GLITCHTIP_LOG_RETENTION_DAYS. This value is ignored, so log "
+        "retention has fallen back to its default and the next maintenance run "
+        "will drop older data"
+    ),
+    "GLITCHTIP_EVENTS_HOT_DAYS": (
+        "renamed to GLITCHTIP_EVENT_HOT_DAYS. This value is ignored, so events "
+        "are archived to cold storage on the default schedule instead"
+    ),
+    "GLITCHTIP_LOGS_HOT_DAYS": (
+        "renamed to GLITCHTIP_LOG_HOT_DAYS. This value is ignored, so logs are "
+        "archived to cold storage on the default schedule instead"
+    ),
+    "ENABLE_OPEN_USER_REGISTRATION": (
+        "renamed to ENABLE_ORGANIZATION_CREATION, which now governs on its own. "
+        "It used to override that variable, so a false here no longer keeps "
+        "organization creation closed"
     ),
 }
 
