@@ -1486,6 +1486,8 @@ def _load_deploy_settings(
         "print('CSRF_COOKIE_SECURE', settings.CSRF_COOKIE_SECURE);"
         "print('SECRET_KEY_IS_DEFAULT', settings.SECRET_KEY == 'change_me');"
         "print('ALLOWED_HOSTS', settings.ALLOWED_HOSTS);"
+        "print('CONN_MAX_AGE', settings.DATABASES['default']['CONN_MAX_AGE']);"
+        "print('POOL', bool(settings.DATABASES['default']['OPTIONS'].get('pool')));"
     )
     env = {
         **os.environ,
@@ -1510,6 +1512,29 @@ def _load_deploy_settings(
 
 def _parse_deploy_report(stdout: str) -> dict[str, str]:
     return dict(line.split(" ", 1) for line in stdout.strip().splitlines() if line)
+
+
+class PersistentConnectionsTests(SimpleTestCase):
+    """Persistent connections went with WSGI serving.
+
+    CONN_MAX_AGE is assigned rather than defaulted, which also protects the
+    pooling configured just below it: a non-zero value used to switch that
+    pooling off as a side effect.
+    """
+
+    def test_connections_are_pooled_and_not_persistent(self):
+        r = _load_deploy_settings({})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        parsed = _parse_deploy_report(r.stdout)
+        self.assertEqual(parsed["CONN_MAX_AGE"], "0")
+        self.assertEqual(parsed["POOL"], "True")
+
+    def test_retired_variable_no_longer_takes_effect(self):
+        r = _load_deploy_settings({"DATABASE_CONN_MAX_AGE": "60"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        parsed = _parse_deploy_report(r.stdout)
+        self.assertEqual(parsed["CONN_MAX_AGE"], "0")
+        self.assertEqual(parsed["POOL"], "True")
 
 
 class CookieSecureDefaultsTests(SimpleTestCase):

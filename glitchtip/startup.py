@@ -156,6 +156,10 @@ RETIRED_ENV_VARS = {
         "It used to override that variable, so a false here no longer keeps "
         "organization creation closed"
     ),
+    "DATABASE_CONN_MAX_AGE": (
+        "persistent connections went with WSGI serving; connections are pooled "
+        "instead, and a non-zero value used to switch that pooling off"
+    ),
 }
 
 
@@ -163,10 +167,13 @@ RETIRED_ENV_VARS = {
 # Helm chart sets GLITCHTIP_EMBED_WORKER=true and the sample compose file sets
 # SERVER_ROLE=all_in_one, and both keep working untouched — warning about them
 # would tell an operator their correct config is wrong, and they often cannot
-# change it without waiting for a chart release.
+# change it without waiting for a chart release. DATABASE_CONN_MAX_AGE=0 is the
+# same case from the other direction: zero was its default, and zero is what
+# the code now does unconditionally.
 RETIRED_ENV_VAR_NOOP_VALUES = {
     "GLITCHTIP_EMBED_WORKER": {"true", "1", "yes", "on"},
     "SERVER_ROLE": {"all_in_one"},
+    "DATABASE_CONN_MAX_AGE": {"0"},
 }
 
 

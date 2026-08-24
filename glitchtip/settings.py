@@ -907,7 +907,12 @@ for db_config in DATABASES.values():
     # ``async_connections`` discovers via load_backend, so sync paths (ORM,
     # migrations, admin) and async cursors all run on the Rust driver.
     db_config["ENGINE"] = DATABASE_ENGINE
-    db_config.setdefault("CONN_MAX_AGE", env.int("DATABASE_CONN_MAX_AGE", 0))
+    # Persistent connections are not supported. Django's own documentation
+    # says to disable them under ASGI in favour of the driver's pooling, and
+    # GlitchTip only runs as an ASGI application. Assigned rather than
+    # defaulted, so neither a DATABASE_URL nor an explicit DATABASES entry can
+    # reintroduce one and silently switch off the pooling configured below.
+    db_config["CONN_MAX_AGE"] = 0
     db_config.setdefault(
         "CONN_HEALTH_CHECKS", env.bool("DATABASE_CONN_HEALTH_CHECKS", False)
     )
@@ -917,8 +922,9 @@ for db_config in DATABASES.values():
     options = db_config.setdefault("OPTIONS", {})
     pooling_already_configured = "pool" in options
 
-    # Django Connection Pooling requires CONN_MAX_AGE = 0
-    if not pooling_already_configured and db_config["CONN_MAX_AGE"] == 0:
+    # Pooling is what replaces persistent connections, so it is configured
+    # unless the operator supplied their own pool above.
+    if not pooling_already_configured:
         options["pool"] = {
             "min_size": env.int("DATABASE_POOL_MIN_SIZE", 2),
             "max_size": env.int("DATABASE_POOL_MAX_SIZE", 20),
