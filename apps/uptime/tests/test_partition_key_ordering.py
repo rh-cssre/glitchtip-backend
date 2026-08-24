@@ -17,7 +17,7 @@ window gets wrong but partition-key ordering handles by construction.
 """
 
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest import mock
 
 from django.db import connection
@@ -60,6 +60,18 @@ def create_fixture_partitions():
         hash_column="organization_id",
         key_type="uuid7",
     )
+
+
+def _instant(value: str) -> datetime:
+    """Parse a ``startCheck`` off the wire.
+
+    Compared as instants, never as strings. ``start_check`` is read out of the
+    UUIDv7 ``id``, so its resolution is milliseconds, and the serializer omits
+    the fractional part entirely when those milliseconds are zero. The fixture
+    is anchored on ``timezone.now()``, which puts that on a 1-in-1000 run and
+    made a formatted comparison flaky rather than wrong.
+    """
+    return datetime.fromisoformat(value)
 
 
 def _checks_for(monitor, organization, timestamps):
@@ -233,10 +245,7 @@ class MonitorCheckOrderingTestCase(GlitchTestCase):
         expected = await MonitorCheck.objects.filter(
             monitor_id=self.frequent.id
         ).afirst()
-        self.assertEqual(
-            newest["startCheck"][:23],
-            expected.start_check.isoformat(timespec="milliseconds")[:23],
-        )
+        self.assertEqual(_instant(newest["startCheck"]), expected.start_check)
 
     async def test_paused_monitor_still_returns_its_history(self):
         """A monitor silent for weeks must not render a blank chart.
@@ -273,11 +282,11 @@ class MonitorCheckOrderingTestCase(GlitchTestCase):
         page = res.json()
         self.assertEqual(len(page), 25)
 
-        timestamps = [row["startCheck"] for row in page]
+        timestamps = [_instant(row["startCheck"]) for row in page]
         self.assertEqual(timestamps, sorted(timestamps, reverse=True))
 
         expected = [
-            check.start_check.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+            check.start_check
             async for check in MonitorCheck.objects.filter(
                 monitor_id=self.sparse.id, organization_id=self.organization.id
             ).order_by("-id")[:25]
@@ -290,11 +299,11 @@ class MonitorCheckOrderingTestCase(GlitchTestCase):
         )
         res = await self.async_client.get(url + "?is_change=true")
         self.assertEqual(res.status_code, 200)
-        returned = [row["startCheck"] for row in res.json()]
+        returned = [_instant(row["startCheck"]) for row in res.json()]
         self.assertTrue(returned, "fixture should contain up/down transitions")
 
         expected = [
-            check.start_check.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+            check.start_check
             async for check in MonitorCheck.objects.filter(
                 monitor_id=self.sparse.id,
                 organization_id=self.organization.id,
@@ -312,13 +321,13 @@ class MonitorCheckOrderingTestCase(GlitchTestCase):
         self.assertEqual(res.status_code, 200)
 
         change_times = {
-            check.start_check.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+            check.start_check
             async for check in MonitorCheck.objects.filter(
                 monitor_id=self.sparse.id, is_change=True
             )
         }
         for row in res.json():
-            self.assertNotIn(row["startCheck"], change_times)
+            self.assertNotIn(_instant(row["startCheck"]), change_times)
 
     def test_default_ordering_follows_the_partition_key(self):
         self.assertEqual(MonitorCheck._meta.ordering, ("-id",))
