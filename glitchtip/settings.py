@@ -51,37 +51,6 @@ path = environ.Path()
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Environment variables removed in 7.0, mapped to what replaces each one.
-# Ignoring a removed name that is still set would apply a default instead: a
-# retention window silently shrinking to 90 days, whose next maintenance run
-# drops the partitions past it; a DSN handed to SDKs pointing at localhost; a
-# reverse-proxy prefix disappearing from every generated URL. Refusing to start
-# and naming the replacement is the cheaper failure. Setting a removed name
-# alongside its replacement is harmless — the replacement governs — and only
-# warns, via RETIRED_ENV_VARS in glitchtip.startup.
-_REMOVED_ENV_VARS = {
-    "GLITCHTIP_DOMAIN": ("GLITCHTIP_URL", "APP_URL"),
-    "GLITCHTIP_MAX_EVENT_LIFE_DAYS": ("GLITCHTIP_RETENTION_DAYS",),
-    "GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS": (
-        "GLITCHTIP_TRANSACTION_RETENTION_DAYS",
-    ),
-    "GLITCHTIP_MAX_UPTIME_CHECK_LIFE_DAYS": ("GLITCHTIP_UPTIME_RETENTION_DAYS",),
-    "GLITCHTIP_MAX_FILE_LIFE_DAYS": ("GLITCHTIP_FILE_RETENTION_DAYS",),
-    "GLITCHTIP_LOGS_COLD_DAYS": ("GLITCHTIP_LOG_RETENTION_DAYS",),
-    "GLITCHTIP_EVENTS_HOT_DAYS": ("GLITCHTIP_EVENT_HOT_DAYS",),
-    "GLITCHTIP_LOGS_HOT_DAYS": ("GLITCHTIP_LOG_HOT_DAYS",),
-    "FORCE_SCRIPT_NAME": ("BASE_PATH",),
-    "ENABLE_OPEN_USER_REGISTRATION": ("ENABLE_ORGANIZATION_CREATION",),
-}
-for _removed, _replacements in _REMOVED_ENV_VARS.items():
-    if _removed in os.environ and not any(
-        _name in os.environ for _name in _replacements
-    ):
-        raise ImproperlyConfigured(
-            f"{_removed} was removed in GlitchTip 7.0. Set "
-            f"{' or '.join(_replacements)} instead."
-        )
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/dev/howto/deployment/checklist/
@@ -114,12 +83,16 @@ if "GLITCHTIP_INSTANCE_NAME" in os.environ:
     GLITCHTIP_INSTANCE_NAME = env.str("GLITCHTIP_INSTANCE_NAME", None, multiline=True)
 
 # Used in email and DSN generation. Set to full domain such as https://glitchtip.example.com
+# GLITCHTIP_DOMAIN is the original name, still what install.md documents.
 default_url = env.str(
-    "APP_URL", "http://localhost:8000"
+    "APP_URL", env.str("GLITCHTIP_DOMAIN", "http://localhost:8000")
 )  # DigitalOcean App Platform uses APP_URL
 GLITCHTIP_URL = env.url("GLITCHTIP_URL", default_url)
 if GLITCHTIP_URL.scheme not in ["http", "https"]:
-    raise ImproperlyConfigured("GLITCHTIP_URL must start with http or https")
+    raise ImproperlyConfigured(
+        "The GlitchTip URL must start with http or https "
+        "(set via GLITCHTIP_URL, GLITCHTIP_DOMAIN, or APP_URL)"
+    )
 
 # If True, use a relative URL in chunk upload responses.
 GLITCHTIP_CHUNK_UPLOAD_USE_RELATIVE_URL = env.bool(
@@ -446,9 +419,10 @@ EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
 
 
 STATIC_URL = "static/"
-# Base HREF, such as example.com/glitchtip/ where BASE_PATH would be "/glitchtip"
-if "BASE_PATH" in os.environ:
-    FORCE_SCRIPT_NAME = env.str("BASE_PATH")
+# Base HREF, such as example.com/glitchtip/ where BASE_PATH would be "/glitchtip".
+# FORCE_SCRIPT_NAME is Django's own name for this setting and is accepted too.
+if "BASE_PATH" in os.environ or "FORCE_SCRIPT_NAME" in os.environ:
+    FORCE_SCRIPT_NAME = env.str("BASE_PATH", env.str("FORCE_SCRIPT_NAME", ""))
 
 
 # GlitchTip can track GlitchTip's own errors.
