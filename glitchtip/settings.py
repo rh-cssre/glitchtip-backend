@@ -911,7 +911,9 @@ for db_config in DATABASES.values():
     # says to disable them under ASGI in favour of the driver's pooling, and
     # GlitchTip only runs as an ASGI application. Assigned rather than
     # defaulted, so neither a DATABASE_URL nor an explicit DATABASES entry can
-    # reintroduce one and silently switch off the pooling configured below.
+    # reintroduce one: a non-zero value skipped the pool configuration below,
+    # which left the driver pooling at its own built-in size and ignoring
+    # every DATABASE_POOL_* setting.
     db_config["CONN_MAX_AGE"] = 0
     db_config.setdefault(
         "CONN_HEALTH_CHECKS", env.bool("DATABASE_CONN_HEALTH_CHECKS", False)

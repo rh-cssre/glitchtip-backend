@@ -158,7 +158,8 @@ RETIRED_ENV_VARS = {
     ),
     "DATABASE_CONN_MAX_AGE": (
         "persistent connections went with WSGI serving; connections are pooled "
-        "instead, and a non-zero value used to switch that pooling off"
+        "instead, and a non-zero value used to discard the DATABASE_POOL_* "
+        "sizing and leave the driver on its own default"
     ),
 }
 
