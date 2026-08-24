@@ -55,21 +55,26 @@ class OverageMathTestCase(SimpleTestCase):
 
 @override_settings(
     GLITCHTIP_OVERAGE_TIERS=[
-        (400_000, "0.00015"),
-        (2_000_000, "0.00010"),
-        (None, "0.00008"),
+        (1_000_000, "0.00017"),
+        (10_000_000, "0.00015"),
+        (None, "0.00012"),
     ]
 )
 class OverageDefaultScheduleTestCase(SimpleTestCase):
     """Sanity-check the production-shaped schedule used in the plan."""
 
     def test_small_overage_cost(self):
-        # 10,000 events over quota at $0.15/1k = $1.50
-        self.assertEqual(cost_cents_for_units(10_000), 150)
+        # 10,000 events over quota at $0.17/1k = $1.70
+        self.assertEqual(cost_cents_for_units(10_000), 170)
 
     def test_budget_converts_to_units(self):
-        # $20 budget, first tier $0.00015/event -> floor(20 / 0.00015) = 133,333
-        self.assertEqual(units_for_budget(2000), 133_333)
+        # $20 budget, first tier $0.00017/event -> floor(20 / 0.00017) = 117,647
+        self.assertEqual(units_for_budget(2000), 117_647)
+
+    def test_cost_spans_all_tiers(self):
+        # 1M @ $0.17/1k = $170, next 9M @ $0.15/1k = $1,350, next 1M @ $0.12/1k
+        # = $120; 11M total overage = $1,640.
+        self.assertEqual(cost_cents_for_units(11_000_000), 164_000)
 
 
 @override_settings(GLITCHTIP_OVERAGE_TIERS=TEST_TIERS)
