@@ -3,6 +3,16 @@ from django.utils.translation import gettext_lazy as _
 
 ISSUE_IDS_KEY = "alert_issue_ids"
 
+# Upper bound on ProjectAlert.environments. An alert naming this many
+# environments is already unusual; the cap is there so an API client cannot
+# grow the array (and the IN clause built from it) without limit.
+MAX_ALERT_ENVIRONMENTS = 100
+
+ENVIRONMENTS_HELP_TEXT = (
+    "Only alert on events and uptime monitors from these environments. "
+    "Empty matches every environment."
+)
+
 
 class RecipientType(models.TextChoices):
     EMAIL = "email", _("Email")

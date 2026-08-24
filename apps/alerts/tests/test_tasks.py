@@ -72,6 +72,86 @@ class AlertTestCase(GlitchTipTransactionTestCase):
         self.assertEqual(Notification.objects.count(), 1)
         self.assertEqual(len(mail.outbox), 1)
 
+    def test_alerts_environment_filter(self):
+        baker.make(
+            "alerts.ProjectAlert",
+            project=self.project,
+            timespan_minutes=10,
+            quantity=2,
+            environments=["production"],
+        )
+        issue = baker.make("issue_events.Issue", project=self.project)
+
+        # Events from other environments must not count towards the quantity,
+        # even in numbers that would trip the alert on their own.
+        baker.make(
+            "issue_events.IssueEvent",
+            issue=issue,
+            organization=issue.project.organization,
+            tags={"environment": "development"},
+            _quantity=5,
+        )
+        # Neither may events that carry no environment tag at all.
+        baker.make(
+            "issue_events.IssueEvent",
+            issue=issue,
+            organization=issue.project.organization,
+            tags={},
+            _quantity=5,
+        )
+        process_event_alerts.call()
+        self.assertEqual(Notification.objects.count(), 0)
+
+        baker.make(
+            "issue_events.IssueEvent",
+            issue=issue,
+            organization=issue.project.organization,
+            tags={"environment": "production"},
+            _quantity=2,
+        )
+        process_event_alerts.call()
+        self.assertEqual(Notification.objects.count(), 1)
+
+    def test_alerts_multiple_environments(self):
+        baker.make(
+            "alerts.ProjectAlert",
+            project=self.project,
+            timespan_minutes=10,
+            quantity=2,
+            environments=["production", "staging"],
+        )
+        issue = baker.make("issue_events.Issue", project=self.project)
+
+        # One event in each selected environment adds up to the quantity
+        for environment in ["production", "staging"]:
+            baker.make(
+                "issue_events.IssueEvent",
+                issue=issue,
+                organization=issue.project.organization,
+                tags={"environment": environment},
+            )
+        process_event_alerts.call()
+        self.assertEqual(Notification.objects.count(), 1)
+
+    def test_alerts_empty_environments_matches_all(self):
+        baker.make(
+            "alerts.ProjectAlert",
+            project=self.project,
+            timespan_minutes=10,
+            quantity=2,
+            environments=[],
+        )
+        issue = baker.make("issue_events.Issue", project=self.project)
+        for environment in ["development", "production"]:
+            baker.make(
+                "issue_events.IssueEvent",
+                issue=issue,
+                organization=issue.project.organization,
+                tags={"environment": environment},
+            )
+        process_event_alerts.call()
+        self.assertEqual(Notification.objects.count(), 1)
+
     def test_multiple_alerts(self):
         baker.make(
             "alerts.ProjectAlert",

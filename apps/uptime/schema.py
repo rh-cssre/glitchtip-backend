@@ -44,6 +44,7 @@ class MonitorIn(CamelSchema, ModelSchema):
     timeout: Annotated[int, Ge(1), Le(60)] | None
     confirmation_threshold: Annotated[int, Ge(1), Le(100)] = 1
     project: str | None = None
+    environment_id: int | None = None
 
     @model_validator(mode="after")
     def validate(self):

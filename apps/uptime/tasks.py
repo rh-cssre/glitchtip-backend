@@ -273,6 +273,20 @@ async def send_monitor_notification(
     recipients = AlertRecipient.objects.filter(
         alert__project__monitor__id=monitor_id, alert__uptime=True
     )
+    environment = (
+        await Monitor.objects.filter(id=monitor_id)
+        .values_list("environment__name", flat=True)
+        .afirst()
+    )
+    if environment:
+        recipients = recipients.filter(
+            Q(alert__environments=[]) | Q(alert__environments__contains=[environment])
+        )
+    else:
+        # A monitor with no environment can only match an alert that asked for
+        # every environment.
+        recipients = recipients.filter(alert__environments=[])
+
     async for recipient in recipients:
         if recipient.recipient_type == RecipientType.EMAIL:
             await sync_to_async(

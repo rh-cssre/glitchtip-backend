@@ -127,6 +127,39 @@ class UptimeAPITestCase(GlitchTestCase):
         monitor = Monitor.objects.get()
         self.assertEqual(monitor.confirmation_threshold, 3)
 
+    # Kept synchronous: see note on test_create_http_monitor.
+    @mock.patch("apps.uptime.tasks.perform_checks")
+    def test_create_monitor_environment(self, mocked):
+        """The environment is what scopes an alert to this monitor"""
+        environment = baker.make(
+            "environments.Environment",
+            organization=self.organization,
+            name="production",
+        )
+        other_environment = baker.make("environments.Environment", name="production")
+        data = {
+            "monitorType": "Ping",
+            "name": "Test",
+            "url": "https://www.google.com",
+            "expectedStatus": 200,
+            "expectedBody": "",
+            "interval": 60,
+            "project": str(self.project.pk),
+            "timeout": 25,
+            "environmentID": environment.pk,
+        }
+        with self.captureOnCommitCallbacks(execute=True):
+            res = self.client.post(self.list_url, data, content_type="application/json")
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.json()["environmentID"], environment.pk)
+
+        # An environment from another organization is not this org's to point at
+        data["environmentID"] = other_environment.pk
+        with self.captureOnCommitCallbacks(execute=True):
+            res = self.client.post(self.list_url, data, content_type="application/json")
+        self.assertEqual(res.status_code, 201)
+        self.assertIsNone(res.json()["environmentID"])
+
     def _monitor_payload(self, name="Test"):
         return {
             "monitorType": "Ping",
@@ -529,6 +562,40 @@ class UptimeAPITestCase(GlitchTestCase):
         self.assertEqual(res.json()["monitorType"], "GET")
         self.assertEqual(res.json()["expectedBody"], "")
         self.assertEqual(res.json()["timeout"], None)
+
+    @mock.patch("apps.uptime.tasks.perform_checks")
+    async def test_monitor_update_environment(self, _):
+        environment = await baker.amake(
+            "environments.Environment", organization=self.organization
+        )
+        monitor = await baker.amake(
+            "uptime.Monitor",
+            organization=self.organization,
+            url="http://example.com",
+            interval="60",
+            monitor_type="Ping",
+            expected_status=None,
+        )
+        url = reverse("api:update_monitor", args=[self.organization.slug, monitor.pk])
+        data = {
+            "name": monitor.name,
+            "url": "http://example.com",
+            "monitorType": "Ping",
+            "interval": 60,
+            "expectedBody": "",
+            "expected_status": None,
+            "timeout": 20,
+            "project": str(self.project.id),
+            "environmentID": environment.pk,
+        }
+        res = await self.async_client.put(url, data, content_type="application/json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["environmentID"], environment.pk)
+
+        del data["environmentID"]
+        res = await self.async_client.put(url, data, content_type="application/json")
+        self.assertEqual(res.status_code, 200)
+        self.assertIsNone(res.json()["environmentID"])
 
     async def test_monitor_delete(self):
         monitor = await baker.amake(

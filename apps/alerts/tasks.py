@@ -54,13 +54,21 @@ async def process_event_alerts():
         # Pruning partition optimization
         start_uuid = UUID7Helper._uuid7_for_timestamp(start_time, min_random=True)
         quantity_in_timespan = alert.quantity
+        event_filters = {
+            # Filter by UUIDv7 which encodes timestamp (enables partition pruning)
+            "issueevent__id__gte": start_uuid,
+            "issueevent__organization_id": alert.project.organization_id,
+        }
+        if alert.environments:
+            # Must stay in the same filter() call as the conditions above. Django
+            # reuses one join per filter() call on a multi-valued relation, and
+            # Count() below aggregates over that join — so this narrows what gets
+            # counted to events from the selected environments. Splitting it into
+            # a chained filter() would add a second join and count events from
+            # every environment instead.
+            event_filters["issueevent__tags__environment__in"] = alert.environments
         issues = (
-            Issue.objects.filter(
-                project_id=alert.project_id,
-                # Filter by UUIDv7 which encodes timestamp (enables partition pruning)
-                issueevent__id__gte=start_uuid,
-                issueevent__organization_id=alert.project.organization_id,
-            )
+            Issue.objects.filter(project_id=alert.project_id, **event_filters)
             .exclude(notification__project_alert=alert)
             .annotate(num_events=Count("issueevent"))
             .filter(num_events__gte=quantity_in_timespan)

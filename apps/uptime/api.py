@@ -10,6 +10,7 @@ from ninja import Router, Status
 from ninja.errors import HttpError
 from ninja.pagination import paginate
 
+from apps.environments.models import Environment
 from apps.organizations_ext.models import Organization
 from apps.organizations_ext.utils import get_uptime_monitor_limit
 from apps.projects.models import Project
@@ -29,6 +30,21 @@ from .schema import (
 from .tasks import send_monitor_notification, update_uptime_statistics
 
 router = Router()
+
+
+async def resolve_environment_id(
+    organization_id: int, environment_id: int | None
+) -> int | None:
+    """Environments belong to an organization; drop one that is not this org's."""
+    if not environment_id:
+        return None
+    return (
+        await Environment.objects.filter(
+            organization_id=organization_id, id=environment_id
+        )
+        .values_list("id", flat=True)
+        .afirst()
+    )
 
 
 class MonitorPagination(AsyncLinkHeaderPagination):
@@ -300,6 +316,9 @@ async def create_monitor(
     data = payload.dict(exclude_defaults=True)
     if project_id := data.pop("project", None):
         data["project"] = await organization.projects.filter(id=project_id).afirst()
+    data["environment_id"] = await resolve_environment_id(
+        organization.id, data.pop("environment_id", None)
+    )
     monitor = await Monitor.objects.acreate(organization=organization, **data)
     monitor = await get_monitor_queryset(user_id, organization_slug).aget(id=monitor.id)
     await attach_checks_to_monitors([monitor])
@@ -329,6 +348,9 @@ async def update_monitor(
             id=project_id,
         ).afirst()
         data["project"] = result
+    data["environment_id"] = await resolve_environment_id(
+        monitor.organization_id, data["environment_id"]
+    )
     for attr, value in data.items():
         setattr(monitor, attr, value)
     await monitor.asave()
