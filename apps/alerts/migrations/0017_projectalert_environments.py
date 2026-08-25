@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("alerts", "0015_add_feishu_recipient_type"),
+        ("alerts", "0016_add_slack_recipient_type"),
     ]
 
     operations = [
