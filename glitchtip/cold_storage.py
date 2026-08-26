@@ -23,12 +23,15 @@ File deletion uses django-storages for backend abstraction (S3, GCS, Azure, file
 High-scale deployments can disable manual cleanup and use S3 lifecycle policies.
 """
 
+import asyncio
 import json
 import logging
 import os
 import tempfile
 import threading
-from contextlib import contextmanager
+import time
+from contextlib import asynccontextmanager, contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timedelta
 
 from django.conf import settings
@@ -299,6 +302,71 @@ _DUCKDB_SLOT_TIMEOUT = 10.0
 _duckdb_semaphore = threading.BoundedSemaphore(_MAX_CONCURRENT_DUCKDB)
 
 
+class ColdStorageBusy(Exception):
+    """No cold-read slot came free within the caller's budget.
+
+    Raised only by point lookups, where the alternative is answering "this
+    does not exist" — a permanent, cacheable answer — to what is really a
+    transient resource shortage. Range queries and counts degrade to empty
+    instead, since a short list is a plausible answer and a 404 is not.
+    """
+
+
+# Set while a cold-read slot is held. asyncio.to_thread and sync_to_async both
+# copy the caller's context into the worker thread, so a slot taken on the
+# event loop is visible to the sync code it dispatches — which is what lets
+# duckdb_slot() below recognise it and not take a second permit.
+_slot_held: ContextVar[bool] = ContextVar("duckdb_slot_held", default=False)
+
+# Backoff bounds for the async acquire. Waiting on the event loop means
+# polling the threading semaphore rather than blocking a pool thread on it;
+# under contention this costs a few hundred wakeups at most.
+_ASYNC_SLOT_POLL_MIN = 0.005
+_ASYNC_SLOT_POLL_MAX = 0.05
+
+
+@asynccontextmanager
+async def cold_read_slot(timeout: float | None = None):
+    """Take a cold-read slot while waiting on the event loop.
+
+    Prefer this over ``duckdb_slot`` in async code. ``duckdb_slot`` blocks on
+    a ``threading`` semaphore, so when it is reached through
+    ``asyncio.to_thread`` the wait pins a pool thread. A thread parked on the
+    semaphore does not read as idle, so the executor grows another one, and
+    every thread that then reaches ``get_duckdb_read_connection`` caches its
+    own connection — making a wait for memory cost more memory. Acquiring here
+    first means threads are occupied only while doing work, and the number of
+    cached connections tracks the concurrency bound rather than the pool size.
+
+    Yields True if a slot was acquired, False on timeout. The work dispatched
+    inside runs under ``_slot_held``, so a nested ``duckdb_slot`` is a no-op
+    rather than a second permit.
+    """
+    wait = _DUCKDB_SLOT_TIMEOUT if timeout is None else timeout
+    deadline = time.monotonic() + wait
+    acquired = _duckdb_semaphore.acquire(blocking=False)
+    delay = _ASYNC_SLOT_POLL_MIN
+    while not acquired and time.monotonic() < deadline:
+        await asyncio.sleep(delay)
+        delay = min(delay * 2, _ASYNC_SLOT_POLL_MAX)
+        acquired = _duckdb_semaphore.acquire(blocking=False)
+
+    if not acquired:
+        logger.warning(
+            "DuckDB concurrency limit (%d) hit; degrading this operation",
+            _MAX_CONCURRENT_DUCKDB,
+        )
+        yield False
+        return
+
+    token = _slot_held.set(True)
+    try:
+        yield True
+    finally:
+        _slot_held.reset(token)
+        _duckdb_semaphore.release()
+
+
 @contextmanager
 def duckdb_slot(block: bool = False, timeout: float | None = None):
     """Bound concurrent DuckDB work, process-wide.
@@ -321,6 +389,14 @@ def duckdb_slot(block: bool = False, timeout: float | None = None):
     removed project's data): waits indefinitely for a slot and always yields
     True. Reads still degrade rather than deadlock behind it.
     """
+    if _slot_held.get():
+        # An enclosing cold_read_slot() already holds a permit for this unit of
+        # work. Taking a second would double-count against the bound and, at
+        # the small-pod cap of 2, could deadlock a single request against
+        # itself.
+        yield True
+        return
+
     if block:
         _duckdb_semaphore.acquire()
         acquired = True

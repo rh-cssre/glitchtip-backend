@@ -18,7 +18,11 @@ from apps.projects.models import LogProjectHourlyStatistic
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.pagination import set_pagination_headers
 from glitchtip.api.permissions import has_permission
-from glitchtip.cold_storage import parse_json_field
+from glitchtip.cold_storage import (
+    ColdStorageBusy,
+    cold_read_slot,
+    parse_json_field,
+)
 from glitchtip.partition_manager import UUID7Helper
 
 from .constants import LogLevel, parse_level_filters
@@ -702,10 +706,17 @@ async def get_log_by_id(organization_id: int, log_id: UUID) -> LogEventRow | Non
         if result:
             return result
 
-    # DuckDB: asyncio.to_thread (in-process, no Django DB)
-    return await asyncio.to_thread(
-        _get_log_from_cold, organization_id, log_id, log_time
-    )
+    # DuckDB: asyncio.to_thread (in-process, no Django DB). Take the cold-read
+    # slot here rather than inside the thread — waiting on the event loop costs
+    # a coroutine, waiting inside the thread pins a pool thread and grows the
+    # executor. Saturation is raised, not returned: a point lookup that answers
+    # None becomes a 404, which reports a transient shortage as permanent.
+    async with cold_read_slot() as slot:
+        if not slot:
+            raise ColdStorageBusy()
+        return await asyncio.to_thread(
+            _get_log_from_cold, organization_id, log_id, log_time
+        )
 
 
 @router.get(

@@ -6,6 +6,7 @@ lazy daily roll → trend rollups → split-retention cleanup → DuckDB reads,
 plus the process-wide DuckDB concurrency bound.
 """
 
+import asyncio
 import logging
 import os
 import shutil
@@ -902,6 +903,91 @@ class DuckDBConcurrencyBoundTestCase(TestCase):
                 self.assertEqual(acquired, [True])
             finally:
                 t.join(2)
+
+
+class AsyncColdReadSlotTestCase(TestCase):
+    """cold_read_slot waits on the event loop and shares one bound with duckdb_slot."""
+
+    def _patch_bound(self, size):
+        return mock.patch.multiple(
+            gcs,
+            _duckdb_semaphore=threading.BoundedSemaphore(size),
+            _MAX_CONCURRENT_DUCKDB=size,
+            _DUCKDB_SLOT_TIMEOUT=0.05,
+        )
+
+    async def test_acquires_and_releases(self):
+        with self._patch_bound(1):
+            async with gcs.cold_read_slot() as slot:
+                self.assertTrue(slot)
+                self.assertFalse(gcs._duckdb_semaphore.acquire(timeout=0))
+            self.assertTrue(gcs._duckdb_semaphore.acquire(timeout=0))
+            gcs._duckdb_semaphore.release()
+
+    async def test_degrades_when_saturated(self):
+        with self._patch_bound(1):
+            gcs._duckdb_semaphore.acquire()
+            try:
+                async with gcs.cold_read_slot() as slot:
+                    self.assertFalse(slot)
+            finally:
+                gcs._duckdb_semaphore.release()
+
+    async def test_nested_duckdb_slot_does_not_double_count(self):
+        """The sync slot must be a no-op inside an async one.
+
+        At the small-pod cap of 2 a second permit for the same unit of work
+        would eat the entire bound; at a cap of 1 it would deadlock the request
+        against itself.
+        """
+        with self._patch_bound(1):
+            async with gcs.cold_read_slot() as outer:
+                self.assertTrue(outer)
+                with gcs.duckdb_slot() as inner:
+                    self.assertTrue(inner)
+            # Exactly one permit was taken and returned.
+            self.assertTrue(gcs._duckdb_semaphore.acquire(timeout=0))
+            gcs._duckdb_semaphore.release()
+
+    async def test_slot_survives_the_thread_hop(self):
+        """asyncio.to_thread copies the context, so the flag reaches the worker."""
+        with self._patch_bound(1):
+            async with gcs.cold_read_slot() as slot:
+                self.assertTrue(slot)
+
+                def in_thread():
+                    with gcs.duckdb_slot() as inner:
+                        return inner, gcs._slot_held.get()
+
+                inner, seen = await asyncio.to_thread(in_thread)
+            self.assertTrue(inner)
+            self.assertTrue(seen, "slot flag did not propagate into the thread")
+
+    async def test_waiting_does_not_block_the_loop(self):
+        """A waiter must not stall other coroutines."""
+        with self._patch_bound(1):
+            gcs._duckdb_semaphore.acquire()
+            ticks = []
+
+            async def ticker():
+                for _ in range(3):
+                    await asyncio.sleep(0.005)
+                    ticks.append(1)
+
+            task = asyncio.ensure_future(ticker())
+            try:
+                async with gcs.cold_read_slot() as slot:
+                    self.assertFalse(slot)
+                # Measure INSIDE the timeout window. Counting after the wait
+                # would pass even with a blocking sleep, because the ticker
+                # simply finishes once the loop is handed back.
+                during = len(ticks)
+            finally:
+                gcs._duckdb_semaphore.release()
+            await task
+            self.assertGreaterEqual(
+                during, 2, "event loop was blocked while waiting for a slot"
+            )
 
 
 class DeletionTestCase(ColdStorageTestMixin, TestCase):
