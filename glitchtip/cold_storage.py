@@ -300,7 +300,7 @@ _duckdb_semaphore = threading.BoundedSemaphore(_MAX_CONCURRENT_DUCKDB)
 
 
 @contextmanager
-def duckdb_slot(block: bool = False):
+def duckdb_slot(block: bool = False, timeout: float | None = None):
     """Bound concurrent DuckDB work, process-wide.
 
     With ``block=False`` (request-driven reads, periodic compaction): yields
@@ -311,6 +311,12 @@ def duckdb_slot(block: bool = False):
     silent data loss) should log on ``not slot``; reads don't, since a
     saturated semaphore is itself logged at acquire time.
 
+    ``timeout`` overrides ``_DUCKDB_SLOT_TIMEOUT`` for one acquisition. Pass
+    ``0`` for work that re-acquires per unit inside a loop: waiting the full
+    timeout on every iteration would multiply request latency by the number of
+    units, whereas taking only a free permit keeps such a loop best-effort.
+    Ignored when ``block=True``.
+
     With ``block=True`` (rare, must-complete background work like deleting a
     removed project's data): waits indefinitely for a slot and always yields
     True. Reads still degrade rather than deadlock behind it.
@@ -319,8 +325,9 @@ def duckdb_slot(block: bool = False):
         _duckdb_semaphore.acquire()
         acquired = True
     else:
-        acquired = _duckdb_semaphore.acquire(timeout=_DUCKDB_SLOT_TIMEOUT)
-        if not acquired:
+        wait = _DUCKDB_SLOT_TIMEOUT if timeout is None else timeout
+        acquired = _duckdb_semaphore.acquire(timeout=wait)
+        if not acquired and wait:
             logger.warning(
                 "DuckDB concurrency limit (%d) hit; degrading this operation",
                 _MAX_CONCURRENT_DUCKDB,

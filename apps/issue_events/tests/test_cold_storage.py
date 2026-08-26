@@ -7,13 +7,17 @@ Tests that need S3 access are skipped when no bucket is configured.
 
 import shutil
 import tempfile
+import threading
 from datetime import UTC, datetime, timedelta
+from unittest import mock
+from uuid import uuid4
 
 from django.conf import settings
 from django.db import connection
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
+from glitchtip import cold_storage as gcs
 from glitchtip.cold_storage import (
     get_org_cold_storage_path,
     is_duckdb_available,
@@ -676,3 +680,38 @@ class MultiDateColdStorageTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
             res = self.client.get(url)
             self.assertEqual(res.status_code, 200)
             self.assertEqual(res.json()["id"], newest_ids[-1].hex)
+
+
+class ColdEventSlotDegradationTestCase(TestCase):
+    """get_event_from_cold holds the process-wide DuckDB slot.
+
+    memory_limit is per connection, so an unslotted read lets concurrent
+    lookups multiply peak RSS. Saturated, it must report "not in cold
+    storage" rather than adding another in-flight query.
+    """
+
+    @mock.patch("apps.issue_events.cold_storage.get_duckdb_read_connection")
+    @mock.patch("apps.issue_events.cold_storage.get_parquet_paths_for_date")
+    @mock.patch("apps.issue_events.cold_storage.get_cold_storage_backend")
+    @mock.patch("apps.issue_events.cold_storage.is_duckdb_available", return_value=True)
+    def test_degrades_when_saturated(self, _avail, backend, paths, get_conn):
+        backend.return_value = mock.Mock()
+        paths.return_value = ["some/file.parquet"]
+
+        patch = mock.patch.multiple(
+            gcs,
+            _duckdb_semaphore=threading.BoundedSemaphore(1),
+            _MAX_CONCURRENT_DUCKDB=1,
+            _DUCKDB_SLOT_TIMEOUT=0.01,
+        )
+        patch.start()
+        self.addCleanup(patch.stop)
+        gcs._duckdb_semaphore.acquire()
+        self.addCleanup(gcs._duckdb_semaphore.release)
+
+        self.assertIsNone(
+            get_event_from_cold(1, uuid4(), datetime(2026, 1, 1, tzinfo=UTC))
+        )
+        # A missing-file error would also yield None, so assert the stronger
+        # property: saturated, no query is issued at all.
+        get_conn.assert_not_called()

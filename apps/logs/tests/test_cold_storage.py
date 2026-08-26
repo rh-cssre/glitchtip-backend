@@ -8,6 +8,7 @@ Tests that need S3 access are skipped when no bucket is configured.
 import os
 import shutil
 import tempfile
+import threading
 from datetime import UTC, datetime, timedelta
 from unittest import mock
 from uuid import UUID
@@ -17,6 +18,7 @@ from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from freezegun import freeze_time
 
+from glitchtip import cold_storage as gcs
 from glitchtip.cold_storage import (
     CSV_QUOTE_CHAR,
     get_cold_storage_backend,
@@ -25,6 +27,7 @@ from glitchtip.cold_storage import (
 from glitchtip.partition_manager import PartitionManager, UUID7Helper
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
+from ..api import _get_log_from_cold, count_cold_storage
 from ..cold_storage import EXPORT_COLUMN_TYPES, LOGS_SELECT_SQL
 from ..constants import LogLevel
 from ..models import LogEvent
@@ -1166,3 +1169,101 @@ class HostileLogBodyArchivalTestCase(GlitchTipTestCaseMixin, TransactionTestCase
 
             self.assertEqual(len(results), pg_count)
             self.assertEqual(sorted(r.body for r in results), sorted(bodies))
+
+
+class ColdReadSlotDegradationTestCase(TestCase):
+    """Every cold read holds the process-wide DuckDB slot.
+
+    memory_limit is enforced per connection, so an unslotted read path lets a
+    burst multiply peak RSS by the number of queries in flight. When the bound
+    is saturated these paths must degrade rather than pile on.
+    """
+
+    def _saturated(self):
+        patch = mock.patch.multiple(
+            gcs,
+            _duckdb_semaphore=threading.BoundedSemaphore(1),
+            _MAX_CONCURRENT_DUCKDB=1,
+            _DUCKDB_SLOT_TIMEOUT=0.01,
+        )
+        patch.start()
+        self.addCleanup(patch.stop)
+        gcs._duckdb_semaphore.acquire()
+        self.addCleanup(gcs._duckdb_semaphore.release)
+
+    @mock.patch("glitchtip.cold_storage.get_duckdb_read_connection")
+    @mock.patch("glitchtip.cold_storage.enumerate_org_parquet_files")
+    @mock.patch("glitchtip.cold_storage.get_cold_storage_backend")
+    @mock.patch("glitchtip.cold_storage.is_duckdb_available", return_value=True)
+    def test_count_cold_storage_degrades(self, _avail, backend, files, get_conn):
+        backend.return_value = mock.Mock()
+        files.return_value = ["some/file.parquet"]
+        self._saturated()
+
+        self.assertEqual(
+            count_cold_storage(
+                organization_id=1,
+                start_dt=datetime(2026, 1, 1, tzinfo=UTC),
+                end_dt=datetime(2026, 1, 2, tzinfo=UTC),
+            ),
+            0,
+        )
+        # Returning 0 is not enough — the per-file except would swallow a
+        # failed query and also return 0. No connection may be taken at all.
+        get_conn.assert_not_called()
+
+    @mock.patch("glitchtip.cold_storage.get_duckdb_read_connection")
+    @mock.patch("glitchtip.cold_storage.get_parquet_paths_for_date")
+    @mock.patch("glitchtip.cold_storage.get_cold_storage_backend")
+    @mock.patch("glitchtip.cold_storage.is_duckdb_available", return_value=True)
+    def test_get_log_from_cold_degrades(self, _avail, backend, paths, get_conn):
+        backend.return_value = mock.Mock()
+        paths.return_value = ["some/file.parquet"]
+        self._saturated()
+
+        self.assertIsNone(
+            _get_log_from_cold(1, UUID(int=1), datetime(2026, 1, 1, tzinfo=UTC))
+        )
+        get_conn.assert_not_called()
+
+    @mock.patch("glitchtip.cold_storage.get_duckdb_read_connection")
+    @mock.patch("glitchtip.cold_storage.enumerate_org_parquet_files")
+    @mock.patch("glitchtip.cold_storage.get_cold_storage_backend")
+    @mock.patch("glitchtip.cold_storage.is_duckdb_available", return_value=True)
+    def test_slot_is_held_across_the_query(self, _avail, backend, files, get_conn):
+        """The permit must still be held while the query runs.
+
+        Taking a slot and then querying outside it would keep the degradation
+        tests above green while reinstating the unbounded-memory bug this
+        exists to prevent, so assert the semaphore is actually unavailable at
+        the moment execute() is called.
+        """
+        backend.return_value = mock.Mock()
+        files.return_value = ["a.parquet"]
+        held = []
+
+        def execute(*args, **kwargs):
+            # Cap is 1 under the patch, so a free permit here means the query
+            # is running outside the slot.
+            held.append(gcs._duckdb_semaphore.acquire(timeout=0))
+            result = mock.Mock()
+            result.fetchone.return_value = (0,)
+            return result
+
+        get_conn.return_value.execute.side_effect = execute
+        patch = mock.patch.multiple(
+            gcs,
+            _duckdb_semaphore=threading.BoundedSemaphore(1),
+            _MAX_CONCURRENT_DUCKDB=1,
+            _DUCKDB_SLOT_TIMEOUT=0.01,
+        )
+        patch.start()
+        self.addCleanup(patch.stop)
+
+        count_cold_storage(
+            organization_id=1,
+            start_dt=datetime(2026, 1, 1, tzinfo=UTC),
+            end_dt=datetime(2026, 1, 2, tzinfo=UTC),
+        )
+
+        self.assertEqual(held, [False], "query ran without holding the slot")
