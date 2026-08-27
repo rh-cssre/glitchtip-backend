@@ -9,6 +9,7 @@ from ninja.pagination import paginate
 from apps.organizations_ext.models import Organization
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.permissions import has_permission
+from glitchtip.cold_storage import ColdStorageBusy, cold_read_slot
 from glitchtip.partition_manager import UUID7Helper
 
 from ..models import Issue, IssueEvent, UserReport
@@ -198,7 +199,13 @@ async def _get_issue_event(request: AuthHttpRequest, issue: Issue, event_id: uui
         return event
 
     # Fall back to cold storage
-    cold_event = await asyncio.to_thread(_get_event_from_cold, event_id, org_id)
+    # Slot taken on the loop, not inside the thread: waiting here costs a
+    # coroutine, waiting in the thread pins a pool thread and grows the
+    # executor (and with it the number of cached DuckDB connections).
+    async with cold_read_slot() as slot:
+        if not slot:
+            raise ColdStorageBusy()
+        cold_event = await asyncio.to_thread(_get_event_from_cold, event_id, org_id)
     if not cold_event:
         raise Http404()
 
@@ -368,7 +375,10 @@ async def get_project_issue_event(
     if not org:
         raise Http404()
 
-    cold_event = await asyncio.to_thread(_get_event_from_cold, event_id, org.id)
+    async with cold_read_slot() as slot:
+        if not slot:
+            raise ColdStorageBusy()
+        cold_event = await asyncio.to_thread(_get_event_from_cold, event_id, org.id)
     if not cold_event:
         raise Http404()
 

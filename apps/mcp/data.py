@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -24,6 +25,7 @@ from apps.releases.models import Release
 from apps.uptime.api import get_monitor_queryset
 from apps.uptime.models import Monitor
 from glitchtip.api.pagination import AsyncLinkHeaderPagination
+from glitchtip.cold_storage import ColdStorageBusy, cold_read_slot
 from glitchtip.partition_manager import UUID7Helper
 
 
@@ -175,9 +177,16 @@ async def get_event(
         except ValueError:
             return None
         for org_id in org_ids:
-            cold_event = await sync_to_async(get_event_from_cold)(
-                org_id, uuid_val, event_time
-            )
+            # asyncio.to_thread, not sync_to_async: this touches DuckDB, not
+            # the Django ORM, and sync_to_async's thread_sensitive default
+            # would park the process-wide executor thread. The slot is taken
+            # on the loop for the same reason — a wait must not hold a thread.
+            async with cold_read_slot() as slot:
+                if not slot:
+                    raise ColdStorageBusy()
+                cold_event = await asyncio.to_thread(
+                    get_event_from_cold, org_id, uuid_val, event_time
+                )
             if cold_event:
                 return await _attach_issue(cold_event, user_id)
     else:

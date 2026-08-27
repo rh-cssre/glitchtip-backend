@@ -38,6 +38,7 @@ from apps.users.api import router as users_router
 from apps.users.models import User
 from apps.users.schema import UserSchema
 from apps.wizard.api import router as wizard_router
+from glitchtip.cold_storage import ColdStorageBusy
 
 from ..schema import CamelSchema
 from .authentication import SessionAuth, TokenAuth
@@ -113,6 +114,25 @@ def throttled(request: HttpRequest, exc: ThrottleException):
         else:
             response["Retry-After"] = retry_after.strftime("%a, %d %b %Y %H:%M:%S GMT")
 
+    return response
+
+
+@api.exception_handler(ColdStorageBusy)
+def cold_storage_busy(request: HttpRequest, exc: ColdStorageBusy):
+    """Report cold-read saturation as transient, not as a missing object.
+
+    These lookups previously returned None when no read slot came free, which
+    the views turned into a 404 — telling the client an event or log does not
+    exist when in fact the pool was busy. That answer is permanent and
+    cacheable by proxies, and indistinguishable from real deletion. 503 with
+    Retry-After says what is actually true.
+    """
+    response = api.create_response(
+        request,
+        {"message": "Cold storage is busy, please retry"},
+        status=503,
+    )
+    response["Retry-After"] = 1
     return response
 
 

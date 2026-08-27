@@ -18,6 +18,7 @@ from glitchtip.cold_storage import (
 from glitchtip.cold_storage import (
     close_duckdb_read_connection,
     duckdb_quote_path,
+    duckdb_slot,
     get_cold_storage_backend,
     get_duckdb_parquet_path,
     get_duckdb_read_connection,
@@ -282,25 +283,33 @@ def get_event_from_cold(
     if not paths:
         return None
 
-    duck_conn = get_duckdb_read_connection(storage)
-    for relative_path in paths:
-        parquet_path = get_duckdb_parquet_path(storage, relative_path)
-        try:
-            sql = f"""
-                SELECT id, event_id, timestamp, issue_id, organization_id, release_id,
-                       type, level, title, transaction, data, tags, hashes
-                FROM read_parquet('{duckdb_quote_path(parquet_path)}')
-                WHERE id = $1 AND organization_id = $2
-                LIMIT 1;
-            """
-            result = duck_conn.execute(sql, [str(event_id), organization_id])
-            row = result.fetchone()
-            if row:
-                return _row_to_issue_event(row)
-        except Exception as e:
-            close_duckdb_read_connection()
-            if not is_missing_file_error(e):
-                raise
-            duck_conn = get_duckdb_read_connection(storage)
+    # memory_limit is enforced per connection, so every cold read has to hold
+    # the process-wide slot or a burst multiplies peak RSS by the number of
+    # queries in flight. Degrade to "not in cold storage" rather than piling on.
+    with duckdb_slot() as slot:
+        if not slot:
+            return None
+
+        duck_conn = get_duckdb_read_connection(storage)
+        for relative_path in paths:
+            parquet_path = get_duckdb_parquet_path(storage, relative_path)
+            try:
+                sql = f"""
+                    SELECT id, event_id, timestamp, issue_id, organization_id,
+                           release_id, type, level, title, transaction, data,
+                           tags, hashes
+                    FROM read_parquet('{duckdb_quote_path(parquet_path)}')
+                    WHERE id = $1 AND organization_id = $2
+                    LIMIT 1;
+                """
+                result = duck_conn.execute(sql, [str(event_id), organization_id])
+                row = result.fetchone()
+                if row:
+                    return _row_to_issue_event(row)
+            except Exception as e:
+                close_duckdb_read_connection()
+                if not is_missing_file_error(e):
+                    raise
+                duck_conn = get_duckdb_read_connection(storage)
 
     return None

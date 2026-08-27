@@ -6,6 +6,7 @@ lazy daily roll → trend rollups → split-retention cleanup → DuckDB reads,
 plus the process-wide DuckDB concurrency bound.
 """
 
+import asyncio
 import logging
 import os
 import shutil
@@ -331,6 +332,46 @@ class CompactSpansTestCase(ColdStorageTestMixin, TestCase):
         self.assertEqual(row[1], 4)  # 4 rows
         # hour_bucket is a naive UTC timestamp at the hour start.
         self.assertEqual(row[4], self.hour.replace(tzinfo=None))
+
+    def test_rollup_quantiles_are_exact(self):
+        """p50/p95 are real observed durations, not sketch estimates.
+
+        The rollup uses quantile_disc rather than approx_quantile: a T-Digest
+        costs a fixed ~20 KiB of state per group regardless of how few values
+        that group holds, and that state is not charged against DuckDB's
+        memory_limit, so it grows without bound as description cardinality
+        grows. Exactness is the observable half of that change — over
+        durations 10.0..109.0 approx_quantile answers 59.5 and 104.49999...,
+        neither of which any span actually took.
+        """
+        self._seed_hour(n_chunks=1, rows_per=100)
+        with freeze_time("2026-05-10T04:00:00Z"):
+            compact_span_chunks()
+        rollup = get_duckdb_parquet_path(
+            self.storage, f"{ROLLUP}/org_{self.org.id}/20260510/02.parquet"
+        )
+        conn = get_duckdb_connection(self.storage)
+        try:
+            count, p50, p95, lo, hi = conn.execute(
+                f"SELECT count, p50, p95, min_duration, max_duration "
+                f"FROM read_parquet('{rollup}')"
+            ).fetchone()
+        finally:
+            conn.close()
+
+        durations = [10.0 + j for j in range(100)]
+        self.assertEqual(count, 100)
+        self.assertEqual(lo, 10.0)
+        self.assertEqual(hi, 109.0)
+        # Assert membership, not the exact index convention: duckdb is pinned
+        # only as >=1.2.0, and which element a discrete quantile picks is an
+        # implementation detail that may shift on a minor bump. Membership is
+        # the real invariant and still separates the three functions — over
+        # this input approx_quantile answers 59.5 and 104.4999988079071 and
+        # quantile_cont answers 59.5 and 104.05, none of which are members.
+        self.assertIn(p50, durations)
+        self.assertIn(p95, durations)
+        self.assertLess(p50, p95)
 
     def test_recovers_missing_rollup_after_seal(self):
         """If the rollup write fails after a successful hour seal, the next
@@ -864,6 +905,91 @@ class DuckDBConcurrencyBoundTestCase(TestCase):
                 t.join(2)
 
 
+class AsyncColdReadSlotTestCase(TestCase):
+    """cold_read_slot waits on the event loop and shares one bound with duckdb_slot."""
+
+    def _patch_bound(self, size):
+        return mock.patch.multiple(
+            gcs,
+            _duckdb_semaphore=threading.BoundedSemaphore(size),
+            _MAX_CONCURRENT_DUCKDB=size,
+            _DUCKDB_SLOT_TIMEOUT=0.05,
+        )
+
+    async def test_acquires_and_releases(self):
+        with self._patch_bound(1):
+            async with gcs.cold_read_slot() as slot:
+                self.assertTrue(slot)
+                self.assertFalse(gcs._duckdb_semaphore.acquire(timeout=0))
+            self.assertTrue(gcs._duckdb_semaphore.acquire(timeout=0))
+            gcs._duckdb_semaphore.release()
+
+    async def test_degrades_when_saturated(self):
+        with self._patch_bound(1):
+            gcs._duckdb_semaphore.acquire()
+            try:
+                async with gcs.cold_read_slot() as slot:
+                    self.assertFalse(slot)
+            finally:
+                gcs._duckdb_semaphore.release()
+
+    async def test_nested_duckdb_slot_does_not_double_count(self):
+        """The sync slot must be a no-op inside an async one.
+
+        At the small-pod cap of 2 a second permit for the same unit of work
+        would eat the entire bound; at a cap of 1 it would deadlock the request
+        against itself.
+        """
+        with self._patch_bound(1):
+            async with gcs.cold_read_slot() as outer:
+                self.assertTrue(outer)
+                with gcs.duckdb_slot() as inner:
+                    self.assertTrue(inner)
+            # Exactly one permit was taken and returned.
+            self.assertTrue(gcs._duckdb_semaphore.acquire(timeout=0))
+            gcs._duckdb_semaphore.release()
+
+    async def test_slot_survives_the_thread_hop(self):
+        """asyncio.to_thread copies the context, so the flag reaches the worker."""
+        with self._patch_bound(1):
+            async with gcs.cold_read_slot() as slot:
+                self.assertTrue(slot)
+
+                def in_thread():
+                    with gcs.duckdb_slot() as inner:
+                        return inner, gcs._slot_held.get()
+
+                inner, seen = await asyncio.to_thread(in_thread)
+            self.assertTrue(inner)
+            self.assertTrue(seen, "slot flag did not propagate into the thread")
+
+    async def test_waiting_does_not_block_the_loop(self):
+        """A waiter must not stall other coroutines."""
+        with self._patch_bound(1):
+            gcs._duckdb_semaphore.acquire()
+            ticks = []
+
+            async def ticker():
+                for _ in range(3):
+                    await asyncio.sleep(0.005)
+                    ticks.append(1)
+
+            task = asyncio.ensure_future(ticker())
+            try:
+                async with gcs.cold_read_slot() as slot:
+                    self.assertFalse(slot)
+                # Measure INSIDE the timeout window. Counting after the wait
+                # would pass even with a blocking sleep, because the ticker
+                # simply finishes once the loop is handed back.
+                during = len(ticks)
+            finally:
+                gcs._duckdb_semaphore.release()
+            await task
+            self.assertGreaterEqual(
+                during, 2, "event loop was blocked while waiting for a slot"
+            )
+
+
 class DeletionTestCase(ColdStorageTestMixin, TestCase):
     """Org/project deletion must purge the hour-tiered raw subtree AND the
     rollup tree (self-hosters without S3 lifecycle rules rely on this)."""
@@ -974,3 +1100,218 @@ class DeletionTestCase(ColdStorageTestMixin, TestCase):
             conn.close()
         self.assertEqual(raw_projects, [p2.id])
         self.assertEqual(rollup_projects, [p2.id])
+
+
+class PromotePagingTestCase(ColdStorageTestMixin, TestCase):
+    """Promotion walks an org's backlog in bounded keyset pages.
+
+    DISABLE_SERVER_SIDE_CURSORS is set globally for PgBouncer, so an iterator
+    would not bound the fetch — the page LIMIT is what keeps peak memory flat.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.project = baker.make(
+            "projects.Project", organization__scrub_ip_addresses=False
+        )
+        self.org = self.project.organization
+
+    async def _seed(self, n, ts=None):
+        ts = ts or datetime.now(UTC) - timedelta(minutes=10)
+        await SpanStaging.objects.abulk_create(
+            [
+                _make_span_staging_row(
+                    self.org.id,
+                    self.project.id,
+                    timestamp=ts,
+                    span_id=f"s{i}",
+                    transaction_id=f"t{i}",
+                )
+                for i in range(n)
+            ]
+        )
+        return ts
+
+    async def test_pages_through_backlog(self):
+        """Every row is promoted even when the backlog spans many pages."""
+        ts = await self._seed(7)
+        with mock.patch("apps.performance.promotion.PROMOTE_PAGE_ROWS", 2):
+            promoted, truncated = await promote_spans()
+
+        self.assertEqual(promoted, 7)
+        self.assertFalse(truncated)
+        self.assertEqual(await SpanStaging.objects.acount(), 0)
+
+        hour_dir = os.path.join(
+            self.cold_dir,
+            f"{RAW}/org_{self.org.id}/{ts.strftime('%Y%m%d')}/{ts.strftime('%H')}",
+        )
+        # 7 rows at 2 per page -> 4 chunk files, one per page.
+        self.assertEqual(len(os.listdir(hour_dir)), 4)
+
+    async def test_page_boundary_exactly_divides(self):
+        """A backlog that is a whole number of pages still terminates."""
+        await self._seed(4)
+        with mock.patch("apps.performance.promotion.PROMOTE_PAGE_ROWS", 2):
+            promoted, truncated = await promote_spans()
+        self.assertEqual(promoted, 4)
+        self.assertFalse(truncated)
+        self.assertEqual(await SpanStaging.objects.acount(), 0)
+
+    async def test_batch_limit_truncates(self):
+        """The per-org cap still bounds one invocation and reports truncation."""
+        await self._seed(6)
+        with (
+            mock.patch("apps.performance.promotion.PROMOTE_PAGE_ROWS", 2),
+            mock.patch("apps.performance.promotion.BATCH_LIMIT_PER_ORG", 4),
+        ):
+            promoted, truncated = await promote_spans()
+        self.assertEqual(promoted, 4)
+        self.assertTrue(truncated)
+        self.assertEqual(await SpanStaging.objects.acount(), 2)
+
+    async def test_delete_failure_removes_chunk(self):
+        """A chunk written but not consumed is rolled back.
+
+        This is the only failure mode here that corrupts data rather than
+        retrying: the rows stay in staging, so if the chunk survived, the next
+        run would promote them a second time and double-count the spans.
+        Paging makes it likelier, not less — N pages per org means N times as
+        many write/delete pairs that can half-succeed.
+        """
+        ts = await self._seed(4)
+        with (
+            mock.patch("apps.performance.promotion.PROMOTE_PAGE_ROWS", 2),
+            mock.patch("apps.performance.promotion.BATCH_LIMIT_PER_ORG", 4),
+            mock.patch(
+                "apps.performance.promotion._delete_promoted_rows",
+                side_effect=OSError("db gone"),
+            ),
+        ):
+            promoted, _ = await promote_spans()
+
+        self.assertEqual(promoted, 0)
+        # Rows survive for the next run...
+        self.assertEqual(await SpanStaging.objects.acount(), 4)
+        # ...and no chunk is left behind to duplicate them.
+        hour_dir = os.path.join(
+            self.cold_dir,
+            f"{RAW}/org_{self.org.id}/{ts.strftime('%Y%m%d')}/{ts.strftime('%H')}",
+        )
+        self.assertEqual(os.listdir(hour_dir) if os.path.isdir(hour_dir) else [], [])
+
+    async def test_delete_and_cleanup_both_failing_is_logged(self):
+        """If the compensating delete also fails, say so loudly.
+
+        The chunk is then orphaned and its rows are still in staging, so the
+        next run duplicates them. Nothing can fix that in-process; it has to be
+        attributable in the logs.
+        """
+        await self._seed(2)
+        storage = mock.Mock(wraps=self.storage)
+        storage.delete.side_effect = OSError("storage gone")
+        with (
+            mock.patch("apps.performance.promotion.PROMOTE_PAGE_ROWS", 2),
+            mock.patch("apps.performance.promotion.BATCH_LIMIT_PER_ORG", 2),
+            mock.patch(
+                "apps.performance.promotion.get_cold_storage_backend",
+                return_value=storage,
+            ),
+            mock.patch(
+                "apps.performance.promotion._delete_promoted_rows",
+                side_effect=OSError("db gone"),
+            ),
+            self.assertLogs("apps.performance.promotion", level="ERROR") as logs,
+        ):
+            promoted, _ = await promote_spans()
+
+        self.assertEqual(promoted, 0)
+        self.assertTrue(
+            any("duplicates may" in line for line in logs.output),
+            f"expected an orphaned-chunk error, got: {logs.output}",
+        )
+
+    async def test_page_of_only_garbage_still_advances(self):
+        """A page whose rows are all dropped consumes them and moves on.
+
+        Garbage rows are deleted without being promoted, so the cursor has to
+        advance on the drop path too — otherwise an all-garbage page would
+        re-select the same rows until the per-org cap.
+        """
+        # Older than raw retention: selected by promotion, then dropped.
+        old = datetime.now(UTC) - timedelta(days=365)
+        await SpanStaging.objects.abulk_create(
+            [
+                _make_span_staging_row(
+                    self.org.id,
+                    self.project.id,
+                    timestamp=old,
+                    span_id=f"g{i}",
+                    transaction_id=f"g{i}",
+                )
+                for i in range(4)
+            ]
+        )
+        with mock.patch("apps.performance.promotion.PROMOTE_PAGE_ROWS", 2):
+            promoted, truncated = await promote_spans()
+
+        self.assertEqual(promoted, 0)
+        self.assertFalse(truncated)
+        # All consumed, so they cannot reaccumulate and re-loop next run.
+        self.assertEqual(await SpanStaging.objects.acount(), 0)
+
+    async def test_page_spanning_two_hours_writes_both(self):
+        """One page split across an hour boundary writes a chunk per hour."""
+        base = datetime.now(UTC).replace(minute=30, second=0, microsecond=0)
+        first = base - timedelta(hours=2)
+        second = first + timedelta(hours=1)
+        await SpanStaging.objects.abulk_create(
+            [
+                _make_span_staging_row(
+                    self.org.id,
+                    self.project.id,
+                    timestamp=ts,
+                    span_id=f"h{i}",
+                    transaction_id=f"h{i}",
+                )
+                for i, ts in enumerate([first, first, second, second])
+            ]
+        )
+        with mock.patch("apps.performance.promotion.PROMOTE_PAGE_ROWS", 4):
+            promoted, _ = await promote_spans()
+
+        self.assertEqual(promoted, 4)
+        self.assertEqual(await SpanStaging.objects.acount(), 0)
+        for ts in (first, second):
+            hour_dir = os.path.join(
+                self.cold_dir,
+                f"{RAW}/org_{self.org.id}/{ts.strftime('%Y%m%d')}/{ts.strftime('%H')}",
+            )
+            self.assertTrue(os.path.isdir(hour_dir), f"missing {ts:%Y%m%d/%H}")
+            self.assertEqual(len(os.listdir(hour_dir)), 1)
+
+    async def test_failed_page_does_not_loop_forever(self):
+        """A page that fails to write is skipped, not retried in place.
+
+        Its rows stay in staging for the next run, but the keyset cursor has
+        already advanced past them, so the loop makes forward progress instead
+        of re-selecting the same rows until the batch limit is hit.
+        """
+        await self._seed(4)
+        with (
+            mock.patch("apps.performance.promotion.PROMOTE_PAGE_ROWS", 2),
+            # Cap the batch too: if the cursor ever stopped advancing this
+            # would grind through BATCH_LIMIT_PER_ORG/2 = 10,000 round trips
+            # before reaching the assertion, stalling CI instead of failing.
+            mock.patch("apps.performance.promotion.BATCH_LIMIT_PER_ORG", 6),
+            mock.patch(
+                "apps.performance.promotion._write_chunk_parquet",
+                side_effect=OSError("cold storage down"),
+            ) as write,
+        ):
+            promoted, _ = await promote_spans()
+
+        self.assertEqual(promoted, 0)
+        # Two pages attempted, then the backlog ran out — not an endless retry.
+        self.assertEqual(write.call_count, 2)
+        self.assertEqual(await SpanStaging.objects.acount(), 4)

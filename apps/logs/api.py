@@ -18,7 +18,11 @@ from apps.projects.models import LogProjectHourlyStatistic
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.pagination import set_pagination_headers
 from glitchtip.api.permissions import has_permission
-from glitchtip.cold_storage import parse_json_field
+from glitchtip.cold_storage import (
+    ColdStorageBusy,
+    cold_read_slot,
+    parse_json_field,
+)
 from glitchtip.partition_manager import UUID7Helper
 
 from .constants import LogLevel, parse_level_filters
@@ -284,12 +288,15 @@ def count_cold_storage(
 ) -> int:
     """Bounded count of matching logs in cold storage."""
     from glitchtip.cold_storage import (
+        close_duckdb_read_connection,
         duckdb_quote_path,
+        duckdb_slot,
         enumerate_org_parquet_files,
         get_cold_storage_backend,
         get_duckdb_parquet_path,
         get_duckdb_read_connection,
         is_duckdb_available,
+        is_missing_file_error,
     )
 
     if not is_duckdb_available():
@@ -357,23 +364,50 @@ def count_cold_storage(
     where_sql = " AND ".join(where_parts)
 
     total = 0
-    duck_conn = get_duckdb_read_connection(storage)
+    duck_conn = None
+    # memory_limit is enforced per connection, so a query must hold the
+    # process-wide slot. Take it per file with a zero timeout rather than once
+    # around the whole loop: this scan is the widest cold read there is —
+    # LogFilterSchema puts no lower bound on `start`, so a selective query over
+    # a wide range visits every file the org owns — and holding one of only
+    # max(2, DUCKDB_THREADS) permits for that long lets a single request starve
+    # every other cold read in the process. The count is already best-effort
+    # (it stops at max_hits and skips unreadable files), so stopping early
+    # under contention costs an undercounted hit header, not correctness.
     for relative_path in parquet_paths:
         if total >= max_hits:
             break
-        parquet_path = get_duckdb_parquet_path(storage, relative_path)
-        try:
-            sql = f"""
-                SELECT COUNT(*) FROM (
-                    SELECT 1 FROM read_parquet('{duckdb_quote_path(parquet_path)}')
-                    WHERE {where_sql}
-                    LIMIT ${len(params) + 1}
-                ) bounded
-            """
-            row = duck_conn.execute(sql, [*params, max_hits - total]).fetchone()
-            total += row[0]
-        except Exception:
-            logger.debug("Count failed for %s, skipping", relative_path)
+        with duckdb_slot(timeout=0) as slot:
+            if not slot:
+                break
+            if duck_conn is None:
+                duck_conn = get_duckdb_read_connection(storage)
+            parquet_path = get_duckdb_parquet_path(storage, relative_path)
+            try:
+                sql = f"""
+                    SELECT COUNT(*) FROM (
+                        SELECT 1 FROM read_parquet('{duckdb_quote_path(parquet_path)}')
+                        WHERE {where_sql}
+                        LIMIT ${len(params) + 1}
+                    ) bounded
+                """
+                row = duck_conn.execute(sql, [*params, max_hits - total]).fetchone()
+                total += row[0]
+            except Exception as e:
+                # Discard the connection like the other cold readers do. If the
+                # failure was an out-of-memory — the condition this bound
+                # exists to contain — reusing it would carry the pinned buffers
+                # into every later file on this thread.
+                close_duckdb_read_connection()
+                duck_conn = None
+                if is_missing_file_error(e):
+                    logger.debug("Cold count skipped vanished %s", relative_path)
+                else:
+                    logger.warning(
+                        "Cold count failed for %s, skipping",
+                        relative_path,
+                        exc_info=True,
+                    )
 
     return min(total, max_hits)
 
@@ -603,6 +637,7 @@ def _get_log_from_cold(
     from glitchtip.cold_storage import (
         close_duckdb_read_connection,
         duckdb_quote_path,
+        duckdb_slot,
         get_cold_storage_backend,
         get_duckdb_parquet_path,
         get_duckdb_read_connection,
@@ -625,26 +660,32 @@ def _get_log_from_cold(
     if not paths:
         return None
 
-    duck_conn = get_duckdb_read_connection(storage)
-    for relative_path in paths:
-        parquet_path = get_duckdb_parquet_path(storage, relative_path)
-        try:
-            sql = f"""
-                SELECT id, trace_id, organization_id, project_id, span_id,
-                       level, severity_number, body, service, environment, host, data
-                FROM read_parquet('{duckdb_quote_path(parquet_path)}')
-                WHERE id = $1 AND organization_id = $2
-                LIMIT 1;
-            """
-            result = duck_conn.execute(sql, [str(log_id), organization_id])
-            row = result.fetchone()
-            if row:
-                return _row_to_log_event(row)
-        except Exception as e:
-            close_duckdb_read_connection()
-            if not is_missing_file_error(e):
-                raise
-            duck_conn = get_duckdb_read_connection(storage)
+    # Cold reads share one process-wide memory budget; see count_cold_storage.
+    with duckdb_slot() as slot:
+        if not slot:
+            return None
+
+        duck_conn = get_duckdb_read_connection(storage)
+        for relative_path in paths:
+            parquet_path = get_duckdb_parquet_path(storage, relative_path)
+            try:
+                sql = f"""
+                    SELECT id, trace_id, organization_id, project_id, span_id,
+                           level, severity_number, body, service, environment,
+                           host, data
+                    FROM read_parquet('{duckdb_quote_path(parquet_path)}')
+                    WHERE id = $1 AND organization_id = $2
+                    LIMIT 1;
+                """
+                result = duck_conn.execute(sql, [str(log_id), organization_id])
+                row = result.fetchone()
+                if row:
+                    return _row_to_log_event(row)
+            except Exception as e:
+                close_duckdb_read_connection()
+                if not is_missing_file_error(e):
+                    raise
+                duck_conn = get_duckdb_read_connection(storage)
 
     return None
 
@@ -665,10 +706,17 @@ async def get_log_by_id(organization_id: int, log_id: UUID) -> LogEventRow | Non
         if result:
             return result
 
-    # DuckDB: asyncio.to_thread (in-process, no Django DB)
-    return await asyncio.to_thread(
-        _get_log_from_cold, organization_id, log_id, log_time
-    )
+    # DuckDB: asyncio.to_thread (in-process, no Django DB). Take the cold-read
+    # slot here rather than inside the thread — waiting on the event loop costs
+    # a coroutine, waiting inside the thread pins a pool thread and grows the
+    # executor. Saturation is raised, not returned: a point lookup that answers
+    # None becomes a 404, which reports a transient shortage as permanent.
+    async with cold_read_slot() as slot:
+        if not slot:
+            raise ColdStorageBusy()
+        return await asyncio.to_thread(
+            _get_log_from_cold, organization_id, log_id, log_time
+        )
 
 
 @router.get(

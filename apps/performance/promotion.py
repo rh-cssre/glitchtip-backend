@@ -37,12 +37,23 @@ from .cold_storage import (
 
 logger = logging.getLogger(__name__)
 
-# Process up to this many rows per organization per invocation. Every row in
-# the batch is materialized as a Python tuple (then regrouped and converted to
-# Arrow) before anything is freed, so this limit is also the promotion task's
-# peak-memory bound. Truncated runs re-enqueue themselves, so a busy org still
-# drains — in more, smaller chunks.
+# Process up to this many rows per organization per invocation. Truncated runs
+# re-enqueue themselves, so a busy org still drains — in more, smaller chunks.
 BATCH_LIMIT_PER_ORG = 20_000
+
+# Rows fetched per query while draining an org. This — not
+# BATCH_LIMIT_PER_ORG — is the task's peak-memory bound: every row in a page is
+# materialized as a Python tuple, regrouped, and converted to Arrow before
+# anything is freed. Pages are walked by keyset (id > last), never by
+# .iterator()/.aiterator(): DISABLE_SERVER_SIDE_CURSORS is set globally for
+# PgBouncer, so an iterator would still have the driver pull the whole result
+# set into client memory first and would bound nothing. Measured against a full
+# BATCH_LIMIT_PER_ORG batch of 20k rows, paging cut peak RSS from ~31 MiB to
+# ~13 MiB; the gap widens with the batch limit, since unpaged peak scales with
+# it and paged peak does not. Smaller pages mean more chunk files per org-hour
+# for compaction to collapse, and one more S3 PUT each, so this trades request
+# count against memory rather than being free.
+PROMOTE_PAGE_ROWS = 5_000
 
 # An hour is sealed (safe to compact, no longer accepting chunks) once this
 # long after the hour ends. Only throttles re-compaction churn — compaction
@@ -77,9 +88,10 @@ async def promote_spans() -> tuple[int, bool]:
     Promote span_staging rows to per-org Parquet files.
 
     1. Get distinct org_ids with rows older than cutoff (partition-prunable)
-    2. For each org, query rows with both id + organization_id filters
-       (prunes both RANGE and HASH partitions)
-    3. Group by date, write chunk Parquet files per org+date
+    2. For each org, walk its backlog in keyset pages of PROMOTE_PAGE_ROWS,
+       filtering on both id + organization_id (prunes RANGE and HASH
+       partitions), up to BATCH_LIMIT_PER_ORG rows per invocation
+    3. Group each page by hour, write chunk Parquet files per org+date+hour
     4. DELETE consumed rows by exact id + organization_id
 
     Returns (rows_promoted, truncated) where truncated is True if any org
@@ -133,103 +145,162 @@ async def promote_spans() -> tuple[int, bool]:
     # Step 2: Process each org separately — both id and organization_id
     # filters allow PostgreSQL to prune RANGE and HASH partitions.
     for org_id in org_ids:
-        rows = [
-            row
-            async for row in SpanStaging.objects.filter(
+        # Walk the org's backlog in keyset pages. `id > last_id` (rather than
+        # OFFSET or an iterator) keeps every page a bounded result set and
+        # guarantees forward progress even when a page fails to promote and
+        # its rows are therefore not deleted. Both id bounds and the
+        # organization_id filter keep RANGE and HASH partition pruning. Since
+        # id is the partition key, PostgreSQL uses the primary key for an
+        # ordered Append once the backlog exceeds about a page, leaving later
+        # partitions never executed; below that it seq-scans and sorts a set
+        # no larger than the backlog itself. Either way it never degrades into
+        # a Merge Append across every leaf.
+        last_id = None
+        consumed = 0
+
+        while consumed < BATCH_LIMIT_PER_ORG:
+            page_qs = SpanStaging.objects.filter(
                 id__lt=cutoff_uuid,
                 organization_id=org_id,
-            ).values_list(
-                "id",
-                "organization_id",
-                "project_id",
-                "transaction_name",
-                "span_id",
-                "transaction_id",
-                "op",
-                "description",
-                "duration",
-                "timestamp",
-            )[:BATCH_LIMIT_PER_ORG]
-        ]
+            )
+            if last_id is not None:
+                page_qs = page_qs.filter(id__gt=last_id)
 
-        if not rows:
-            continue
+            page_size = min(PROMOTE_PAGE_ROWS, BATCH_LIMIT_PER_ORG - consumed)
+            # Fetch one extra row purely to learn whether more remain. Without
+            # it, a backlog that is an exact multiple of the page size costs an
+            # extra query returning nothing, and that empty query is the most
+            # expensive one in the loop: organization_id is the *second* PK
+            # column, so `id > last` with no matching rows walks the whole
+            # remaining id range on every surviving leaf, at a cost that scales
+            # with total staging size rather than with this org's backlog.
+            rows = [
+                row
+                async for row in page_qs.order_by("id").values_list(
+                    "id",
+                    "organization_id",
+                    "project_id",
+                    "transaction_name",
+                    "span_id",
+                    "transaction_id",
+                    "op",
+                    "description",
+                    "duration",
+                    "timestamp",
+                )[: page_size + 1]
+            ]
 
-        if len(rows) >= BATCH_LIMIT_PER_ORG:
-            truncated = True
+            if not rows:
+                break
 
-        # Group rows by (date, hour) — the T1 raw unit. Garbage spans
-        # (missing / far-future / past-retention timestamps) are dropped but
-        # still consumed below so they don't reaccumulate in staging.
-        hour_groups: dict[tuple[str, str], list[tuple]] = {}
-        drop_uuids: list = []
-        for row in rows:
-            ts = row[9]  # timestamp
-            if ts is None or ts < min_ts or ts > max_ts:
-                drop_uuids.append(row[0])
-                continue
-            key = (ts.strftime("%Y%m%d"), ts.strftime("%H"))
-            hour_groups.setdefault(key, []).append(row)
+            has_more = len(rows) > page_size
+            del rows[page_size:]
+            page_len = len(rows)
+            last_id = rows[-1][0]
+            consumed += page_len
+            if consumed >= BATCH_LIMIT_PER_ORG:
+                truncated = True
 
-        for (date_str, hour_str), group_rows in hour_groups.items():
-            try:
-                chunk_path = await _write_chunk_parquet(
-                    storage, org_id, date_str, hour_str, group_rows
-                )
-            except Exception:
-                logger.exception(
-                    "Failed to write parquet chunk for org %d %s/%s",
-                    org_id,
-                    date_str,
-                    hour_str,
-                )
-                continue
+            promoted, dropped = await _promote_page(
+                storage, org_id, rows, min_ts, max_ts
+            )
+            total_promoted += promoted
+            total_dropped += dropped
 
-            # Delete exactly the promoted rows by ID.
-            # Includes organization_id for HASH partition pruning.
-            group_uuids = [r[0] for r in group_rows]
-            try:
-                await sync_to_async(_delete_promoted_rows)(group_uuids, org_id)
-            except Exception:
-                # DELETE failed after chunk was written — remove the chunk
-                # to prevent duplicate data on the next promotion run.
-                logger.exception(
-                    "Failed to delete promoted rows for org %d %s/%s, "
-                    "removing chunk to prevent duplicates",
-                    org_id,
-                    date_str,
-                    hour_str,
-                )
-                try:
-                    await sync_to_async(storage.delete)(chunk_path)
-                except Exception:
-                    logger.error(
-                        "Failed to remove chunk %s — duplicates may "
-                        "exist on next promotion run",
-                        chunk_path,
-                    )
-                continue
-            total_promoted += len(group_rows)
+            # Drop the page before fetching the next one. A list comprehension
+            # builds its result in full before rebinding the name, so holding
+            # this reference would make the peak two pages rather than one.
+            rows = None
 
-        # Consume dropped rows so they don't reaccumulate in staging.
-        # Non-fatal on failure — they'll be retried next run.
-        if drop_uuids:
-            try:
-                await sync_to_async(_delete_promoted_rows)(drop_uuids, org_id)
-                total_dropped += len(drop_uuids)
-            except Exception:
-                logger.warning(
-                    "Failed to delete %d dropped span rows for org %d",
-                    len(drop_uuids),
-                    org_id,
-                    exc_info=True,
-                )
+            if not has_more:
+                break
 
     if total_promoted:
         logger.info("Promoted %d span rows to cold storage", total_promoted)
     if total_dropped:
         logger.info("Dropped %d whacky/stale span rows during promotion", total_dropped)
     return total_promoted, truncated
+
+
+async def _promote_page(
+    storage, org_id: int, rows: list[tuple], min_ts: datetime, max_ts: datetime
+) -> tuple[int, int]:
+    """Write one page of staging rows to Parquet and consume it.
+
+    Returns (promoted, dropped). Failures are logged and skipped rather than
+    raised so one bad hour cannot stall an org's backlog.
+    """
+    total_promoted = 0
+    total_dropped = 0
+
+    # Group rows by (date, hour) — the T1 raw unit. Garbage spans
+    # (missing / far-future / past-retention timestamps) are dropped but
+    # still consumed below so they don't reaccumulate in staging.
+    hour_groups: dict[tuple[str, str], list[tuple]] = {}
+    drop_uuids: list = []
+    for row in rows:
+        ts = row[9]  # timestamp
+        if ts is None or ts < min_ts or ts > max_ts:
+            drop_uuids.append(row[0])
+            continue
+        key = (ts.strftime("%Y%m%d"), ts.strftime("%H"))
+        hour_groups.setdefault(key, []).append(row)
+
+    for (date_str, hour_str), group_rows in hour_groups.items():
+        try:
+            chunk_path = await _write_chunk_parquet(
+                storage, org_id, date_str, hour_str, group_rows
+            )
+        except Exception:
+            logger.exception(
+                "Failed to write parquet chunk for org %d %s/%s",
+                org_id,
+                date_str,
+                hour_str,
+            )
+            continue
+
+        # Delete exactly the promoted rows by ID.
+        # Includes organization_id for HASH partition pruning.
+        group_uuids = [r[0] for r in group_rows]
+        try:
+            await sync_to_async(_delete_promoted_rows)(group_uuids, org_id)
+        except Exception:
+            # DELETE failed after chunk was written — remove the chunk
+            # to prevent duplicate data on the next promotion run.
+            logger.exception(
+                "Failed to delete promoted rows for org %d %s/%s, "
+                "removing chunk to prevent duplicates",
+                org_id,
+                date_str,
+                hour_str,
+            )
+            try:
+                await sync_to_async(storage.delete)(chunk_path)
+            except Exception:
+                logger.error(
+                    "Failed to remove chunk %s — duplicates may "
+                    "exist on next promotion run",
+                    chunk_path,
+                )
+            continue
+        total_promoted += len(group_rows)
+
+    # Consume dropped rows so they don't reaccumulate in staging.
+    # Non-fatal on failure — they'll be retried next run.
+    if drop_uuids:
+        try:
+            await sync_to_async(_delete_promoted_rows)(drop_uuids, org_id)
+            total_dropped += len(drop_uuids)
+        except Exception:
+            logger.warning(
+                "Failed to delete %d dropped span rows for org %d",
+                len(drop_uuids),
+                org_id,
+                exc_info=True,
+            )
+
+    return total_promoted, total_dropped
 
 
 async def _write_chunk_parquet(
@@ -466,12 +537,29 @@ def _write_hour_rollup(
             return
         conn = get_duckdb_connection(storage)
         try:
+            # Exact quantiles, not approx_quantile. A T-Digest sketch costs a
+            # fixed ~20 KiB per group no matter how few values that group has,
+            # and that state is NOT charged against memory_limit — so the two
+            # sketches cost ~41 KiB per group, growing without bound as
+            # description cardinality grows. Grouping includes description,
+            # which carries SQL text and is close to unique in practice, so
+            # this workload is many groups with a handful of values each: the
+            # opposite of what a sketch is for. Measured on 500k spans with
+            # memory_limit at 244 MiB, 183k groups: approx_quantile peaked at
+            # 7.6 GiB, quantile_disc at 278 MiB and 3.5x faster, and exact
+            # besides. This trades the risk rather than erasing it: an exact
+            # quantile materializes every value in a group, so its state is
+            # O(values in the LARGEST group) and also sits outside
+            # memory_limit. That is the opposite shape — one high-volume
+            # endpoint with an empty description — and costs 8 bytes a span
+            # rather than 20 KiB a group, but it is worth knowing about if a
+            # low-cardinality org ever reports pressure here.
             rows = conn.execute(
                 f"""
                 SELECT project_id, transaction_name, op, description,
                     COUNT(*), SUM(duration), MIN(duration), MAX(duration),
-                    approx_quantile(duration, 0.5),
-                    approx_quantile(duration, 0.95),
+                    quantile_disc(duration, 0.5),
+                    quantile_disc(duration, 0.95),
                     COUNT(DISTINCT transaction_id)
                 FROM read_parquet('{duckdb_quote_path(src)}')
                 GROUP BY project_id, transaction_name, op, description
