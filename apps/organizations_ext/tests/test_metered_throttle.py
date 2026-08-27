@@ -31,7 +31,16 @@ ALLOWED = QUOTA + CAP_UNITS  # 233,333
     ],
 )
 class MeteredThrottleTestCase(TestCase):
-    def _make_org(self, *, enabled=True, cap_cents=CAP_CENTS, metered_item="si_1"):
+    def _make_org(
+        self,
+        *,
+        enabled=True,
+        cap_cents=CAP_CENTS,
+        metered_item="si_1",
+        plan_price=15,
+        status=SubscriptionStatus.ACTIVE,
+        stripe_id="sub_1",
+    ):
         now = timezone.now()
         org = baker.make(
             "organizations_ext.Organization",
@@ -41,17 +50,17 @@ class MeteredThrottleTestCase(TestCase):
         )
         product = baker.make("stripe.StripeProduct", events=QUOTA)
         price = baker.make(
-            "stripe.StripePrice", product=product, price=15, no_throttle=False
+            "stripe.StripePrice", product=product, price=plan_price, no_throttle=False
         )
         sub = StripeSubscription.objects.create(
-            stripe_id="sub_1",
+            stripe_id=stripe_id,
             created=now,
             current_period_start=now - timedelta(days=5),
             current_period_end=now + timedelta(days=25),
             start_date=now,
             price=price,
             organization=org,
-            status=SubscriptionStatus.ACTIVE,
+            status=status,
             metered_item_id=metered_item,
         )
         org.stripe_primary_subscription = sub
@@ -232,6 +241,91 @@ class MeteredThrottleTestCase(TestCase):
         async_to_sync(_persist_overage)(sub, sub.overage_period_start, 50_000)
         sub.refresh_from_db()
         self.assertEqual(sub.overage_units_reported, 80_000)
+
+    def test_stale_check_from_a_closed_cycle_is_dropped(self):
+        # A check that read the period dates just before a renewal advanced
+        # them carries the *old* cycle's usage. The anchor has already rolled
+        # forward, so treating it as a rollover would re-report the whole prior
+        # cycle Stripe has already invoiced, and drag the anchor backwards.
+        org, sub = self._make_org()
+        sub.overage_period_start = sub.current_period_start + timedelta(days=30)
+        sub.overage_units_reported = 0
+        sub.save(update_fields=["overage_period_start", "overage_units_reported"])
+
+        mock_meter = self._run(org, 150_000)
+
+        mock_meter.assert_not_awaited()
+        sub.refresh_from_db()
+        self.assertEqual(sub.overage_units_reported, 0)
+        self.assertEqual(
+            sub.overage_period_start, sub.current_period_start + timedelta(days=30)
+        )
+
+    def test_persist_cannot_move_the_anchor_backwards(self):
+        # The same guard at the write: only a *later* cycle may reset the
+        # counter, so an older anchor is refused rather than read as rollover.
+        org, sub = self._make_org()
+        self._run(org, 180_000)  # counter -> 80,000
+        sub.refresh_from_db()
+        anchor = sub.overage_period_start
+
+        async_to_sync(_persist_overage)(sub, anchor - timedelta(days=30), 999_999)
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.overage_units_reported, 80_000)
+        self.assertEqual(sub.overage_period_start, anchor)
+
+    def test_ineligible_plan_is_not_metered(self):
+        """The opt-in flag and the item id are sticky state that outlive the
+        plan justifying them — a downgrade to a free plan keeps the
+        subscription active, and the primary pointer is cleared only
+        asynchronously. The path that sends meter events must re-test
+        eligibility, not trust the flags."""
+        for label, kwargs in (
+            ("free plan", {"plan_price": 0}),
+            ("canceled", {"status": SubscriptionStatus.CANCELED}),
+            ("unpaid", {"status": SubscriptionStatus.UNPAID}),
+        ):
+            with self.subTest(label):
+                org, sub = self._make_org(stripe_id=f"sub_{label}", **kwargs)
+                mock_meter = self._run(org, 150_000)
+                mock_meter.assert_not_awaited()
+                sub.refresh_from_db()
+                self.assertEqual(sub.overage_units_reported, 0)
+
+    def test_refused_counter_write_is_not_reported(self):
+        # The counter is advanced before the send so the DB always bounds what
+        # Stripe may hold. If a concurrent writer wins that write, our delta was
+        # computed against a superseded base and must not go out.
+        org, _sub = self._make_org()
+        with patch(
+            "apps.organizations_ext.tasks._persist_overage",
+            new=AsyncMock(return_value=False),
+        ):
+            mock_meter = self._run(org, 150_000)
+        mock_meter.assert_not_awaited()
+
+    def test_rollover_with_no_overage_arms_the_next_cycle(self):
+        # Rolling into a cycle that is under quota reports nothing, but must
+        # still move the anchor and zero the counter — that base is what the
+        # next report in this cycle computes its delta from.
+        org, sub = self._make_org()
+        self._run(org, 150_000)  # counter -> 50,000
+        sub.refresh_from_db()
+        old_anchor = sub.overage_period_start
+
+        new_start = sub.current_period_start + timedelta(days=30)
+        StripeSubscription.objects.filter(pk=sub.pk).update(
+            current_period_start=new_start,
+            current_period_end=new_start + timedelta(days=30),
+        )
+        org.refresh_from_db()
+        mock_meter = self._run(org, 50_000)
+
+        mock_meter.assert_not_awaited()
+        sub.refresh_from_db()
+        self.assertGreater(sub.overage_period_start, old_anchor)
+        self.assertEqual(sub.overage_units_reported, 0)
 
     def test_rollback_only_reverts_own_write(self):
         # Rollback is conditional on the counter still holding the write-ahead

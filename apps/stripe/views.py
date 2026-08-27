@@ -20,7 +20,7 @@ from apps.organizations_ext.models import Organization
 from apps.organizations_ext.tasks import check_organization_throttle
 
 from .client import fetch_v2_event, mark_welcome_sent, stripe_get
-from .constants import ACTIVE_SUBSCRIPTION_STATUSES
+from .constants import ACTIVE_SUBSCRIPTION_STATUSES, TERMINAL_SUBSCRIPTION_STATUSES
 from .email import SupportLicenseWelcomeEmail
 from .models import (
     StripePrice,
@@ -231,7 +231,30 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
     # Primary subscription should be removed if status is not active
     elif stripe_subscription.stripe_id == organization.stripe_primary_subscription_id:
         organization.stripe_primary_subscription = None
-        await organization.asave(update_fields=["stripe_primary_subscription"])
+        update_fields = ["stripe_primary_subscription"]
+        if stripe_subscription.status in TERMINAL_SUBSCRIPTION_STATUSES:
+            # Overage rides on a subscription item that dies with the
+            # subscription, so leaving the flag set would advertise overage the
+            # org no longer has: a resubscribe creates a *new* subscription with
+            # no metered item, and the throttle path requires both, so events
+            # would be dropped while the UI showed overage enabled with headroom
+            # to spare. Re-enabling is an explicit opt-in.
+            #
+            # Only for terminal statuses. unpaid and paused recover onto this
+            # same row with its item intact, and silently dropping an opt-in the
+            # customer chose (and pays for) would throttle them with no notice.
+            # Nothing bills in the meantime either way — the throttle path tests
+            # eligibility, which an inactive status already fails.
+            organization.metered_billing_enabled = False
+            update_fields.append("metered_billing_enabled")
+            # The item id points into a subscription that can never come back;
+            # keeping it would make a later enable skip the attach and reuse a
+            # dead Stripe item.
+            stripe_subscription.metered_item_id = ""
+            await stripe_subscription.asave(update_fields=["metered_item_id"])
+        await organization.asave(update_fields=update_fields)
+        # Quota just dropped to the free tier; don't wait for the next sweep.
+        await check_organization_throttle.aenqueue(organization.id, bypass_cache=True)
 
 
 async def handle_meter_error_event(payload: bytes) -> HttpResponse:

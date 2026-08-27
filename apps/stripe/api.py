@@ -42,7 +42,7 @@ from .constants import (
 )
 from .exceptions import StripeError
 from .models import StripePrice, StripeProduct, StripeSubscription
-from .overage import cost_cents_for_units, units_for_budget
+from .overage import cost_cents_for_units, overage_eligible, units_for_budget
 from .utils import compute_cycle, select_subscription_items, unix_to_datetime
 
 logger = logging.getLogger(__name__)
@@ -551,11 +551,14 @@ async def get_overage_status(request: AuthHttpRequest, organization_slug: str):
     )
     sub = org.stripe_primary_subscription
     # Same test configure_overage applies, so the card can't offer a toggle the
-    # POST would reject: a plan with no quota (NULL or 0) has nothing to meter
-    # overage against, and no_throttle plans are unlimited already.
+    # POST would reject.
     plan_events = (sub.price.product.events or 0) if sub else 0
-    eligible = bool(sub and not sub.price.no_throttle and plan_events > 0)
-    quota = plan_events if eligible else settings.GLITCHTIP_FREE_TIER_EVENTS
+    eligible = overage_eligible(sub)
+    # Quota is a separate question from eligibility: an ineligible plan (unpaid,
+    # comped, quota-less) still has whatever quota it has, and _check_and_update_
+    # throttle enforces exactly this. Deriving it from `eligible` made the card
+    # report the free-tier number while a larger one was actually being enforced.
+    quota = plan_events or settings.GLITCHTIP_FREE_TIER_EVENTS
 
     usage = 0
     period = await get_current_period_dates(org)
@@ -607,7 +610,7 @@ async def configure_overage(
     sub = org.stripe_primary_subscription
 
     if payload.enabled:
-        if not sub or sub.price.no_throttle or not sub.price.product.events:
+        if not overage_eligible(sub):
             return JsonResponse(
                 {"detail": "An active paid plan is required for overage billing."},
                 status=400,

@@ -5,11 +5,17 @@ Stripe is the system of record for what a customer is actually invoiced; these
 functions mirror that schedule locally so we can (a) show an org its projected
 overage cost and (b) convert a dollar spend cap into a hard unit ceiling we stop
 reporting at. "units" are billable events above the plan quota.
+
+:func:`overage_eligible` lives here rather than beside the API views so the
+background throttle task — the only code that actually sends meter events —
+can apply the same predicate the API does without importing a router module.
 """
 
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
 from django.conf import settings
+
+from .constants import ACTIVE_SUBSCRIPTION_STATUSES
 
 CENTS = Decimal(1)
 
@@ -115,3 +121,22 @@ def tier_problems(raw_price: dict) -> list[str]:
         if tier.get("flat_amount") or tier.get("flat_amount_decimal"):
             problems.append(f"tier {i} has a flat_amount; only per-unit is supported.")
     return problems
+
+
+def overage_eligible(sub) -> bool:
+    """Whether ``sub`` can carry metered overage billing.
+
+    Overage is a usage charge layered on top of a plan, so it needs a live
+    *paid* plan with a finite quota to meter against. Free plans are ordinary
+    subscriptions here — self-serve signup only ever creates ``price=0`` ones —
+    so "has a subscription" is a different question from "is paying"; testing
+    only the former let a free org with no card on file attach a metered item.
+    ``no_throttle`` plans are unlimited and have nothing to meter against.
+    """
+    return bool(
+        sub
+        and sub.status in ACTIVE_SUBSCRIPTION_STATUSES
+        and sub.price.price > 0
+        and not sub.price.no_throttle
+        and (sub.price.product.events or 0) > 0
+    )

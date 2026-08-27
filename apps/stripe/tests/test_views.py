@@ -1,7 +1,7 @@
 import hmac
 import json
 import time
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from django.core.cache import cache
 from django.test import RequestFactory, TestCase, override_settings
@@ -58,7 +58,46 @@ class TestStripeWebhookView(TestCase):
         product_id,
         status=SubscriptionStatus.ACTIVE,
         event_created_timestamp=None,
+        metered_item_id=None,
     ):
+        # A metered overage item, when the caller wants the subscription to look
+        # like one that opted into overage billing.
+        metered_items = (
+            [
+                SubscriptionItem(
+                    id=metered_item_id,
+                    object="subscription_item",
+                    created=current_period_start,
+                    current_period_end=current_period_end,
+                    current_period_start=current_period_start,
+                    metadata={},
+                    price=Price(
+                        object="price",
+                        active=True,
+                        billing_scheme="tiered",
+                        created=0,
+                        currency="usd",
+                        livemode=False,
+                        lookup_key=None,
+                        nickname=None,
+                        recurring={"usage_type": "metered", "meter": "mtr_1"},
+                        tax_behavior=None,
+                        tiers_mode="graduated",
+                        type="",
+                        unit_amount_decimal=None,
+                        metadata={},
+                        id="price_overage",
+                        product="prod_overage",
+                        unit_amount=None,
+                    ),
+                    quantity=1,
+                    subscription=subscription_id,
+                    tax_rates=[],
+                )
+            ]
+            if metered_item_id
+            else []
+        )
         data = StripeEvent(
             type=type,
             id=event_id,
@@ -100,7 +139,8 @@ class TestStripeWebhookView(TestCase):
                                 subscription=subscription_id,
                                 tax_rates=[],
                             )
-                        ],
+                        ]
+                        + metered_items,
                     ),
                     created=current_period_start,
                     status=status,
@@ -473,6 +513,160 @@ class TestStripeWebhookView(TestCase):
         # The canceled subscription must no longer be the org's primary.
         await organization.arefresh_from_db()
         self.assertIsNone(organization.stripe_primary_subscription_id)
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_clears_metered_billing_when_canceled(self):
+        """Cancelling must also clear the org's overage flag.
+
+        The metered item dies with the subscription, so a flag left set
+        advertises headroom the org no longer has: a later resubscribe starts
+        with no metered item and the throttle path needs both, so events would
+        be silently dropped while the UI showed overage enabled.
+        """
+        organization = await Organization.objects.acreate(
+            name="Metered Cancel Org",
+            id=54322,
+            metered_billing_enabled=True,
+            overage_spend_cap_cents=5000,
+        )
+        product = await StripeProduct.objects.acreate(
+            stripe_id="prod_mcancel", name="P", description="", events=1, is_public=True
+        )
+        price = await StripePrice.objects.acreate(
+            stripe_id="price_mcancel", product=product, price=10.00, nickname="P"
+        )
+        now = timezone.now()
+        now_timestamp = int(now.timestamp())
+        subscription_id = "sub_metered_cancel"
+        sub = await StripeSubscription.objects.acreate(
+            stripe_id=subscription_id,
+            organization=organization,
+            price=price,
+            status=SubscriptionStatus.ACTIVE,
+            created=now,
+            current_period_start=now,
+            current_period_end=now,
+            start_date=now,
+            metered_item_id="si_1",
+        )
+        organization.stripe_primary_subscription = sub
+        await organization.asave(update_fields=["stripe_primary_subscription"])
+
+        payload = self.generate_subscription_event_data(
+            type="customer.subscription.updated",
+            event_id="evt_metered_cancel_test",
+            subscription_id=subscription_id,
+            current_period_start=now_timestamp,
+            current_period_end=now_timestamp + 2592000,
+            price_id=price.stripe_id,
+            product_id=product.stripe_id,
+            status=SubscriptionStatus.CANCELED,
+            metered_item_id="si_1",
+        )
+        mock_customer_data = {
+            "object": "customer",
+            "id": "cus_test",
+            "email": "test@example.com",
+            "metadata": {"organization_id": str(organization.id)},
+            "name": None,
+        }
+        request = self.generate_stripe_request(payload)
+        with (
+            patch(
+                "apps.stripe.views.stripe_get", new_callable=AsyncMock
+            ) as mock_stripe_get,
+            patch(
+                "apps.stripe.views.check_organization_throttle",
+                new=MagicMock(aenqueue=AsyncMock()),
+            ) as mock_throttle,
+        ):
+            mock_stripe_get.return_value = json.dumps(mock_customer_data)
+            response = await stripe_webhook_view(request)
+        self.assertEqual(response.status_code, 200)
+
+        await organization.arefresh_from_db()
+        await sub.arefresh_from_db()
+        self.assertIsNone(organization.stripe_primary_subscription_id)
+        self.assertFalse(organization.metered_billing_enabled)
+        # The dead item id must go too, or a later enable skips the attach and
+        # reuses it.
+        self.assertEqual(sub.metered_item_id, "")
+        # Quota just dropped to the free tier; don't wait for the next sweep.
+        mock_throttle.aenqueue.assert_awaited_once_with(
+            organization.id, bypass_cache=True
+        )
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_keeps_metered_billing_when_recoverable(self):
+        """unpaid is not terminal: the customer can pay the open invoice and the
+        same subscription returns to active with its metered item intact.
+        Dropping the opt-in there would silently throttle a paying customer."""
+        organization = await Organization.objects.acreate(
+            name="Unpaid Org", id=54323, metered_billing_enabled=True
+        )
+        product = await StripeProduct.objects.acreate(
+            stripe_id="prod_unpaid", name="P", description="", events=1, is_public=True
+        )
+        price = await StripePrice.objects.acreate(
+            stripe_id="price_unpaid", product=product, price=10.00, nickname="P"
+        )
+        now = timezone.now()
+        now_timestamp = int(now.timestamp())
+        sub = await StripeSubscription.objects.acreate(
+            stripe_id="sub_unpaid",
+            organization=organization,
+            price=price,
+            status=SubscriptionStatus.ACTIVE,
+            created=now,
+            current_period_start=now,
+            current_period_end=now,
+            start_date=now,
+            metered_item_id="si_1",
+        )
+        organization.stripe_primary_subscription = sub
+        await organization.asave(update_fields=["stripe_primary_subscription"])
+
+        payload = self.generate_subscription_event_data(
+            type="customer.subscription.updated",
+            event_id="evt_unpaid_test",
+            subscription_id=sub.stripe_id,
+            current_period_start=now_timestamp,
+            current_period_end=now_timestamp + 2592000,
+            price_id=price.stripe_id,
+            product_id=product.stripe_id,
+            status=SubscriptionStatus.UNPAID,
+            metered_item_id="si_1",
+        )
+        mock_customer_data = {
+            "object": "customer",
+            "id": "cus_test",
+            "email": "test@example.com",
+            "metadata": {"organization_id": str(organization.id)},
+            "name": None,
+        }
+        request = self.generate_stripe_request(payload)
+        with patch(
+            "apps.stripe.views.stripe_get", new_callable=AsyncMock
+        ) as mock_stripe_get:
+            mock_stripe_get.return_value = json.dumps(mock_customer_data)
+            response = await stripe_webhook_view(request)
+        self.assertEqual(response.status_code, 200)
+
+        await organization.arefresh_from_db()
+        await sub.arefresh_from_db()
+        # Pointer detached (it is not an active subscription) but the opt-in and
+        # the item survive for the recovery.
+        self.assertIsNone(organization.stripe_primary_subscription_id)
+        self.assertTrue(organization.metered_billing_enabled)
+        self.assertEqual(sub.metered_item_id, "si_1")
 
     @override_settings(
         STRIPE_WEBHOOK_SECRET="test_webhook_secret",
