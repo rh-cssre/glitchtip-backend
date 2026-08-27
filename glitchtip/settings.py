@@ -270,9 +270,9 @@ GLITCHTIP_OVERAGE_METER_EVENT_NAME = "glitchtip_overage_events"
 # case, so raise it per env for the rare very large customer.
 GLITCHTIP_OVERAGE_MAX_CAP_CENTS = env.int("GLITCHTIP_OVERAGE_MAX_CAP_CENTS", 1_000_000)
 GLITCHTIP_OVERAGE_TIERS: list[tuple[int | None, str]] = [
-    (400_000, "0.00015"),  # first 400k overage events: $0.15 / 1k
-    (2_000_000, "0.00010"),  # next, up to 2M total overage: $0.10 / 1k
-    (None, "0.00008"),  # beyond 2M overage: $0.08 / 1k
+    (1_000_000, "0.00017"),  # first 1M overage events: $0.17 / 1k
+    (10_000_000, "0.00015"),  # next, up to 10M total overage: $0.15 / 1k
+    (None, "0.00012"),  # beyond 10M overage: $0.12 / 1k
 ]
 
 # Enable/disable logs feature. When False, log events are rejected at ingest.
