@@ -241,3 +241,61 @@ class TestPeriodicSync(TestCase):
         self.assertEqual(diff.days, 0, "cycle_end should be period_start + N months")
         diff = relativedelta(subscription.subscription_cycle_start, anchor)
         self.assertEqual(diff.days, 0, "cycle_start should be period_start + N months")
+
+
+class TestRemoveInactivePrimarySubscriptions(TestCase):
+    """The periodic counterpart to the cancel webhook.
+
+    It is the safety net for a webhook that was lost or never sent (an
+    out-of-region customer never reaches the local handler at all), so it has
+    to make the same terminal-vs-recoverable distinction the webhook does.
+    """
+
+    async def _make_org(self, name, org_id, status, *, enabled=True):
+        now = timezone.now()
+        product = await StripeProduct.objects.acreate(
+            stripe_id=f"prod_{org_id}", name="P", events=1000, is_public=True
+        )
+        price = await StripePrice.objects.acreate(
+            stripe_id=f"price_{org_id}", product=product, price=10.00, nickname="P"
+        )
+        org = await Organization.objects.acreate(
+            name=name, id=org_id, metered_billing_enabled=enabled
+        )
+        sub = await StripeSubscription.objects.acreate(
+            stripe_id=f"sub_{org_id}",
+            organization=org,
+            price=price,
+            status=status,
+            created=now,
+            current_period_start=now,
+            current_period_end=now,
+            start_date=now,
+        )
+        org.stripe_primary_subscription = sub
+        await org.asave(update_fields=["stripe_primary_subscription"])
+        return org
+
+    async def test_clears_only_terminal_opt_ins(self):
+        active = await self._make_org("Active", 61, SubscriptionStatus.ACTIVE)
+        canceled = await self._make_org("Canceled", 62, SubscriptionStatus.CANCELED)
+        unpaid = await self._make_org("Unpaid", 63, SubscriptionStatus.UNPAID)
+
+        await StripeSubscription.remove_inactive_primary_subscriptions()
+
+        for org in (active, canceled, unpaid):
+            await org.arefresh_from_db()
+
+        # An active subscription is untouched entirely.
+        self.assertIsNotNone(active.stripe_primary_subscription_id)
+        self.assertTrue(active.metered_billing_enabled)
+
+        # Terminal: pointer detached and the opt-in dropped, because a
+        # resubscribe arrives as a new subscription with no metered item.
+        self.assertIsNone(canceled.stripe_primary_subscription_id)
+        self.assertFalse(canceled.metered_billing_enabled)
+
+        # Recoverable: pointer detached (it is not active) but the opt-in
+        # survives, so paying the open invoice restores overage silently.
+        self.assertIsNone(unpaid.stripe_primary_subscription_id)
+        self.assertTrue(unpaid.metered_billing_enabled)

@@ -18,6 +18,7 @@ from .client import (
 )
 from .constants import (
     ACTIVE_SUBSCRIPTION_STATUSES,
+    TERMINAL_SUBSCRIPTION_STATUSES,
     CollectionMethod,
     SubscriptionStatus,
 )
@@ -406,17 +407,23 @@ class StripeSubscription(StripeModel):
     async def remove_inactive_primary_subscriptions(cls):
         """Detach primary subscriptions that are no longer active.
 
-        Clears ``metered_billing_enabled`` alongside, for the same reason the
-        cancel webhook does: the metered item dies with the subscription, so a
-        flag left set advertises overage headroom the org does not have.
+        Clears ``metered_billing_enabled`` for terminal ones, for the same
+        reason the cancel webhook does: the metered item dies with the
+        subscription, so a flag left set advertises overage headroom the org
+        does not have. Recoverable statuses keep the opt-in — see
+        ``TERMINAL_SUBSCRIPTION_STATUSES``.
+
+        Order matters: clear the flag while the pointer still identifies which
+        subscription is terminal, then detach.
         """
-        await (
-            Organization.objects.filter(stripe_primary_subscription__isnull=False)
-            .exclude(
-                stripe_primary_subscription__status__in=ACTIVE_SUBSCRIPTION_STATUSES
-            )
-            .aupdate(stripe_primary_subscription=None, metered_billing_enabled=False)
-        )
+        inactive = Organization.objects.filter(
+            stripe_primary_subscription__isnull=False
+        ).exclude(stripe_primary_subscription__status__in=ACTIVE_SUBSCRIPTION_STATUSES)
+        await inactive.filter(
+            metered_billing_enabled=True,
+            stripe_primary_subscription__status__in=TERMINAL_SUBSCRIPTION_STATUSES,
+        ).aupdate(metered_billing_enabled=False)
+        await inactive.aupdate(stripe_primary_subscription=None)
 
     @classmethod
     async def sync_from_stripe(cls):

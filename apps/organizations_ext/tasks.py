@@ -119,6 +119,19 @@ async def _report_overage(
             # so ``billable_units`` describes a cycle Stripe has already closed
             # and billed. Reporting it would re-send the whole prior cycle as a
             # fresh delta and drag the anchor backwards; drop it instead.
+            #
+            # Logged because the anchor is monotonic and can never be walked
+            # back: were it ever to advance for some reason other than this
+            # race, overage would stop for the subscription with no other
+            # symptom than missing revenue.
+            logger.warning(
+                "Dropping stale overage report for %s: anchor %s is ahead of "
+                "cycle start %s (%s units unreported)",
+                sub.stripe_id,
+                period_start,
+                cycle_start,
+                billable_units,
+            )
             return
         if period_start != cycle_start:
             reported = 0  # new cycle: counter resets
@@ -129,7 +142,18 @@ async def _report_overage(
                 await _persist_overage(sub, cycle_start, billable_units)
             return
 
-        await _persist_overage(sub, cycle_start, billable_units)
+        if not await _persist_overage(sub, cycle_start, billable_units):
+            # Another writer advanced the anchor or the counter past us between
+            # the read above and this write (the lock is best-effort and can
+            # expire under a slow usage query). The counter no longer bounds
+            # what Stripe holds, so sending would bill a delta computed against
+            # a base someone else has already superseded.
+            logger.warning(
+                "Overage counter for %s moved under us; dropping a %s unit delta",
+                sub.stripe_id,
+                delta,
+            )
+            return
         identifier = f"{sub.stripe_id}:{cycle_start.isoformat()}:{reported}"
         try:
             await create_meter_event(
@@ -159,8 +183,11 @@ async def _report_overage(
         await cache.adelete(lock_key)
 
 
-async def _persist_overage(sub, cycle_start, units_reported: int) -> None:
+async def _persist_overage(sub, cycle_start, units_reported: int) -> bool:
     """Advance the overage counter + cycle anchor for ``sub``, never regressing.
+
+    Returns whether the write landed. A refusal means a concurrent writer has
+    already moved past this report, so the caller must not send it.
 
     A stale writer (expired lock) regressing the counter would recompute later
     deltas from too low a base and re-bill units Stripe already recorded, so
@@ -188,6 +215,7 @@ async def _persist_overage(sub, cycle_start, units_reported: int) -> None:
     if updated:
         sub.overage_units_reported = units_reported
         sub.overage_period_start = cycle_start
+    return bool(updated)
 
 
 async def _rollback_overage(sub, cycle_start, sent_target: int, base: int) -> None:
@@ -215,7 +243,7 @@ async def _check_and_update_throttle(org: Organization):
     total_event_count = 0
 
     if org.stripe_primary_subscription:
-        from apps.stripe.overage import units_for_budget
+        from apps.stripe.overage import overage_eligible, units_for_budget
 
         sub = org.stripe_primary_subscription
         price = sub.price
@@ -233,7 +261,18 @@ async def _check_and_update_throttle(org: Organization):
             counts = await get_event_counts(org.id, start, end)
             total_event_count = counts.total_event_count
 
-            if org.metered_billing_enabled and sub.metered_item_id and start:
+            # Both flags are sticky DB state that outlives the plan that
+            # justified them: a downgrade to a free plan keeps the subscription
+            # active, and the primary-subscription pointer is only cleared
+            # asynchronously. Without the eligibility test here the API refuses
+            # to *enable* overage on such an org while this path keeps invoicing
+            # it. `select_related` on both callers keeps this DB-free.
+            if (
+                org.metered_billing_enabled
+                and sub.metered_item_id
+                and start
+                and overage_eligible(sub)
+            ):
                 # Paid overage: charge for usage above quota up to the spend cap,
                 # then resume the progressive ramp (no further charges).
                 cap_units = units_for_budget(org.overage_spend_cap_cents)

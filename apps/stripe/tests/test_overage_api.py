@@ -107,7 +107,12 @@ class OverageAPITestCase(TestCase):
         self.price.price = 0
         self.price.save(update_fields=["price"])
 
-        self.assertFalse(self._status().json()["eligible"])
+        body = self._status().json()
+        self.assertFalse(body["eligible"])
+        # Eligibility and quota are separate questions: the plan still has its
+        # quota and the throttle path still enforces it, so the card must keep
+        # reporting the real number rather than falling back to the free tier.
+        self.assertEqual(body["quota"], QUOTA)
 
         res = self._configure({"enabled": True, "capCents": 5000})
         self.assertEqual(res.status_code, 400)
@@ -122,6 +127,21 @@ class OverageAPITestCase(TestCase):
 
         res = self._configure({"enabled": True, "capCents": 5000})
         self.assertEqual(res.status_code, 400)
+
+    def test_recoverable_statuses_stay_eligible(self):
+        """Eligibility tracks the active set, not "not canceled". trialing and
+        past_due are live subscriptions whose owners must keep the control."""
+        for status, expected in (
+            (SubscriptionStatus.TRIALING, True),
+            (SubscriptionStatus.PAST_DUE, True),
+            (SubscriptionStatus.UNPAID, False),
+            (SubscriptionStatus.PAUSED, False),
+            (SubscriptionStatus.CANCELED, False),
+        ):
+            with self.subTest(status):
+                self.sub.status = status
+                self.sub.save(update_fields=["status"])
+                self.assertIs(self._status().json()["eligible"], expected)
 
     def test_enable_attaches_item_and_sets_cap(self):
         item = AsyncMock(return_value=type("I", (), {"id": "si_new"})())

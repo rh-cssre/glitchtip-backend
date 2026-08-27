@@ -42,7 +42,7 @@ from .constants import (
 )
 from .exceptions import StripeError
 from .models import StripePrice, StripeProduct, StripeSubscription
-from .overage import cost_cents_for_units, units_for_budget
+from .overage import cost_cents_for_units, overage_eligible, units_for_budget
 from .utils import compute_cycle, select_subscription_items, unix_to_datetime
 
 logger = logging.getLogger(__name__)
@@ -536,25 +536,6 @@ async def _get_overage_price() -> StripePrice | None:
     )
 
 
-def overage_eligible(sub) -> bool:
-    """Whether ``sub`` can carry metered overage billing.
-
-    Overage is a usage charge layered on top of a plan, so it needs a live
-    *paid* plan with a finite quota to meter against. Free plans are ordinary
-    subscriptions here — self-serve signup only ever creates ``price=0`` ones —
-    so "has a subscription" is a different question from "is paying"; testing
-    only the former let a free org with no card on file attach a metered item.
-    ``no_throttle`` plans are unlimited and have nothing to meter against.
-    """
-    return bool(
-        sub
-        and sub.status in ACTIVE_SUBSCRIPTION_STATUSES
-        and sub.price.price > 0
-        and not sub.price.no_throttle
-        and (sub.price.product.events or 0) > 0
-    )
-
-
 @router.get(
     "subscriptions/{slug:organization_slug}/overage/",
     response=OverageStatusSchema,
@@ -573,7 +554,11 @@ async def get_overage_status(request: AuthHttpRequest, organization_slug: str):
     # POST would reject.
     plan_events = (sub.price.product.events or 0) if sub else 0
     eligible = overage_eligible(sub)
-    quota = plan_events if eligible else settings.GLITCHTIP_FREE_TIER_EVENTS
+    # Quota is a separate question from eligibility: an ineligible plan (unpaid,
+    # comped, quota-less) still has whatever quota it has, and _check_and_update_
+    # throttle enforces exactly this. Deriving it from `eligible` made the card
+    # report the free-tier number while a larger one was actually being enforced.
+    quota = plan_events or settings.GLITCHTIP_FREE_TIER_EVENTS
 
     usage = 0
     period = await get_current_period_dates(org)
