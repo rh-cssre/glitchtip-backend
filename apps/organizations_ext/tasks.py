@@ -114,6 +114,12 @@ async def _report_overage(
         reported, period_start = await StripeSubscription.objects.values_list(
             "overage_units_reported", "overage_period_start"
         ).aget(stripe_id=sub.stripe_id)
+        if period_start is not None and period_start > cycle_start:
+            # This check read the period dates before a renewal advanced them,
+            # so ``billable_units`` describes a cycle Stripe has already closed
+            # and billed. Reporting it would re-send the whole prior cycle as a
+            # fresh delta and drag the anchor backwards; drop it instead.
+            return
         if period_start != cycle_start:
             reported = 0  # new cycle: counter resets
 
@@ -159,7 +165,12 @@ async def _persist_overage(sub, cycle_start, units_reported: int) -> None:
     A stale writer (expired lock) regressing the counter would recompute later
     deltas from too low a base and re-bill units Stripe already recorded, so
     within a cycle the counter only moves forward; a decrease is legitimate
-    only when the cycle anchor changes (rollover reset).
+    only on rollover to a *later* cycle.
+
+    The anchor itself is likewise monotonic. Accepting an older one would let a
+    check that read pre-renewal period dates reset the counter and re-report a
+    cycle Stripe has already invoiced, so a lower ``cycle_start`` is refused
+    outright rather than treated as a rollover.
     """
     from apps.stripe.models import StripeSubscription
 
@@ -167,8 +178,11 @@ async def _persist_overage(sub, cycle_start, units_reported: int) -> None:
         Q(stripe_id=sub.stripe_id)
         & (
             Q(overage_period_start__isnull=True)
-            | ~Q(overage_period_start=cycle_start)
-            | Q(overage_units_reported__lt=units_reported)
+            | Q(overage_period_start__lt=cycle_start)
+            | Q(
+                overage_period_start=cycle_start,
+                overage_units_reported__lt=units_reported,
+            )
         )
     ).aupdate(overage_units_reported=units_reported, overage_period_start=cycle_start)
     if updated:

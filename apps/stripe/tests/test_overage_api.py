@@ -99,6 +99,30 @@ class OverageAPITestCase(TestCase):
         res = self._configure({"enabled": True, "capCents": 5000})
         self.assertEqual(res.status_code, 400)
 
+    def test_free_plan_is_not_eligible(self):
+        """Overage layers a usage charge on a paid plan, so a $0 plan must not
+        take it: self-serve signup only creates free subscriptions, so a check
+        for "has a subscription" would let any free org attach a metered item
+        (and be invoiced) with no card on file."""
+        self.price.price = 0
+        self.price.save(update_fields=["price"])
+
+        self.assertFalse(self._status().json()["eligible"])
+
+        res = self._configure({"enabled": True, "capCents": 5000})
+        self.assertEqual(res.status_code, 400)
+
+    def test_inactive_subscription_is_not_eligible(self):
+        """The primary-subscription pointer is cleared asynchronously, so a
+        canceled subscription can still be attached when the request lands."""
+        self.sub.status = SubscriptionStatus.CANCELED
+        self.sub.save(update_fields=["status"])
+
+        self.assertFalse(self._status().json()["eligible"])
+
+        res = self._configure({"enabled": True, "capCents": 5000})
+        self.assertEqual(res.status_code, 400)
+
     def test_enable_attaches_item_and_sets_cap(self):
         item = AsyncMock(return_value=type("I", (), {"id": "si_new"})())
         with (

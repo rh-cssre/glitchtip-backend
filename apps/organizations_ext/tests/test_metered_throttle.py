@@ -233,6 +233,39 @@ class MeteredThrottleTestCase(TestCase):
         sub.refresh_from_db()
         self.assertEqual(sub.overage_units_reported, 80_000)
 
+    def test_stale_check_from_a_closed_cycle_is_dropped(self):
+        # A check that read the period dates just before a renewal advanced
+        # them carries the *old* cycle's usage. The anchor has already rolled
+        # forward, so treating it as a rollover would re-report the whole prior
+        # cycle Stripe has already invoiced, and drag the anchor backwards.
+        org, sub = self._make_org()
+        sub.overage_period_start = sub.current_period_start + timedelta(days=30)
+        sub.overage_units_reported = 0
+        sub.save(update_fields=["overage_period_start", "overage_units_reported"])
+
+        mock_meter = self._run(org, 150_000)
+
+        mock_meter.assert_not_awaited()
+        sub.refresh_from_db()
+        self.assertEqual(sub.overage_units_reported, 0)
+        self.assertEqual(
+            sub.overage_period_start, sub.current_period_start + timedelta(days=30)
+        )
+
+    def test_persist_cannot_move_the_anchor_backwards(self):
+        # The same guard at the write: only a *later* cycle may reset the
+        # counter, so an older anchor is refused rather than read as rollover.
+        org, sub = self._make_org()
+        self._run(org, 180_000)  # counter -> 80,000
+        sub.refresh_from_db()
+        anchor = sub.overage_period_start
+
+        async_to_sync(_persist_overage)(sub, anchor - timedelta(days=30), 999_999)
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.overage_units_reported, 80_000)
+        self.assertEqual(sub.overage_period_start, anchor)
+
     def test_rollback_only_reverts_own_write(self):
         # Rollback is conditional on the counter still holding the write-ahead
         # value; a superseded write must not be stomped back.

@@ -231,7 +231,17 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
     # Primary subscription should be removed if status is not active
     elif stripe_subscription.stripe_id == organization.stripe_primary_subscription_id:
         organization.stripe_primary_subscription = None
-        await organization.asave(update_fields=["stripe_primary_subscription"])
+        # Overage rides on a subscription item that dies with the subscription,
+        # so leaving the flag set would advertise overage the org no longer has:
+        # a later resubscribe starts with no metered item, and the throttle path
+        # requires both, so events would be dropped while the UI showed overage
+        # enabled with headroom to spare. Re-enabling is an explicit opt-in.
+        organization.metered_billing_enabled = False
+        await organization.asave(
+            update_fields=["stripe_primary_subscription", "metered_billing_enabled"]
+        )
+        # Quota just dropped to the free tier; don't wait for the next sweep.
+        await check_organization_throttle.aenqueue(organization.id, True)
 
 
 async def handle_meter_error_event(payload: bytes) -> HttpResponse:

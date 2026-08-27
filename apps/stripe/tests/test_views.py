@@ -479,6 +479,77 @@ class TestStripeWebhookView(TestCase):
         STRIPE_WEBHOOK_TOLERANCE=300,
         STRIPE_REGION="",
     )
+    async def test_webhook_clears_metered_billing_when_canceled(self):
+        """Cancelling must also clear the org's overage flag.
+
+        The metered item dies with the subscription, so a flag left set
+        advertises headroom the org no longer has: a later resubscribe starts
+        with no metered item and the throttle path needs both, so events would
+        be silently dropped while the UI showed overage enabled.
+        """
+        organization = await Organization.objects.acreate(
+            name="Metered Cancel Org",
+            id=54322,
+            metered_billing_enabled=True,
+            overage_spend_cap_cents=5000,
+        )
+        product = await StripeProduct.objects.acreate(
+            stripe_id="prod_mcancel", name="P", description="", events=1, is_public=True
+        )
+        price = await StripePrice.objects.acreate(
+            stripe_id="price_mcancel", product=product, price=10.00, nickname="P"
+        )
+        now = timezone.now()
+        now_timestamp = int(now.timestamp())
+        subscription_id = "sub_metered_cancel"
+        sub = await StripeSubscription.objects.acreate(
+            stripe_id=subscription_id,
+            organization=organization,
+            price=price,
+            status=SubscriptionStatus.ACTIVE,
+            created=now,
+            current_period_start=now,
+            current_period_end=now,
+            start_date=now,
+            metered_item_id="si_1",
+        )
+        organization.stripe_primary_subscription = sub
+        await organization.asave(update_fields=["stripe_primary_subscription"])
+
+        payload = self.generate_subscription_event_data(
+            type="customer.subscription.updated",
+            event_id="evt_metered_cancel_test",
+            subscription_id=subscription_id,
+            current_period_start=now_timestamp,
+            current_period_end=now_timestamp + 2592000,
+            price_id=price.stripe_id,
+            product_id=product.stripe_id,
+            status=SubscriptionStatus.CANCELED,
+        )
+        mock_customer_data = {
+            "object": "customer",
+            "id": "cus_test",
+            "email": "test@example.com",
+            "metadata": {"organization_id": str(organization.id)},
+            "name": None,
+        }
+        request = self.generate_stripe_request(payload)
+        with patch(
+            "apps.stripe.views.stripe_get", new_callable=AsyncMock
+        ) as mock_stripe_get:
+            mock_stripe_get.return_value = json.dumps(mock_customer_data)
+            response = await stripe_webhook_view(request)
+        self.assertEqual(response.status_code, 200)
+
+        await organization.arefresh_from_db()
+        self.assertIsNone(organization.stripe_primary_subscription_id)
+        self.assertFalse(organization.metered_billing_enabled)
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
     async def test_webhook_ordering_and_deduplication(self):
         """Ensure mistimed and duplicated events are ignored."""
 

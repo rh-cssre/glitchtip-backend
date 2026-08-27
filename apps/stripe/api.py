@@ -536,6 +536,25 @@ async def _get_overage_price() -> StripePrice | None:
     )
 
 
+def overage_eligible(sub) -> bool:
+    """Whether ``sub`` can carry metered overage billing.
+
+    Overage is a usage charge layered on top of a plan, so it needs a live
+    *paid* plan with a finite quota to meter against. Free plans are ordinary
+    subscriptions here — self-serve signup only ever creates ``price=0`` ones —
+    so "has a subscription" is a different question from "is paying"; testing
+    only the former let a free org with no card on file attach a metered item.
+    ``no_throttle`` plans are unlimited and have nothing to meter against.
+    """
+    return bool(
+        sub
+        and sub.status in ACTIVE_SUBSCRIPTION_STATUSES
+        and sub.price.price > 0
+        and not sub.price.no_throttle
+        and (sub.price.product.events or 0) > 0
+    )
+
+
 @router.get(
     "subscriptions/{slug:organization_slug}/overage/",
     response=OverageStatusSchema,
@@ -551,10 +570,9 @@ async def get_overage_status(request: AuthHttpRequest, organization_slug: str):
     )
     sub = org.stripe_primary_subscription
     # Same test configure_overage applies, so the card can't offer a toggle the
-    # POST would reject: a plan with no quota (NULL or 0) has nothing to meter
-    # overage against, and no_throttle plans are unlimited already.
+    # POST would reject.
     plan_events = (sub.price.product.events or 0) if sub else 0
-    eligible = bool(sub and not sub.price.no_throttle and plan_events > 0)
+    eligible = overage_eligible(sub)
     quota = plan_events if eligible else settings.GLITCHTIP_FREE_TIER_EVENTS
 
     usage = 0
@@ -607,7 +625,7 @@ async def configure_overage(
     sub = org.stripe_primary_subscription
 
     if payload.enabled:
-        if not sub or sub.price.no_throttle or not sub.price.product.events:
+        if not overage_eligible(sub):
             return JsonResponse(
                 {"detail": "An active paid plan is required for overage billing."},
                 status=400,

@@ -404,12 +404,18 @@ class StripeSubscription(StripeModel):
 
     @classmethod
     async def remove_inactive_primary_subscriptions(cls):
+        """Detach primary subscriptions that are no longer active.
+
+        Clears ``metered_billing_enabled`` alongside, for the same reason the
+        cancel webhook does: the metered item dies with the subscription, so a
+        flag left set advertises overage headroom the org does not have.
+        """
         await (
             Organization.objects.filter(stripe_primary_subscription__isnull=False)
             .exclude(
                 stripe_primary_subscription__status__in=ACTIVE_SUBSCRIPTION_STATUSES
             )
-            .aupdate(stripe_primary_subscription=None)
+            .aupdate(stripe_primary_subscription=None, metered_billing_enabled=False)
         )
 
     @classmethod
