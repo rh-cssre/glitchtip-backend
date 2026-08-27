@@ -1,3 +1,4 @@
+import codecs
 import contextlib
 import json
 import tempfile
@@ -11,6 +12,7 @@ from django.urls import reverse
 from model_bakery import baker
 from pydantic import ValidationError
 
+from apps.difs.api import _PROGUARD_SNIFF_BYTES, extract_proguard_metadata
 from apps.difs.stacktrace_processor import (
     MAX_SCORED_ADDRS,
     StacktraceProcessor,
@@ -35,6 +37,73 @@ class DebugInformationFileModelTestCase(GlitchTestCase):
 
         dif = baker.make("difs.DebugInformationFile", data={"symbol_type": "proguard"})
         self.assertEqual(dif.is_proguard_mapping(), True)
+
+
+class ExtractProguardMetadataTestCase(GlitchTestCase):
+    def test_accepts_utf8_mapping_content(self):
+        metadata = extract_proguard_metadata(b"com.example.Foo -> a.b.c:\n")
+        self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
+
+    def test_accepts_mapping_with_header_comments(self):
+        content = (
+            b"# compiler: R8\n"
+            b"# compiler_version: 8.0.40\n"
+            b"# min_api: 21\n"
+            b"com.example.Foo -> a.b.c:\n"
+            b"    int field -> a\n"
+        )
+        metadata = extract_proguard_metadata(content)
+        self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
+
+    def test_accepts_empty_content(self):
+        # Matches the pre-existing, already-permissive behavior of
+        # ProguardMapper.open(), which does not error on an empty mapping.
+        metadata = extract_proguard_metadata(b"")
+        self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
+
+    def test_accepts_only_header_comments(self):
+        # No class records at all -- same "nothing to reject" situation as
+        # empty content.
+        metadata = extract_proguard_metadata(b"# compiler: R8\n# min_api: 21\n")
+        self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
+
+    def test_rejects_non_utf8_binary(self):
+        metadata = extract_proguard_metadata(b"\xff\xfe\x00\x01")
+        self.assertIsNone(metadata)
+
+    def test_rejects_plain_text(self):
+        # ProguardMapper.open() from `symbolic` accepts this too (verified
+        # locally against both 10.1.1 and 13.9.0 -- its line parser silently
+        # skips anything it can't parse as a mapping record rather than
+        # erroring), so this is a deliberate tightening, not a preserved
+        # behavior.
+        metadata = extract_proguard_metadata(
+            b"hello world, this is not a proguard mapping at all\njust some prose.\n"
+        )
+        self.assertIsNone(metadata)
+
+    def test_rejects_csv_like_content(self):
+        metadata = extract_proguard_metadata(b"a,b,c\n1,2,3\n")
+        self.assertIsNone(metadata)
+
+    def test_rejects_member_line_without_class_header(self):
+        # A member record can never legally appear before its class record.
+        metadata = extract_proguard_metadata(b"    int field -> a\n")
+        self.assertIsNone(metadata)
+
+    def test_accepts_content_with_bom(self):
+        content = codecs.BOM_UTF8 + b"com.example.Foo -> a.b.c:\n"
+        metadata = extract_proguard_metadata(content)
+        self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
+
+    def test_ignores_non_utf8_bytes_past_the_sniff_window(self):
+        # Only the first _PROGUARD_SNIFF_BYTES are inspected -- a valid class
+        # record within that window is enough, regardless of what a huge real
+        # mapping file contains further down (checked in full by the real
+        # ProguardMapper at resolve time instead).
+        content = b"com.example.Foo -> a.b.c:\n" + b"\xff" * (2 * _PROGUARD_SNIFF_BYTES)
+        metadata = extract_proguard_metadata(content)
+        self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
 
 
 class DifsAssembleAPITestCase(GlitchTestCase):
@@ -220,6 +289,32 @@ class DsymsAPIViewTestCase(GlitchTestCase):
 
         self.assertEqual(response.json(), expected_response)
         self.assertEqual(response.status_code, 400)
+
+    async def test_post_invalid_proguard_content(self):
+        """Non-UTF8 binary content inside proguard/<uuid>.txt should be rejected."""
+        proguard_file = MagicMock()
+        proguard_file.read.return_value = b"\xff\xfe\x00\x01"
+
+        uploaded_zip_file = MagicMock()
+        uploaded_zip_file.namelist.return_value = iter([f"proguard/{self.uuid}.txt"])
+        uploaded_zip_file.open.return_value.__enter__.return_value = proguard_file
+
+        upload_file = SimpleUploadedFile(
+            "example.zip", b"random_content", content_type="multipart/form-data"
+        )
+        data = {"file": upload_file}
+
+        with (
+            patch("zipfile.is_zipfile", return_value=True),
+            patch("zipfile.ZipFile") as ZipFile,
+        ):
+            ZipFile.return_value.__enter__.return_value = uploaded_zip_file
+            response = await self.async_client.post(self.url, data)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json(), {"detail": "Invalid proguard mapping file uploaded"}
+        )
 
     async def test_get(self):
         """
