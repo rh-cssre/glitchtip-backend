@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     dependencies = [
         ("organizations_ext", "0011_organization_is_deleted"),
-        ("sourcecode", "0002_alter_debugsymbolbundle_file_and_more"),
+        ("sourcecode", "0001_squashed_0002_alter_debugsymbolbundle_file_and_more"),
     ]
 
     operations = [

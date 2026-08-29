@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("stripe", "0013_stripeprice_interval_stripeprice_no_throttle"),
+        ("stripe", "0001_squashed_0013_stripeprice_interval_stripeprice_no_throttle"),
     ]
 
     operations = [

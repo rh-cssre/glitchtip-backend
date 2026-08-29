@@ -50,7 +50,7 @@ def drop_partitions(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("projects", "0018_auto_20251117_2129"),
+        ("projects", "0017_auto_20250627_1413"),
         ("issue_events", "0007_storage_v2_events"),
     ]
 

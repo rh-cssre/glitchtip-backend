@@ -6,11 +6,8 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("organizations_ext", "0008_merge_20250210_1625"),
-        (
-            "stripe",
-            "0008_remove_stripesubscription_unique_primary_subscription_per_organization_and_more",
-        ),
+        ("organizations_ext", "0001_squashed_0008_merge_20250210_1625"),
+        ("stripe", "0001_squashed_0013_stripeprice_interval_stripeprice_no_throttle"),
     ]
 
     operations = [

@@ -79,13 +79,14 @@ Load benchmarks live in [benchmarks/](./benchmarks/README.md) — see
 
 ### Memory profiling
 
-Use memray to profile. For example we can profile celery beat (bin/run-beat.sh) with
+Use memray to profile. For example, to profile the server (which also runs the
+task worker and scheduler) replace the container's command with:
 
 ```shell
-exec memray run /usr/local/bin/celery -A glitchtip beat -s /tmp/celerybeat-schedule -l info --pidfile=
+exec memray run -o /tmp/glitchtip.bin -m granian --interface asgi glitchtip.asgi:application --host 0.0.0.0 --port 8000
 ```
 
-Then run `memray flamegraph file.bin` on the above file output.
+Then run `memray flamegraph /tmp/glitchtip.bin` on the above file output.
 
 ### Observability metrics with Prometheus
 
@@ -98,7 +99,6 @@ In order to enable json logging, set the environment as follows::
 
 ```
 DJANGO_LOGGING_HANDLER_CLASS=google.cloud.logging_v2.handlers.ContainerEngineHandler
-UWSGI_LOG_ENCODER='json {"severity":"info","timestamp":${unix},"message":"${msg}"}}'
 ```
 
 # Acknowledgements

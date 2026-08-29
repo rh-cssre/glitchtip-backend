@@ -14,7 +14,6 @@ dependencies = [
     "django-extensions~=4.0",
     "django-organizations~=2.7",
     "django-storages[boto3,azure,google]~=1.12",
-    "uWSGI~=2.0",
     "whitenoise~=6.0",
     "sentry-sdk~=2.20",
     "django-anymail~=15.0",
@@ -24,7 +23,6 @@ dependencies = [
     "aiohttp~=3.7",
     "google-cloud-logging~=3.0",
     "django-prometheus~=2.2",
-    "uwsgi-chunked~=0.1",
     "django-import-export~=4.1",
     # Library-only: psycopg.sql composition and Jsonb/Json parameter
     # wrappers, plus the import Django's stock postgresql backend performs.

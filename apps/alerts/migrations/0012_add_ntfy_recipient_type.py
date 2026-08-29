@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("alerts", "0011_alertrecipient_tags_to_add"),
+        ("alerts", "0001_squashed_0011_alertrecipient_tags_to_add"),
     ]
 
     operations = [

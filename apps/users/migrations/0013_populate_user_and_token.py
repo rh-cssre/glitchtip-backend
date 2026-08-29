@@ -33,7 +33,7 @@ def provision_user_and_token(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("users", "0011_alter_user_email"),
+        ("users", "0001_squashed_0012_auto_20240727_1849"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         migrations.swappable_dependency("api_tokens.APIToken"),
     ]

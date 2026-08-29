@@ -85,7 +85,7 @@ async def create_organization(request: AuthHttpRequest, payload: OrganizationInS
     """
     Create new organization
     The first organization on a server is always allowed to be created.
-    Afterwards, ENABLE_OPEN_USER_REGISTRATION is checked.
+    Afterwards, ENABLE_ORGANIZATION_CREATION is checked.
     Superusers are always allowed to create organizations.
     """
     user = await aget_object_or_404(User, id=request.auth.user_id)

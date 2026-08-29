@@ -3,26 +3,16 @@
 from django.db import migrations, models
 
 
-def delete_null_method_transaction_groups(apps, schema_editor):
-    TransactionGroup = apps.get_model("performance", "TransactionGroup")
-    TransactionGroup.objects.filter(method__isnull=True).delete()
-
-
 class Migration(migrations.Migration):
-    atomic = False  # Postgres transactions don't support editing data + schema at once.
-
     dependencies = [
         ("performance", "0015_transactiongroup_is_deleted"),
-        ("projects", "0017_auto_20250627_1413"),
+        ("projects", "0001_squashed_0016_auto_20250125_1733"),
     ]
 
     operations = [
         migrations.AlterUniqueTogether(
             name="transactiongroup",
             unique_together=set(),
-        ),
-        migrations.RunPython(
-            delete_null_method_transaction_groups, migrations.RunPython.noop
         ),
         migrations.AlterField(
             model_name="transactiongroup",

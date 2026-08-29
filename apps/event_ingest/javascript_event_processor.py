@@ -81,7 +81,7 @@ class JavascriptEventProcessor:
 
     def get_stacktrace_exceptions(self) -> list["EventException"]:
         data = self.data
-        if data.exception and not isinstance(data.exception, list):
+        if data.exception:
             return [
                 exception for exception in data.exception.values if exception.stacktrace
             ]

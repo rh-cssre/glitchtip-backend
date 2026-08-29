@@ -3,17 +3,6 @@
 from django.db import migrations, models
 
 
-def null_out_overage_quota(apps, schema_editor):
-    """The overage product has no quota; 0 was only ever a placeholder."""
-    StripeProduct = apps.get_model("stripe", "StripeProduct")
-    StripeProduct.objects.filter(is_overage=True).update(events=None)
-
-
-def zero_out_overage_quota(apps, schema_editor):
-    StripeProduct = apps.get_model("stripe", "StripeProduct")
-    StripeProduct.objects.filter(is_overage=True).update(events=0)
-
-
 class Migration(migrations.Migration):
     dependencies = [
         ("stripe", "0018_stripeproduct_allow_sso"),
@@ -45,7 +34,6 @@ class Migration(migrations.Migration):
                 null=True,
             ),
         ),
-        migrations.RunPython(null_out_overage_quota, zero_out_overage_quota),
     ]
 
     # Existing rows default to active=True. Anything already archived in Stripe

@@ -5,9 +5,9 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("files", "0009_alter_file_size"),
-        ("releases", "0005_alter_releasefile_unique_together_and_more"),
-        ("sourcecode", "0001_initial"),
+        ("files", "0001_squashed_0009_alter_file_size"),
+        ("releases", "0001_squashed_0005_alter_releasefile_unique_together_and_more"),
+        ("sourcecode", "0001_squashed_0002_alter_debugsymbolbundle_file_and_more"),
     ]
 
     operations = [

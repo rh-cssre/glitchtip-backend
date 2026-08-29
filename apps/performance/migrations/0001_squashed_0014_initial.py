@@ -21,11 +21,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        (
-            "projects",
-            "0001_squashed_0009_alter_project_id_alter_projectcounter_id_and_more",
-        ),
-        ("projects", "0015_rename_label_projectkey_name_projectkey_is_active"),
+        ("projects", "0001_squashed_0016_auto_20250125_1733"),
     ]
 
     operations = [

@@ -83,12 +83,16 @@ if "GLITCHTIP_INSTANCE_NAME" in os.environ:
     GLITCHTIP_INSTANCE_NAME = env.str("GLITCHTIP_INSTANCE_NAME", None, multiline=True)
 
 # Used in email and DSN generation. Set to full domain such as https://glitchtip.example.com
+# GLITCHTIP_DOMAIN is the original name, still what install.md documents.
 default_url = env.str(
     "APP_URL", env.str("GLITCHTIP_DOMAIN", "http://localhost:8000")
 )  # DigitalOcean App Platform uses APP_URL
 GLITCHTIP_URL = env.url("GLITCHTIP_URL", default_url)
 if GLITCHTIP_URL.scheme not in ["http", "https"]:
-    raise ImproperlyConfigured("GLITCHTIP_DOMAIN must start with http or https")
+    raise ImproperlyConfigured(
+        "The GlitchTip URL must start with http or https "
+        "(set via GLITCHTIP_URL, GLITCHTIP_DOMAIN, or APP_URL)"
+    )
 
 # If True, use a relative URL in chunk upload responses.
 GLITCHTIP_CHUNK_UPLOAD_USE_RELATIVE_URL = env.bool(
@@ -192,21 +196,15 @@ PARTITION_HASH_BUCKETS = env.int("PARTITION_HASH_BUCKETS", 2)
 
 # ── Retention settings ──────────────────────────────────────────────
 # More retention days means more partitions, which spends the same lock budget.
-# Master default; falls back to legacy GLITCHTIP_MAX_EVENT_LIFE_DAYS
-GLITCHTIP_RETENTION_DAYS = env.int(
-    "GLITCHTIP_RETENTION_DAYS",
-    default=env.int("GLITCHTIP_MAX_EVENT_LIFE_DAYS", default=90),
-)
+# Master default for every per-type retention below.
+GLITCHTIP_RETENTION_DAYS = env.int("GLITCHTIP_RETENTION_DAYS", default=90)
 
 # Per-type total retention (hot + cold combined)
 GLITCHTIP_EVENT_RETENTION_DAYS = env.int(
     "GLITCHTIP_EVENT_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
 )
 GLITCHTIP_TRANSACTION_RETENTION_DAYS = env.int(
-    "GLITCHTIP_TRANSACTION_RETENTION_DAYS",
-    default=env.int(
-        "GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS", default=GLITCHTIP_RETENTION_DAYS
-    ),
+    "GLITCHTIP_TRANSACTION_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
 )
 # Reject transaction/span events whose timestamp is further in the future
 # than this (clearly-broken clients) — bounds garbage so cold-storage
@@ -224,18 +222,13 @@ GLITCHTIP_SPAN_RAW_RETENTION_DAYS = env.int(
     "GLITCHTIP_SPAN_RAW_RETENTION_DAYS", default=30
 )
 GLITCHTIP_UPTIME_RETENTION_DAYS = env.int(
-    "GLITCHTIP_UPTIME_RETENTION_DAYS",
-    default=env.int(
-        "GLITCHTIP_MAX_UPTIME_CHECK_LIFE_DAYS", default=GLITCHTIP_RETENTION_DAYS
-    ),
+    "GLITCHTIP_UPTIME_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
 )
 GLITCHTIP_FILE_RETENTION_DAYS = env.int(
-    "GLITCHTIP_FILE_RETENTION_DAYS",
-    default=env.int("GLITCHTIP_MAX_FILE_LIFE_DAYS", default=GLITCHTIP_RETENTION_DAYS),
+    "GLITCHTIP_FILE_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
 )
 GLITCHTIP_LOG_RETENTION_DAYS = env.int(
-    "GLITCHTIP_LOG_RETENTION_DAYS",
-    default=env.int("GLITCHTIP_LOGS_COLD_DAYS", default=GLITCHTIP_RETENTION_DAYS),
+    "GLITCHTIP_LOG_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
 )
 GLITCHTIP_RELEASE_RETENTION_DAYS = env.int(
     "GLITCHTIP_RELEASE_RETENTION_DAYS", default=365
@@ -305,14 +298,8 @@ GLITCHTIP_ALLOW_PRIVATE_IPS = env.bool("GLITCHTIP_ALLOW_PRIVATE_IPS", False)
 
 
 # Hot storage (PostgreSQL retention before archival to cold)
-GLITCHTIP_EVENT_HOT_DAYS = env.int(
-    "GLITCHTIP_EVENT_HOT_DAYS",
-    default=env.int("GLITCHTIP_EVENTS_HOT_DAYS", default=30),
-)
-GLITCHTIP_LOG_HOT_DAYS = env.int(
-    "GLITCHTIP_LOG_HOT_DAYS",
-    default=env.int("GLITCHTIP_LOGS_HOT_DAYS", default=7),
-)
+GLITCHTIP_EVENT_HOT_DAYS = env.int("GLITCHTIP_EVENT_HOT_DAYS", default=30)
+GLITCHTIP_LOG_HOT_DAYS = env.int("GLITCHTIP_LOG_HOT_DAYS", default=7)
 
 # DuckDB extension directory (pre-installed in Docker image at /opt/duckdb/extensions)
 DUCKDB_EXTENSION_DIRECTORY = env.str("DUCKDB_EXTENSION_DIRECTORY", None)
@@ -432,7 +419,8 @@ EVENT_STORE_DEBUG = env.bool("EVENT_STORE_DEBUG", False)
 
 
 STATIC_URL = "static/"
-# Base HREF, such as example.com/glitchtip/ where BASE_PATH would be "/glitchtip"
+# Base HREF, such as example.com/glitchtip/ where BASE_PATH would be "/glitchtip".
+# FORCE_SCRIPT_NAME is Django's own name for this setting and is accepted too.
 if "BASE_PATH" in os.environ or "FORCE_SCRIPT_NAME" in os.environ:
     FORCE_SCRIPT_NAME = env.str("BASE_PATH", env.str("FORCE_SCRIPT_NAME", ""))
 
@@ -513,28 +501,28 @@ if SENTRY_DSN:
 
         return event
 
-    # Ignore whitenoise served static routes
+    # Ignore whitenoise served static routes. The path comes off the ASGI
+    # scope; STATIC_URL is stored without a leading slash, so it is compared
+    # against the request path in the rooted form the scope carries, including
+    # any BASE_PATH the app is mounted under. A prefix of "/" would match every
+    # request, so an unset or root STATIC_URL disables the filter instead.
+    _static_path_prefix = "/" + STATIC_URL.lstrip("/")
+    if _static_path_prefix == "/":
+        _static_path_prefix = None
+
     def traces_sampler(sampling_context):
-        if (
-            sampling_context.get("wsgi_environ", {})
-            .get("PATH_INFO", "")
-            .startswith(STATIC_URL)
-        ):
-            return 0.0
+        if _static_path_prefix:
+            scope = sampling_context.get("asgi_scope", {})
+            # The scope's path already carries root_path, so the prefix has to
+            # as well when the app is mounted under a sub-path.
+            prefix = scope.get("root_path", "") + _static_path_prefix
+            if scope.get("path", "").startswith(prefix):
+                return 0.0
         return SENTRY_TRACES_SAMPLE_RATE
 
     release = "glitchtip@" + GLITCHTIP_VERSION if GLITCHTIP_VERSION else None
 
-    _is_worker = env.bool("IS_WORKER", False)
-    _embed_worker = os.environ.get("GLITCHTIP_EMBED_WORKER") == "true"
-    if _is_worker:
-        _default_service = "glitchtip-worker"
-    elif _embed_worker:
-        _default_service = "glitchtip"
-    else:
-        _default_service = "glitchtip-web"
-
-    SENTRY_SERVICE_NAME = env.str("SENTRY_SERVICE_NAME", _default_service)
+    SENTRY_SERVICE_NAME = env.str("SENTRY_SERVICE_NAME", "glitchtip")
 
     # Disable auto-discovered integrations that add overhead without value:
     # - ModulesIntegration: serializes all ~2600 sys.modules on every error event
@@ -610,16 +598,11 @@ AIOHTTP_CONFIG = {
 ENABLE_ADMIN = env.bool("ENABLE_ADMIN", True)
 ENABLE_OPENAPI = env.bool("ENABLE_OPENAPI", True)
 
-WEB_INSTALLED_APPS = [
+INSTALLED_APPS = [
+    *(["django.contrib.admin"] if ENABLE_ADMIN else []),
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "ninja",
-]
-if ENABLE_ADMIN:
-    WEB_INSTALLED_APPS.insert(0, "django.contrib.admin")
-
-
-INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.humanize",
@@ -671,10 +654,6 @@ INSTALLED_APPS += [
     "apps.oauth",
     "import_export",  # Contains import management command, keep under apps.importer
 ]
-
-IS_WORKER = env.bool("IS_WORKER", False)
-if not IS_WORKER:
-    INSTALLED_APPS = WEB_INSTALLED_APPS + INSTALLED_APPS
 
 # Ensure no one uses runsslserver in production
 if SECRET_KEY == "change_me" and DEBUG is True:
@@ -739,8 +718,6 @@ TEMPLATES = [
         },
     },
 ]
-
-WSGI_APPLICATION = "glitchtip.wsgi.application"
 
 # Defaults to True because Sentry SDKs send events from arbitrary user domains.
 # Set to False and configure CORS_ORIGIN_WHITELIST only if you control all client origins.
@@ -930,7 +907,14 @@ for db_config in DATABASES.values():
     # ``async_connections`` discovers via load_backend, so sync paths (ORM,
     # migrations, admin) and async cursors all run on the Rust driver.
     db_config["ENGINE"] = DATABASE_ENGINE
-    db_config.setdefault("CONN_MAX_AGE", env.int("DATABASE_CONN_MAX_AGE", 0))
+    # Persistent connections are not supported. Django's own documentation
+    # says to disable them under ASGI in favour of the driver's pooling, and
+    # GlitchTip only runs as an ASGI application. Assigned rather than
+    # defaulted, so neither a DATABASE_URL nor an explicit DATABASES entry can
+    # reintroduce one: a non-zero value skipped the pool configuration below,
+    # which left the driver pooling at its own built-in size and ignoring
+    # every DATABASE_POOL_* setting.
+    db_config["CONN_MAX_AGE"] = 0
     db_config.setdefault(
         "CONN_HEALTH_CHECKS", env.bool("DATABASE_CONN_HEALTH_CHECKS", False)
     )
@@ -940,8 +924,9 @@ for db_config in DATABASES.values():
     options = db_config.setdefault("OPTIONS", {})
     pooling_already_configured = "pool" in options
 
-    # Django Connection Pooling requires CONN_MAX_AGE = 0
-    if not pooling_already_configured and db_config["CONN_MAX_AGE"] == 0:
+    # Pooling is what replaces persistent connections, so it is configured
+    # unless the operator supplied their own pool above.
+    if not pooling_already_configured:
         options["pool"] = {
             "min_size": env.int("DATABASE_POOL_MIN_SIZE", 2),
             "max_size": env.int("DATABASE_POOL_MAX_SIZE", 20),
@@ -1045,18 +1030,6 @@ VTASKS_TASK_CONTEXT = "glitchtip.vtasks_context.sentry_task_scope"
 
 # Maximum number of issues send in a single alert payload
 MAX_ISSUES_PER_ALERT = env.int("MAX_ISSUES_PER_ALERT", 3)
-
-# Support running in WSGI mode (uWSGI or Granian WSGI)
-# We need to use a different cache backend for WSGI to avoid async loop issues
-try:
-    import uwsgi  # noqa
-
-    HAS_UWSGI = True
-except ImportError:
-    HAS_UWSGI = False
-
-# Default to True for now, but if running under uWSGI or Granian WSGI, we might need to switch
-USE_ASYNC_SERVER = env.bool("USE_ASYNC_SERVER", True)
 
 # VALKEY_URL drives both cache and task broker. Empty string disables valkey.
 # TLS: use rediss:// or valkeys:// URL scheme. For custom CA or mTLS, set
@@ -1280,9 +1253,7 @@ ENABLE_USER_REGISTRATION = env.bool("ENABLE_USER_REGISTRATION", True)
 ENABLE_SOCIAL_APPS_USER_REGISTRATION = env.bool(
     "ENABLE_SOCIAL_APPS_USER_REGISTRATION", ENABLE_USER_REGISTRATION
 )
-ENABLE_ORGANIZATION_CREATION = env.bool(
-    "ENABLE_OPEN_USER_REGISTRATION", env.bool("ENABLE_ORGANIZATION_CREATION", False)
-)
+ENABLE_ORGANIZATION_CREATION = env.bool("ENABLE_ORGANIZATION_CREATION", False)
 
 AUTHENTICATION_BACKENDS = (
     # Needed to login by username in Django admin, regardless of `allauth`.

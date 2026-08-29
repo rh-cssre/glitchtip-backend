@@ -10,8 +10,8 @@ The scheduled maintenance task already does this, but scheduled tasks run
 once cluster-wide per interval — only the pod whose worker picks the task
 up gets trimmed. This wrapper runs the same trim inside every ASGI process
 on a conservative timer, reclaiming pages in place rather than by recycling
-the worker. Dedicated ``runworker`` processes don't go through ASGI and
-keep relying on the maintenance-task trim.
+the worker. Every GlitchTip process is an ASGI process, so every process
+gets it.
 """
 
 import asyncio

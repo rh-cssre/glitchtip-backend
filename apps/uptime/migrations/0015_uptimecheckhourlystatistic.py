@@ -36,7 +36,7 @@ def create_initial_partitions(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("uptime", "0014_backfill_cached_fields"),
+        ("uptime", "0013_monitor_cached_fields"),
         ("organizations_ext", "0011_organization_is_deleted"),
     ]
 
