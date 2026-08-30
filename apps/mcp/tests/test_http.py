@@ -10,11 +10,13 @@ import time
 from contextlib import asynccontextmanager
 
 import httpx2
+from asgiref.sync import sync_to_async
 from django.core.cache import cache
 from django.test import TestCase
 from model_bakery import baker
 
-from apps.mcp.server import build_http_app, mcp
+from apps.api_tokens.models import APIToken, generate_token
+from apps.mcp.server import build_http_app
 from apps.oauth.provider import _access_cache_key
 from glitchtip.asgi import MCPDjangoDispatcher
 
@@ -25,6 +27,13 @@ INITIALIZE_PARAMS = {
 }
 
 ACCEPT_HEADERS = "application/json, text/event-stream"
+
+
+def _client(app) -> httpx2.AsyncClient:
+    """An HTTP client that speaks straight to an ASGI app, no socket."""
+    return httpx2.AsyncClient(
+        transport=httpx2.ASGITransport(app=app), base_url="http://testserver"
+    )
 
 
 def _jsonrpc(method: str, params: dict | None = None, req_id: int = 1) -> dict:
@@ -85,9 +94,6 @@ class MCPHttpAuthTest(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        # Reset the SDK's lazily-cached session manager so each build gets a
-        # fresh one; streamable_http_app() reuses it otherwise.
-        mcp._lowlevel_server._session_manager = None
         cls.app = build_http_app()
 
     async def _post(self, body, token=None, host="localhost:8000"):
@@ -98,10 +104,7 @@ class MCPHttpAuthTest(TestCase):
         }
         if token:
             headers["Authorization"] = f"Bearer {token}"
-        async with httpx2.AsyncClient(
-            transport=httpx2.ASGITransport(app=self.app),
-            base_url="http://testserver",
-        ) as client:
+        async with _client(self.app) as client:
             return await client.post("/mcp", json=body, headers=headers)
 
     async def test_no_auth_returns_401(self):
@@ -119,7 +122,6 @@ class MCPHttpAuthTest(TestCase):
 
 def _store_oauth_token(user, scopes=None):
     """Store an OAuth access token in Valkey and return the token string."""
-    from apps.api_tokens.models import generate_token
 
     if scopes is None:
         scopes = ["org:read", "event:read", "project:read", "team:read", "member:read"]
@@ -149,23 +151,15 @@ class MCPHttpIntegrationTest(TestCase):
         cache.clear()
         super().tearDown()
 
-    def _fresh_app(self):
-        """Create a fresh ASGI app with a new session manager."""
-        mcp._lowlevel_server._session_manager = None
-        return build_http_app()
-
     async def test_initialize_with_valid_token(self):
-        app = self._fresh_app()
+        app = build_http_app()
         async with _run_lifespan(app):
             headers = {
                 "Content-Type": "application/json",
                 "Accept": ACCEPT_HEADERS,
                 "Authorization": f"Bearer {self.token}",
             }
-            async with httpx2.AsyncClient(
-                transport=httpx2.ASGITransport(app=app),
-                base_url="http://testserver",
-            ) as client:
+            async with _client(app) as client:
                 resp = await client.post(
                     "/mcp",
                     json=_jsonrpc("initialize", INITIALIZE_PARAMS),
@@ -185,17 +179,14 @@ class MCPHttpIntegrationTest(TestCase):
             self.assertIn("untrusted", instructions.lower())
 
     async def test_tools_call_with_valid_token(self):
-        app = self._fresh_app()
+        app = build_http_app()
         async with _run_lifespan(app):
             headers = {
                 "Content-Type": "application/json",
                 "Accept": ACCEPT_HEADERS,
                 "Authorization": f"Bearer {self.token}",
             }
-            async with httpx2.AsyncClient(
-                transport=httpx2.ASGITransport(app=app),
-                base_url="http://testserver",
-            ) as client:
+            async with _client(app) as client:
                 resp = await client.post(
                     "/mcp",
                     json=_jsonrpc(
@@ -216,23 +207,17 @@ class MCPHttpIntegrationTest(TestCase):
 
     async def test_api_token_auth(self):
         """MCP endpoint should accept regular API tokens, not just OAuth tokens."""
-        from asgiref.sync import sync_to_async
-
-        from apps.api_tokens.models import APIToken
 
         api_token = await sync_to_async(APIToken.objects.create)(user=self.user)
 
-        app = self._fresh_app()
+        app = build_http_app()
         async with _run_lifespan(app):
             headers = {
                 "Content-Type": "application/json",
                 "Accept": ACCEPT_HEADERS,
                 "Authorization": f"Bearer {api_token.token}",
             }
-            async with httpx2.AsyncClient(
-                transport=httpx2.ASGITransport(app=app),
-                base_url="http://testserver",
-            ) as client:
+            async with _client(app) as client:
                 resp = await client.post(
                     "/mcp",
                     json=_jsonrpc("initialize", INITIALIZE_PARAMS),
@@ -251,12 +236,9 @@ class MCPHttpIntegrationTest(TestCase):
         The MCP SDK registers the protected resource route WITH the /mcp
         suffix, so stripping it causes a 404 during OAuth discovery.
         """
-        app = self._fresh_app()
+        app = build_http_app()
         async with _run_lifespan(app):
-            async with httpx2.AsyncClient(
-                transport=httpx2.ASGITransport(app=app),
-                base_url="http://testserver",
-            ) as client:
+            async with _client(app) as client:
                 resp = await client.get(
                     "/.well-known/oauth-protected-resource/mcp",
                     headers={
@@ -273,7 +255,7 @@ class MCPHttpIntegrationTest(TestCase):
         Reproduces the staging bug where DNS rebinding protection
         rejected requests with Host: staging.glitchtip.com.
         """
-        app = self._fresh_app()
+        app = build_http_app()
         async with _run_lifespan(app):
             headers = {
                 "Content-Type": "application/json",
@@ -281,10 +263,7 @@ class MCPHttpIntegrationTest(TestCase):
                 "Host": "staging.glitchtip.com",
                 "Authorization": f"Bearer {self.token}",
             }
-            async with httpx2.AsyncClient(
-                transport=httpx2.ASGITransport(app=app),
-                base_url="http://testserver",
-            ) as client:
+            async with _client(app) as client:
                 resp = await client.post(
                     "/mcp",
                     json=_jsonrpc("initialize", INITIALIZE_PARAMS),
