@@ -1,7 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from unittest import mock
 
-from aioresponses import aioresponses
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.core import mail
@@ -14,6 +13,7 @@ from model_bakery import baker
 from apps.alerts.models import ProjectAlert
 from apps.organizations_ext.constants import OrganizationUserRole
 from apps.projects.models import ProjectAlertStatus
+from glitchtip.test_utils.aiohttp_mock import mock_aiohttp
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
 from ..constants import MonitorType
@@ -64,7 +64,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
 
         self.assertGreaterEqual(mocked.aenqueue.call_count, 1)
 
-    @aioresponses()
+    @mock_aiohttp()
     def test_fetch_all(self, mocked):
         test_url = "https://example.com"
         mocked.get(test_url, status=200)
@@ -74,7 +74,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         results = async_to_sync(fetch_all)(monitors)
         self.assertEqual(results[0]["id"], mon1.pk)
 
-    @aioresponses()
+    @mock_aiohttp()
     def test_monitor_checks_integration(self, mocked):
         test_url = "https://example.com"
         mocked.get(test_url, status=200)
@@ -136,7 +136,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         latest_check = mon.checks.order_by("-id").first()
         self.assertTrue(latest_check.is_change)
 
-    @aioresponses()
+    @mock_aiohttp()
     def test_expected_response(self, mocked):
         test_url = "https://example.com"
 
@@ -163,7 +163,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         self.assertFalse(check.is_up)
         self.assertEqual(check.data["payload"], "Status: Failure")
 
-    @aioresponses()
+    @mock_aiohttp()
     def test_monitor_notifications(self, mocked):
         self.create_user_and_project()
         test_url = "https://example.com"
@@ -251,7 +251,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         async_to_sync(send_uptime_as_webhook)(recipient, check.pk, True, timezone.now())
         mock_post.assert_called_once()
 
-    @aioresponses()
+    @mock_aiohttp()
     def test_notification_default_scope(self, mocked):
         """Subscribe by default should not result in alert emails for non-team members"""
         self.create_user_and_project()
@@ -301,7 +301,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         self.assertIn(user3.email, mail.outbox[0].to)
         self.assertEqual(len(mail.outbox[0].to), 2)
 
-    @aioresponses()
+    @mock_aiohttp()
     def test_monitor_notification_environment_filter(self, mocked):
         """An alert limited to environments only covers monitors set to one of them"""
         self.create_user_and_project()
@@ -349,7 +349,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         notify()
         self.assertEqual(len(mail.outbox), 2)
 
-    @aioresponses()
+    @mock_aiohttp()
     def test_user_project_alert_scope(self, mocked):
         """User project alert should not result in alert emails for non-team members"""
         self.create_user_and_project()
@@ -672,7 +672,7 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         self.assertFalse(mon.cached_is_up)
         self.assertEqual(mon.cached_consecutive_down, 2)
 
-    @aioresponses()
+    @mock_aiohttp()
     def test_confirmation_threshold_delays_notification(self, mocked):
         """With confirmation_threshold=2, no notification fires on the first
         failure; the second consecutive failure sends a single notification."""

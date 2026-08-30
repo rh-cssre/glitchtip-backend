@@ -1,8 +1,8 @@
+import base64
 import json
 from datetime import datetime
 from unittest import mock
 
-import aiohttp
 from asgiref.sync import async_to_sync
 from model_bakery import baker
 
@@ -67,6 +67,13 @@ def _mock_aiohttp_session():
 
     mock_constructor = mock.MagicMock(return_value=mock_session)
     return mock_constructor, mock_post
+
+
+def _basic_auth_credentials(header: str) -> str:
+    """Decode an ``Authorization: Basic ...`` header back to ``login:password``."""
+    scheme, _, encoded = header.partition(" ")
+    assert scheme == "Basic", header
+    return base64.b64decode(encoded).decode()
 
 
 class WebhookTestCase(GlitchTipTestCase):
@@ -820,9 +827,10 @@ class WebhookTestCase(GlitchTipTestCase):
         )
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args.kwargs
-        self.assertIsInstance(call_kwargs["auth"], aiohttp.BasicAuth)
-        self.assertEqual(call_kwargs["auth"].login, "bot@zulip.example.com")
-        self.assertEqual(call_kwargs["auth"].password, "test-api-key")
+        self.assertEqual(
+            _basic_auth_credentials(call_kwargs["headers"]["Authorization"]),
+            "bot@zulip.example.com:test-api-key",
+        )
         self.assertEqual(call_kwargs["data"]["type"], "channel")
         self.assertEqual(call_kwargs["data"]["to"], "alerts")
         self.assertEqual(call_kwargs["data"]["topic"], "GlitchTip Alerts")

@@ -474,7 +474,10 @@ async def send_zulip_message(server_url, bot_email, api_key, channel, topic, con
     """Send a message to a Zulip channel via the native API."""
     url = f"{server_url.rstrip('/')}/api/v1/messages"
     data = {"type": "channel", "to": channel, "topic": topic, "content": content}
-    return await _post(url, data=data, auth=aiohttp.BasicAuth(bot_email, api_key))
+    # aiohttp deprecated BasicAuth (and the `auth` parameter) in 3.14; the
+    # header it encodes is what went on the wire either way.
+    headers = {"Authorization": aiohttp.encode_basic_auth(bot_email, api_key)}
+    return await _post(url, data=data, headers=headers)
 
 
 async def send_issue_as_zulip(

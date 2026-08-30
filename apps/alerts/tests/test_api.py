@@ -1,10 +1,10 @@
 from unittest import mock
 
-import aiohttp
 from django.test import TestCase
 from django.urls import reverse
 from model_bakery import baker
 
+from apps.alerts.tests.test_webhooks import _basic_auth_credentials
 from apps.organizations_ext.constants import OrganizationUserRole
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
@@ -510,6 +510,7 @@ class AlertAPITestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertEqual(data[0]["status"], "sent")
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args.kwargs
-        self.assertIsInstance(call_kwargs["auth"], aiohttp.BasicAuth)
-        self.assertEqual(call_kwargs["auth"].login, "bot@zulip.example.com")
-        self.assertEqual(call_kwargs["auth"].password, "test-key")
+        self.assertEqual(
+            _basic_auth_credentials(call_kwargs["headers"]["Authorization"]),
+            "bot@zulip.example.com:test-key",
+        )
