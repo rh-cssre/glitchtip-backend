@@ -287,9 +287,9 @@ async def _recycle_db_connections():
 
 
 if settings.GLITCHTIP_ENABLE_MCP:
-    from apps.mcp.server import mcp as _mcp_server
+    from apps.mcp.server import build_http_app
 
-    _mcp_app = _mcp_server.streamable_http_app()
+    _mcp_app = build_http_app()
     application = MCPDjangoDispatcher(
         django_app=application,
         mcp_app=RecycleConnectionsMiddleware(_mcp_app),

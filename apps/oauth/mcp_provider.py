@@ -1,6 +1,6 @@
 """MCP OAuth authorization-server provider.
 
-Kept in its own module so the MCP SDK (``mcp`` → FastMCP server, which pulls in
+Kept in its own module so the MCP SDK (``mcp`` → ``MCPServer``, which pulls in
 uvicorn + sse_starlette + jsonschema, ~22 MiB resident) is imported ONLY when
 MCP is enabled — i.e. from ``apps.mcp.server``, which is itself only imported
 when ``GLITCHTIP_ENABLE_MCP`` is set. The MCP-free token/cache helpers and the

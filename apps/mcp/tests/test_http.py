@@ -9,12 +9,12 @@ import json
 import time
 from contextlib import asynccontextmanager
 
-import httpx
+import httpx2
 from django.core.cache import cache
 from django.test import TestCase
 from model_bakery import baker
 
-from apps.mcp.server import mcp
+from apps.mcp.server import build_http_app, mcp
 from apps.oauth.provider import _access_cache_key
 from glitchtip.asgi import MCPDjangoDispatcher
 
@@ -85,9 +85,10 @@ class MCPHttpAuthTest(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        # Reset session manager so we get a fresh app
-        mcp._session_manager = None
-        cls.app = mcp.streamable_http_app()
+        # Reset the SDK's lazily-cached session manager so each build gets a
+        # fresh one; streamable_http_app() reuses it otherwise.
+        mcp._lowlevel_server._session_manager = None
+        cls.app = build_http_app()
 
     async def _post(self, body, token=None, host="localhost:8000"):
         headers = {
@@ -97,8 +98,8 @@ class MCPHttpAuthTest(TestCase):
         }
         if token:
             headers["Authorization"] = f"Bearer {token}"
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=self.app),
+        async with httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=self.app),
             base_url="http://testserver",
         ) as client:
             return await client.post("/mcp", json=body, headers=headers)
@@ -150,8 +151,8 @@ class MCPHttpIntegrationTest(TestCase):
 
     def _fresh_app(self):
         """Create a fresh ASGI app with a new session manager."""
-        mcp._session_manager = None
-        return mcp.streamable_http_app()
+        mcp._lowlevel_server._session_manager = None
+        return build_http_app()
 
     async def test_initialize_with_valid_token(self):
         app = self._fresh_app()
@@ -161,8 +162,8 @@ class MCPHttpIntegrationTest(TestCase):
                 "Accept": ACCEPT_HEADERS,
                 "Authorization": f"Bearer {self.token}",
             }
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
+            async with httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=app),
                 base_url="http://testserver",
             ) as client:
                 resp = await client.post(
@@ -191,8 +192,8 @@ class MCPHttpIntegrationTest(TestCase):
                 "Accept": ACCEPT_HEADERS,
                 "Authorization": f"Bearer {self.token}",
             }
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
+            async with httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=app),
                 base_url="http://testserver",
             ) as client:
                 resp = await client.post(
@@ -228,8 +229,8 @@ class MCPHttpIntegrationTest(TestCase):
                 "Accept": ACCEPT_HEADERS,
                 "Authorization": f"Bearer {api_token.token}",
             }
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
+            async with httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=app),
                 base_url="http://testserver",
             ) as client:
                 resp = await client.post(
@@ -252,8 +253,8 @@ class MCPHttpIntegrationTest(TestCase):
         """
         app = self._fresh_app()
         async with _run_lifespan(app):
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
+            async with httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=app),
                 base_url="http://testserver",
             ) as client:
                 resp = await client.get(
@@ -280,8 +281,8 @@ class MCPHttpIntegrationTest(TestCase):
                 "Host": "staging.glitchtip.com",
                 "Authorization": f"Bearer {self.token}",
             }
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
+            async with httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=app),
                 base_url="http://testserver",
             ) as client:
                 resp = await client.post(
