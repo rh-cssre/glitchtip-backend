@@ -20,7 +20,11 @@ dependencies = [
     "user-agents~=2.1",
     "django-ipware~=7.0",
     "anonymizeip~=1.0",
-    "aiohttp~=3.7",
+    # Capped below 3.14: it made ``stream_writer`` a required keyword-only
+    # argument on ClientResponse.__init__, which aioresponses (0.7.9, latest)
+    # does not pass, so every mocked response raises TypeError. Raise once
+    # aioresponses supports it.
+    "aiohttp>=3.7,<3.14",
     "google-cloud-logging~=3.0",
     "django-prometheus~=2.2",
     "django-import-export~=4.1",
@@ -39,7 +43,9 @@ dependencies = [
     "django-vcache>=3.0.0",
     "glitchtip-rust>=0.9.0",
     "uuid6>=2024.1.12",
-    "mcp[cli]>=1.9",
+    # Capped below 2: the v2 SDK renames FastMCP to MCPServer and moves the
+    # server module, and swaps httpx for httpx2. Raise once apps/mcp is ported.
+    "mcp[cli]>=1.9,<2",
     "duckdb>=1.2.0",
     "minidump>=0.0.24",
     "arro3-core~=0.8",
