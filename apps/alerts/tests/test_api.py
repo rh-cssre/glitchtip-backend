@@ -4,8 +4,8 @@ from django.test import TestCase
 from django.urls import reverse
 from model_bakery import baker
 
-from apps.alerts.tests.test_webhooks import _basic_auth_credentials
 from apps.organizations_ext.constants import OrganizationUserRole
+from glitchtip.test_utils.aiohttp_mock import basic_auth_credentials
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
 from ..constants import MAX_ALERT_ENVIRONMENTS, RecipientType
@@ -511,6 +511,6 @@ class AlertAPITestCase(GlitchTipTestCaseMixin, TestCase):
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args.kwargs
         self.assertEqual(
-            _basic_auth_credentials(call_kwargs["headers"]["Authorization"]),
+            basic_auth_credentials(call_kwargs["headers"]["Authorization"]),
             "bot@zulip.example.com:test-key",
         )

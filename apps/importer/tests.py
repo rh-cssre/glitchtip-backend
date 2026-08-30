@@ -264,6 +264,13 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
 
     @mock_aiohttp()
     async def test_invalid_org(self, m):
+        """An import the caller may not perform never reaches the remote.
+
+        The endpoint takes an auth token for another server, so who is refused
+        matters less than when: the refusal has to land before anything is sent.
+        Registering no response asserts that -- any outbound request would
+        raise. Membership alone is not enough either; the view demands admin.
+        """
         await sync_to_async(self.create_logged_in_user)()
         await self.async_client.aforce_login(self.user)
         url = reverse("api:importer")
@@ -272,17 +279,23 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
             "authToken": self.auth_token,
             "organizationSlug": "foo",
         }
-        res = await self.async_client.post(url, data)
-        self.assertEqual(res.status_code, 400)
+        # No such organization.
+        res = await self.async_client.post(url, data, content_type="application/json")
+        self.assertEqual(res.status_code, 404)
+
+        # The organization exists, but belongs to someone else.
         other_user = await baker.amake("users.User")
         other_org = await baker.amake("Organization", name="foo")
         await other_org.aadd_user(other_user)
-        res = await self.async_client.post(url, data)
-        self.assertEqual(res.status_code, 400)
+        res = await self.async_client.post(url, data, content_type="application/json")
+        self.assertEqual(res.status_code, 404)
+
+        # A member of it, but not an admin of it.
         await other_org.aadd_user(self.user)
-        m.get(self.url + "api/0/", payload={"user": {"username": "foo"}})
-        res = await self.async_client.post(url, data)
-        self.assertEqual(res.status_code, 400)
+        res = await self.async_client.post(url, data, content_type="application/json")
+        self.assertEqual(res.status_code, 404)
+
+        self.assertEqual(m.requests, [])
 
 
 @override_settings(GLITCHTIP_ALLOW_PRIVATE_IPS=False)

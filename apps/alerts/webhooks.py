@@ -37,7 +37,14 @@ async def _post(url: str, **kwargs):
     does not follow redirects, so a 3xx response can't be used to reach an
     internal target. Returns the response, or None if the URL is disallowed or
     the request errors. `kwargs` are forwarded to `session.post` (json/data/
-    headers/auth/timeout).
+    headers/timeout).
+
+    ValueError is caught alongside the network errors because a caller may pass
+    an explicit Authorization header: with `trust_env` on (PROXY_ENV), aiohttp
+    consults netrc for any request that sets no `auth` argument, and refuses to
+    combine what it finds there with an Authorization header the caller already
+    set. That is a local configuration clash, not a reason to fail the whole
+    alert batch.
     """
     if not await _is_url_allowed(url):
         return None
@@ -48,7 +55,7 @@ async def _post(url: str, **kwargs):
             session.post(url, allow_redirects=False, **kwargs) as resp,
         ):
             return resp
-    except (TimeoutError, aiohttp.ClientError):
+    except (TimeoutError, ValueError, aiohttp.ClientError):
         return None
 
 

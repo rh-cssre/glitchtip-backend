@@ -73,6 +73,9 @@ class UptimeTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         monitors = list(Monitor.objects.all().values())
         results = async_to_sync(fetch_all)(monitors)
         self.assertEqual(results[0]["id"], mon1.pk)
+        # fetch() returns the monitor whatever happens, so without this the
+        # scripted response is never actually asserted on.
+        self.assertTrue(results[0]["is_up"])
 
     @mock_aiohttp()
     def test_monitor_checks_integration(self, mocked):

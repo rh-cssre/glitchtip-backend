@@ -1,4 +1,3 @@
-import base64
 import json
 from datetime import datetime
 from unittest import mock
@@ -10,6 +9,7 @@ from apps.issue_events.constants import LogLevel
 from apps.uptime.constants import MonitorType
 from apps.uptime.models import Monitor, MonitorCheck
 from apps.uptime.webhooks import send_uptime_as_webhook
+from glitchtip.test_utils.aiohttp_mock import basic_auth_credentials
 from glitchtip.test_utils.issue import make_issue
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 
@@ -67,13 +67,6 @@ def _mock_aiohttp_session():
 
     mock_constructor = mock.MagicMock(return_value=mock_session)
     return mock_constructor, mock_post
-
-
-def _basic_auth_credentials(header: str) -> str:
-    """Decode an ``Authorization: Basic ...`` header back to ``login:password``."""
-    scheme, _, encoded = header.partition(" ")
-    assert scheme == "Basic", header
-    return base64.b64decode(encoded).decode()
 
 
 class WebhookTestCase(GlitchTipTestCase):
@@ -828,7 +821,7 @@ class WebhookTestCase(GlitchTipTestCase):
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args.kwargs
         self.assertEqual(
-            _basic_auth_credentials(call_kwargs["headers"]["Authorization"]),
+            basic_auth_credentials(call_kwargs["headers"]["Authorization"]),
             "bot@zulip.example.com:test-api-key",
         )
         self.assertEqual(call_kwargs["data"]["type"], "channel")

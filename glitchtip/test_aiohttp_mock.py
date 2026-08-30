@@ -12,7 +12,9 @@ script a retry sequence.
 import aiohttp
 from django.test import SimpleTestCase
 
-from glitchtip.test_utils.aiohttp_mock import mock_aiohttp
+from glitchtip.ssrf_protection import request_with_validated_redirects
+from glitchtip.test_utils.aiohttp_mock import basic_auth_credentials, mock_aiohttp
+from glitchtip.test_utils.dns import resolves_to
 
 URL = "https://example.com/resource"
 
@@ -76,6 +78,68 @@ class MockAiohttpTests(SimpleTestCase):
                 await session.post(URL, data={"mode": "flexible"})
         self.assertEqual(mocked.requests[0].method, "POST")
         self.assertEqual(mocked.requests[0].kwargs["data"], {"mode": "flexible"})
+
+    async def test_json_refuses_a_non_json_content_type(self):
+        """Match aiohttp, which raises rather than parsing an unexpected body.
+
+        The importer and the Stripe error branch both call ``json()`` on a
+        response they do not control; a double that parsed a proxy's
+        ``text/html`` would let a test cover a path production never takes.
+        """
+        with mock_aiohttp() as mocked:
+            mocked.get(
+                URL, body="<html>502</html>", headers={"Content-Type": "text/html"}
+            )
+            mocked.get(
+                f"{URL}/empty",
+                payload=None,
+                headers={"Content-Type": "application/json"},
+            )
+            async with aiohttp.ClientSession() as session:
+                with self.assertRaises(aiohttp.ContentTypeError):
+                    await (await session.get(URL)).json()
+                self.assertIsNone(await (await session.get(f"{URL}/empty")).json())
+
+    async def test_unknown_keyword_is_rejected_as_aiohttp_would(self):
+        with mock_aiohttp() as mocked:
+            mocked.get(URL)
+            async with aiohttp.ClientSession() as session:
+                with self.assertRaises(TypeError):
+                    await session.get(URL, not_a_real_kwarg=1)
+
+    async def test_a_scripted_redirect_drives_the_real_redirect_walk(self):
+        """The layered code runs for real: only the double's answers are fake.
+
+        ``request_with_validated_redirects`` disables aiohttp's own redirect
+        following and walks the chain itself, re-validating each hop. Scripting
+        a 302 exercises that walk -- including the ``await response.release()``
+        on the hop it discards.
+        """
+        with mock_aiohttp() as mocked:
+            mocked.get(
+                "https://start.example/",
+                status=302,
+                headers={"Location": "https://final.example/"},
+            )
+            mocked.get("https://final.example/", status=200)
+            with resolves_to():
+                async with aiohttp.ClientSession() as session:
+                    response = await request_with_validated_redirects(
+                        session, "GET", "https://start.example/"
+                    )
+        self.assertEqual(response.status, 200)
+        self.assertEqual(
+            [str(request.url) for request in mocked.requests],
+            ["https://start.example/", "https://final.example/"],
+        )
+
+    def test_basic_auth_credentials_decodes_a_header(self):
+        self.assertEqual(
+            basic_auth_credentials(aiohttp.encode_basic_auth("user", "pass")),
+            "user:pass",
+        )
+        with self.assertRaises(ValueError):
+            basic_auth_credentials("Bearer sometoken")
 
     def test_patch_is_removed_on_exit(self):
         original = aiohttp.ClientSession.__dict__["_request"]

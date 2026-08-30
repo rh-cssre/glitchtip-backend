@@ -27,18 +27,22 @@ already uses -- in which case that code needs the fix too, and a failing test is
 the right outcome rather than a blocked upgrade.
 
 The seam is ``ClientSession._request``: every ``get``/``post``/``request`` call
-funnels through it, and it sits after aiohttp has parsed the URL but before any
-connector or resolver work, so nothing here dials or resolves. Code layered on
-top still runs for real -- ``request_with_validated_redirects`` walking a
-redirect chain, say -- so scripting a 302 with a ``Location`` header exercises
-the real walk rather than a shortcut.
+funnels through it, so no connector, resolver or socket is reached. It also
+means aiohttp's own URL building and header serialization are replaced rather
+than exercised, so the errors those raise on a malformed URL or a header
+carrying control characters are not modelled here. Keyword arguments *are*
+checked against the real signature, so a call aiohttp would reject as a
+TypeError still fails. Code layered on top runs for real --
+``request_with_validated_redirects`` walks a scripted 302 chain rather than
+taking a shortcut through the double.
 """
 
-import asyncio
+import base64
 import json
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from functools import wraps
+from inspect import iscoroutinefunction, signature
 from typing import Any, Self
 from unittest import mock
 
@@ -47,6 +51,10 @@ from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
 DEFAULT_ENCODING = "utf-8"
+JSON_CONTENT_TYPE = "application/json"
+
+# Captured before any patch is installed, to check call signatures against.
+REAL_REQUEST_SIGNATURE = signature(aiohttp.ClientSession._request)
 
 
 class _Released:
@@ -113,8 +121,37 @@ class MockResponse:
     async def text(self, encoding: str | None = None) -> str:
         return self._body.decode(encoding or self.get_encoding())
 
-    async def json(self, *, encoding: str | None = None, **_: Any) -> Any:
-        return json.loads(self._body.decode(encoding or self.get_encoding()))
+    async def json(
+        self,
+        *,
+        encoding: str | None = None,
+        content_type: str | None = JSON_CONTENT_TYPE,
+    ) -> Any:
+        """Decode the body as JSON, refusing a non-JSON content type.
+
+        The refusal is the point. Two callers -- the importer against an
+        operator-supplied host, and the Stripe client's error branch -- call
+        this on a response they do not control, where a proxy answering
+        ``text/html`` raises ``ContentTypeError`` in production. A double that
+        parsed anything would let a test assert behavior production never
+        reaches.
+        """
+        if content_type:
+            received = self.headers.get("Content-Type", "").split(";")[0].strip()
+            if received.lower() != content_type.lower():
+                raise aiohttp.ContentTypeError(
+                    None,
+                    (),
+                    status=self.status,
+                    message=(
+                        f"Attempt to decode JSON with unexpected mimetype: {received}"
+                    ),
+                    headers=self.headers,
+                )
+        stripped = self._body.strip()
+        if not stripped:
+            return None
+        return json.loads(stripped.decode(encoding or self.get_encoding()))
 
     def release(self) -> _Released:
         return _Released()
@@ -151,12 +188,20 @@ def _canonical(url: str | URL, params: Any = None) -> URL:
 
     Query order carries no meaning, and a caller may pass parameters either
     inside the URL or through aiohttp's ``params=``; both spellings have to
-    reach the same registration.
+    reach the same registration. ``extend_query`` rather than ``update_query``
+    because that is what ``ClientRequest`` does -- ``params`` appends to a query
+    already in the URL, it does not replace it.
+
+    Dropping the fragment and an explicitly-written default port matches what
+    aiohttp puts on the wire. yarl compares those as distinct while rendering
+    them identically, which without this produces a mismatch whose message
+    names the same URL on both sides.
     """
-    canonical = URL(url)
+    canonical = URL(url).with_fragment(None)
     if params:
-        canonical = canonical.update_query(params)
-    return canonical.with_query(sorted(canonical.query.items()))
+        canonical = canonical.extend_query(params)
+    canonical = canonical.with_query(sorted(canonical.query.items()))
+    return URL(str(canonical))
 
 
 class MockAiohttp:
@@ -244,11 +289,15 @@ class MockAiohttp:
             with MockAiohttp() as mocked:
                 return await func(*args, mocked, **kwargs)
 
-        return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
+        return async_wrapper if iscoroutinefunction(func) else sync_wrapper
 
     async def _request(
         self, method: str, url: str | URL, **kwargs: Any
     ) -> MockResponse:
+        # Bind against the real signature so a call aiohttp would reject -- an
+        # unknown keyword, or one removed by an upgrade -- fails here too
+        # instead of being silently accepted by **kwargs.
+        REAL_REQUEST_SIGNATURE.bind(None, method, url, **kwargs)
         method = method.upper()
         requested = _canonical(url, kwargs.get("params"))
         self.requests.append(RecordedRequest(method, requested, kwargs))
@@ -278,3 +327,15 @@ class MockAiohttp:
 def mock_aiohttp() -> MockAiohttp:
     """A script of aiohttp responses, usable as a context manager or decorator."""
     return MockAiohttp()
+
+
+def basic_auth_credentials(header: str) -> str:
+    """Decode an ``Authorization: Basic ...`` header back to ``login:password``.
+
+    For asserting on what a caller put on the wire when it builds the header
+    itself rather than handing credentials to aiohttp.
+    """
+    scheme, _, encoded = header.partition(" ")
+    if scheme != "Basic":
+        raise ValueError(f"not a Basic Authorization header: {header!r}")
+    return base64.b64decode(encoded, validate=True).decode()
