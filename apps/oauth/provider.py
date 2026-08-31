@@ -5,9 +5,10 @@ from .models import OAuthRefreshToken
 
 # NOTE: keep this module free of any ``mcp`` import. It is on the default web
 # boot path (URL routing -> oauth.views -> here), and importing the MCP SDK
-# pulls the FastMCP server stack (uvicorn + sse_starlette + jsonschema,
-# ~22 MiB resident) into every web process even when GLITCHTIP_ENABLE_MCP is
-# off. The MCP-dependent provider lives in mcp_provider.py instead.
+# pulls the MCPServer stack (uvicorn + sse_starlette + jsonschema +
+# opentelemetry-api, ~48 MiB resident) into every web process even when
+# GLITCHTIP_ENABLE_MCP is off. The MCP-dependent provider lives in
+# mcp_provider.py instead.
 
 ACCESS_TOKEN_LIFETIME = 28800  # 8 hours
 REFRESH_TOKEN_LIFETIME = 30 * 86400  # 30 days

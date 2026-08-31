@@ -43,9 +43,9 @@ dependencies = [
     "django-vcache>=3.0.0",
     "glitchtip-rust>=0.9.0",
     "uuid6>=2024.1.12",
-    # Capped below 2: the v2 SDK renames FastMCP to MCPServer and moves the
-    # server module, and swaps httpx for httpx2. Raise once apps/mcp is ported.
-    "mcp[cli]>=1.9,<2",
+    # Bounded below 3: the SDK moves its server API across majors (v2 renamed
+    # FastMCP to MCPServer), so a major bump is a code change, not a relock.
+    "mcp[cli]>=2.1.1,<3",
     "duckdb>=1.2.0",
     "minidump>=0.0.24",
     "arro3-core~=0.8",
@@ -74,6 +74,9 @@ dev = [
     "django-stubs[compatible-mypy]~=6.0",
     "django-sslserver~=0.22",
     "aioresponses~=0.7",
+    # The benchmark harness's HTTP client. Declared here because it used to
+    # arrive transitively via the MCP SDK, which has since moved to httpx2.
+    "httpx~=0.28",
     "memray~=1.9",
     "tblib~=3.0",                         # Needed for test --parallel
     "ipython>=8.32.0",
