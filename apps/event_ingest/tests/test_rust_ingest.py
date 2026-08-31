@@ -1,0 +1,353 @@
+"""Tests for the Rust envelope-ingest ASGI path.
+
+These drive ``IngestDispatcher`` at the ASGI layer — the seam where the Rust
+pipeline serves envelope POSTs — and then flush the vtasks batch so the real
+worker tasks consume what Rust enqueued. That covers the full contract: DSN
+auth against the shared Postgres pool, Valkey block/dedupe caches, the vtasks
+wire format, and worker-side re-validation of the payloads.
+"""
+
+import gzip
+import importlib
+import json
+import uuid
+
+from django.core.cache import cache
+from django.tasks import task_backends
+
+from apps.issue_events.models import IssueEvent, UserReport
+from apps.logs.models import LogEvent
+from apps.performance.models import TransactionGroup
+
+from .utils import (
+    CLIENT_IP,
+    AsgiIngestTestMixin,
+    EventIngestTestCase,
+    flush_rust_ingest_state,
+    list_to_envelope,
+    pop_rust_ingest_messages,
+)
+
+
+class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
+    """Runs in BOTH Rust ingest shapes: the Valkey lane (block/dedupe cache
+    and LPUSH broker on the dedicated test Valkey database) and the
+    Postgres-only lane (``VALKEY_URL=""``: django_cache table +
+    db_queuedtask broker). The broker/store differences live in the
+    ``flush_rust_ingest_state``/``pop_rust_ingest_messages`` helpers."""
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+        # Start each test from a clean Rust-side block/dedupe/queue slate.
+        flush_rust_ingest_state()
+
+    async def _drain_rust_queue(self):
+        """Pop everything the Rust path enqueued and run it through the real
+        task functions. Going through ``django_vtasks.serialization`` proves
+        the Rust-written bytes are exactly what a worker would consume."""
+        from django_vtasks.serialization import deserialize
+
+        for raw in await pop_rust_ingest_messages():
+            message = deserialize(raw)
+            module, name = message["func"].rsplit(".", 1)
+            vtask = getattr(importlib.import_module(module), name)
+            # Ingest tasks are batched consumers: each call takes a list of
+            # task-message dicts.
+            await vtask.func([message])
+
+    def _envelope(self, replace_id=True) -> tuple[list, str]:
+        data = self.get_json_data(
+            "apps/event_ingest/tests/test_data/envelopes/django_message.json"
+        )
+        if replace_id:
+            new_id = uuid.uuid4().hex
+            data[0]["event_id"] = new_id
+            data[2]["event_id"] = new_id
+        return data, list_to_envelope(data)
+
+    async def test_event_envelope(self):
+        data, envelope = self._envelope()
+        status, _headers, body = await self._post(envelope.encode())
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["id"], data[0]["event_id"])
+        await self._drain_rust_queue()
+        self.assertEqual(await self.project.issues.acount(), 1)
+        event = await IssueEvent.objects.aget()
+        self.assertEqual(event.event_id.hex, data[0]["event_id"])
+        # Client IP was injected before enqueue — anonymized, because
+        # project/org IP scrubbing is on by default (the /24 mask matches
+        # anonymizeip's default exactly like the Python view).
+        self.assertEqual(event.data.get("user", {}).get("ip_address"), "93.184.216.0")
+
+    async def test_duplicate_event_id_ingested_once(self):
+        _, envelope = self._envelope()
+        await self._post(envelope.encode())
+        status, _, _ = await self._post(envelope.encode())
+        self.assertEqual(status, 200)
+        await self._drain_rust_queue()
+        self.assertEqual(await IssueEvent.objects.acount(), 1)
+
+    async def test_auth_rejections(self):
+        _, envelope = self._envelope()
+        # Unknown (but well-formed) key: Denied, and the rejection is cached.
+        status, _, body = await self._post(
+            envelope.encode(), query=f"sentry_key={uuid.uuid4().hex}"
+        )
+        self.assertEqual(status, 403)
+        self.assertEqual(json.loads(body), {"detail": "Denied"})
+        # Malformed key: Invalid DSN.
+        status, _, body = await self._post(envelope.encode(), query="sentry_key=nope")
+        self.assertEqual(status, 403)
+        self.assertEqual(json.loads(body), {"detail": "Invalid DSN"})
+        # No auth at all.
+        status, _, body = await self._post(envelope.encode(), query="")
+        self.assertEqual(status, 403)
+        self.assertEqual(json.loads(body), {"detail": "Denied"})
+        await self._drain_rust_queue()
+        self.assertEqual(await IssueEvent.objects.acount(), 0)
+
+    async def test_header_dsn_auth_no_query_credential(self):
+        """Worst case: the credential is *only* in the envelope-header ``dsn`` —
+        no query string, no auth header. The Rust path recovers the public key
+        from the header and accepts, so a mis-configured SDK's events are
+        ingested instead of silently dropped. (The fallback view reads only the
+        query / Authorization / X-Sentry-Auth and would deny.)"""
+        data, _ = self._envelope()
+        data[0]["dsn"] = (
+            f"https://{self.projectkey.public_key}@localhost/{self.project.id}"
+        )
+        status, _, body = await self._post(list_to_envelope(data).encode(), query="")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["id"], data[0]["event_id"])
+        await self._drain_rust_queue()
+        self.assertEqual(await IssueEvent.objects.acount(), 1)
+
+    async def test_header_dsn_bad_key_denied(self):
+        """A bogus key in the envelope-header DSN, with no query credential, is
+        denied — the header path rejects junk, it does not wave it through."""
+        data, _ = self._envelope()
+        data[0]["dsn"] = f"https://{uuid.uuid4().hex}@localhost/{self.project.id}"
+        status, _, body = await self._post(list_to_envelope(data).encode(), query="")
+        self.assertEqual(status, 403)
+        self.assertEqual(json.loads(body), {"detail": "Denied"})
+        await self._drain_rust_queue()
+        self.assertEqual(await IssueEvent.objects.acount(), 0)
+
+    async def test_hard_throttle(self):
+        await self.organization.__class__.objects.filter(
+            id=self.organization.id
+        ).aupdate(event_throttle_rate=100)
+        _, envelope = self._envelope()
+        status, headers, _ = await self._post(envelope.encode())
+        self.assertEqual(status, 429)
+        self.assertEqual(headers.get("Retry-After"), "600")
+
+    async def test_transaction_envelope(self):
+        from django.utils import timezone
+
+        now = timezone.now().isoformat()
+        event = {
+            "event_id": uuid.uuid4().hex,
+            "type": "transaction",
+            "transaction": "GET /rust-test",
+            "contexts": {
+                "trace": {
+                    "trace_id": uuid.uuid4().hex,
+                    "span_id": "aaaabbbbccccdddd",
+                    "op": "http.server",
+                }
+            },
+            "start_timestamp": now,
+            "timestamp": now,
+            "spans": [],
+        }
+        envelope = list_to_envelope(
+            [{"event_id": uuid.uuid4().hex}, {"type": "transaction"}, event]
+        )
+        status, _, _ = await self._post(envelope.encode())
+        self.assertEqual(status, 200)
+        await self._drain_rust_queue()
+        self.assertEqual(await TransactionGroup.objects.acount(), 1)
+
+    async def test_log_envelope(self):
+        import time
+
+        payload = {
+            "items": [
+                {
+                    "timestamp": time.time(),
+                    "level": "WARN",
+                    "body": "rust ingest log",
+                    "attributes": {
+                        "sentry.service": {"value": "apitest", "type": "string"}
+                    },
+                }
+            ]
+        }
+        envelope = list_to_envelope([{}, {"type": "log"}, payload])
+        status, _, _ = await self._post(envelope.encode())
+        self.assertEqual(status, 200)
+        await self._drain_rust_queue()
+        log = await LogEvent.objects.aget()
+        self.assertEqual(log.body, "rust ingest log")
+        self.assertEqual(log.service, "apitest")
+
+    async def test_user_report_envelope(self):
+        report = {
+            "event_id": uuid.uuid4().hex,
+            "name": "n" * 200,
+            "email": "reporter@example.com",
+            "comments": "it broke",
+        }
+        envelope = list_to_envelope([{}, {"type": "user_report"}, report])
+        status, _, _ = await self._post(envelope.encode())
+        self.assertEqual(status, 200)
+        await self._drain_rust_queue()
+        saved = await UserReport.objects.aget()
+        self.assertEqual(saved.comments, "it broke")
+        self.assertEqual(len(saved.name), 128)  # view-side truncation
+
+    async def test_unknown_item_type_is_ignored(self):
+        envelope = list_to_envelope([{}, {"type": "quantum_report"}, {"x": 1}])
+        status, _, body = await self._post(envelope.encode())
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {})
+        await self._drain_rust_queue()
+        self.assertEqual(await IssueEvent.objects.acount(), 0)
+
+    async def test_cors_header_on_response(self):
+        _, envelope = self._envelope()
+        status, headers, _ = await self._post(
+            envelope.encode(), extra_headers=[(b"origin", b"https://app.example")]
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("Access-Control-Allow-Origin"), "*")
+
+    async def test_non_post_falls_through_to_django(self):
+        status, _, _ = await self._post(b"", method="GET")
+        # The Django view answers non-POST envelope requests.
+        self.assertEqual(status, 405)
+
+    async def test_absurdly_long_project_id_does_not_raise(self):
+        """A project id past CPython's 4300-digit ``int()`` limit must not
+        escape the dispatcher as an unhandled ASGI error.
+
+        The path pattern is matched before any handler that could turn an
+        exception into a response, so an unbounded digit capture would let
+        ``int()`` raise straight out of ``IngestDispatcher`` — no response,
+        no CORS headers, no error capture. Django's router 404s the same URL.
+        """
+        _, envelope = self._envelope()
+        status, _, _ = await self._post(
+            envelope.encode(), path="/api/" + "1" * 4301 + "/envelope/"
+        )
+        self.assertGreaterEqual(status, 400)
+        self.assertLess(status, 500)
+
+    async def test_non_ascii_digit_project_id_not_claimed(self):
+        """``\\d`` matches non-ASCII digits and ``int()`` converts them, so an
+        unrestricted pattern would ingest ``/api/<arabic-indic 123>/envelope/``
+        as project 123 while Django's ``[0-9]+`` router 404s it. Anything an
+        edge rule keyed on the ASCII project id cannot see must not be
+        accepted here either."""
+        _, envelope = self._envelope()
+        status, _, _ = await self._post(envelope.encode(), path="/api/١٢٣/envelope/")
+        self.assertEqual(status, 404)
+        await self._drain_rust_queue()
+        self.assertEqual(await IssueEvent.objects.acount(), 0)
+
+    async def test_oversized_project_id_falls_through_to_django(self):
+        # A project id past the BIGINT/i64 range can't name a real project
+        # and must not overflow the Rust session arg into a 500 + error
+        # capture; the Rust handler declines it and the Django path answers.
+        _, envelope = self._envelope()
+        status, _, _ = await self._post(
+            envelope.encode(), path="/api/99999999999999999999999/envelope/"
+        )
+        self.assertNotEqual(status, 500)
+        self.assertGreaterEqual(status, 400)
+        self.assertLess(status, 500)
+
+    MINIDUMP_ENVELOPE = (
+        b"{}\n"
+        b'{"type": "attachment", "attachment_type": "event.minidump", "length": 8}\n'
+        b"MDMPxxxx\n"
+    )
+
+    async def test_minidump_envelope_falls_back_to_django_view(self):
+        # A garbage minidump exercises the pre-side-effect fallback: the
+        # Rust path hands the buffered request to the Django view, which is
+        # where the (in-progress, not end-to-end) minidump -> event
+        # conversion lives. What is pinned here is the handback and the
+        # 200 — not minidump support.
+        status, _, body = await self._post(self.MINIDUMP_ENVELOPE)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {})
+
+    async def test_compressed_minidump_envelope_falls_back(self):
+        """A Content-Encoded minidump envelope must survive the fallback.
+
+        The Rust pipeline hands back the buffered *raw* (still-compressed)
+        body and the replayed scope keeps its ``Content-Encoding``, so the
+        Django view is the one that decompresses. Handing back decompressed
+        bytes under an unchanged header would make the view decompress
+        twice and answer 400, so pin the round trip.
+        """
+        from asgiref.sync import sync_to_async
+
+        status, _, body = await self._post(
+            gzip.compress(self.MINIDUMP_ENVELOPE),
+            extra_headers=[(b"content-encoding", b"gzip")],
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {})
+        # The fallback view enqueues through the immediate test backend.
+        await sync_to_async(task_backends["default"].flush_batches)()
+        self.assertEqual(await IssueEvent.objects.acount(), 1)
+
+    async def test_fallback_view_payload_parity(self):
+        """The worker-visible event must not depend on whether the Rust
+        pipeline served the request or handed it to the fallback view — a
+        minidump envelope's regular items reach the DB through the view, and
+        must land identically. Post the same event both ways, then compare the
+        stored events field by field."""
+        from asgiref.sync import sync_to_async
+
+        data, envelope = self._envelope()
+        await self._post(envelope.encode())
+
+        rust_id = data[0]["event_id"]
+        fallback_id = uuid.uuid4().hex
+        data[0]["event_id"] = fallback_id
+        data[2]["event_id"] = fallback_id
+
+        def post_fallback():
+            return self.client.post(
+                self.url_for_fallback_view(),
+                list_to_envelope(data),
+                content_type="application/json",
+                REMOTE_ADDR=CLIENT_IP,
+            )
+
+        res = await sync_to_async(post_fallback)()
+        self.assertEqual(res.status_code, 200)
+        await self._drain_rust_queue()
+        # The fallback view enqueued via the immediate backend; its flush runs
+        # async task functions through async_to_sync, so it needs a thread.
+        await sync_to_async(task_backends["default"].flush_batches)()
+
+        rust_event = await IssueEvent.objects.aget(event_id=rust_id)
+        fallback_event = await IssueEvent.objects.aget(event_id=fallback_id)
+        self.assertEqual(rust_event.data, fallback_event.data)
+        self.assertEqual(rust_event.title, fallback_event.title)
+        self.assertEqual(rust_event.type, fallback_event.type)
+        self.assertEqual(rust_event.level, fallback_event.level)
+        self.assertEqual(rust_event.tags, fallback_event.tags)
+        # Both landed in the same issue (identical grouping hash).
+        self.assertEqual(rust_event.issue_id, fallback_event.issue_id)
+
+    def url_for_fallback_view(self):
+        from django.urls import reverse
+
+        return reverse("event_envelope", args=[self.project.id]) + self.params
