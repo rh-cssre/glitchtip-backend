@@ -66,9 +66,9 @@ sleep 3  # Let docker stabilize after recreate
 echo ">>> Waiting for web server..."
 for i in $(seq 1 300); do
     result=$($COMPOSE exec -T bench python -c "
-import httpx
+import httpx2
 try:
-    r = httpx.get('http://web:8000/_health/', timeout=3)
+    r = httpx2.get('http://web:8000/_health/', timeout=3)
     print('ok' if r.status_code < 500 else 'fail')
 except Exception as e:
     print(f'err:{e}')

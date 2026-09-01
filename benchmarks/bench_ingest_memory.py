@@ -23,7 +23,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
-import httpx
+import httpx2
 
 # Defaults
 DEFAULT_HOST = "http://web:8000"
@@ -42,7 +42,7 @@ API_TOKEN = "d" * 64
 
 def discover_dsn_key(host: str, project_id: int) -> str:
     """Fetch the DSN public key via the API using the bootstrap dev token."""
-    r = httpx.get(
+    r = httpx2.get(
         f"{host}/api/0/projects/",
         headers={"Authorization": f"Bearer {API_TOKEN}"},
         timeout=10,
@@ -52,7 +52,7 @@ def discover_dsn_key(host: str, project_id: int) -> str:
         if str(proj.get("id")) == str(project_id):
             org_slug = proj["organization"]["slug"]
             proj_slug = proj["slug"]
-            kr = httpx.get(
+            kr = httpx2.get(
                 f"{host}/api/0/projects/{org_slug}/{proj_slug}/keys/",
                 headers={"Authorization": f"Bearer {API_TOKEN}"},
                 timeout=10,
@@ -166,7 +166,7 @@ class Stats:
 
 
 def timed_request(
-    client: httpx.Client, method: str, url: str, **kwargs
+    client: httpx2.Client, method: str, url: str, **kwargs
 ) -> tuple[float, bool]:
     """Execute a request and return (elapsed_secs, success_bool)."""
     t0 = time.monotonic()
@@ -184,7 +184,7 @@ def timed_request(
 
 
 def run_ingest_wave_into(
-    client: httpx.Client,
+    client: httpx2.Client,
     sentry_key: str,
     host: str,
     project_id: int,
@@ -217,7 +217,7 @@ def run_ingest_wave_into(
 
 
 def run_ingest_wave(
-    client: httpx.Client,
+    client: httpx2.Client,
     sentry_key: str,
     host: str,
     project_id: int,
@@ -264,7 +264,7 @@ def build_mixed_request_list(count: int) -> list[str]:
 
 
 def run_mixed_wave_into(
-    client: httpx.Client,
+    client: httpx2.Client,
     sentry_key: str,
     host: str,
     project_id: int,
@@ -346,7 +346,7 @@ def run_mixed_wave_into(
 
 
 def run_mixed_wave(
-    client: httpx.Client,
+    client: httpx2.Client,
     sentry_key: str,
     host: str,
     project_id: int,
@@ -372,7 +372,7 @@ def wait_for_server(host: str, timeout: int = 60):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            r = httpx.get(f"{host}/_health/", timeout=3)
+            r = httpx2.get(f"{host}/_health/", timeout=3)
             if r.status_code < 500:
                 print("Server is ready.", flush=True)
                 return
@@ -504,8 +504,8 @@ Examples:
     overall = Stats()
     wall_t0 = time.monotonic()
 
-    transport = httpx.HTTPTransport(retries=0)
-    with httpx.Client(timeout=60, transport=transport) as client:
+    transport = httpx2.HTTPTransport(retries=0)
+    with httpx2.Client(timeout=60, transport=transport) as client:
         if args.mode == "ingest":
             header = f"{'Wave':<8} {'Success':>8} {'Error':>8} {'p50ms':>8} {'p95ms':>8} {'p99ms':>8}"
             print(header)
