@@ -2,7 +2,6 @@ import json
 from datetime import datetime
 from unittest import mock
 
-import aiohttp
 from asgiref.sync import async_to_sync
 from model_bakery import baker
 
@@ -10,6 +9,7 @@ from apps.issue_events.constants import LogLevel
 from apps.uptime.constants import MonitorType
 from apps.uptime.models import Monitor, MonitorCheck
 from apps.uptime.webhooks import send_uptime_as_webhook
+from glitchtip.test_utils.aiohttp_mock import basic_auth_credentials
 from glitchtip.test_utils.issue import make_issue
 from glitchtip.test_utils.test_case import GlitchTipTestCase
 
@@ -820,9 +820,10 @@ class WebhookTestCase(GlitchTipTestCase):
         )
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args.kwargs
-        self.assertIsInstance(call_kwargs["auth"], aiohttp.BasicAuth)
-        self.assertEqual(call_kwargs["auth"].login, "bot@zulip.example.com")
-        self.assertEqual(call_kwargs["auth"].password, "test-api-key")
+        self.assertEqual(
+            basic_auth_credentials(call_kwargs["headers"]["Authorization"]),
+            "bot@zulip.example.com:test-api-key",
+        )
         self.assertEqual(call_kwargs["data"]["type"], "channel")
         self.assertEqual(call_kwargs["data"]["to"], "alerts")
         self.assertEqual(call_kwargs["data"]["topic"], "GlitchTip Alerts")

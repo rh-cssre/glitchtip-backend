@@ -37,7 +37,14 @@ async def _post(url: str, **kwargs):
     does not follow redirects, so a 3xx response can't be used to reach an
     internal target. Returns the response, or None if the URL is disallowed or
     the request errors. `kwargs` are forwarded to `session.post` (json/data/
-    headers/auth/timeout).
+    headers/timeout).
+
+    ValueError is caught alongside the network errors because a caller may pass
+    an explicit Authorization header: with `trust_env` on (PROXY_ENV), aiohttp
+    consults netrc for any request that sets no `auth` argument, and refuses to
+    combine what it finds there with an Authorization header the caller already
+    set. That is a local configuration clash, not a reason to fail the whole
+    alert batch.
     """
     if not await _is_url_allowed(url):
         return None
@@ -49,6 +56,14 @@ async def _post(url: str, **kwargs):
         ):
             return resp
     except (TimeoutError, aiohttp.ClientError):
+        return None
+    except ValueError:
+        # Logged, unlike the network errors: this one is a local configuration
+        # clash the operator can fix, and it would otherwise drop the alert in
+        # total silence.
+        logger.warning(
+            "webhook delivery failed: rejected before sending", exc_info=True
+        )
         return None
 
 
@@ -474,7 +489,10 @@ async def send_zulip_message(server_url, bot_email, api_key, channel, topic, con
     """Send a message to a Zulip channel via the native API."""
     url = f"{server_url.rstrip('/')}/api/v1/messages"
     data = {"type": "channel", "to": channel, "topic": topic, "content": content}
-    return await _post(url, data=data, auth=aiohttp.BasicAuth(bot_email, api_key))
+    # aiohttp deprecated BasicAuth (and the `auth` parameter) in 3.14; the
+    # header it encodes is what went on the wire either way.
+    headers = {"Authorization": aiohttp.encode_basic_auth(bot_email, api_key)}
+    return await _post(url, data=data, headers=headers)
 
 
 async def send_issue_as_zulip(

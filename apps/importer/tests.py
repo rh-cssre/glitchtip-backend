@@ -1,4 +1,3 @@
-from aioresponses import aioresponses
 from asgiref.sync import sync_to_async
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -12,6 +11,7 @@ from apps.projects.models import Project
 from apps.teams.models import Team
 from apps.users.models import User
 from glitchtip.test_utils import generators  # noqa: F401
+from glitchtip.test_utils.aiohttp_mock import mock_aiohttp
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
 from .exceptions import ImporterException
@@ -60,7 +60,7 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
         )
         m.get(self.url + "/api/0/teams/org/team/members/", payload=[])
 
-    @aioresponses()
+    @mock_aiohttp()
     async def test_get_follows_pagination(self, m):
         first_url = self.url + self.importer.projects_url
         next_url = first_url + "?cursor=abc"
@@ -81,13 +81,13 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
 
         self.assertEqual(data, [{"id": "1"}, {"id": "2"}])
 
-    @aioresponses()
+    @mock_aiohttp()
     async def test_get_rebases_cross_origin_pagination(self, m):
         """A pagination link on another host is followed on ours, not theirs.
 
-        Nothing may be requested from ``bad.example.com``: aioresponses raises
-        on an unmocked URL, so mocking only the rebased URL is the assertion
-        that the auth token never left the origin the operator supplied.
+        Nothing may be requested from ``bad.example.com``: an unregistered URL
+        raises, so registering only the rebased URL is the assertion that the
+        auth token never left the origin the operator supplied.
         """
         first_url = self.url + self.importer.projects_url
         foreign_url = "https://bad.example.com" + self.importer.projects_url
@@ -106,7 +106,7 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
 
         self.assertEqual(data, [{"id": "1"}, {"id": "2"}])
 
-    @aioresponses()
+    @mock_aiohttp()
     async def test_get_follows_link_built_from_a_foreign_url_prefix(self, m):
         """Follow pagination from a server that names itself, not the request.
 
@@ -147,7 +147,7 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
 
         self.assertEqual(data, [{"id": "1"}, {"id": "2"}])
 
-    @aioresponses()
+    @mock_aiohttp()
     async def test_get_stops_when_the_next_link_repeats_a_page(self, m):
         """End the walk when a remote points back at a page already fetched.
 
@@ -172,7 +172,7 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
 
         self.assertEqual(data, [{"id": "1"}, {"id": "2"}])
 
-    @aioresponses()
+    @mock_aiohttp()
     async def test_get_rejects_a_non_list_page_mid_walk(self, m):
         """Don't silently discard collected pages if a later one isn't a list.
 
@@ -191,7 +191,7 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
         with self.assertRaises(ImporterException):
             await self.importer.get(first_url)
 
-    @aioresponses()
+    @mock_aiohttp()
     async def test_get_stops_at_pagination_cap(self, m):
         first_url = self.url + self.importer.projects_url
         last_url = first_url
@@ -209,7 +209,7 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
         with self.assertRaises(ImporterException):
             await self.importer.get(first_url)
 
-    @aioresponses()
+    @mock_aiohttp()
     def test_import_command_creates_users(self, m):
         """Cover the management command's ``create_users`` branch.
 
@@ -232,7 +232,7 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
             OrganizationUserRole.OWNER,
         )
 
-    @aioresponses()
+    @mock_aiohttp()
     def test_import_command(self, m):
         self.set_mocks(m)
 
@@ -246,7 +246,7 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
             ).exists()
         )
 
-    @aioresponses()
+    @mock_aiohttp()
     def test_view(self, m):
         self.create_logged_in_user()
         self.organization.slug = self.org_name
@@ -262,8 +262,15 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertTrue(Team.objects.filter(slug="team").exists())
 
-    @aioresponses()
+    @mock_aiohttp()
     async def test_invalid_org(self, m):
+        """An import the caller may not perform never reaches the remote.
+
+        The endpoint takes an auth token for another server, so who is refused
+        matters less than when: the refusal has to land before anything is sent.
+        Registering no response asserts that -- any outbound request would
+        raise. Membership alone is not enough either; the view demands admin.
+        """
         await sync_to_async(self.create_logged_in_user)()
         await self.async_client.aforce_login(self.user)
         url = reverse("api:importer")
@@ -272,17 +279,23 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
             "authToken": self.auth_token,
             "organizationSlug": "foo",
         }
-        res = await self.async_client.post(url, data)
-        self.assertEqual(res.status_code, 400)
+        # No such organization.
+        res = await self.async_client.post(url, data, content_type="application/json")
+        self.assertEqual(res.status_code, 404)
+
+        # The organization exists, but belongs to someone else.
         other_user = await baker.amake("users.User")
         other_org = await baker.amake("Organization", name="foo")
         await other_org.aadd_user(other_user)
-        res = await self.async_client.post(url, data)
-        self.assertEqual(res.status_code, 400)
+        res = await self.async_client.post(url, data, content_type="application/json")
+        self.assertEqual(res.status_code, 404)
+
+        # A member of it, but not an admin of it.
         await other_org.aadd_user(self.user)
-        m.get(self.url + "api/0/", payload={"user": {"username": "foo"}})
-        res = await self.async_client.post(url, data)
-        self.assertEqual(res.status_code, 400)
+        res = await self.async_client.post(url, data, content_type="application/json")
+        self.assertEqual(res.status_code, 404)
+
+        self.assertEqual(m.requests, [])
 
 
 @override_settings(GLITCHTIP_ALLOW_PRIVATE_IPS=False)

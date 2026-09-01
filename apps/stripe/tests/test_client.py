@@ -1,7 +1,6 @@
 import json
 from unittest.mock import patch
 
-from aioresponses import aioresponses
 from django.test import TestCase
 
 from apps.stripe.client import (
@@ -25,6 +24,7 @@ from apps.stripe.schema import (
     SubscriptionItems,
     TotalDetails,
 )
+from glitchtip.test_utils.aiohttp_mock import mock_aiohttp
 
 
 class StripeClientRetryTests(TestCase):
@@ -40,7 +40,7 @@ class StripeClientRetryTests(TestCase):
 
     async def test_stripe_get_retries_on_429_should_retry(self):
         url = f"{STRIPE_URL}/customers/cus_test"
-        with aioresponses() as mocked:
+        with mock_aiohttp() as mocked:
             mocked.get(
                 url,
                 status=429,
@@ -53,7 +53,7 @@ class StripeClientRetryTests(TestCase):
 
     async def test_stripe_get_retries_on_5xx_without_header(self):
         url = f"{STRIPE_URL}/customers/cus_test"
-        with aioresponses() as mocked:
+        with mock_aiohttp() as mocked:
             mocked.get(url, status=503, payload={"error": {"message": "unavailable"}})
             mocked.get(url, status=200, body='{"ok": true}')
             body = await stripe_get("customers/cus_test")
@@ -61,7 +61,7 @@ class StripeClientRetryTests(TestCase):
 
     async def test_stripe_get_does_not_retry_when_header_says_false(self):
         url = f"{STRIPE_URL}/customers/cus_test"
-        with aioresponses() as mocked:
+        with mock_aiohttp() as mocked:
             mocked.get(
                 url,
                 status=429,
@@ -74,7 +74,7 @@ class StripeClientRetryTests(TestCase):
 
     async def test_stripe_get_raises_after_exhausting_retries(self):
         url = f"{STRIPE_URL}/customers/cus_test"
-        with aioresponses() as mocked:
+        with mock_aiohttp() as mocked:
             for _ in range(4):
                 mocked.get(
                     url,
@@ -88,14 +88,14 @@ class StripeClientRetryTests(TestCase):
 
     async def test_stripe_get_raises_resource_not_found_without_retry(self):
         url = f"{STRIPE_URL}/customers/cus_test"
-        with aioresponses() as mocked:
+        with mock_aiohttp() as mocked:
             mocked.get(url, status=404, payload={"error": {"message": "missing"}})
             with self.assertRaises(StripeResourceNotFound):
                 await stripe_get("customers/cus_test")
 
     async def test_stripe_post_retries_on_429(self):
         url = f"{STRIPE_URL}/customers"
-        with aioresponses() as mocked:
+        with mock_aiohttp() as mocked:
             mocked.post(
                 url,
                 status=429,
@@ -112,7 +112,7 @@ class StripeV2EventFetchTests(TestCase):
         # Runs inline in a webhook response; Stripe's redelivery is the retry
         # mechanism, so a transient failure must raise after one attempt.
         url = f"{STRIPE_V2_URL}/core/events/evt_1"
-        with aioresponses() as mocked:
+        with mock_aiohttp() as mocked:
             mocked.get(
                 url,
                 status=500,
@@ -221,21 +221,21 @@ class StripeBillingModeTests(TestCase):
     """
 
     async def test_create_subscription_requests_flexible_mode(self):
-        with aioresponses() as mocked:
+        with mock_aiohttp() as mocked:
             mocked.post(
                 f"{STRIPE_URL}/subscriptions", status=200, body=_subscription_response()
             )
             await create_subscription("cus_1", "price_1")
-            request = next(iter(mocked.requests.values()))[0]
+            request = mocked.requests[0]
         self.assertEqual(request.kwargs["data"]["billing_mode[type]"], "flexible")
 
     async def test_create_session_requests_flexible_mode(self):
-        with aioresponses() as mocked:
+        with mock_aiohttp() as mocked:
             mocked.post(
                 f"{STRIPE_URL}/checkout/sessions", status=200, body=_session_response()
             )
             await create_session("price_1", "cus_1", "my-org")
-            request = next(iter(mocked.requests.values()))[0]
+            request = mocked.requests[0]
         self.assertEqual(
             request.kwargs["data"]["subscription_data[billing_mode][type]"], "flexible"
         )

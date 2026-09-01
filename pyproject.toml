@@ -20,11 +20,7 @@ dependencies = [
     "user-agents~=2.1",
     "django-ipware~=7.0",
     "anonymizeip~=1.0",
-    # Capped below 3.14: it made ``stream_writer`` a required keyword-only
-    # argument on ClientResponse.__init__, which aioresponses (0.7.9, latest)
-    # does not pass, so every mocked response raises TypeError. Raise once
-    # aioresponses supports it.
-    "aiohttp>=3.7,<3.14",
+    "aiohttp~=3.14",
     "google-cloud-logging~=3.0",
     "django-prometheus~=2.2",
     "django-import-export~=4.1",
@@ -73,7 +69,6 @@ dev = [
     "django-debug-toolbar~=7.0",
     "django-stubs[compatible-mypy]~=6.0",
     "django-sslserver~=0.22",
-    "aioresponses~=0.7",
     # The benchmark harness's HTTP client. Declared here because it used to
     # arrive transitively via the MCP SDK, which has since moved to httpx2.
     "httpx~=0.28",
