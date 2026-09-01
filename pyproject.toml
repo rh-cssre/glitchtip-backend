@@ -69,9 +69,10 @@ dev = [
     "django-debug-toolbar~=7.0",
     "django-stubs[compatible-mypy]~=6.0",
     "django-sslserver~=0.22",
-    # The benchmark harness's HTTP client. Declared here because it used to
-    # arrive transitively via the MCP SDK, which has since moved to httpx2.
-    "httpx~=0.28",
+    # The benchmark harness's HTTP client. Declared rather than relied on
+    # transitively (it reaches us via the MCP SDK) so a future SDK change
+    # cannot silently take it away, as the move off httpx already did once.
+    "httpx2~=2.12",
     "memray~=1.9",
     "tblib~=3.0",                         # Needed for test --parallel
     "ipython>=8.32.0",
