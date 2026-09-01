@@ -55,7 +55,15 @@ async def _post(url: str, **kwargs):
             session.post(url, allow_redirects=False, **kwargs) as resp,
         ):
             return resp
-    except (TimeoutError, ValueError, aiohttp.ClientError):
+    except (TimeoutError, aiohttp.ClientError):
+        return None
+    except ValueError:
+        # Logged, unlike the network errors: this one is a local configuration
+        # clash the operator can fix, and it would otherwise drop the alert in
+        # total silence.
+        logger.warning(
+            "webhook delivery failed: rejected before sending", exc_info=True
+        )
         return None
 
 
