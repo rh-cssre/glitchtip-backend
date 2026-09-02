@@ -66,7 +66,7 @@ dev = [
     {include-group = "lint"},
     "freezegun~=1.1",
     "model-bakery-async~=1.23",
-    "django-debug-toolbar~=7.0",
+    "django-debug-toolbar~=8.0",
     "django-stubs[compatible-mypy]~=6.0",
     "django-sslserver~=0.22",
     # The benchmark harness's HTTP client. Declared rather than relied on
