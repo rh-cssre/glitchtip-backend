@@ -18,12 +18,17 @@ live credential onto the wire.
 
 Enable with ``DATABASE_IAM_AUTH=true``; see ``glitchtip/settings.py``.
 
-IAM auth is between the client and *RDS*. An alias that connects through a
-connection pooler instead — GlitchTip's ``read_only`` alias points at a
-read-only PgBouncer over the same database — authenticates against the
-pooler, which cannot validate an IAM token; PgBouncer holds its own
-credentials for the upstream. Use ``DATABASE_IAM_AUTH_ALIASES`` to limit IAM
-auth to the aliases that really do connect straight to RDS.
+Not every alias can use it. GlitchTip's ``read_only`` alias points at a
+read-only PgBouncer over the same database, and PgBouncer authenticates its
+own clients while holding separate credentials upstream — it cannot validate
+an IAM token. Use ``DATABASE_IAM_AUTH_ALIASES`` to limit IAM auth to the
+aliases that reach an IAM-aware endpoint.
+
+This is a PgBouncer limitation, not a pooler one: *RDS Proxy* accepts IAM
+auth from clients and works fine. A token is signed for a specific host, port
+and user, so it has to be minted for the endpoint actually being connected
+to — which happens automatically, because the driver hands the provider the
+connection it is opening rather than a configured hostname.
 
 Outside GlitchTip, RDS IAM auth also requires:
 

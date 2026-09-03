@@ -909,12 +909,11 @@ DATABASE_ENGINE = "gt_rust.django_backend"
 # ignored. See glitchtip/db_iam.py for the AWS-side prerequisites.
 DATABASE_IAM_AUTH = env.bool("DATABASE_IAM_AUTH", False)
 # Which DATABASES aliases authenticate with IAM. Defaults to "default" only,
-# and deliberately not to every alias: IAM auth happens between the client and
-# RDS, so an alias that connects through a pooler instead (the read_only alias
-# points at a read-only PgBouncer over the same database) authenticates
-# against the pooler — which cannot validate an IAM token and would simply
-# receive a live, replayable AWS credential in the clear. Widen this list only
-# for aliases that connect straight to RDS.
+# and deliberately not to every alias: the read_only alias points at a
+# read-only PgBouncer, which authenticates its own clients and cannot validate
+# an IAM token — it would simply receive a live, replayable AWS credential in
+# the clear. Widen this list for any alias whose endpoint is IAM-aware; RDS
+# Proxy is (it accepts IAM auth from clients), PgBouncer is not.
 DATABASE_IAM_AUTH_ALIASES = [
     alias.strip()
     for alias in env.str("DATABASE_IAM_AUTH_ALIASES", "default").split(",")
