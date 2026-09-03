@@ -85,18 +85,42 @@ class ConfigureOptionsTestCase(SimpleTestCase):
         # whatever answers on that hostname.
         assert options["sslmode"] == "verify-full"
 
-    def test_verify_full_without_a_ca_bundle_is_refused(self):
-        # RDS certificates do not chain to a CA in the system trust store,
-        # so this would otherwise fail later as an opaque TLS error.
+    def test_verifying_modes_without_a_ca_bundle_are_refused(self):
+        # RDS certificates do not chain to a CA in the system trust store, so
+        # this would otherwise fail later as an opaque TLS error. verify-ca is
+        # included: without the bundle it falls back to system roots AND skips
+        # the hostname check, so any publicly-trusted cert would be accepted.
+        for sslmode in ("verify-full", "verify-ca"):
+            with self.subTest(sslmode=sslmode):
+                with self.assertRaises(ImproperlyConfigured) as ctx:
+                    db_iam.configure_options(
+                        {}, iam_auth=True, token_ttl=600, sslmode=sslmode
+                    )
+                assert "DATABASE_SSLROOTCERT" in str(ctx.exception)
+
+    def test_the_ca_bundle_error_does_not_recommend_the_unverified_mode(self):
+        # This error is on the default path, so it is the one message every
+        # operator sees. It must lead with the fix, and must not present
+        # 'require' as an equivalent alternative — it validates nothing.
         with self.assertRaises(ImproperlyConfigured) as ctx:
             db_iam.configure_options({}, iam_auth=True, token_ttl=600)
-        assert "DATABASE_SSLROOTCERT" in str(ctx.exception)
+        message = str(ctx.exception)
+        assert db_iam.RDS_CA_BUNDLE_URL in message
+        assert "NO certificate or hostname validation" in message
 
     def test_explicit_require_opts_out_of_verification(self):
         options = db_iam.configure_options(
             {}, iam_auth=True, token_ttl=600, sslmode="require"
         )
         assert options["sslmode"] == "require"
+
+    def test_unknown_sslmode_is_refused(self):
+        # Allow-list, not deny-list: a mode the driver gains later must not
+        # slip through here.
+        with self.assertRaises(ImproperlyConfigured):
+            db_iam.configure_options(
+                {}, iam_auth=True, token_ttl=600, sslmode="prefer-verify"
+            )
 
     def test_explicit_options_win_over_environment(self):
         options = db_iam.configure_options(

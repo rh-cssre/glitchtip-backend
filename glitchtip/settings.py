@@ -884,7 +884,12 @@ if env.str("DATABASE_HOST", None):
         {
             "NAME": env.str("DATABASE_NAME", "postgres"),
             "USER": env.str("DATABASE_USER", "postgres"),
-            "PASSWORD": env.str("DATABASE_PASSWORD"),
+            # Not required under IAM auth, where there is no password to
+            # supply; demanding one would only invite a dummy value.
+            "PASSWORD": env.str(
+                "DATABASE_PASSWORD",
+                "" if env.bool("DATABASE_IAM_AUTH", False) else environ.Env.NOTSET,
+            ),
             "HOST": env.str("DATABASE_HOST"),
             "PORT": env.str("DATABASE_PORT", "5432"),
         }
@@ -903,14 +908,16 @@ DATABASE_ENGINE = "gt_rust.django_backend"
 # authenticates with a short-lived IAM token. Any PASSWORD in DATABASE_URL is
 # ignored. See glitchtip/db_iam.py for the AWS-side prerequisites.
 DATABASE_IAM_AUTH = env.bool("DATABASE_IAM_AUTH", False)
-# Which DATABASES aliases authenticate with IAM. Empty means all of them.
-# IAM auth happens between the client and RDS, so an alias that connects
-# through a pooler instead (the read_only alias points at a read-only
-# PgBouncer over the same database) must be left off this list: PgBouncer
-# authenticates its clients itself and cannot validate an IAM token.
+# Which DATABASES aliases authenticate with IAM. Defaults to "default" only,
+# and deliberately not to every alias: IAM auth happens between the client and
+# RDS, so an alias that connects through a pooler instead (the read_only alias
+# points at a read-only PgBouncer over the same database) authenticates
+# against the pooler — which cannot validate an IAM token and would simply
+# receive a live, replayable AWS credential in the clear. Widen this list only
+# for aliases that connect straight to RDS.
 DATABASE_IAM_AUTH_ALIASES = [
     alias.strip()
-    for alias in env.str("DATABASE_IAM_AUTH_ALIASES", "").split(",")
+    for alias in env.str("DATABASE_IAM_AUTH_ALIASES", "default").split(",")
     if alias.strip()
 ]
 # Region used to sign the token. Unset lets boto3 resolve it the usual way
@@ -1012,8 +1019,7 @@ for _db_alias, db_config in DATABASES.items():
     # explicitly in a DATABASES override still wins over the environment.
     _db_iam.configure_options(
         options,
-        iam_auth=DATABASE_IAM_AUTH
-        and (not DATABASE_IAM_AUTH_ALIASES or _db_alias in DATABASE_IAM_AUTH_ALIASES),
+        iam_auth=DATABASE_IAM_AUTH and _db_alias in DATABASE_IAM_AUTH_ALIASES,
         token_ttl=DATABASE_IAM_TOKEN_TTL,
         sslmode=DATABASE_SSLMODE,
         sslrootcert=DATABASE_SSLROOTCERT,

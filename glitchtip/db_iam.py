@@ -39,6 +39,13 @@ from django.core.exceptions import ImproperlyConfigured
 #: Where to obtain the CA bundle RDS certificates chain to.
 RDS_CA_BUNDLE_URL = "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"
 
+#: sslmode values that actually authenticate the server. Anything outside
+#: these plus UNVERIFIED_SSLMODE permits a plaintext session, which would put
+#: a live credential on the wire in the clear.
+VERIFIED_SSLMODES = ("verify-full", "verify-ca")
+#: Encrypted but unauthenticated — see the warning in configure_options.
+UNVERIFIED_SSLMODE = "require"
+
 _client = None
 _client_lock = threading.Lock()
 
@@ -121,23 +128,31 @@ def configure_options(
     # otherwise — without verification a token would be handed to whatever
     # answers on that hostname.
     options.setdefault("sslmode", "verify-full")
-    if options["sslmode"] in ("disable", "allow", "prefer"):
-        # The driver refuses these too, but at connect time and as an
-        # OperationalError. Failing here names the setting that is wrong.
+    # Allow-list, mirroring the driver's own check, rather than a deny-list of
+    # the three unencrypted modes: a mode name added to the driver later would
+    # otherwise slip through here silently.
+    if options["sslmode"] not in VERIFIED_SSLMODES + (UNVERIFIED_SSLMODE,):
         raise ImproperlyConfigured(
             f"DATABASE_SSLMODE={options['sslmode']!r} cannot be combined with "
             "DATABASE_IAM_AUTH: an IAM token is sent to PostgreSQL as a "
-            "cleartext password, and these modes permit an unencrypted "
-            "session ('prefer' negotiates TLS but accepts plaintext if the "
-            "server declines). Use 'require', 'verify-ca' or 'verify-full'."
+            "cleartext password, and this mode permits an unencrypted session "
+            "('prefer' negotiates TLS but accepts plaintext if the server "
+            f"declines). Use one of {', '.join(VERIFIED_SSLMODES)}."
         )
-    if options["sslmode"] == "verify-full" and not options.get("sslrootcert"):
+    # Both verifying modes need the bundle: RDS certificates do not chain to a
+    # CA in the system trust store, and 'verify-ca' would otherwise fall back
+    # to system roots *and* skip the hostname check — any publicly-trusted
+    # certificate, for any name, would be accepted.
+    if options["sslmode"] in VERIFIED_SSLMODES and not options.get("sslrootcert"):
         raise ImproperlyConfigured(
             "DATABASE_IAM_AUTH requires DATABASE_SSLROOTCERT to point at the "
             "Amazon RDS CA bundle, because RDS certificates are not signed by "
             f"a CA in the system trust store. Download {RDS_CA_BUNDLE_URL} and "
-            "set DATABASE_SSLROOTCERT to its path. To connect without "
-            "verifying the server, set DATABASE_SSLMODE=require instead "
-            "(encrypted, but the database's identity is not checked)."
+            "set DATABASE_SSLROOTCERT to its path.\n\n"
+            f"DATABASE_SSLMODE={UNVERIFIED_SSLMODE!r} will also start, but it "
+            "performs NO certificate or hostname validation: anything that can "
+            "answer on the database hostname receives a live IAM token, "
+            "replayable against RDS for 15 minutes as that role. Set the CA "
+            "bundle instead unless you have a specific reason not to."
         )
     return options
