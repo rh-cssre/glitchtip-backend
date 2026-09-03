@@ -896,6 +896,39 @@ if env.str("DATABASE_HOST", None):
 # and the import Django's stock postgresql backend — which this engine
 # extends — performs at load), but no database I/O flows through it.
 DATABASE_ENGINE = "gt_rust.django_backend"
+
+# AWS RDS IAM database authentication. When enabled there is no database
+# password in the environment at all: the driver calls
+# glitchtip.db_iam.rds_auth_token for every physical connection it opens and
+# authenticates with a short-lived IAM token. Any PASSWORD in DATABASE_URL is
+# ignored. See glitchtip/db_iam.py for the AWS-side prerequisites.
+DATABASE_IAM_AUTH = env.bool("DATABASE_IAM_AUTH", False)
+# Which DATABASES aliases authenticate with IAM. Empty means all of them.
+# IAM auth happens between the client and RDS, so an alias that connects
+# through a pooler instead (the read_only alias points at a read-only
+# PgBouncer over the same database) must be left off this list: PgBouncer
+# authenticates its clients itself and cannot validate an IAM token.
+DATABASE_IAM_AUTH_ALIASES = [
+    alias.strip()
+    for alias in env.str("DATABASE_IAM_AUTH_ALIASES", "").split(",")
+    if alias.strip()
+]
+# Region used to sign the token. Unset lets boto3 resolve it the usual way
+# (AWS_REGION / AWS_DEFAULT_REGION, instance metadata).
+DATABASE_IAM_REGION = env.str("DATABASE_IAM_REGION", None)
+# How long a minted token is reused. RDS tokens are valid for 900 s; the
+# default leaves a margin so a connection opened just after a refresh check
+# still authenticates comfortably inside the window.
+DATABASE_IAM_TOKEN_TTL = env.int("DATABASE_IAM_TOKEN_TTL", 600)
+# TLS to the database. Independent of IAM auth, but required by it.
+DATABASE_SSLMODE = env.str("DATABASE_SSLMODE", None)
+DATABASE_SSLROOTCERT = env.str("DATABASE_SSLROOTCERT", None)
+
+# Imported here rather than at the top of the file: ``glitchtip/__init__.py``
+# pulls in ``glitchtip.lookups``, which reaches into Django's ORM, and that
+# must not happen while settings are still being assembled.
+from glitchtip import db_iam as _db_iam
+
 # Valkey/Redis connection. VALKEY_URL is the source of truth — supports any scheme
 # that django-vcache understands: redis://, rediss://, valkey://, valkeys://, sentinel://
 # Component env vars (VALKEY_HOST, etc.) are a convenience for simple single-node setups.
@@ -914,7 +947,7 @@ else:
     VALKEY_URL = env.str("VALKEY_URL", env.str("REDIS_URL", "redis://redis:6379/0"))
 
 # Settings applied to every DATABASES entry, however it was configured above.
-for db_config in DATABASES.values():
+for _db_alias, db_config in DATABASES.items():
     # gt_rust.django_backend extends Django's stock postgresql backend and
     # adds the AsyncDatabaseWrapper that django-async-backend's
     # ``async_connections`` discovers via load_backend, so sync paths (ORM,
@@ -974,6 +1007,17 @@ for db_config in DATABASES.values():
                 "statement after N uses, 0 = on first use) or 'off' to "
                 f"disable prepared statements; got {_prepare_threshold!r}"
             )
+
+    # TLS and, when enabled, RDS IAM authentication. An OPTIONS entry set
+    # explicitly in a DATABASES override still wins over the environment.
+    _db_iam.configure_options(
+        options,
+        iam_auth=DATABASE_IAM_AUTH
+        and (not DATABASE_IAM_AUTH_ALIASES or _db_alias in DATABASE_IAM_AUTH_ALIASES),
+        token_ttl=DATABASE_IAM_TOKEN_TTL,
+        sslmode=DATABASE_SSLMODE,
+        sslrootcert=DATABASE_SSLROOTCERT,
+    )
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
