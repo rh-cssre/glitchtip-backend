@@ -1,61 +1,18 @@
-"""Tests for AWS RDS IAM database authentication (``glitchtip.db_iam``).
+"""Tests for GlitchTip's RDS IAM auth policy (``glitchtip.db_iam``).
 
-No AWS: the boto3 client is stubbed. What matters here is that the token is
-minted for the connection actually being opened, and that a token can never
-be configured onto an unencrypted or unverified connection.
+Token minting lives in the driver (``django_vpg.contrib.aws``); what is
+tested here is the policy around it — which aliases get IAM auth, and the
+refusal to configure a live credential onto an unencrypted or unverified
+connection.
 """
 
-from unittest import mock
+from unittest import skipUnless
 
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
+from django.utils.module_loading import import_string
 
 from glitchtip import db_iam
-
-
-class RdsAuthTokenTestCase(SimpleTestCase):
-    def setUp(self):
-        # The module caches its client process-wide; keep tests independent.
-        db_iam._client = None
-        self.addCleanup(setattr, db_iam, "_client", None)
-
-    def test_token_is_minted_for_the_connection_being_opened(self):
-        # An RDS token signs host, port and user, so it is only valid for
-        # that endpoint. Each alias has its own, which is why the driver
-        # passes the connection rather than the provider reading settings.
-        client = mock.Mock()
-        client.generate_db_auth_token.return_value = "token-value"
-        with mock.patch.object(db_iam, "_rds_client", return_value=client):
-            token = db_iam.rds_auth_token(
-                {
-                    "host": "db.abc123.us-east-1.rds.amazonaws.com",
-                    "port": 5432,
-                    "user": "glitchtip_iam",
-                    "dbname": "glitchtip",
-                }
-            )
-        assert token == "token-value"
-        client.generate_db_auth_token.assert_called_once_with(
-            DBHostname="db.abc123.us-east-1.rds.amazonaws.com",
-            Port=5432,
-            DBUsername="glitchtip_iam",
-        )
-
-    def test_port_given_as_a_string_is_coerced(self):
-        # DATABASE_URL parsing can leave PORT as a str.
-        client = mock.Mock()
-        with mock.patch.object(db_iam, "_rds_client", return_value=client):
-            db_iam.rds_auth_token(
-                {"host": "h", "port": "5432", "user": "u", "dbname": "d"}
-            )
-        assert client.generate_db_auth_token.call_args.kwargs["Port"] == 5432
-
-    def test_client_is_built_once_and_reused(self):
-        with mock.patch("boto3.client") as boto_client:
-            first = db_iam._rds_client()
-            second = db_iam._rds_client()
-        assert first is second
-        boto_client.assert_called_once()
 
 
 class ConfigureOptionsTestCase(SimpleTestCase):
@@ -79,7 +36,7 @@ class ConfigureOptionsTestCase(SimpleTestCase):
             token_ttl=300,
             sslrootcert="/certs/rds.pem",
         )
-        assert options["password_provider"] == "glitchtip.db_iam.rds_auth_token"
+        assert options["password_provider"] == db_iam.RDS_IAM_PROVIDER
         assert options["password_ttl"] == 300
         # Verified TLS by default: without it a token would be handed to
         # whatever answers on that hostname.
@@ -149,3 +106,24 @@ class ConfigureOptionsTestCase(SimpleTestCase):
             {}, iam_auth=False, sslmode="prefer", token_ttl=600
         )
         assert options["sslmode"] == "prefer"
+
+
+def _provider_available():
+    try:
+        import_string(db_iam.RDS_IAM_PROVIDER)
+    except ImportError:
+        return False
+    return True
+
+
+class ProviderWiringTestCase(SimpleTestCase):
+    @skipUnless(
+        _provider_available(),
+        f"{db_iam.RDS_IAM_PROVIDER} needs a django-vpg with rotating-credential "
+        "support; this skip disappears once glitchtip-rust pins that release. "
+        "Until then, DATABASE_IAM_AUTH cannot work at runtime.",
+    )
+    def test_the_configured_provider_is_importable_and_callable(self):
+        # The dotted path is resolved by the driver at connect time, so a typo
+        # would otherwise surface only on a deployment with IAM enabled.
+        assert callable(import_string(db_iam.RDS_IAM_PROVIDER))

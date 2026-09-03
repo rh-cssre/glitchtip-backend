@@ -10,10 +10,11 @@ driver's pool opens new ones on its own schedule — warmup, growth toward
 ``max_size``, ``max_lifetime`` recycling — and those fail to authenticate
 once the token is stale.
 
-django-vpg's ``OPTIONS["password_provider"]`` exists for exactly this: the
-driver calls back here whenever it needs a credential for a *physical*
-connection. This module is the AWS-specific half — the driver itself knows
-nothing about AWS, which is why the token minting lives in the application.
+django-vpg exists for exactly this: it keeps a credential current for the
+pool and mints through ``OPTIONS["password_provider"]``. The minting itself
+is the driver's ``django_vpg.contrib.aws`` provider; what lives here is the
+*policy* — which aliases use IAM, and what TLS we insist on before letting a
+live credential onto the wire.
 
 Enable with ``DATABASE_IAM_AUTH=true``; see ``glitchtip/settings.py``.
 
@@ -32,9 +33,13 @@ Outside GlitchTip, RDS IAM auth also requires:
 * TLS, which the driver enforces — a token travels as a cleartext password.
 """
 
-import threading
-
 from django.core.exceptions import ImproperlyConfigured
+
+#: The driver's own RDS provider. It derives the region from the endpoint
+#: hostname and reads the renewal deadline out of the token, so neither is
+#: configuration here. boto3 is already a hard dependency of GlitchTip, so
+#: django-vpg's ``[aws]`` extra adds nothing we do not already have.
+RDS_IAM_PROVIDER = "django_vpg.contrib.aws.rds_iam_token"
 
 #: Where to obtain the CA bundle RDS certificates chain to.
 RDS_CA_BUNDLE_URL = "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"
@@ -45,51 +50,6 @@ RDS_CA_BUNDLE_URL = "https://truststore.pki.rds.amazonaws.com/global/global-bund
 VERIFIED_SSLMODES = ("verify-full", "verify-ca")
 #: Encrypted but unauthenticated — see the warning in configure_options.
 UNVERIFIED_SSLMODE = "require"
-
-_client = None
-_client_lock = threading.Lock()
-
-
-def _rds_client():
-    """Return a process-local boto3 RDS client, built on first use.
-
-    Deliberately lazy rather than built at import: settings are imported in
-    the parent of a prefork server, and a boto3 client created before
-    ``fork()`` carries connection-pool state its children would then share.
-    First use happens in the worker, after the fork.
-    """
-    global _client
-    if _client is None:
-        with _client_lock:
-            if _client is None:
-                import boto3
-                from django.conf import settings
-
-                _client = boto3.client(
-                    "rds", region_name=getattr(settings, "DATABASE_IAM_REGION", None)
-                )
-    return _client
-
-
-def rds_auth_token(conn) -> str:
-    """Mint an RDS IAM auth token for the connection being opened.
-
-    ``conn`` carries the endpoint django-vpg is about to connect to
-    (``host``, ``port``, ``user``, ``dbname``). The token signs host, port
-    and user, so it is only valid for that endpoint — which is why this
-    reads the connection rather than ``settings.DATABASES``: a writer and a
-    read replica are different hosts and need different tokens, and one
-    provider serves every alias.
-
-    Called from whichever thread first notices the credential has aged past
-    ``password_ttl``; the boto3 client is shared and its calls are
-    thread-safe once constructed.
-    """
-    return _rds_client().generate_db_auth_token(
-        DBHostname=conn["host"],
-        Port=int(conn["port"]),
-        DBUsername=conn["user"],
-    )
 
 
 def configure_options(
@@ -120,7 +80,7 @@ def configure_options(
     # One provider serves every alias it is enabled for: it is handed the
     # host, port and user of the connection being opened, and an RDS token
     # signs exactly those, so each alias gets a token for its own endpoint.
-    options["password_provider"] = "glitchtip.db_iam.rds_auth_token"
+    options["password_provider"] = RDS_IAM_PROVIDER
     options["password_ttl"] = token_ttl
     # An IAM token is sent as a cleartext password, so the connection must be
     # encrypted; the driver refuses the modes that permit a plaintext
