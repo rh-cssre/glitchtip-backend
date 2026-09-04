@@ -49,75 +49,94 @@ RDS_IAM_PROVIDER = "django_vpg.contrib.aws.rds_iam_token"
 #: Where to obtain the CA bundle RDS certificates chain to.
 RDS_CA_BUNDLE_URL = "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"
 
-#: sslmode values that actually authenticate the server. Anything outside
-#: these plus UNVERIFIED_SSLMODE permits a plaintext session, which would put
-#: a live credential on the wire in the clear.
-VERIFIED_SSLMODES = ("verify-full", "verify-ca")
-#: Encrypted but unauthenticated — see the warning in configure_options.
-UNVERIFIED_SSLMODE = "require"
+#: sslmode values that authenticate the *server*, not merely encrypt.
+#:
+#: verify-ca is deliberately NOT here. It validates the certificate chain but
+#: skips the hostname check, and the trust anchor RDS deployments use is the
+#: **global** bundle — the anchor for every RDS instance in every AWS account.
+#: So verify-ca + that bundle trusts any RDS instance anywhere: anyone who can
+#: answer on the database hostname (split-horizon DNS, a reclaimed CNAME, a
+#: compromised sidecar) can point it at an instance in their own account,
+#: complete the handshake, and be handed a live IAM token as a cleartext
+#: password — replayable against the real database for 15 minutes.
+VERIFIED_SSLMODES = ("verify-full",)
+
+#: Encrypted, but authenticating nothing: no certificate chain and no
+#: hostname. Reachable only by deliberately setting
+#: DATABASE_IAM_ALLOW_UNVERIFIED_TLS, never by following an error message.
+UNVERIFIED_SSLMODES = ("require", "verify-ca")
 
 
 def configure_options(
     options,
     *,
     iam_auth,
-    token_ttl,
+    token_ttl=None,
     sslmode=None,
     sslrootcert=None,
+    allow_unverified_tls=False,
 ):
     """Apply TLS and IAM-auth settings to one alias's ``OPTIONS`` dict.
 
-    Mutates and returns ``options``. An entry already present (set
-    explicitly in a ``DATABASES`` override) wins over the environment,
-    except ``password_provider``/``password_ttl``, which IAM auth owns.
+    Mutates and returns ``options``, but only after every check has passed —
+    a caller that catches ``ImproperlyConfigured`` is never left with IAM
+    half-wired onto a rejected sslmode.
 
-    Kept here rather than inline in settings so the guard below is
-    reachable from tests without re-importing settings.
+    An entry already present (set explicitly in a ``DATABASES`` override)
+    wins over the environment, except ``password_provider``, which IAM auth
+    owns. Kept here rather than inline in settings so the guards are reachable
+    from tests without re-importing settings.
     """
+    resolved = dict(options)
     if sslmode:
-        options.setdefault("sslmode", sslmode)
+        resolved.setdefault("sslmode", sslmode)
     if sslrootcert:
-        options.setdefault("sslrootcert", sslrootcert)
+        resolved.setdefault("sslrootcert", sslrootcert)
 
-    if not iam_auth:
-        return options
+    if iam_auth:
+        # An IAM token reaches PostgreSQL as a cleartext password, so the
+        # connection must both be encrypted and prove who it is talking to.
+        resolved.setdefault("sslmode", "verify-full")
+        mode = resolved["sslmode"]
+        if mode in UNVERIFIED_SSLMODES:
+            if not allow_unverified_tls:
+                raise ImproperlyConfigured(
+                    f"DATABASE_SSLMODE={mode!r} authenticates nothing about the "
+                    "server, so a live IAM token would be handed to whatever "
+                    "answers on the database hostname and could be replayed "
+                    "against the real database for 15 minutes. "
+                    f"{'verify-ca validates the chain but not the hostname, and the RDS global bundle trusts every RDS instance in every AWS account. ' if mode == 'verify-ca' else ''}"
+                    f"Use 'verify-full' with DATABASE_SSLROOTCERT set to the RDS "
+                    f"CA bundle ({RDS_CA_BUNDLE_URL}). If you genuinely accept "
+                    "an unauthenticated server, set "
+                    "DATABASE_IAM_ALLOW_UNVERIFIED_TLS=true."
+                )
+        elif mode not in VERIFIED_SSLMODES:
+            raise ImproperlyConfigured(
+                f"DATABASE_SSLMODE={mode!r} cannot be combined with "
+                "DATABASE_IAM_AUTH: an IAM token is sent as a cleartext "
+                "password, and this mode permits an unencrypted session "
+                "('prefer' negotiates TLS but accepts plaintext if the server "
+                f"declines). Use {', '.join(VERIFIED_SSLMODES)}."
+            )
+        elif not resolved.get("sslrootcert"):
+            # RDS certificates do not chain to a CA in the system trust store,
+            # so verify-full without the bundle fails as an opaque TLS error.
+            raise ImproperlyConfigured(
+                "DATABASE_IAM_AUTH requires DATABASE_SSLROOTCERT to point at "
+                "the Amazon RDS CA bundle, because RDS certificates are not "
+                "signed by a CA in the system trust store. Download "
+                f"{RDS_CA_BUNDLE_URL} and set DATABASE_SSLROOTCERT to its path."
+            )
+        # One provider serves every alias it is enabled for: it is handed the
+        # host, port and user of the connection being opened, and an RDS token
+        # signs exactly those, so each alias gets a token for its own endpoint.
+        resolved["password_provider"] = RDS_IAM_PROVIDER
+        if token_ttl:
+            # Only a fallback: the RDS provider states the token's own expiry,
+            # which the driver prefers, so this is unused with it.
+            resolved["password_ttl"] = token_ttl
 
-    # One provider serves every alias it is enabled for: it is handed the
-    # host, port and user of the connection being opened, and an RDS token
-    # signs exactly those, so each alias gets a token for its own endpoint.
-    options["password_provider"] = RDS_IAM_PROVIDER
-    options["password_ttl"] = token_ttl
-    # An IAM token is sent as a cleartext password, so the connection must be
-    # encrypted; the driver refuses the modes that permit a plaintext
-    # session. Verify the server too unless the operator deliberately chose
-    # otherwise — without verification a token would be handed to whatever
-    # answers on that hostname.
-    options.setdefault("sslmode", "verify-full")
-    # Allow-list, mirroring the driver's own check, rather than a deny-list of
-    # the three unencrypted modes: a mode name added to the driver later would
-    # otherwise slip through here silently.
-    if options["sslmode"] not in VERIFIED_SSLMODES + (UNVERIFIED_SSLMODE,):
-        raise ImproperlyConfigured(
-            f"DATABASE_SSLMODE={options['sslmode']!r} cannot be combined with "
-            "DATABASE_IAM_AUTH: an IAM token is sent to PostgreSQL as a "
-            "cleartext password, and this mode permits an unencrypted session "
-            "('prefer' negotiates TLS but accepts plaintext if the server "
-            f"declines). Use one of {', '.join(VERIFIED_SSLMODES)}."
-        )
-    # Both verifying modes need the bundle: RDS certificates do not chain to a
-    # CA in the system trust store, and 'verify-ca' would otherwise fall back
-    # to system roots *and* skip the hostname check — any publicly-trusted
-    # certificate, for any name, would be accepted.
-    if options["sslmode"] in VERIFIED_SSLMODES and not options.get("sslrootcert"):
-        raise ImproperlyConfigured(
-            "DATABASE_IAM_AUTH requires DATABASE_SSLROOTCERT to point at the "
-            "Amazon RDS CA bundle, because RDS certificates are not signed by "
-            f"a CA in the system trust store. Download {RDS_CA_BUNDLE_URL} and "
-            "set DATABASE_SSLROOTCERT to its path.\n\n"
-            f"DATABASE_SSLMODE={UNVERIFIED_SSLMODE!r} will also start, but it "
-            "performs NO certificate or hostname validation: anything that can "
-            "answer on the database hostname receives a live IAM token, "
-            "replayable against RDS for 15 minutes as that role. Set the CA "
-            "bundle instead unless you have a specific reason not to."
-        )
+    options.clear()
+    options.update(resolved)
     return options

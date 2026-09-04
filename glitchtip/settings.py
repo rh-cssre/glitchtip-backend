@@ -863,6 +863,38 @@ ANYMAIL = {
 
 ACCOUNT_EMAIL_SUBJECT_PREFIX = env.str("ACCOUNT_EMAIL_SUBJECT_PREFIX", "")
 
+# AWS RDS IAM database authentication. When enabled there is no database
+# password for the aliases it covers: the driver calls
+# django_vpg.contrib.aws.rds_iam_token for the connections it opens and
+# authenticates with a short-lived IAM token, so any PASSWORD in DATABASE_URL
+# is ignored by the driver. See glitchtip/db_iam.py for the AWS prerequisites.
+DATABASE_IAM_AUTH = env.bool("DATABASE_IAM_AUTH", False)
+# Which DATABASES aliases authenticate with IAM. Defaults to "default" only,
+# and deliberately not to every alias: the read_only alias may point at a
+# PgBouncer, which authenticates its own clients and cannot validate an IAM
+# token — it would simply receive a live, replayable AWS credential in the
+# clear. Widen this for any alias whose endpoint is IAM-aware; RDS Proxy is,
+# PgBouncer is not. A maintenance alias sharing the database is also excluded
+# by default: GRANT rds_iam disables password auth for a role, so an alias
+# left off this list must not use a role that has it.
+DATABASE_IAM_AUTH_ALIASES = [
+    alias.strip()
+    for alias in env.str("DATABASE_IAM_AUTH_ALIASES", "default").split(",")
+    if alias.strip()
+]
+# Seconds a minted credential is reused. Only a fallback: the RDS provider
+# reports the token's own expiry, which the driver prefers, so this has no
+# effect with it. Unset means the driver's own default.
+DATABASE_IAM_TOKEN_TTL = env.int("DATABASE_IAM_TOKEN_TTL", 0)
+# Accept a database server whose identity is not verified. Only meaningful
+# with IAM auth, where it means a live token may be handed to anything that
+# answers on the hostname. Exists so the insecure choice has to be made
+# deliberately rather than by following an error message.
+DATABASE_IAM_ALLOW_UNVERIFIED_TLS = env.bool("DATABASE_IAM_ALLOW_UNVERIFIED_TLS", False)
+# TLS to the database. Independent of IAM auth, but required by it.
+DATABASE_SSLMODE = env.str("DATABASE_SSLMODE", None)
+DATABASE_SSLROOTCERT = env.str("DATABASE_SSLROOTCERT", None)
+
 # Database
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
 # Use either DATABASE_URL or individual components
@@ -884,11 +916,17 @@ if env.str("DATABASE_HOST", None):
         {
             "NAME": env.str("DATABASE_NAME", "postgres"),
             "USER": env.str("DATABASE_USER", "postgres"),
-            # Not required under IAM auth, where there is no password to
-            # supply; demanding one would only invite a dummy value.
+            # Not required when IAM auth covers THIS alias, where there is
+            # no password to supply. Gated on alias membership, not on
+            # DATABASE_IAM_AUTH alone: enabling IAM for some other alias must
+            # not quietly turn a mandatory password into an empty one here,
+            # which against a trust/peer-configured server would connect
+            # unauthenticated.
             "PASSWORD": env.str(
                 "DATABASE_PASSWORD",
-                "" if env.bool("DATABASE_IAM_AUTH", False) else environ.Env.NOTSET,
+                ""
+                if (DATABASE_IAM_AUTH and "default" in DATABASE_IAM_AUTH_ALIASES)
+                else environ.Env.NOTSET,
             ),
             "HOST": env.str("DATABASE_HOST"),
             "PORT": env.str("DATABASE_PORT", "5432"),
@@ -902,33 +940,6 @@ if env.str("DATABASE_HOST", None):
 # extends — performs at load), but no database I/O flows through it.
 DATABASE_ENGINE = "gt_rust.django_backend"
 
-# AWS RDS IAM database authentication. When enabled there is no database
-# password in the environment at all: the driver calls
-# glitchtip.db_iam.rds_auth_token for every physical connection it opens and
-# authenticates with a short-lived IAM token. Any PASSWORD in DATABASE_URL is
-# ignored. See glitchtip/db_iam.py for the AWS-side prerequisites.
-DATABASE_IAM_AUTH = env.bool("DATABASE_IAM_AUTH", False)
-# Which DATABASES aliases authenticate with IAM. Defaults to "default" only,
-# and deliberately not to every alias: the read_only alias points at a
-# read-only PgBouncer, which authenticates its own clients and cannot validate
-# an IAM token — it would simply receive a live, replayable AWS credential in
-# the clear. Widen this list for any alias whose endpoint is IAM-aware; RDS
-# Proxy is (it accepts IAM auth from clients), PgBouncer is not.
-DATABASE_IAM_AUTH_ALIASES = [
-    alias.strip()
-    for alias in env.str("DATABASE_IAM_AUTH_ALIASES", "default").split(",")
-    if alias.strip()
-]
-# Region used to sign the token. Unset lets boto3 resolve it the usual way
-# (AWS_REGION / AWS_DEFAULT_REGION, instance metadata).
-DATABASE_IAM_REGION = env.str("DATABASE_IAM_REGION", None)
-# How long a minted token is reused. RDS tokens are valid for 900 s; the
-# default leaves a margin so a connection opened just after a refresh check
-# still authenticates comfortably inside the window.
-DATABASE_IAM_TOKEN_TTL = env.int("DATABASE_IAM_TOKEN_TTL", 600)
-# TLS to the database. Independent of IAM auth, but required by it.
-DATABASE_SSLMODE = env.str("DATABASE_SSLMODE", None)
-DATABASE_SSLROOTCERT = env.str("DATABASE_SSLROOTCERT", None)
 
 # Imported here rather than at the top of the file: ``glitchtip/__init__.py``
 # pulls in ``glitchtip.lookups``, which reaches into Django's ORM, and that
@@ -951,6 +962,44 @@ if VALKEY_HOST:
         VALKEY_URL = f"redis://{VALKEY_HOST}:{VALKEY_PORT}/{VALKEY_DATABASE}"
 else:
     VALKEY_URL = env.str("VALKEY_URL", env.str("REDIS_URL", "redis://redis:6379/0"))
+
+if DATABASE_IAM_AUTH:
+    _unknown = set(DATABASE_IAM_AUTH_ALIASES) - set(DATABASES)
+    if _unknown:
+        raise ImproperlyConfigured(
+            f"DATABASE_IAM_AUTH_ALIASES names unknown aliases: {sorted(_unknown)}. "
+            f"Configured aliases are {sorted(DATABASES)}. A typo here silently "
+            "leaves an alias on password authentication."
+        )
+    # Fail closed if the installed driver cannot honour password_provider.
+    # Without this the backend warns about an unsupported OPTIONS key, drops
+    # it, and connects with the static PASSWORD instead — so turning on a
+    # security feature would silently do nothing.
+    #
+    # Import the configured engine first and inspect the extension it
+    # installs, not django_vpg directly: gt_rust substitutes its own compiled
+    # module for django_vpg._vpg_driver and refuses if django_vpg was imported
+    # ahead of it, and that substituted module is the one whose capability
+    # actually decides this.
+    import importlib
+    import inspect
+
+    importlib.import_module(f"{DATABASE_ENGINE}.base")
+    from django_vpg._vpg_driver import RustPgDriver as _vpg_driver_cls
+
+    try:
+        _vpg_params = inspect.signature(_vpg_driver_cls.connect).parameters
+    except (TypeError, ValueError):  # pragma: no cover - builtin without one
+        _vpg_params = {}
+    if "password_provider" not in _vpg_params:
+        raise ImproperlyConfigured(
+            "DATABASE_IAM_AUTH requires a database driver with "
+            "rotating-credential support, but the loaded "
+            f"{sys.modules['django_vpg._vpg_driver'].__name__} extension "
+            "does not accept "
+            "password_provider and would fall back to password "
+            "authentication. Upgrade glitchtip-rust, which supplies it."
+        )
 
 # Settings applied to every DATABASES entry, however it was configured above.
 for _db_alias, db_config in DATABASES.items():
@@ -1022,6 +1071,7 @@ for _db_alias, db_config in DATABASES.items():
         token_ttl=DATABASE_IAM_TOKEN_TTL,
         sslmode=DATABASE_SSLMODE,
         sslrootcert=DATABASE_SSLROOTCERT,
+        allow_unverified_tls=DATABASE_IAM_ALLOW_UNVERIFIED_TLS,
     )
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
