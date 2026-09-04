@@ -971,7 +971,7 @@ if DATABASE_IAM_AUTH:
             f"Configured aliases are {sorted(DATABASES)}. A typo here silently "
             "leaves an alias on password authentication."
         )
-    # Fail closed if the installed driver cannot honour password_provider.
+    # Fail closed if the installed driver cannot honour credential_provider.
     # Without this the backend warns about an unsupported OPTIONS key, drops
     # it, and connects with the static PASSWORD instead — so turning on a
     # security feature would silently do nothing.
@@ -991,13 +991,13 @@ if DATABASE_IAM_AUTH:
         _vpg_params = inspect.signature(_vpg_driver_cls.connect).parameters
     except (TypeError, ValueError):  # pragma: no cover - builtin without one
         _vpg_params = {}
-    if "password_provider" not in _vpg_params:
+    if "credential_provider" not in _vpg_params:
         raise ImproperlyConfigured(
             "DATABASE_IAM_AUTH requires a database driver with "
             "rotating-credential support, but the loaded "
             f"{sys.modules['django_vpg._vpg_driver'].__name__} extension "
             "does not accept "
-            "password_provider and would fall back to password "
+            "credential_provider and would fall back to password "
             "authentication. Upgrade glitchtip-rust, which supplies it."
         )
 

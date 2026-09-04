@@ -11,7 +11,7 @@ driver's pool opens new ones on its own schedule — warmup, growth toward
 once the token is stale.
 
 django-vpg exists for exactly this: it keeps a credential current for the
-pool and mints through ``OPTIONS["password_provider"]``. The minting itself
+pool and mints through ``OPTIONS["credential_provider"]``. The minting itself
 is the driver's ``django_vpg.contrib.aws`` provider; what lives here is the
 *policy* — which aliases use IAM, and what TLS we insist on before letting a
 live credential onto the wire.
@@ -83,7 +83,7 @@ def configure_options(
     half-wired onto a rejected sslmode.
 
     An entry already present (set explicitly in a ``DATABASES`` override)
-    wins over the environment, except ``password_provider``, which IAM auth
+    wins over the environment, except ``credential_provider``, which IAM auth
     owns. Kept here rather than inline in settings so the guards are reachable
     from tests without re-importing settings.
     """
@@ -131,11 +131,11 @@ def configure_options(
         # One provider serves every alias it is enabled for: it is handed the
         # host, port and user of the connection being opened, and an RDS token
         # signs exactly those, so each alias gets a token for its own endpoint.
-        resolved["password_provider"] = RDS_IAM_PROVIDER
+        resolved["credential_provider"] = RDS_IAM_PROVIDER
         if token_ttl:
             # Only a fallback: the RDS provider states the token's own expiry,
             # which the driver prefers, so this is unused with it.
-            resolved["password_ttl"] = token_ttl
+            resolved["credential_ttl"] = token_ttl
 
     options.clear()
     options.update(resolved)

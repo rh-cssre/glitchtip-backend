@@ -29,7 +29,7 @@ class ConfigureOptionsTestCase(SimpleTestCase):
         options = db_iam.configure_options(
             {}, iam_auth=True, sslrootcert="/certs/rds.pem"
         )
-        assert options["password_provider"] == db_iam.RDS_IAM_PROVIDER
+        assert options["credential_provider"] == db_iam.RDS_IAM_PROVIDER
         # Verified TLS by default: without it a token would be handed to
         # whatever answers on that hostname.
         assert options["sslmode"] == "verify-full"
@@ -121,19 +121,19 @@ class ConfigureOptionsTestCase(SimpleTestCase):
     def test_token_ttl_is_only_a_fallback(self):
         # The RDS provider states the token's own expiry, which the driver
         # prefers, so this is absent unless explicitly configured.
-        assert "password_ttl" not in db_iam.configure_options(
+        assert "credential_ttl" not in db_iam.configure_options(
             {}, iam_auth=True, sslrootcert="/certs/rds.pem"
         )
         assert (
             db_iam.configure_options(
                 {}, iam_auth=True, token_ttl=300, sslrootcert="/certs/rds.pem"
-            )["password_ttl"]
+            )["credential_ttl"]
             == 300
         )
 
 
 def _provider_available():
-    """Can the *loaded extension* actually honour password_provider?
+    """Can the *loaded extension* actually honour credential_provider?
 
     Checking that ``django_vpg.contrib.aws`` imports is not enough: gt_rust
     substitutes its own compiled module for ``django_vpg._vpg_driver``, and
@@ -146,7 +146,9 @@ def _provider_available():
         import_string(db_iam.RDS_IAM_PROVIDER)
         from django_vpg._vpg_driver import RustPgDriver
 
-        return "password_provider" in inspect.signature(RustPgDriver.connect).parameters
+        return (
+            "credential_provider" in inspect.signature(RustPgDriver.connect).parameters
+        )
     except Exception:
         return False
 
