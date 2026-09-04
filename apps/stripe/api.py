@@ -500,6 +500,9 @@ class OverageStatusSchema(CamelSchema):
     eligible: bool  # has an active paid subscription an overage item can attach to
     configured: bool  # an overage product/price is provisioned in Stripe
     cap_cents: int
+    # The ceiling configure_overage enforces; served so the client validates
+    # against it rather than a copy that drifts or blocks a raised env var.
+    max_cap_cents: int
     cap_units: int
     quota: int
     usage: int
@@ -574,6 +577,7 @@ async def get_overage_status(request: AuthHttpRequest, organization_slug: str):
         "eligible": eligible,
         "configured": await _get_overage_price() is not None,
         "cap_cents": org.overage_spend_cap_cents,
+        "max_cap_cents": settings.GLITCHTIP_OVERAGE_MAX_CAP_CENTS,
         "cap_units": cap_units,
         "quota": quota,
         "usage": usage,
