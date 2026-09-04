@@ -56,6 +56,7 @@ class OrgScope:
             )
         return qs.filter(self.gate, **{model.org_field: self.org_id_expr})
 
+
 def _resolve_roles(scopes: list[Scopes]) -> tuple[frozenset[Scopes], tuple[int, ...]]:
     """Import time: which role ints hold at least one required scope."""
     required = frozenset(scopes)
@@ -81,6 +82,7 @@ async def _enter_scope(request, required, roles, kwargs) -> OrgScope:
     request.org_scope = scope  # set before the view runs
     return scope
 
+
 def _org_gate(required: frozenset[Scopes], roles: tuple[int, ...], view):
     """The gate, with nothing about response shape in it.
 
@@ -102,8 +104,8 @@ def _org_gate(required: frozenset[Scopes], roles: tuple[int, ...], view):
 
 
 def org_scoped_list(scopes: list[Scopes]):
-    """ Folded gate for paginated views 
-    
+    """Folded gate for paginated views
+
     only ~14 endpoints are paginated. For pagination, we can capture the
     queryset, fold in authz, then paginate (evaluate).
     """
