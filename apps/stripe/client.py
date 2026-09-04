@@ -34,9 +34,11 @@ from .schema import (
 
 STRIPE_URL = "https://api.stripe.com/v1"
 STRIPE_V2_URL = "https://api.stripe.com/v2"
+# No Content-Type here: aiohttp derives it from the body, and sends none when
+# there is no body. Hardcoding the v1 form type 415'd every v2 request, which
+# accepts only JSON.
 HEADERS = {
     "Authorization": f"Bearer {settings.STRIPE_SECRET_KEY}",
-    "Content-Type": "application/x-www-form-urlencoded",
     "Stripe-Version": "2025-12-15.clover",
 }
 

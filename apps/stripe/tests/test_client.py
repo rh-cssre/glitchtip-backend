@@ -129,6 +129,44 @@ class StripeV2EventFetchTests(TestCase):
             await fetch_v2_event("evt_1/../../v1/customers")
 
 
+class StripeContentTypeTests(TestCase):
+    """No request may pin a Content-Type; aiohttp derives it from the body.
+
+    A pinned v1 form type reached v2 too, where Stripe answers 415
+    `wsp_415_illegal_request_content_type`, breaking the meter-error webhook's
+    event fetch and the provisioning command's destination check.
+    """
+
+    async def test_v2_get_pins_no_content_type(self):
+        with mock_aiohttp() as mocked:
+            mocked.get(
+                f"{STRIPE_V2_URL}/core/events/evt_1",
+                status=200,
+                payload={
+                    "id": "evt_1",
+                    "object": "v2.core.event",
+                    "type": "v1.billing.meter.error_report_triggered",
+                },
+            )
+            await fetch_v2_event("evt_1")
+            request = mocked.requests[0]
+        self.assertNotIn("Content-Type", request.kwargs["headers"])
+
+    async def test_v1_post_pins_no_content_type(self):
+        with mock_aiohttp() as mocked:
+            mocked.post(f"{STRIPE_URL}/customers", status=200, payload={"id": "cus_1"})
+            await stripe_post("customers", {"email": "a@b.c"})
+            request = mocked.requests[0]
+        self.assertNotIn("Content-Type", request.kwargs["headers"])
+
+    async def test_v1_get_pins_no_content_type(self):
+        with mock_aiohttp() as mocked:
+            mocked.get(f"{STRIPE_URL}/customers/cus_1", status=200, payload={})
+            await stripe_get("customers/cus_1")
+            request = mocked.requests[0]
+        self.assertNotIn("Content-Type", request.kwargs["headers"])
+
+
 def _session_response() -> str:
     """A minimal valid Checkout Session body for create_session to parse."""
     return Session(
