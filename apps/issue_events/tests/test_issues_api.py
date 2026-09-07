@@ -1,12 +1,15 @@
+import asyncio
 import datetime
 import logging
 import re
 import uuid
+from copy import deepcopy
 from timeit import default_timer as timer
+from unittest.mock import AsyncMock, patch
 
 from django.conf import settings
 from django.contrib.postgres.search import SearchVector
-from django.db.models import Value
+from django.db.models import QuerySet, Value
 from django.urls import reverse
 from django.utils import timezone
 from freezegun import freeze_time
@@ -20,7 +23,8 @@ from glitchtip.test_utils.test_case import (
 )
 
 from ..constants import EventStatus, LogLevel
-from ..models import Issue, IssueIndex
+from ..models import Issue, IssueEvent, IssueIndex
+from ..tasks import update_issues_task
 
 logger = logging.getLogger(__name__)
 
@@ -931,11 +935,13 @@ class IssueAPITestCase(GlitchTestCase):
         await baker.amake(
             "issue_events.IssueEvent",
             issue=issues[0],
+            organization=self.organization,
             _quantity=issue_event_count,
         )
         await baker.amake(
             "issue_events.IssueEvent",
             issue=issues[1],
+            organization=self.organization,
             _quantity=issue_event_count,
         )
         url = f"{self.list_url}?id={issues[0].id}&id={issues[1].id}"
@@ -950,6 +956,308 @@ class IssueAPITestCase(GlitchTestCase):
         merged = await Issue.objects.aget(is_deleted=False)
         merged_index = await IssueIndex.objects.aget(issue_id=merged.pk)
         self.assertEqual(merged_index.count, 2 * issue_event_count)
+
+    async def test_issue_merge_background_task_keeps_id_filter(self):
+        unrelated_issue = await baker.amake("issue_events.Issue", project=self.project)
+        selected_issues = await baker.amake(
+            "issue_events.Issue",
+            project=self.project,
+            _quantity=51,
+        )
+        selected_ids = [issue.id for issue in selected_issues]
+        query = "&".join(f"id={issue_id}" for issue_id in selected_ids)
+        queued_tasks = []
+
+        async def capture_task(**kwargs):
+            queued_tasks.append(deepcopy(kwargs))
+
+        enqueue = AsyncMock(side_effect=capture_task)
+        with patch("apps.issue_events.api.issues.update_issues_task", aenqueue=enqueue):
+            response = await self.async_client.put(
+                f"{self.list_url}?{query}",
+                {"merge": 1, "status": EventStatus.RESOLVED.label},
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(enqueue.await_count, 2)
+        for task_kwargs in queued_tasks:
+            self.assertCountEqual(task_kwargs["filter_params"]["id"], selected_ids)
+            self.assertNotIn("id__in", task_kwargs["filter_params"])
+            self.assertEqual(task_kwargs["update_params"]["merge"], max(selected_ids))
+        task_kwargs = queued_tasks[0]
+
+        await asyncio.wait_for(update_issues_task.func(**task_kwargs), timeout=30)
+
+        self.assertEqual(
+            await Issue.objects.filter(id__in=selected_ids, is_deleted=False).acount(),
+            1,
+        )
+        await unrelated_issue.arefresh_from_db()
+        self.assertFalse(unrelated_issue.is_deleted)
+
+    async def test_issue_merge_background_task_drains_all_events(self):
+        source, target = await baker.amake(
+            "issue_events.Issue",
+            project=self.project,
+            _quantity=2,
+        )
+        await IssueIndex.objects.filter(issue_id=source.id).aupdate(count=1001)
+        await IssueIndex.objects.filter(issue_id=target.id).aupdate(count=0)
+        await baker.amake(
+            "issue_events.IssueEvent",
+            issue=source,
+            organization=self.organization,
+            _quantity=1001,
+        )
+
+        enqueue = AsyncMock()
+        with patch("apps.issue_events.api.issues.update_issues_task", aenqueue=enqueue):
+            response = await self.async_client.put(
+                f"{self.list_url}?id={source.id}&id={target.id}",
+                {"merge": 1},
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        enqueue.assert_awaited_once()
+        await asyncio.wait_for(
+            update_issues_task.func(**enqueue.await_args.kwargs), timeout=30
+        )
+
+        self.assertEqual(
+            await IssueEvent.objects.filter(issue_id=source.id).acount(), 0
+        )
+        self.assertEqual(
+            await IssueEvent.objects.filter(issue_id=target.id).acount(), 1001
+        )
+        target_index = await IssueIndex.objects.aget(issue_id=target.id)
+        self.assertEqual(target_index.count, 1001)
+
+    async def test_issue_merge_background_task_advances_source_cursor(self):
+        issues = await baker.amake(
+            "issue_events.Issue",
+            project=self.project,
+            _quantity=4,
+        )
+        source_ids = [issue.id for issue in issues[:-1]]
+        target = issues[-1]
+        await Issue.objects.filter(id__in=source_ids).aupdate(is_deleted=True)
+        await IssueIndex.objects.filter(issue_id=target.id).aupdate(count=0)
+        for source in issues[:-1]:
+            await baker.amake(
+                "issue_events.IssueEvent",
+                issue=source,
+                organization=self.organization,
+            )
+        task_kwargs = {
+            "organization_slug": self.organization.slug,
+            "user_id": self.user.id,
+            "filter_params": {"id": [issue.id for issue in issues]},
+            "update_params": {"merge": target.id},
+            "exclude_ids": source_ids,
+            "max_id": target.id,
+        }
+
+        with patch("apps.issue_events.tasks.MERGE_ISSUE_CHUNK_SIZE", 2):
+            await asyncio.wait_for(update_issues_task.func(**task_kwargs), timeout=30)
+
+        self.assertEqual(
+            await Issue.objects.filter(id__in=source_ids, is_deleted=True).acount(),
+            len(source_ids),
+        )
+        self.assertEqual(
+            await IssueEvent.objects.filter(issue_id=target.id).acount(),
+            len(source_ids),
+        )
+        target_index = await IssueIndex.objects.aget(issue_id=target.id)
+        self.assertEqual(target_index.count, len(source_ids))
+        await target.arefresh_from_db()
+        self.assertFalse(target.is_deleted)
+
+    async def test_issue_status_background_task_does_not_revisit_reopened_issue(self):
+        issues = await baker.amake(
+            "issue_events.Issue", project=self.project, _quantity=3
+        )
+        issue_ids = sorted(issue.id for issue in issues)
+        await IssueIndex.objects.filter(issue_id__in=issue_ids).aupdate(
+            status=EventStatus.UNRESOLVED
+        )
+        original_update = QuerySet.aupdate
+        updated_ids = []
+
+        async def update_and_reopen(qs, **kwargs):
+            batch_ids = [
+                issue_id async for issue_id in qs.values_list("issue_id", flat=True)
+            ]
+            result = await original_update(qs, **kwargs)
+            if not updated_ids:
+                await original_update(
+                    IssueIndex.objects.filter(issue_id=issue_ids[0]),
+                    status=EventStatus.UNRESOLVED,
+                )
+            updated_ids.extend(batch_ids)
+            return result
+
+        with (
+            patch("apps.issue_events.tasks.UPDATE_ISSUE_CHUNK_SIZE", 2),
+            patch.object(QuerySet, "aupdate", update_and_reopen),
+        ):
+            await asyncio.wait_for(
+                update_issues_task.func(
+                    organization_slug=self.organization.slug,
+                    user_id=self.user.id,
+                    filter_params={"id": issue_ids},
+                    update_params={"status": EventStatus.RESOLVED.label},
+                    exclude_ids=[],
+                    max_id=max(issue_ids),
+                ),
+                timeout=30,
+            )
+
+        self.assertCountEqual(updated_ids, issue_ids)
+        reopened = await IssueIndex.objects.aget(issue_id=issue_ids[0])
+        self.assertEqual(reopened.status, EventStatus.UNRESOLVED)
+
+    async def test_issue_assignment_background_task_advances_cursor(self):
+        unrelated_issue = await baker.amake("issue_events.Issue", project=self.project)
+        selected_issues = await baker.amake(
+            "issue_events.Issue",
+            project=self.project,
+            _quantity=3,
+        )
+        selected_ids = [issue.id for issue in selected_issues]
+
+        with patch("apps.issue_events.tasks.UPDATE_ISSUE_CHUNK_SIZE", 2):
+            await asyncio.wait_for(
+                update_issues_task.func(
+                    organization_slug=self.organization.slug,
+                    user_id=self.user.id,
+                    filter_params={"id": selected_ids},
+                    update_params={
+                        "assigned_to_org_user_id": self.org_user.id,
+                        "assigned_to_team_id": None,
+                    },
+                    exclude_ids=[],
+                    max_id=max(selected_ids),
+                ),
+                timeout=30,
+            )
+
+        self.assertEqual(
+            await Issue.objects.filter(
+                id__in=selected_ids,
+                assigned_to_org_user_id=self.org_user.id,
+            ).acount(),
+            len(selected_ids),
+        )
+        await unrelated_issue.arefresh_from_db()
+        self.assertIsNone(unrelated_issue.assigned_to_org_user_id)
+
+    async def test_issue_merge_background_task_rejects_foreign_target(self):
+        source = await baker.amake("issue_events.Issue", project=self.project)
+        foreign_project = await baker.amake("projects.Project")
+        target = await baker.amake("issue_events.Issue", project=foreign_project)
+        fingerprint = await baker.amake(
+            "issue_events.IssueHash", issue=source, project=self.project
+        )
+        event = await baker.amake(
+            "issue_events.IssueEvent",
+            issue=source,
+            organization=self.organization,
+        )
+
+        await asyncio.wait_for(
+            update_issues_task.func(
+                organization_slug=self.organization.slug,
+                user_id=self.user.id,
+                filter_params={},
+                update_params={"merge": target.id},
+                exclude_ids=[],
+                max_id=target.id,
+            ),
+            timeout=30,
+        )
+
+        self.assertNotEqual(foreign_project.organization_id, self.organization.id)
+        await source.arefresh_from_db()
+        await fingerprint.arefresh_from_db()
+        await event.arefresh_from_db()
+        self.assertFalse(source.is_deleted)
+        self.assertEqual(fingerprint.issue_id, source.id)
+        self.assertEqual(event.issue_id, source.id)
+
+    async def test_issue_merge_background_task_skips_deleted_target(self):
+        source, target = await baker.amake(
+            "issue_events.Issue",
+            project=self.project,
+            _quantity=2,
+        )
+        await Issue.objects.filter(id=target.id).aupdate(is_deleted=True)
+        event = await baker.amake(
+            "issue_events.IssueEvent",
+            issue=source,
+            organization=self.organization,
+        )
+
+        await update_issues_task.func(
+            organization_slug=self.organization.slug,
+            user_id=self.user.id,
+            filter_params={"id": [source.id, target.id]},
+            update_params={"merge": target.id},
+            exclude_ids=[],
+            max_id=target.id,
+        )
+
+        await source.arefresh_from_db()
+        await event.arefresh_from_db()
+        self.assertFalse(source.is_deleted)
+        self.assertEqual(event.issue_id, source.id)
+
+    async def test_issue_merge_background_task_skips_predeleted_source(self):
+        source, target = await baker.amake(
+            "issue_events.Issue",
+            project=self.project,
+            _quantity=2,
+        )
+        await Issue.objects.filter(id=source.id).aupdate(is_deleted=True)
+        event = await baker.amake(
+            "issue_events.IssueEvent",
+            issue=source,
+            organization=self.organization,
+        )
+
+        await update_issues_task.func(
+            organization_slug=self.organization.slug,
+            user_id=self.user.id,
+            filter_params={"id": [source.id, target.id]},
+            update_params={"merge": target.id},
+            exclude_ids=[],
+            max_id=target.id,
+        )
+
+        await event.arefresh_from_db()
+        self.assertEqual(event.issue_id, source.id)
+
+    async def test_issue_merge_rejects_multiple_projects(self):
+        other_project = await baker.amake(
+            "projects.Project", organization=self.organization
+        )
+        await other_project.teams.aadd(self.team)
+        issue = await baker.amake("issue_events.Issue", project=self.project)
+        other_issue = await baker.amake("issue_events.Issue", project=other_project)
+
+        response = await self.async_client.put(
+            f"{self.list_url}?id={issue.id}&id={other_issue.id}",
+            {"merge": 1},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        await issue.arefresh_from_db()
+        await other_issue.arefresh_from_db()
+        self.assertFalse(issue.is_deleted)
+        self.assertFalse(other_issue.is_deleted)
 
     async def test_bulk_delete_via_search(self):
         """Bulk delete Issues via search string"""

@@ -1,4 +1,4 @@
-from django.db.models import F
+from django.db.models import F, Q
 from django.tasks import task
 
 from apps.organizations_ext.models import Organization
@@ -7,6 +7,10 @@ from .constants import EventStatus
 from .maintenance import delete_issues_in_batches
 from .models import Issue, IssueEvent, IssueHash, IssueIndex
 from .services import IssueFilters, filter_issue_list, get_queryset
+
+UPDATE_ISSUE_CHUNK_SIZE = 1000
+MERGE_ISSUE_CHUNK_SIZE = 1000
+MERGE_EVENT_CHUNK_SIZE = 1000
 
 
 @task
@@ -30,8 +34,8 @@ async def update_issues_task(
     """
     filters = IssueFilters(**filter_params)
     qs = await get_queryset(user_id, organization_slug=organization_slug)
-    qs = filter_issue_list(qs, filters)
-    qs = qs.exclude(id__in=exclude_ids).filter(id__lte=max_id)
+    qs = filter_issue_list(qs, filters).filter(id__lte=max_id)
+    remaining_qs = qs.exclude(id__in=exclude_ids)
 
     # IssueIndex partition key, so the leaf writes below prune to one
     # hash partition instead of scanning all of them.
@@ -51,70 +55,87 @@ async def update_issues_task(
         event_status = EventStatus.from_string(status)
         # Optimization: Don't update rows that already match. status lives on the
         # IssueIndex leaf.
-        qs = qs.exclude(index__status=event_status)
+        status_qs = remaining_qs.exclude(index__status=event_status)
 
-        chunk_size = 1000
+        last_issue_id = 0
         while True:
-            # Fetch IDs to lock minimally
-            batch_ids = [i async for i in qs.values_list("id", flat=True)[:chunk_size]]
+            batch_ids = [
+                i
+                async for i in status_qs.filter(id__gt=last_issue_id)
+                .order_by("id")
+                .values_list("id", flat=True)[:UPDATE_ISSUE_CHUNK_SIZE]
+            ]
             if not batch_ids:
                 break
+            last_issue_id = batch_ids[-1]
 
             await IssueIndex.objects.filter(
                 issue_id__in=batch_ids, organization_id=organization_id
             ).aupdate(status=event_status)
 
     if apply_assignment:
-        chunk_size = 1000
+        last_issue_id = 0
         while True:
-            batch_ids = [i async for i in qs.values_list("id", flat=True)[:chunk_size]]
+            batch_ids = [
+                i
+                async for i in remaining_qs.filter(id__gt=last_issue_id)
+                .order_by("id")
+                .values_list("id", flat=True)[:UPDATE_ISSUE_CHUNK_SIZE]
+            ]
             if not batch_ids:
                 break
+            last_issue_id = batch_ids[-1]
             await Issue.objects.filter(id__in=batch_ids).aupdate(
                 assigned_to_org_user_id=assignee_org_user_id,
                 assigned_to_team_id=assignee_team_id,
             )
 
     if merge_id:
-        try:
-            target_issue = await Issue.objects.aget(id=merge_id)
-        except Issue.DoesNotExist:
+        target_issue = await qs.filter(id=merge_id, is_deleted=False).afirst()
+        if not target_issue:
             return
 
-        updated_issue_count = 0
-        chunk_size = 1000
+        merge_qs = qs.filter(
+            Q(is_deleted=False) | Q(id__in=exclude_ids),
+            project_id=target_issue.project_id,
+        ).exclude(id=target_issue.id)
+
+        last_issue_id = 0
         while True:
             batch_ids = [
                 i
-                async for i in qs.exclude(id=target_issue.id).values_list(
-                    "id", flat=True
-                )[:chunk_size]
+                async for i in merge_qs.filter(id__gt=last_issue_id)
+                .order_by("id")
+                .values_list("id", flat=True)[:MERGE_ISSUE_CHUNK_SIZE]
             ]
             if not batch_ids:
-                # count lives on the IssueIndex leaf.
-                await IssueIndex.objects.filter(
-                    issue_id=target_issue.id, organization_id=organization_id
-                ).aupdate(count=F("count") + updated_issue_count)
                 break
 
-            # Soft delete source issues
-            await Issue.objects.filter(id__in=batch_ids).aupdate(is_deleted=True)
+            last_issue_id = batch_ids[-1]
 
-            # Move Hashes
             await IssueHash.objects.filter(issue_id__in=batch_ids).aupdate(
                 issue=target_issue
             )
 
-            # Caution: Moving millions of events is heavy.
-            # Switch only the first 1000 events
-            event_ids = []
-            async for event_id in IssueEvent.objects.filter(
-                issue_id__in=batch_ids
-            ).values_list("id", flat=True)[:1000]:
-                event_ids.append(event_id)
+            while True:
+                event_ids = [
+                    event_id
+                    async for event_id in IssueEvent.objects.filter(
+                        issue_id__in=batch_ids,
+                        organization_id=organization_id,
+                    ).values_list("id", flat=True)[:MERGE_EVENT_CHUNK_SIZE]
+                ]
+                if not event_ids:
+                    break
 
-            if event_ids:
-                await IssueEvent.objects.filter(id__in=event_ids).aupdate(
-                    issue=target_issue
-                )
-                updated_issue_count += len(event_ids)
+                moved_event_count = await IssueEvent.objects.filter(
+                    id__in=event_ids,
+                    issue_id__in=batch_ids,
+                    organization_id=organization_id,
+                ).aupdate(issue=target_issue)
+                if moved_event_count:
+                    await IssueIndex.objects.filter(
+                        issue_id=target_issue.id, organization_id=organization_id
+                    ).aupdate(count=F("count") + moved_event_count)
+
+            await Issue.objects.filter(id__in=batch_ids).aupdate(is_deleted=True)
