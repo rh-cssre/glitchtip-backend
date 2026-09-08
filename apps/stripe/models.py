@@ -404,17 +404,75 @@ class StripeSubscription(StripeModel):
             )
 
     @classmethod
+    async def retire_overage_for_terminal(
+        cls, subscription, prior_item_id: str = ""
+    ) -> None:
+        """Drop the overage state a terminal subscription takes with it.
+
+        The metered item lives on the subscription and dies with it, so both the
+        item id and the org's opt-in are stale once the status is terminal.
+        Recoverable statuses keep the opt-in — see
+        ``TERMINAL_SUBSCRIPTION_STATUSES``.
+
+        Deliberately not keyed on ``stripe_primary_subscription``: a resubscribe
+        can claim that pointer before the cancel is processed, and keying the
+        cleanup on it left the opt-in set with no item behind it — throttling
+        the org at bare plan quota while its UI read "overage on".
+        """
+        if subscription.status not in TERMINAL_SUBSCRIPTION_STATUSES:
+            return
+        # An item id is the only evidence this subscription carried overage
+        # rather than being some unrelated dead row. A canceled payload need not
+        # still list the item, hence the pre-upsert fallback; if even that is
+        # gone, remove_inactive_primary_subscriptions is the backstop.
+        if not (subscription.metered_item_id or prior_item_id):
+            return
+
+        if subscription.metered_item_id:
+            # Points into a subscription that can never come back; a later
+            # enable would otherwise skip the attach and reuse a dead item.
+            subscription.metered_item_id = ""
+            await subscription.asave(update_fields=["metered_item_id"])
+
+        if subscription.organization_id is None:
+            return
+        # A live subscription already carrying an item means the customer
+        # re-enabled overage on the replacement; that opt-in stands.
+        if (
+            await cls.objects.filter(
+                organization_id=subscription.organization_id,
+                status__in=ACTIVE_SUBSCRIPTION_STATUSES,
+            )
+            .exclude(metered_item_id="")
+            .aexists()
+        ):
+            return
+        await Organization.objects.filter(
+            id=subscription.organization_id, metered_billing_enabled=True
+        ).aupdate(metered_billing_enabled=False)
+
+    @classmethod
+    async def retire_dead_overage_items(cls):
+        """Backstop for terminal subscriptions no cancel webhook ever reached."""
+        async for subscription in cls.objects.filter(
+            status__in=TERMINAL_SUBSCRIPTION_STATUSES
+        ).exclude(metered_item_id=""):
+            await cls.retire_overage_for_terminal(subscription)
+
+    @classmethod
     async def remove_inactive_primary_subscriptions(cls):
         """Detach primary subscriptions that are no longer active.
 
-        Clears ``metered_billing_enabled`` for terminal ones, for the same
-        reason the cancel webhook does: the metered item dies with the
-        subscription, so a flag left set advertises overage headroom the org
-        does not have. Recoverable statuses keep the opt-in — see
+        Also clears ``metered_billing_enabled`` while the pointer still names
+        the terminal subscription. That overlaps
+        :meth:`retire_overage_for_terminal` deliberately: this catches an org
+        whose metered item id was already lost, leaving that method no evidence
+        the subscription carried overage, and it catches an org whose pointer
+        moved first. Recoverable statuses keep the opt-in — see
         ``TERMINAL_SUBSCRIPTION_STATUSES``.
 
-        Order matters: clear the flag while the pointer still identifies which
-        subscription is terminal, then detach.
+        Order matters within this method: clear the flag while the pointer still
+        identifies which subscription is terminal, then detach.
         """
         inactive = Organization.objects.filter(
             stripe_primary_subscription__isnull=False
@@ -547,6 +605,8 @@ class StripeSubscription(StripeModel):
 
         await cls.set_primary_subscriptions_for_organizations(active_organization_ids)
         await cls.update_outdated_subscriptions()
+        # After update_outdated_subscriptions, which can itself flip rows terminal.
+        await cls.retire_dead_overage_items()
         await cls.remove_inactive_primary_subscriptions()
 
 
