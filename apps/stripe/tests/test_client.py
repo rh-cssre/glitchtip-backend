@@ -129,6 +129,30 @@ class StripeV2EventFetchTests(TestCase):
             await fetch_v2_event("evt_1/../../v1/customers")
 
 
+class StripeContentTypeTests(TestCase):
+    async def test_v2_request_pins_no_content_type(self):
+        """A pinned Content-Type reaches v2, which answers 415.
+
+        aiohttp derives the header from the body -- form encoding for our v1
+        POSTs, none at all for a bodyless request, which is what v2 wants. The
+        header this asserts against is shared by every Stripe call, so pinning
+        it here covers v1 too.
+        """
+        with mock_aiohttp() as mocked:
+            mocked.get(
+                f"{STRIPE_V2_URL}/core/events/evt_1",
+                status=200,
+                payload={
+                    "id": "evt_1",
+                    "object": "v2.core.event",
+                    "type": "v1.billing.meter.error_report_triggered",
+                },
+            )
+            await fetch_v2_event("evt_1")
+            request = mocked.requests[0]
+        self.assertNotIn("Content-Type", request.kwargs["headers"])
+
+
 def _session_response() -> str:
     """A minimal valid Checkout Session body for create_session to parse."""
     return Session(

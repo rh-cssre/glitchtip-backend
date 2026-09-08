@@ -36,7 +36,6 @@ STRIPE_URL = "https://api.stripe.com/v1"
 STRIPE_V2_URL = "https://api.stripe.com/v2"
 HEADERS = {
     "Authorization": f"Bearer {settings.STRIPE_SECRET_KEY}",
-    "Content-Type": "application/x-www-form-urlencoded",
     "Stripe-Version": "2025-12-15.clover",
 }
 
