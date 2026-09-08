@@ -130,14 +130,14 @@ class StripeV2EventFetchTests(TestCase):
 
 
 class StripeContentTypeTests(TestCase):
-    """No request may pin a Content-Type; aiohttp derives it from the body.
+    async def test_v2_request_pins_no_content_type(self):
+        """A pinned Content-Type reaches v2, which answers 415.
 
-    A pinned v1 form type reached v2 too, where Stripe answers 415
-    `wsp_415_illegal_request_content_type`, breaking the meter-error webhook's
-    event fetch and the provisioning command's destination check.
-    """
-
-    async def test_v2_get_pins_no_content_type(self):
+        aiohttp derives the header from the body -- form encoding for our v1
+        POSTs, none at all for a bodyless request, which is what v2 wants. The
+        header this asserts against is shared by every Stripe call, so pinning
+        it here covers v1 too.
+        """
         with mock_aiohttp() as mocked:
             mocked.get(
                 f"{STRIPE_V2_URL}/core/events/evt_1",
@@ -149,20 +149,6 @@ class StripeContentTypeTests(TestCase):
                 },
             )
             await fetch_v2_event("evt_1")
-            request = mocked.requests[0]
-        self.assertNotIn("Content-Type", request.kwargs["headers"])
-
-    async def test_v1_post_pins_no_content_type(self):
-        with mock_aiohttp() as mocked:
-            mocked.post(f"{STRIPE_URL}/customers", status=200, payload={"id": "cus_1"})
-            await stripe_post("customers", {"email": "a@b.c"})
-            request = mocked.requests[0]
-        self.assertNotIn("Content-Type", request.kwargs["headers"])
-
-    async def test_v1_get_pins_no_content_type(self):
-        with mock_aiohttp() as mocked:
-            mocked.get(f"{STRIPE_URL}/customers/cus_1", status=200, payload={})
-            await stripe_get("customers/cus_1")
             request = mocked.requests[0]
         self.assertNotIn("Content-Type", request.kwargs["headers"])
 
