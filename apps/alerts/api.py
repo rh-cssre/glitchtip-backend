@@ -36,11 +36,14 @@ def _prepare_recipient_data(recipient: dict) -> dict:
         cleaned["config"] = config_data
     return cleaned
 
+
 def alert_rows(project_slug: str) -> QuerySet[ProjectAlert]:
     return ProjectAlert.objects.filter(project__slug=project_slug)
 
-async def alert_qs(request, project_slug, **kwargs):   # provider for org_scoped_qs
+
+async def alert_qs(request, project_slug, **kwargs):  # provider for org_scoped_qs
     return alert_rows(project_slug)
+
 
 def get_project_alert_queryset(user_id: int, organization_slug: str, project_slug: str):
     return ProjectAlert.objects.filter(
@@ -63,6 +66,7 @@ async def list_project_alerts(
     project_slug: str,
 ):
     return alert_rows(project_slug).prefetch_related("alertrecipient_set")
+
 
 @router.post(
     "projects/{slug:organization_slug}/{slug:project_slug}/alerts/",

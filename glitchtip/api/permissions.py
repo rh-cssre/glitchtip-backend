@@ -38,8 +38,7 @@ class OrgScope:
         # OuterRef here looks more correct and silently makes it per-row.
         qs = OrganizationUser.objects.filter(
             user_id=self.user_id,
-            organization__slug=self.org_slug,
-            organization__is_deleted=False,
+            organization_id=self.org_id_expr,
         )
         if len(self.roles) < len(ROLES):
             # A no-op on event:* routes, where every role qualifies.
