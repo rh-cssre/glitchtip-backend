@@ -36,16 +36,11 @@ def _prepare_recipient_data(recipient: dict) -> dict:
         cleaned["config"] = config_data
     return cleaned
 
-
-async def alert_qs(request: OrgScopedHttpRequest, project_slug: str, **kwargs):
-    """The alerts a gated route may act on.
-
-    Says only *which* alerts; the gate folds in *whose*. Stated here rather
-    than inline because the decorator gates whatever this returns, so this is
-    the one place a route's reachable rows are declared.
-    """
+def alert_rows(project_slug: str) -> QuerySet[ProjectAlert]:
     return ProjectAlert.objects.filter(project__slug=project_slug)
 
+async def alert_qs(request, project_slug, **kwargs):   # provider for org_scoped_qs
+    return alert_rows(project_slug)
 
 def get_project_alert_queryset(user_id: int, organization_slug: str, project_slug: str):
     return ProjectAlert.objects.filter(
@@ -67,10 +62,7 @@ async def list_project_alerts(
     organization_slug: str,
     project_slug: str,
 ):
-    return get_project_alert_queryset(
-        request.auth.user_id, organization_slug, project_slug
-    )
-
+    return alert_rows(project_slug).prefetch_related("alertrecipient_set")
 
 @router.post(
     "projects/{slug:organization_slug}/{slug:project_slug}/alerts/",
