@@ -635,12 +635,30 @@ async def configure_overage(
                 {"detail": "Overage billing is not configured on this server."},
                 status=400,
             )
+        if not org.stripe_customer_id:
+            # Nothing to attach to or meter; also keeps the customer-scoped
+            # listing below from ever running unscoped.
+            return JsonResponse(
+                {"detail": "A billing account is required for overage billing."},
+                status=400,
+            )
+        # A cap decrease on an already-enabled org only reduces exposure; it
+        # must never be refused, whatever state the account's subscriptions are in.
+        lowering_cap = (
+            org.metered_billing_enabled
+            and payload.cap_cents <= org.overage_spend_cap_cents
+        )
         try:
             # The meter aggregates per customer, so two subscriptions each
             # carrying the metered price both bill the same usage. One
             # subscription per customer is the rule elsewhere; this is the
             # backstop for when it has already been broken.
-            for other in await list_customer_subscriptions(org.stripe_customer_id):
+            others = (
+                []
+                if lowering_cap
+                else await list_customer_subscriptions(org.stripe_customer_id)
+            )
+            for other in others:
                 if other.id == sub.stripe_id:
                     continue
                 if select_subscription_items(other.items)[1] is not None:
@@ -694,9 +712,9 @@ async def configure_overage(
             update_fields=["metered_billing_enabled", "overage_spend_cap_cents"]
         )
     else:
-        # Keep the item attached and counter intact. The meter aggregates per
-        # customer for the whole cycle, so detaching/resetting re-bills usage
-        # already reported. A dormant item bills zero.
+        # Keep the item attached and the last-report record intact: a re-enable
+        # is then a flag flip, and the in-cycle floor still holds so toggling
+        # can't retract usage already billed. A dormant item bills zero.
         org.metered_billing_enabled = False
         await org.asave(update_fields=["metered_billing_enabled"])
 

@@ -42,7 +42,7 @@ from apps.stripe.client import (
 )
 from apps.stripe.exceptions import StripeError
 from apps.stripe.maintenance import sync_stripe_models
-from apps.stripe.overage import tier_problems
+from apps.stripe.overage import METER_FORMULA, tier_problems
 
 
 async def _find_product_by_type(product_type: str):
@@ -89,7 +89,7 @@ def _require_last_aggregation(meter) -> None:
     at a fresh event name, then re-run.
     """
     formula = meter.default_aggregation.formula
-    if formula != "last":
+    if formula != METER_FORMULA:
         raise CommandError(
             f"Meter {meter.id} ({meter.event_name}) aggregates by {formula!r}; "
             "overage reports are cycle-to-date totals and need 'last'. Deactivate "

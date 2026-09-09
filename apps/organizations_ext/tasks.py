@@ -19,6 +19,7 @@ from apps.projects.models import (
     TransactionEventProjectHourlyStatistic,
 )
 from apps.stripe.exceptions import StripeError
+from apps.stripe.overage import METER_FORMULA
 from apps.uptime.models import MonitorCheck, UptimeCheckHourlyStatistic
 
 from .email import InvitationEmail, ThrottleNoticeEmail
@@ -65,7 +66,12 @@ async def check_all_organizations_throttle():
         if not orgs:
             break
         for org in orgs:
-            await _check_and_update_throttle(org)
+            try:
+                await _check_and_update_throttle(org)
+            except Exception:
+                # One organization's failure (a cache blip, a row deleted
+                # mid-sweep) must not stop throttling for every org after it.
+                logger.exception("Throttle check failed for org %s", org.id)
         last_id = orgs[-1].id
 
 
@@ -86,6 +92,7 @@ def _progressive_throttle(usage: int, start: int, width: int) -> int:
 
 METER_FORMULA_CACHE_TTL = 3600
 METER_FORMULA_RETRY_TTL = 300
+METER_FORMULA_UNKNOWN_TTL = 60
 
 
 async def _meter_reports_last() -> bool:
@@ -96,35 +103,45 @@ async def _meter_reports_last() -> bool:
     without bound, and one that a provisioning slip or a rollback of this code
     alone could produce. So the formula is read from Stripe (cached) and the send
     path fails closed: unknown or wrong means no report, never a wrong one. A
-    good answer is kept for an hour; a bad one for five minutes so a fix to the
-    meter takes effect promptly.
+    good answer is kept for an hour; a wrong one for five minutes so a fix to the
+    meter takes effect promptly; a failed lookup for one minute so a Stripe or
+    cache outage is probed once, not once per organization per sweep.
     """
     from apps.stripe.client import find_meter
 
     event_name = settings.GLITCHTIP_OVERAGE_METER_EVENT_NAME
     cache_key = f"overage-meter-formula:{event_name}"
-    formula = await cache.aget(cache_key)
-    if formula is None:
-        try:
-            meter = await find_meter(event_name)
-        except Exception:
-            logger.exception("Could not read the overage meter %r", event_name)
-            return False
-        formula = meter.default_aggregation.formula if meter else "missing"
-        ttl = METER_FORMULA_CACHE_TTL if formula == "last" else METER_FORMULA_RETRY_TTL
-        await cache.aset(cache_key, formula, ttl)
-    if formula != "last":
-        logger.error(
-            "Overage meter %r aggregates by %r, not 'last'; not reporting",
-            event_name,
-            formula,
-        )
+    try:
+        formula = await cache.aget(cache_key)
+        if formula is None:
+            try:
+                meter = await find_meter(event_name)
+            except Exception:
+                logger.exception("Could not read the overage meter %r", event_name)
+                formula, ttl = "unknown", METER_FORMULA_UNKNOWN_TTL
+            else:
+                formula = meter.default_aggregation.formula if meter else "missing"
+                ttl = (
+                    METER_FORMULA_CACHE_TTL
+                    if formula == METER_FORMULA
+                    else METER_FORMULA_RETRY_TTL
+                )
+                if formula != METER_FORMULA:
+                    logger.error(
+                        "Overage meter %r aggregates by %r, not %r; not reporting",
+                        event_name,
+                        formula,
+                        METER_FORMULA,
+                    )
+            await cache.aset(cache_key, formula, ttl)
+    except Exception:
+        logger.exception("Overage meter check failed; not reporting")
         return False
-    return True
+    return formula == METER_FORMULA
 
 
 async def _report_overage(
-    org: Organization, sub, cycle_start, measured_at, billable_units: int
+    org: Organization, cycle_start, cycle_end, measured_at, billable_units: int
 ) -> None:
     """Report the cycle-to-date billable overage to the Stripe meter.
 
@@ -135,30 +152,48 @@ async def _report_overage(
     failure leaves Stripe holding at most what was measured.
 
     Stripe files the event under the billing period containing ``timestamp``
-    and, within a period, bills the latest. The measurement time is sent rather
-    than the send time so a slow sweep can't overtake a fresher one, and one that
-    lands after rollover stays in its own period.
+    and, within a period, bills the one with the latest timestamp regardless of
+    arrival order (verified against Stripe test mode, not assumed). The
+    measurement time is sent rather
+    than the send time so a slow sweep can't overtake a fresher one. A
+    measurement outside the local period is dropped: the local dates lag Stripe's
+    by a webhook, so a check that runs just after a boundary can still be
+    counting the old cycle while its timestamp would file the figure under the
+    new one -- the whole prior cycle, billed again.
 
     Within a cycle the value never goes down: a lowered cap stops growth from
     that point but doesn't retract usage already billed, or dropping the cap to
-    a dollar on the last day would forgive the month.
+    a dollar on the last day would forgive the month. The same floor holds
+    across a mid-cycle plan change; overage already billed against the smaller
+    quota stays billed.
     """
     from apps.stripe.client import create_meter_event
 
     if not org.stripe_customer_id:
         return
-    if measured_at < cycle_start:
-        # The period dates advanced under this check; its figure describes a
-        # cycle Stripe has closed, and its timestamp would file the event there,
-        # where a late arrival is billed on the next invoice as a fresh total.
+    if not cycle_start <= measured_at < cycle_end:
+        # Either the period advanced under this check (measurement before the
+        # start) or the local period is stale after a Stripe renewal
+        # (measurement past the end). Both describe a cycle other than the one
+        # Stripe would file this timestamp under.
         logger.warning(
-            "Dropping stale overage report for %s: measured %s, cycle starts %s",
-            sub.stripe_id,
+            "Dropping overage report for org %s: measured %s outside cycle %s to %s",
+            org.id,
             measured_at,
             cycle_start,
+            cycle_end,
         )
         return
-    if not await _meter_reports_last():
+
+    def in_cycle(at):
+        return at is not None and cycle_start <= at < cycle_end
+
+    # The caller's copy of the record is enough to know nothing new is due,
+    # which is the common case; a stale copy only errs toward the locked re-read.
+    if (
+        in_cycle(org.overage_last_reported_at)
+        and billable_units <= org.overage_last_reported_units
+    ):
         return
 
     lock_key = f"overage-report-{org.stripe_customer_id}"
@@ -171,13 +206,15 @@ async def _report_overage(
         # Stripe timestamps are whole seconds; two measurements in the same
         # second have no defined order there, so only a strictly later one goes.
         seconds = int(measured_at.timestamp())
-        if last_at is not None and last_at >= cycle_start:
+        if in_cycle(last_at):
             if int(last_at.timestamp()) >= seconds:
                 return
             billable_units = max(billable_units, last_units)
             if billable_units == last_units:
                 return
         if billable_units <= 0:
+            return
+        if not await _meter_reports_last():
             return
 
         try:
@@ -189,7 +226,11 @@ async def _report_overage(
                 timestamp=seconds,
             )
         except StripeError as e:
-            logger.exception(
+            # 429 is Stripe's one-call-per-customer limit tripping on a sweep
+            # the lock didn't serialize; 400 is a same-second duplicate. Both
+            # are restated by the next sweep, so neither is an error to page on.
+            log = logger.warning if e.status in (400, 429) else logger.exception
+            log(
                 "Overage meter event failed for org %s (status=%s code=%s)",
                 org.id,
                 e.status,
@@ -260,7 +301,7 @@ async def _check_and_update_throttle(org: Organization):
                 # then resume the progressive ramp (no further charges).
                 cap_units = units_for_budget(org.overage_spend_cap_cents)
                 billable = min(max(0, total_event_count - plan_events), cap_units)
-                await _report_overage(org, sub, start, measured_at, billable)
+                await _report_overage(org, start, end, measured_at, billable)
                 org_throttle = _progressive_throttle(
                     total_event_count, plan_events + cap_units, plan_events
                 )

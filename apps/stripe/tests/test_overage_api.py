@@ -323,6 +323,53 @@ class OverageAPITestCase(TestCase):
         self.org.refresh_from_db()
         self.assertFalse(self.org.metered_billing_enabled)
 
+    def test_enable_skips_the_orgs_own_metered_subscription(self):
+        # The org's own subscription carrying the item is the normal re-enable
+        # state, not a second subscription.
+        self.sub.metered_item_id = "si_old"
+        self.sub.save()
+        self.other_subscriptions.return_value = [
+            self._stripe_subscription("sub_1", metered=True),
+            self._stripe_subscription("sub_other"),
+        ]
+        with patch(
+            "apps.stripe.api.check_organization_throttle",
+            new=MagicMock(aenqueue=AsyncMock()),
+        ):
+            res = self._configure({"enabled": True, "capCents": 2000})
+        self.assertEqual(res.status_code, 200)
+        self.other_subscriptions.assert_awaited_once()
+        self.org.refresh_from_db()
+        self.assertTrue(self.org.metered_billing_enabled)
+
+    def test_enable_requires_a_billing_account(self):
+        self.org.stripe_customer_id = ""
+        self.org.save()
+        res = self._configure({"enabled": True, "capCents": 2000})
+        self.assertEqual(res.status_code, 400)
+        self.other_subscriptions.assert_not_awaited()
+
+    def test_cap_decrease_is_not_refused_by_another_metered_subscription(self):
+        # Lowering the cap only reduces exposure; an account already in the
+        # two-metered-subscriptions state must still be able to do it.
+        self.sub.metered_item_id = "si_old"
+        self.sub.save()
+        self.org.metered_billing_enabled = True
+        self.org.overage_spend_cap_cents = 5000
+        self.org.save()
+        self.other_subscriptions.return_value = [
+            self._stripe_subscription("sub_other", metered=True)
+        ]
+        with patch(
+            "apps.stripe.api.check_organization_throttle",
+            new=MagicMock(aenqueue=AsyncMock()),
+        ):
+            res = self._configure({"enabled": True, "capCents": 2000})
+        self.assertEqual(res.status_code, 200)
+        self.other_subscriptions.assert_not_awaited()
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.overage_spend_cap_cents, 2000)
+
     def test_enable_ignores_other_subscriptions_without_metered_item(self):
         self.other_subscriptions.return_value = [
             self._stripe_subscription("sub_1"),

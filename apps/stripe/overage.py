@@ -19,6 +19,11 @@ from .constants import ACTIVE_SUBSCRIPTION_STATUSES
 
 CENTS = Decimal(1)
 
+# Reports are cycle-to-date totals, so the meter must bill the last value in
+# each period; anything else compounds them. Shared by meter creation, the
+# provisioning checks, and the send path's guard so the three can't drift.
+METER_FORMULA = "last"
+
 
 def _tiers() -> list[tuple[int | None, Decimal]]:
     """Normalize the settings schedule to (up_to, per_event_cost) Decimals.

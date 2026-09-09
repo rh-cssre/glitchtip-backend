@@ -287,6 +287,39 @@ class MeteredThrottleTestCase(TestCase):
         org.refresh_from_db()
         self.assertEqual(org.overage_last_reported_units, 50_000)
 
+    def test_stale_local_period_after_renewal_is_dropped(self):
+        """The overcharge the old counter never had.
+
+        Stripe rolled the period but the webhook hasn't landed, so the local
+        dates still describe the old cycle. The figure is the old cycle's total,
+        but its timestamp is in the new one: Stripe would file it there and the
+        in-cycle floor would then hold it for the whole month -- the prior cycle
+        billed twice. A measurement past the local period end is dropped.
+        """
+        org, sub = self._make_org()
+        self._run(org, 150_000)  # 50,000 reported in the current cycle
+        StripeSubscription.objects.filter(pk=sub.pk).update(
+            current_period_start=timezone.now() - timedelta(days=40),
+            current_period_end=timezone.now() - timedelta(minutes=1),
+        )
+        org.refresh_from_db()
+        mock_meter = self._run(org, 150_000)
+        mock_meter.assert_not_awaited()
+        mock_meter = self._run(org, 999_999)
+        mock_meter.assert_not_awaited()
+
+    def test_floor_does_not_carry_across_a_stale_boundary(self):
+        # A last report from a cycle the local dates no longer cover is not a
+        # floor for the new cycle; the new cycle's own total is sent.
+        org, _ = self._make_org()
+        org.overage_last_reported_at = timezone.now() - timedelta(days=40)
+        org.overage_last_reported_units = 999_999
+        org.save(
+            update_fields=["overage_last_reported_at", "overage_last_reported_units"]
+        )
+        mock_meter = self._run(org, 120_000)
+        self.assertEqual(self._sent(mock_meter), 20_000)
+
     def test_stale_check_from_a_closed_cycle_is_dropped(self):
         # The period dates advanced under this check; its timestamp would file
         # the event in the closed period, where a late arrival is billed on the
@@ -331,6 +364,62 @@ class MeteredThrottleTestCase(TestCase):
         mock_meter.assert_not_awaited()
         org.refresh_from_db()
         self.assertIsNone(org.overage_last_reported_at)
+
+    def test_meter_is_not_consulted_when_nothing_is_due(self):
+        # Under quota or unchanged, the sweep must cost no Stripe call at all;
+        # otherwise a Stripe outage turns every metered org into a probe.
+        org, _ = self._make_org()
+        self._run(org, 150_000)
+        find = AsyncMock(return_value=_meter())
+        with patch("apps.stripe.client.find_meter", new=find):
+            for usage in (50_000, 150_000):
+                self.clock += timedelta(seconds=10)
+                with (
+                    patch(
+                        "apps.organizations_ext.tasks.get_event_counts",
+                        new=AsyncMock(
+                            return_value=EventCounts(issue_event_count=usage)
+                        ),
+                    ),
+                    patch(
+                        "apps.organizations_ext.tasks.timezone.now",
+                        return_value=self.clock,
+                    ),
+                    patch(
+                        "apps.stripe.client.create_meter_event",
+                        new_callable=AsyncMock,
+                    ) as mock_meter,
+                ):
+                    cache.delete("overage-meter-formula:glitchtip_overage_events_total")
+                    _check(org.id, bypass_cache=True)
+                mock_meter.assert_not_awaited()
+        find.assert_not_awaited()
+
+    def test_meter_lookup_failure_is_fail_closed_and_cached(self):
+        org, _ = self._make_org()
+        find = AsyncMock(side_effect=StripeError("down", status=503))
+        with patch("apps.stripe.client.find_meter", new=find):
+            for usage in (150_000, 160_000):
+                self.clock += timedelta(seconds=10)
+                with (
+                    patch(
+                        "apps.organizations_ext.tasks.get_event_counts",
+                        new=AsyncMock(
+                            return_value=EventCounts(issue_event_count=usage)
+                        ),
+                    ),
+                    patch(
+                        "apps.organizations_ext.tasks.timezone.now",
+                        return_value=self.clock,
+                    ),
+                    patch(
+                        "apps.stripe.client.create_meter_event",
+                        new_callable=AsyncMock,
+                    ) as mock_meter,
+                ):
+                    _check(org.id, bypass_cache=True)  # must not raise
+                mock_meter.assert_not_awaited()
+        find.assert_awaited_once()  # the failure is cached, not re-probed per org
 
     def test_refuses_to_report_without_a_meter(self):
         org, _ = self._make_org()

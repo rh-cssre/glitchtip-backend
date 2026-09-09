@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from apps.organizations_ext.models import Organization
 
 from .exceptions import StripeError, StripeResourceNotFound
+from .overage import METER_FORMULA
 from .schema import (
     Customer,
     Meter,
@@ -29,7 +30,8 @@ from .schema import (
     SubscriptionExpandCustomer,
     SubscriptionExpandCustomerResponse,
     SubscriptionItem,
-    SubscriptionListResponse,
+    SubscriptionSummary,
+    SubscriptionSummaryListResponse,
     ThinEvent,
 )
 
@@ -285,15 +287,18 @@ async def create_subscription(customer: str, price: str, **kwargs) -> Subscripti
     return Subscription.model_validate_json(response)
 
 
-async def list_customer_subscriptions(customer_id: str) -> list[Subscription]:
+async def list_customer_subscriptions(
+    customer_id: str,
+) -> list[SubscriptionSummary]:
     """Every non-canceled subscription of ``customer_id``, across pages.
 
-    Stripe's default status filter omits canceled and incomplete_expired, which
-    is the set that can still carry a billable metered item.
+    No ``status`` filter is passed; Stripe then omits canceled and
+    incomplete_expired subscriptions, leaving exactly the set that can still
+    carry a billable metered item.
     """
-    subscriptions: list[Subscription] = []
+    subscriptions: list[SubscriptionSummary] = []
     async for page in _paginated_stripe_get(
-        "subscriptions", SubscriptionListResponse, {"customer": customer_id}
+        "subscriptions", SubscriptionSummaryListResponse, {"customer": customer_id}
     ):
         subscriptions += page
     return subscriptions
@@ -339,7 +344,7 @@ async def create_meter(display_name: str, event_name: str) -> Meter:
         {
             "display_name": display_name,
             "event_name": event_name,
-            "default_aggregation[formula]": "last",
+            "default_aggregation[formula]": METER_FORMULA,
             "customer_mapping[type]": "by_id",
             "customer_mapping[event_payload_key]": "stripe_customer_id",
             "value_settings[event_payload_key]": "value",
@@ -436,7 +441,7 @@ async def create_meter_event(
     """Report usage to a Billing Meter.
 
     ``timestamp`` places the event in a billing period; ``identifier`` must be
-    unique per event within Stripe's dedupe window, or the event is dropped.
+    unique per event within Stripe's dedupe window.
     """
     data: dict = {
         "event_name": event_name,
