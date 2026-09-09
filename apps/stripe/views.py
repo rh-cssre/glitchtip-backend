@@ -224,8 +224,9 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
         },
     )
     # Unconditional: whether this subscription still holds the org's primary
-    # pointer is a separate question from whether its overage state is dead.
-    await StripeSubscription.retire_overage_for_terminal(
+    # pointer is a separate question from whether its overage state is dead. When
+    # it doesn't, no branch below runs, so `retired` asks for the re-check.
+    retired = await StripeSubscription.retire_overage_for_terminal(
         stripe_subscription, prior_item_id=(prior or {}).get("metered_item_id", "")
     )
 
@@ -247,6 +248,9 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
         organization.stripe_primary_subscription = None
         await organization.asave(update_fields=["stripe_primary_subscription"])
         # Quota just dropped to the free tier; don't wait for the next sweep.
+        await check_organization_throttle.aenqueue(organization.id, bypass_cache=True)
+
+    elif retired:
         await check_organization_throttle.aenqueue(organization.id, bypass_cache=True)
 
 

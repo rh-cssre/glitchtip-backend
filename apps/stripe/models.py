@@ -375,6 +375,9 @@ class StripeSubscription(StripeModel):
             )
             subscription.start_date = unix_to_datetime(fetched_sub.start_date)
             subscription.collection_method = fetched_sub.collection_method
+            # Canceling and blanking the item happen in one save below, so keep
+            # the old id: it is the only evidence the sub carried overage.
+            prior_item_id = subscription.metered_item_id
             subscription.metered_item_id = metered_item.id if metered_item else ""
 
             is_annual = subscription.price.interval == "year" or bool(
@@ -402,17 +405,17 @@ class StripeSubscription(StripeModel):
                     "metered_item_id",
                 ]
             )
+            await cls.retire_overage_for_terminal(
+                subscription, prior_item_id=prior_item_id
+            )
 
     @classmethod
     async def retire_overage_for_terminal(
         cls, subscription, prior_item_id: str = ""
-    ) -> None:
+    ) -> bool:
         """Drop the overage state a terminal subscription takes with it.
 
-        The metered item lives on the subscription and dies with it, so both the
-        item id and the org's opt-in are stale once the status is terminal.
-        Recoverable statuses keep the opt-in — see
-        ``TERMINAL_SUBSCRIPTION_STATUSES``.
+        Returns whether the org's opt-in was cleared.
 
         Deliberately not keyed on ``stripe_primary_subscription``: a resubscribe
         can claim that pointer before the cancel is processed, and keying the
@@ -420,13 +423,11 @@ class StripeSubscription(StripeModel):
         the org at bare plan quota while its UI read "overage on".
         """
         if subscription.status not in TERMINAL_SUBSCRIPTION_STATUSES:
-            return
+            return False
         # An item id is the only evidence this subscription carried overage
-        # rather than being some unrelated dead row. A canceled payload need not
-        # still list the item, hence the pre-upsert fallback; if even that is
-        # gone, remove_inactive_primary_subscriptions is the backstop.
+        # rather than being some unrelated dead row; hence the caller's fallback.
         if not (subscription.metered_item_id or prior_item_id):
-            return
+            return False
 
         if subscription.metered_item_id:
             # Points into a subscription that can never come back; a later
@@ -435,7 +436,7 @@ class StripeSubscription(StripeModel):
             await subscription.asave(update_fields=["metered_item_id"])
 
         if subscription.organization_id is None:
-            return
+            return False
         # A live subscription already carrying an item means the customer
         # re-enabled overage on the replacement; that opt-in stands.
         if (
@@ -446,10 +447,12 @@ class StripeSubscription(StripeModel):
             .exclude(metered_item_id="")
             .aexists()
         ):
-            return
-        await Organization.objects.filter(
-            id=subscription.organization_id, metered_billing_enabled=True
-        ).aupdate(metered_billing_enabled=False)
+            return False
+        return bool(
+            await Organization.objects.filter(
+                id=subscription.organization_id, metered_billing_enabled=True
+            ).aupdate(metered_billing_enabled=False)
+        )
 
     @classmethod
     async def retire_dead_overage_items(cls):
@@ -464,15 +467,9 @@ class StripeSubscription(StripeModel):
         """Detach primary subscriptions that are no longer active.
 
         Also clears ``metered_billing_enabled`` while the pointer still names
-        the terminal subscription. That overlaps
-        :meth:`retire_overage_for_terminal` deliberately: this catches an org
-        whose metered item id was already lost, leaving that method no evidence
-        the subscription carried overage, and it catches an org whose pointer
-        moved first. Recoverable statuses keep the opt-in — see
-        ``TERMINAL_SUBSCRIPTION_STATUSES``.
-
-        Order matters within this method: clear the flag while the pointer still
-        identifies which subscription is terminal, then detach.
+        the terminal subscription: belt and braces beside the not-pointer-keyed
+        :meth:`retire_overage_for_terminal`. Clear the flag before detaching,
+        while the pointer still says which subscription is terminal.
         """
         inactive = Organization.objects.filter(
             stripe_primary_subscription__isnull=False
