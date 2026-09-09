@@ -69,12 +69,17 @@ class ProductExpandedPrice(Product):
 ProductExpandedPriceListResponse = StripeListResponse[ProductExpandedPrice]
 
 
+class MeterAggregation(BaseModel):
+    formula: str
+
+
 class Meter(BaseModel):
     id: str
     object: Literal["billing.meter"]
     display_name: str
     event_name: str
     status: str
+    default_aggregation: MeterAggregation
 
 
 MeterListResponse = StripeListResponse[Meter]
@@ -161,6 +166,9 @@ class SubscriptionBase(BaseModel):
 
 class Subscription(SubscriptionBase):
     customer: str
+
+
+SubscriptionListResponse = StripeListResponse[Subscription]
 
 
 class SubscriptionExpandCustomer(SubscriptionBase):

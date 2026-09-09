@@ -34,6 +34,7 @@ from .client import (
     create_session,
     create_subscription,
     fetch_subscription,
+    list_customer_subscriptions,
 )
 from .constants import (
     ACTIVE_SUBSCRIPTION_STATUSES,
@@ -634,8 +635,30 @@ async def configure_overage(
                 {"detail": "Overage billing is not configured on this server."},
                 status=400,
             )
-        if not sub.metered_item_id:
-            try:
+        try:
+            # The meter aggregates per customer, so two subscriptions each
+            # carrying the metered price both bill the same usage. One
+            # subscription per customer is the rule elsewhere; this is the
+            # backstop for when it has already been broken.
+            for other in await list_customer_subscriptions(org.stripe_customer_id):
+                if other.id == sub.stripe_id:
+                    continue
+                if select_subscription_items(other.items)[1] is not None:
+                    logger.warning(
+                        "Refusing overage for org %s: subscription %s also carries "
+                        "the metered price",
+                        org.id,
+                        other.id,
+                    )
+                    return JsonResponse(
+                        {
+                            "detail": "Another subscription on this account already "
+                            "has overage billing. Contact support to consolidate "
+                            "your subscriptions first."
+                        },
+                        status=400,
+                    )
+            if not sub.metered_item_id:
                 # Stripe is the source of truth: a crash between attaching the
                 # item and saving its id here leaves an orphan that Stripe would
                 # reject as a duplicate on retry, so reuse it instead of re-adding.
@@ -648,23 +671,23 @@ async def configure_overage(
                         sub.stripe_id, overage_price.stripe_id
                     )
                     sub.metered_item_id = item.id
-            except StripeError as e:
-                # Card declines are safe to show the owner; other Stripe errors
-                # may leak internals, so log those and return a generic message.
-                if e.type == "card_error":
-                    return JsonResponse({"detail": e.message}, status=402)
-                logger.exception(
-                    "Overage enable failed for org %s (status=%s type=%s code=%s)",
-                    org.id,
-                    e.status,
-                    e.type,
-                    e.code,
-                )
-                return JsonResponse(
-                    {"detail": "Could not enable overage billing. Please try again."},
-                    status=502,
-                )
-            await sub.asave(update_fields=["metered_item_id"])
+                await sub.asave(update_fields=["metered_item_id"])
+        except StripeError as e:
+            # Card declines are safe to show the owner; other Stripe errors
+            # may leak internals, so log those and return a generic message.
+            if e.type == "card_error":
+                return JsonResponse({"detail": e.message}, status=402)
+            logger.exception(
+                "Overage enable failed for org %s (status=%s type=%s code=%s)",
+                org.id,
+                e.status,
+                e.type,
+                e.code,
+            )
+            return JsonResponse(
+                {"detail": "Could not enable overage billing. Please try again."},
+                status=502,
+            )
         org.metered_billing_enabled = True
         org.overage_spend_cap_cents = payload.cap_cents
         await org.asave(

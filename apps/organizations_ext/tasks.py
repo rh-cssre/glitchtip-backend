@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Q
 from django.tasks import task
+from django.utils import timezone
 
 from apps.issue_events.maintenance import (
     delete_issues_in_batches,
@@ -83,84 +84,109 @@ def _progressive_throttle(usage: int, start: int, width: int) -> int:
     return 0
 
 
+METER_FORMULA_CACHE_TTL = 3600
+METER_FORMULA_RETRY_TTL = 300
+
+
+async def _meter_reports_last() -> bool:
+    """Whether the overage meter aggregates by ``last``.
+
+    Every report is a cycle-to-date total. Into a ``sum`` meter those would add
+    the whole cycle again on each sweep -- the one failure here that overcharges
+    without bound, and one that a provisioning slip or a rollback of this code
+    alone could produce. So the formula is read from Stripe (cached) and the send
+    path fails closed: unknown or wrong means no report, never a wrong one. A
+    good answer is kept for an hour; a bad one for five minutes so a fix to the
+    meter takes effect promptly.
+    """
+    from apps.stripe.client import find_meter
+
+    event_name = settings.GLITCHTIP_OVERAGE_METER_EVENT_NAME
+    cache_key = f"overage-meter-formula:{event_name}"
+    formula = await cache.aget(cache_key)
+    if formula is None:
+        try:
+            meter = await find_meter(event_name)
+        except Exception:
+            logger.exception("Could not read the overage meter %r", event_name)
+            return False
+        formula = meter.default_aggregation.formula if meter else "missing"
+        ttl = METER_FORMULA_CACHE_TTL if formula == "last" else METER_FORMULA_RETRY_TTL
+        await cache.aset(cache_key, formula, ttl)
+    if formula != "last":
+        logger.error(
+            "Overage meter %r aggregates by %r, not 'last'; not reporting",
+            event_name,
+            formula,
+        )
+        return False
+    return True
+
+
 async def _report_overage(
-    org: Organization, sub, cycle_start, billable_units: int
+    org: Organization, sub, cycle_start, measured_at, billable_units: int
 ) -> None:
-    """Report cumulative billable overage to Stripe as an additive delta.
+    """Report the cycle-to-date billable overage to the Stripe meter.
 
-    Meter events sum per cycle, so we only send the increase since the last
-    report; the counter resets on cycle rollover. A per-subscription cache lock
-    serializes concurrent throttle checks so they can't report overlapping
-    deltas and over-charge.
+    The meter aggregates by ``last``, so each report carries the whole figure
+    and any re-send is harmless: a retry, a concurrent sweep, or a replacement
+    subscription all restate the same number. Nothing local is an input to the
+    send, so there is no counter to reset, roll back, or migrate, and every
+    failure leaves Stripe holding at most what was measured.
 
-    Ordering makes every failure window err toward undercharging: the counter
-    is advanced *before* the send (so the DB always bounds what Stripe may have
-    recorded — a crash can strand an unbilled delta, never re-bill one) and
-    rolled back only on a definite send failure. The meter-event identifier is
-    keyed on the base counter the delta was computed from, so a re-send racing
-    a stale writer carries the same identifier and Stripe's uniqueness window
-    absorbs it.
+    Stripe files the event under the billing period containing ``timestamp``
+    and, within a period, bills the latest. The measurement time is sent rather
+    than the send time so a slow sweep can't overtake a fresher one, and one that
+    lands after rollover stays in its own period.
+
+    Within a cycle the value never goes down: a lowered cap stops growth from
+    that point but doesn't retract usage already billed, or dropping the cap to
+    a dollar on the last day would forgive the month.
     """
     from apps.stripe.client import create_meter_event
-    from apps.stripe.models import StripeSubscription
 
     if not org.stripe_customer_id:
         return
+    if measured_at < cycle_start:
+        # The period dates advanced under this check; its figure describes a
+        # cycle Stripe has closed, and its timestamp would file the event there,
+        # where a late arrival is billed on the next invoice as a fresh total.
+        logger.warning(
+            "Dropping stale overage report for %s: measured %s, cycle starts %s",
+            sub.stripe_id,
+            measured_at,
+            cycle_start,
+        )
+        return
+    if not await _meter_reports_last():
+        return
 
-    lock_key = f"overage-report-{sub.stripe_id}"
+    lock_key = f"overage-report-{org.stripe_customer_id}"
     if not await cache.aadd(lock_key, "1", 60):
         return
     try:
-        reported, period_start = await StripeSubscription.objects.values_list(
-            "overage_units_reported", "overage_period_start"
-        ).aget(stripe_id=sub.stripe_id)
-        if period_start is not None and period_start > cycle_start:
-            # This check read the period dates before a renewal advanced them,
-            # so ``billable_units`` describes a cycle Stripe has already closed
-            # and billed. Reporting it would re-send the whole prior cycle as a
-            # fresh delta and drag the anchor backwards; drop it instead.
-            #
-            # Logged because the anchor is monotonic and can never be walked
-            # back: were it ever to advance for some reason other than this
-            # race, overage would stop for the subscription with no other
-            # symptom than missing revenue.
-            logger.warning(
-                "Dropping stale overage report for %s: anchor %s is ahead of "
-                "cycle start %s (%s units unreported)",
-                sub.stripe_id,
-                period_start,
-                cycle_start,
-                billable_units,
-            )
-            return
-        if period_start != cycle_start:
-            reported = 0  # new cycle: counter resets
-
-        delta = billable_units - reported
-        if delta <= 0:
-            if period_start != cycle_start:
-                await _persist_overage(sub, cycle_start, billable_units)
+        last_units, last_at = await Organization.objects.values_list(
+            "overage_last_reported_units", "overage_last_reported_at"
+        ).aget(id=org.id)
+        # Stripe timestamps are whole seconds; two measurements in the same
+        # second have no defined order there, so only a strictly later one goes.
+        seconds = int(measured_at.timestamp())
+        if last_at is not None and last_at >= cycle_start:
+            if int(last_at.timestamp()) >= seconds:
+                return
+            billable_units = max(billable_units, last_units)
+            if billable_units == last_units:
+                return
+        if billable_units <= 0:
             return
 
-        if not await _persist_overage(sub, cycle_start, billable_units):
-            # Another writer advanced the anchor or the counter past us between
-            # the read above and this write (the lock is best-effort and can
-            # expire under a slow usage query). The counter no longer bounds
-            # what Stripe holds, so sending would bill a delta computed against
-            # a base someone else has already superseded.
-            logger.warning(
-                "Overage counter for %s moved under us; dropping a %s unit delta",
-                sub.stripe_id,
-                delta,
-            )
-            return
-        identifier = f"{sub.stripe_id}:{cycle_start.isoformat()}:{reported}"
         try:
             await create_meter_event(
                 settings.GLITCHTIP_OVERAGE_METER_EVENT_NAME,
                 org.stripe_customer_id,
-                delta,
-                identifier,
+                billable_units,
+                f"{org.stripe_customer_id}:{seconds}",
+                timestamp=seconds,
             )
         except StripeError as e:
             logger.exception(
@@ -169,71 +195,27 @@ async def _report_overage(
                 e.status,
                 e.code,
             )
-            # A 400 (e.g. duplicate identifier: a previous send from this base
-            # was recorded) can never succeed on retry — keep the advanced
-            # counter, which at worst undercharges. Other statuses are
-            # transient: roll back so the next check retries the same delta
-            # under the same identifier.
-            if e.status != 400:
-                await _rollback_overage(sub, cycle_start, billable_units, reported)
+            return
         except Exception:
             logger.exception("Failed to report overage meter event for org %s", org.id)
-            await _rollback_overage(sub, cycle_start, billable_units, reported)
+            return
+        # Conditional so a sweep that lost the lock race and measured earlier
+        # can't overwrite a newer record with an older, lower figure.
+        updated = await Organization.objects.filter(
+            Q(id=org.id)
+            & (
+                Q(overage_last_reported_at__isnull=True)
+                | Q(overage_last_reported_at__lt=measured_at)
+            )
+        ).aupdate(
+            overage_last_reported_units=billable_units,
+            overage_last_reported_at=measured_at,
+        )
+        if updated:
+            org.overage_last_reported_units = billable_units
+            org.overage_last_reported_at = measured_at
     finally:
         await cache.adelete(lock_key)
-
-
-async def _persist_overage(sub, cycle_start, units_reported: int) -> bool:
-    """Advance the overage counter + cycle anchor for ``sub``, never regressing.
-
-    Returns whether the write landed. A refusal means a concurrent writer has
-    already moved past this report, so the caller must not send it.
-
-    A stale writer (expired lock) regressing the counter would recompute later
-    deltas from too low a base and re-bill units Stripe already recorded, so
-    within a cycle the counter only moves forward; a decrease is legitimate
-    only on rollover to a *later* cycle.
-
-    The anchor itself is likewise monotonic. Accepting an older one would let a
-    check that read pre-renewal period dates reset the counter and re-report a
-    cycle Stripe has already invoiced, so a lower ``cycle_start`` is refused
-    outright rather than treated as a rollover.
-    """
-    from apps.stripe.models import StripeSubscription
-
-    updated = await StripeSubscription.objects.filter(
-        Q(stripe_id=sub.stripe_id)
-        & (
-            Q(overage_period_start__isnull=True)
-            | Q(overage_period_start__lt=cycle_start)
-            | Q(
-                overage_period_start=cycle_start,
-                overage_units_reported__lt=units_reported,
-            )
-        )
-    ).aupdate(overage_units_reported=units_reported, overage_period_start=cycle_start)
-    if updated:
-        sub.overage_units_reported = units_reported
-        sub.overage_period_start = cycle_start
-    return bool(updated)
-
-
-async def _rollback_overage(sub, cycle_start, sent_target: int, base: int) -> None:
-    """Best-effort revert of a write-ahead counter after a failed send.
-
-    Conditional on the counter still holding our value, so a concurrent writer
-    that advanced further isn't stomped. If the revert itself is lost, the
-    stranded delta goes unbilled rather than double-billed.
-    """
-    from apps.stripe.models import StripeSubscription
-
-    updated = await StripeSubscription.objects.filter(
-        stripe_id=sub.stripe_id,
-        overage_period_start=cycle_start,
-        overage_units_reported=sent_target,
-    ).aupdate(overage_units_reported=base)
-    if updated:
-        sub.overage_units_reported = base
 
 
 async def _check_and_update_throttle(org: Organization):
@@ -256,6 +238,7 @@ async def _check_and_update_throttle(org: Organization):
             # the free tier instead of throttling the org to a standstill.
             plan_events = price.product.events or settings.GLITCHTIP_FREE_TIER_EVENTS
 
+            measured_at = timezone.now()
             period = await get_current_period_dates(org)
             start, end = period if period else (None, None)
             counts = await get_event_counts(org.id, start, end)
@@ -277,7 +260,7 @@ async def _check_and_update_throttle(org: Organization):
                 # then resume the progressive ramp (no further charges).
                 cap_units = units_for_budget(org.overage_spend_cap_cents)
                 billable = min(max(0, total_event_count - plan_events), cap_units)
-                await _report_overage(org, sub, start, billable)
+                await _report_overage(org, sub, start, measured_at, billable)
                 org_throttle = _progressive_throttle(
                     total_event_count, plan_events + cap_units, plan_events
                 )

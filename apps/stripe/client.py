@@ -29,6 +29,7 @@ from .schema import (
     SubscriptionExpandCustomer,
     SubscriptionExpandCustomerResponse,
     SubscriptionItem,
+    SubscriptionListResponse,
     ThinEvent,
 )
 
@@ -284,6 +285,20 @@ async def create_subscription(customer: str, price: str, **kwargs) -> Subscripti
     return Subscription.model_validate_json(response)
 
 
+async def list_customer_subscriptions(customer_id: str) -> list[Subscription]:
+    """Every non-canceled subscription of ``customer_id``, across pages.
+
+    Stripe's default status filter omits canceled and incomplete_expired, which
+    is the set that can still carry a billable metered item.
+    """
+    subscriptions: list[Subscription] = []
+    async for page in _paginated_stripe_get(
+        "subscriptions", SubscriptionListResponse, {"customer": customer_id}
+    ):
+        subscriptions += page
+    return subscriptions
+
+
 async def fetch_subscription(id: str) -> Subscription:
     response = await stripe_get("subscriptions/" + id)
     return Subscription.model_validate_json(response)
@@ -310,17 +325,21 @@ async def find_meter(event_name: str) -> Meter | None:
 
 
 async def create_meter(display_name: str, event_name: str) -> Meter:
-    """Create a sum-aggregation Billing Meter keyed by customer id.
+    """Create a last-value Billing Meter keyed by customer id.
 
-    Usage events carry ``payload[stripe_customer_id]`` and ``payload[value]``;
-    Stripe sums ``value`` per customer per billing period.
+    Usage events carry ``payload[stripe_customer_id]`` and ``payload[value]``,
+    where ``value`` is the customer's cycle-to-date billable total; Stripe bills
+    the last value received in each billing period. Reports are therefore
+    idempotent -- a retry, a concurrent sweep, or a replacement subscription all
+    restate the same figure -- which is what lets the throttle task keep no
+    delta counter. A ``sum`` meter fed the same reports would compound them.
     """
     response = await stripe_post(
         "billing/meters",
         {
             "display_name": display_name,
             "event_name": event_name,
-            "default_aggregation[formula]": "sum",
+            "default_aggregation[formula]": "last",
             "customer_mapping[type]": "by_id",
             "customer_mapping[event_payload_key]": "stripe_customer_id",
             "value_settings[event_payload_key]": "value",
@@ -416,8 +435,8 @@ async def create_meter_event(
 ) -> MeterEvent:
     """Report usage to a Billing Meter.
 
-    ``identifier`` deduplicates events server-side within Stripe's window, so a
-    retried report of the same delta is not double-counted.
+    ``timestamp`` places the event in a billing period; ``identifier`` must be
+    unique per event within Stripe's dedupe window, or the event is dropped.
     """
     data: dict = {
         "event_name": event_name,

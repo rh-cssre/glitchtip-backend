@@ -165,9 +165,15 @@ class VerifyCommandTestCase(SimpleTestCase):
         return price
 
     def _verify(
-        self, prices, raw_tiers=None, destinations=None, destination_pages=None
+        self,
+        prices,
+        raw_tiers=None,
+        destinations=None,
+        destination_pages=None,
+        formula="last",
     ):
-        meter = MagicMock(id="mtr_1")
+        meter = MagicMock(id="mtr_1", event_name="glitchtip_overage_events_total")
+        meter.default_aggregation.formula = formula
         product = MagicMock(id="prod_1")
         product.metadata = {"product_type": "overage"}
         raw = {
@@ -213,6 +219,27 @@ class VerifyCommandTestCase(SimpleTestCase):
     def test_provision_refuses_live_key(self):
         with self.assertRaises(CommandError):
             call_command("provision_overage_billing")
+
+    def test_verify_fails_on_sum_meter(self):
+        # Reports are cycle-to-date totals; a sum meter would compound them on
+        # every sweep. The task refuses to send to one, so verify must fail too.
+        with self.assertRaisesRegex(CommandError, "aggregates by 'sum'"):
+            self._verify([self._price()], formula="sum")
+
+    @override_settings(STRIPE_SECRET_KEY="sk_test_x")
+    def test_provision_refuses_to_reuse_sum_meter(self):
+        meter = MagicMock(id="mtr_old", event_name="glitchtip_overage_events_total")
+        meter.default_aggregation.formula = "sum"
+        create = AsyncMock()
+        with (
+            patch(f"{COMMAND}.find_meter", new=AsyncMock(return_value=meter)),
+            patch(f"{COMMAND}.create_meter", new=create),
+            patch(f"{COMMAND}._find_product_by_type", new=AsyncMock()) as products,
+            self.assertRaisesRegex(CommandError, "aggregates by 'sum'"),
+        ):
+            call_command("provision_overage_billing")
+        create.assert_not_awaited()
+        products.assert_not_awaited()
 
     def test_verify_fails_on_tier_drift(self):
         with self.assertRaises(CommandError) as ctx:
