@@ -332,8 +332,9 @@ async def get_event_detail(
             - "contexts": the full contexts object.
             - "extra": the event's `extra` payload.
         frame: Frame index (frameIndex) — required for section="vars".
-        offset: Pagination offset for "frames" / "breadcrumbs" (default 0).
-        limit: Page size for "frames" / "breadcrumbs".
+        offset: Pagination offset for "frames" / "breadcrumbs" (default 0,
+            must be >= 0).
+        limit: Page size for "frames" / "breadcrumbs" (must be >= 1).
         organization_slug: Optional org slug for faster lookup (recommended).
 
     The response is itself size-bounded; if a single slice is still too large

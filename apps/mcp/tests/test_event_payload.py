@@ -14,6 +14,7 @@ from apps.mcp.data import get_event
 from apps.mcp.event_payload import (
     CHARS_PER_TOKEN,
     DEFAULT_EVENT_TOKEN_BUDGET,
+    FRAME_PAGE_SIZE,
     MAX_BREADCRUMBS_DEFAULT,
     serialize_event_detail,
     serialize_event_lean,
@@ -285,6 +286,28 @@ class DrillDownTest(TestCase):
         event = self._make_event(_make_event_data(n_frames=2))
         with self.assertRaises(ValueError):
             serialize_event_detail(event, "vars", frame=99)
+
+    def test_drill_down_rejects_nonpositive_limit(self):
+        """A negative limit slices as frames[0:-n], widening the response."""
+        event = self._make_event(_make_event_data(n_frames=10))
+        for section in ("frames", "breadcrumbs"):
+            for limit in (0, -1, -10):
+                with self.assertRaises(ValueError):
+                    serialize_event_detail(event, section, limit=limit)
+
+    def test_drill_down_rejects_negative_offset(self):
+        """A negative offset slices as frames[-n:page], silently returning
+        nothing while `total` still reports the full count."""
+        event = self._make_event(_make_event_data(n_frames=10))
+        for section in ("frames", "breadcrumbs"):
+            with self.assertRaises(ValueError):
+                serialize_event_detail(event, section, offset=-5)
+
+    def test_drill_down_limit_none_uses_default_page(self):
+        event = self._make_event(_make_event_data(n_frames=3))
+        result = serialize_event_detail(event, "frames", limit=None)
+        self.assertEqual(result["limit"], FRAME_PAGE_SIZE)
+        self.assertEqual(result["shown"], 3)
 
     def test_drill_down_frames_pagination(self):
         event = self._make_event(

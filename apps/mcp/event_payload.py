@@ -498,6 +498,15 @@ def serialize_event_detail(
     base: dict = {"eventId": event.id.hex, "section": section}
     omissions: dict = {}
 
+    # Reject paging values a slice would silently reinterpret rather than
+    # reject: frames[0:-1] is every frame but the last, and frames[-5:45] is
+    # empty, so a negative limit *widens* the response and a negative offset
+    # reads to the caller as "this event has no frames".
+    if offset < 0:
+        raise ValueError(f"offset must be >= 0 (got {offset})")
+    if limit is not None and limit < 1:
+        raise ValueError(f"limit must be at least 1 (got {limit})")
+
     if section == "vars":
         if frame is None:
             raise ValueError("section='vars' requires a frame index")
@@ -530,7 +539,7 @@ def serialize_event_detail(
     elif section == "frames":
         frames = _collect_frames(data)
         total = len(frames)
-        page = limit or FRAME_PAGE_SIZE
+        page = FRAME_PAGE_SIZE if limit is None else limit
         window = frames[offset : offset + page]
         out = []
         for i, f in enumerate(window, start=offset):
@@ -559,7 +568,7 @@ def serialize_event_detail(
     elif section == "breadcrumbs":
         crumbs = _collect_breadcrumbs(data)
         total = len(crumbs)
-        page = limit or BREADCRUMB_PAGE_SIZE
+        page = BREADCRUMB_PAGE_SIZE if limit is None else limit
         window = copy.deepcopy(crumbs[offset : offset + page])
         window = _fit_to_budget(window, char_budget, omissions)
         base.update(
