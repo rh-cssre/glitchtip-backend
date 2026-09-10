@@ -293,8 +293,9 @@ async def get_event(event_id: str, organization_slug: str | None = None) -> str:
         event = await data.get_event(user_id, event_id, organization_slug)
         if event is None:
             return _error("Event not found")
-        result = event_payload.serialize_event_lean(event)
-        result["issue"] = serializers.serialize_issue(event.issue)
+        result = event_payload.serialize_event_lean(
+            event, issue=serializers.serialize_issue(event.issue)
+        )
         return json.dumps(result)
     except ValueError as e:
         return _error(str(e))

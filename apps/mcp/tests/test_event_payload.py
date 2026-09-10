@@ -19,6 +19,7 @@ from apps.mcp.event_payload import (
     serialize_event_detail,
     serialize_event_lean,
 )
+from apps.mcp.serializers import serialize_issue
 from glitchtip.test_utils.issue import amake_issue
 
 
@@ -250,6 +251,53 @@ class LeanSerializationTest(TestCase):
         in_app_flags = [f.get("inApp") for f in frames]
         self.assertTrue(all(flag is True for flag in in_app_flags))
         self.assertIn("frames", result["_meta"]["omissions"])
+
+
+class IssueAttachmentTest(TestCase):
+    """get_event attaches the parent issue. It has to be measured with the
+    rest of the payload: Issue.metadata is written from event data at ingest,
+    so it is DSN-submitted and unbounded."""
+
+    def setUp(self):
+        self.project = baker.make("projects.Project")
+        self.organization = self.project.organization
+
+    def _event(self, issue):
+        return baker.make(
+            "issue_events.IssueEvent",
+            issue=issue,
+            organization=self.organization,
+            data=_make_event_data(n_frames=3, n_breadcrumbs=5),
+            tags={},
+        )
+
+    def test_estimated_tokens_matches_delivered_payload(self):
+        issue = baker.make("issue_events.Issue", project=self.project)
+        event = self._event(issue)
+        result = serialize_event_lean(event, issue=serialize_issue(issue))
+        self.assertIn("issue", result)
+        actual = len(json.dumps(result)) // CHARS_PER_TOKEN
+        # _meta is stamped just before the two scalar keys are added, so a
+        # few tokens of slack are expected -- but not the size of the issue.
+        self.assertLessEqual(abs(result["_meta"]["estimatedTokens"] - actual), 20)
+
+    def test_hostile_issue_metadata_is_bounded(self):
+        issue = baker.make(
+            "issue_events.Issue",
+            project=self.project,
+            metadata={"value": "M" * 200_000},
+        )
+        event = self._event(issue)
+        result = serialize_event_lean(event, issue=serialize_issue(issue))
+        budget = DEFAULT_EVENT_TOKEN_BUDGET * CHARS_PER_TOKEN
+        self.assertLess(len(json.dumps(result)), budget)
+        self.assertLess(len(result["issue"]["metadata"]["value"]), 200_000)
+
+    def test_issue_omitted_when_not_supplied(self):
+        """get_latest_event passes no issue; nothing should be invented."""
+        issue = baker.make("issue_events.Issue", project=self.project)
+        result = serialize_event_lean(self._event(issue))
+        self.assertNotIn("issue", result)
 
 
 class DrillDownTest(TestCase):

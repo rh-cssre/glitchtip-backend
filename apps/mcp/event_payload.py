@@ -184,7 +184,11 @@ def _truncate_in_place(obj, max_len: int) -> int:
 # --- Lean default serialization ---------------------------------------------
 
 
-def serialize_event_lean(event, token_budget: int = DEFAULT_EVENT_TOKEN_BUDGET) -> dict:
+def serialize_event_lean(
+    event,
+    token_budget: int = DEFAULT_EVENT_TOKEN_BUDGET,
+    issue: dict | None = None,
+) -> dict:
     """Serialize an event into a lean, budget-bounded triage view.
 
     Always drops frame ``vars`` and the request body (replaced by markers).
@@ -200,6 +204,14 @@ def serialize_event_lean(event, token_budget: int = DEFAULT_EVENT_TOKEN_BUDGET) 
     # Deep copy so mutation never touches the cached ORM ``event.data`` (the
     # serialized entries reference it directly).
     result = copy.deepcopy(serializers.serialize_event(event))
+    # Attached here rather than by the caller so it is measured, shed against
+    # and string-truncated with everything else. serialize_issue carries
+    # title, culprit and metadata, and Issue.metadata is a plain JSONField
+    # written from event data at ingest -- DSN-submitted and unbounded -- so
+    # appending it after the budget was enforced would leave the payload
+    # unbounded too.
+    if issue is not None:
+        result["issue"] = issue
     omissions: dict = {}
 
     exception_entry = _find_entry(result, "exception")
