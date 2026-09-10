@@ -575,7 +575,8 @@ def serialize_event_detail(
     elif section in ("request", "contexts", "extra"):
         payload = copy.deepcopy(data.get(section))
         if payload is None:
-            payload = {} if section != "extra" else {}
+            payload = {}
+            omissions["absent"] = f"event has no {section!r} section"
         payload = _fit_to_budget(payload, char_budget, omissions)
         base[section] = payload
 
