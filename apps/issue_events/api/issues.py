@@ -37,7 +37,7 @@ from ..services import (
     is_uuid7,
     sort_options,
 )
-from ..tasks import delete_issue_task, update_issues_task
+from ..tasks import CHUNK_SIZE, delete_issue_task, update_issues_task
 from . import router
 
 EventStatusEnum = StrEnum("EventStatusEnum", EventStatus.labels)
@@ -495,7 +495,7 @@ async def update_issues(
             async for event_id in IssueEvent.objects.filter(
                 issue__in=remove_qs,
                 organization_id=organization_id,
-            ).values_list("id", flat=True)[:1000]
+            ).values_list("id", flat=True)[:CHUNK_SIZE]
         ]
         moved_event_count = await IssueEvent.objects.filter(
             id__in=event_ids,
@@ -508,12 +508,10 @@ async def update_issues(
                 organization_id=merge_issue.project.organization_id,
             ).aupdate(count=F("count") + moved_event_count)
 
-        has_remaining_events = await IssueEvent.objects.filter(
-            issue__in=remove_qs,
-            organization_id=organization_id,
-        ).aexists()
-        await remove_qs.aupdate(is_deleted=True)
-        if should_enqueue or has_remaining_events:
+        needs_drain = len(event_ids) == CHUNK_SIZE
+        if not needs_drain:
+            await remove_qs.aupdate(is_deleted=True)
+        if should_enqueue or needs_drain:
             await update_issues_task.aenqueue(**task_kwargs)
 
     return payload

@@ -998,21 +998,22 @@ class IssueAPITestCase(GlitchTestCase):
 
     async def test_issue_merge_background_task_drains_all_events(self):
         source, target = await baker.amake(
-            "issue_events.Issue",
-            project=self.project,
-            _quantity=2,
+            "issue_events.Issue", project=self.project, _quantity=2
         )
-        await IssueIndex.objects.filter(issue_id=source.id).aupdate(count=1001)
+        await IssueIndex.objects.filter(issue_id=source.id).aupdate(count=7)
         await IssueIndex.objects.filter(issue_id=target.id).aupdate(count=0)
         await baker.amake(
             "issue_events.IssueEvent",
             issue=source,
             organization=self.organization,
-            _quantity=1001,
+            _quantity=7,
         )
 
         enqueue = AsyncMock()
-        with patch("apps.issue_events.api.issues.update_issues_task", aenqueue=enqueue):
+        with (
+            patch("apps.issue_events.api.issues.CHUNK_SIZE", 2),
+            patch("apps.issue_events.api.issues.update_issues_task", aenqueue=enqueue),
+        ):
             response = await self.async_client.put(
                 f"{self.list_url}?id={source.id}&id={target.id}",
                 {"merge": 1},
@@ -1021,18 +1022,177 @@ class IssueAPITestCase(GlitchTestCase):
 
         self.assertEqual(response.status_code, 200)
         enqueue.assert_awaited_once()
-        await asyncio.wait_for(
-            update_issues_task.func(**enqueue.await_args.kwargs), timeout=30
+        await source.arefresh_from_db()
+        self.assertFalse(source.is_deleted)
+        self.assertEqual(await IssueEvent.objects.filter(issue=source).acount(), 5)
+        with patch("apps.issue_events.tasks.CHUNK_SIZE", 2):
+            await asyncio.wait_for(
+                update_issues_task.func(**enqueue.await_args.kwargs), timeout=30
+            )
+
+        self.assertEqual(await IssueEvent.objects.filter(issue=source).acount(), 0)
+        self.assertEqual(await IssueEvent.objects.filter(issue=target).acount(), 7)
+        target_index = await IssueIndex.objects.aget(issue_id=target.id)
+        self.assertEqual(target_index.count, 7)
+        await source.arefresh_from_db()
+        self.assertTrue(source.is_deleted)
+
+    async def test_issue_merge_keeps_source_visible_when_enqueue_fails(self):
+        source, target = await baker.amake(
+            "issue_events.Issue", project=self.project, _quantity=2
+        )
+        await baker.amake(
+            "issue_events.IssueEvent",
+            issue=source,
+            organization=self.organization,
+            _quantity=3,
+        )
+        enqueue = AsyncMock(side_effect=RuntimeError("queue unavailable"))
+        with (
+            patch("apps.issue_events.api.issues.CHUNK_SIZE", 2),
+            patch("apps.issue_events.api.issues.update_issues_task", aenqueue=enqueue),
+            self.assertRaisesRegex(RuntimeError, "queue unavailable"),
+        ):
+            await self.async_client.put(
+                f"{self.list_url}?id={source.id}&id={target.id}",
+                {"merge": 1},
+                content_type="application/json",
+            )
+
+        enqueue.assert_awaited_once()
+        await source.arefresh_from_db()
+        self.assertFalse(source.is_deleted)
+        self.assertEqual(await IssueEvent.objects.filter(issue=source).acount(), 1)
+
+    async def test_issue_merge_keeps_source_visible_when_drain_fails(self):
+        source, target = await baker.amake(
+            "issue_events.Issue", project=self.project, _quantity=2
+        )
+        await IssueIndex.objects.filter(issue=target).aupdate(count=0)
+        await baker.amake(
+            "issue_events.IssueEvent",
+            issue=source,
+            organization=self.organization,
+            _quantity=5,
+        )
+        original_update = QuerySet.aupdate
+        event_updates = 0
+
+        async def fail_second_event_update(qs, **kwargs):
+            nonlocal event_updates
+            if qs.model is IssueEvent:
+                event_updates += 1
+                if event_updates == 2:
+                    raise RuntimeError("event update failed")
+            return await original_update(qs, **kwargs)
+
+        task_kwargs = {
+            "organization_slug": self.organization.slug,
+            "user_id": self.user.id,
+            "filter_params": {"id": [source.id, target.id]},
+            "update_params": {"merge": target.id},
+            "exclude_ids": [],
+            "max_id": target.id,
+        }
+        with (
+            patch("apps.issue_events.tasks.CHUNK_SIZE", 2),
+            patch.object(QuerySet, "aupdate", fail_second_event_update),
+            self.assertRaisesRegex(RuntimeError, "event update failed"),
+        ):
+            await update_issues_task.func(**task_kwargs)
+
+        await source.arefresh_from_db()
+        self.assertFalse(source.is_deleted)
+        self.assertEqual(await IssueEvent.objects.filter(issue=source).acount(), 3)
+        target_index = await IssueIndex.objects.aget(issue=target)
+        self.assertEqual(target_index.count, 2)
+
+        with patch("apps.issue_events.tasks.CHUNK_SIZE", 2):
+            await update_issues_task.func(**task_kwargs)
+        await source.arefresh_from_db()
+        self.assertTrue(source.is_deleted)
+        self.assertEqual(await IssueEvent.objects.filter(issue=target).acount(), 5)
+        await target_index.arefresh_from_db()
+        self.assertEqual(target_index.count, 5)
+
+    async def test_issue_merge_stops_when_event_update_makes_no_progress(self):
+        source, target = await baker.amake(
+            "issue_events.Issue", project=self.project, _quantity=2
+        )
+        await IssueIndex.objects.filter(issue=target).aupdate(count=0)
+        await baker.amake(
+            "issue_events.IssueEvent", issue=source, organization=self.organization
+        )
+        original_update = QuerySet.aupdate
+        event_update = AsyncMock(return_value=0)
+
+        async def skip_event_update(qs, **kwargs):
+            if qs.model is IssueEvent:
+                return await event_update(**kwargs)
+            return await original_update(qs, **kwargs)
+
+        with patch.object(QuerySet, "aupdate", skip_event_update):
+            await asyncio.wait_for(
+                update_issues_task.func(
+                    organization_slug=self.organization.slug,
+                    user_id=self.user.id,
+                    filter_params={"id": [source.id, target.id]},
+                    update_params={"merge": target.id},
+                    exclude_ids=[],
+                    max_id=target.id,
+                ),
+                timeout=5,
+            )
+
+        event_update.assert_awaited_once()
+        await source.arefresh_from_db()
+        self.assertFalse(source.is_deleted)
+        self.assertEqual(await IssueEvent.objects.filter(issue=source).acount(), 1)
+        target_index = await IssueIndex.objects.aget(issue=target)
+        self.assertEqual(target_index.count, 0)
+
+    async def test_issue_merge_background_task_pins_source_project(self):
+        other_project = await baker.amake(
+            "projects.Project", organization=self.organization
+        )
+        unrelated = await baker.amake("issue_events.Issue", project=other_project)
+        source, target = await baker.amake(
+            "issue_events.Issue", project=self.project, _quantity=2
+        )
+        fingerprints = []
+        events = []
+        for issue, project in ((unrelated, other_project), (source, self.project)):
+            fingerprints.append(
+                await baker.amake(
+                    "issue_events.IssueHash", issue=issue, project=project
+                )
+            )
+            events.append(
+                await baker.amake(
+                    "issue_events.IssueEvent",
+                    issue=issue,
+                    organization=self.organization,
+                )
+            )
+
+        await update_issues_task.func(
+            organization_slug=self.organization.slug,
+            user_id=self.user.id,
+            filter_params={"id": [unrelated.id, source.id, target.id]},
+            update_params={"merge": target.id},
+            exclude_ids=[],
+            max_id=target.id,
         )
 
-        self.assertEqual(
-            await IssueEvent.objects.filter(issue_id=source.id).acount(), 0
-        )
-        self.assertEqual(
-            await IssueEvent.objects.filter(issue_id=target.id).acount(), 1001
-        )
-        target_index = await IssueIndex.objects.aget(issue_id=target.id)
-        self.assertEqual(target_index.count, 1001)
+        await unrelated.arefresh_from_db()
+        await source.arefresh_from_db()
+        self.assertFalse(unrelated.is_deleted)
+        self.assertTrue(source.is_deleted)
+        for fingerprint, event, owner in zip(fingerprints, events, (unrelated, target)):
+            await fingerprint.arefresh_from_db()
+            await event.arefresh_from_db()
+            self.assertEqual(fingerprint.issue_id, owner.id)
+            self.assertEqual(event.issue_id, owner.id)
 
     async def test_issue_merge_background_task_advances_source_cursor(self):
         issues = await baker.amake(
@@ -1059,7 +1219,7 @@ class IssueAPITestCase(GlitchTestCase):
             "max_id": target.id,
         }
 
-        with patch("apps.issue_events.tasks.MERGE_ISSUE_CHUNK_SIZE", 2):
+        with patch("apps.issue_events.tasks.CHUNK_SIZE", 2):
             await asyncio.wait_for(update_issues_task.func(**task_kwargs), timeout=30)
 
         self.assertEqual(
@@ -1100,7 +1260,7 @@ class IssueAPITestCase(GlitchTestCase):
             return result
 
         with (
-            patch("apps.issue_events.tasks.UPDATE_ISSUE_CHUNK_SIZE", 2),
+            patch("apps.issue_events.tasks.CHUNK_SIZE", 2),
             patch.object(QuerySet, "aupdate", update_and_reopen),
         ):
             await asyncio.wait_for(
@@ -1128,7 +1288,7 @@ class IssueAPITestCase(GlitchTestCase):
         )
         selected_ids = [issue.id for issue in selected_issues]
 
-        with patch("apps.issue_events.tasks.UPDATE_ISSUE_CHUNK_SIZE", 2):
+        with patch("apps.issue_events.tasks.CHUNK_SIZE", 2):
             await asyncio.wait_for(
                 update_issues_task.func(
                     organization_slug=self.organization.slug,

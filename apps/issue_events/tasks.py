@@ -8,9 +8,7 @@ from .maintenance import delete_issues_in_batches
 from .models import Issue, IssueEvent, IssueHash, IssueIndex
 from .services import IssueFilters, filter_issue_list, get_queryset
 
-UPDATE_ISSUE_CHUNK_SIZE = 1000
-MERGE_ISSUE_CHUNK_SIZE = 1000
-MERGE_EVENT_CHUNK_SIZE = 1000
+CHUNK_SIZE = 1000
 
 
 @task
@@ -63,7 +61,7 @@ async def update_issues_task(
                 i
                 async for i in status_qs.filter(id__gt=last_issue_id)
                 .order_by("id")
-                .values_list("id", flat=True)[:UPDATE_ISSUE_CHUNK_SIZE]
+                .values_list("id", flat=True)[:CHUNK_SIZE]
             ]
             if not batch_ids:
                 break
@@ -80,7 +78,7 @@ async def update_issues_task(
                 i
                 async for i in remaining_qs.filter(id__gt=last_issue_id)
                 .order_by("id")
-                .values_list("id", flat=True)[:UPDATE_ISSUE_CHUNK_SIZE]
+                .values_list("id", flat=True)[:CHUNK_SIZE]
             ]
             if not batch_ids:
                 break
@@ -106,7 +104,7 @@ async def update_issues_task(
                 i
                 async for i in merge_qs.filter(id__gt=last_issue_id)
                 .order_by("id")
-                .values_list("id", flat=True)[:MERGE_ISSUE_CHUNK_SIZE]
+                .values_list("id", flat=True)[:CHUNK_SIZE]
             ]
             if not batch_ids:
                 break
@@ -123,9 +121,12 @@ async def update_issues_task(
                     async for event_id in IssueEvent.objects.filter(
                         issue_id__in=batch_ids,
                         organization_id=organization_id,
-                    ).values_list("id", flat=True)[:MERGE_EVENT_CHUNK_SIZE]
+                    ).values_list("id", flat=True)[:CHUNK_SIZE]
                 ]
                 if not event_ids:
+                    await Issue.objects.filter(id__in=batch_ids).aupdate(
+                        is_deleted=True
+                    )
                     break
 
                 moved_event_count = await IssueEvent.objects.filter(
@@ -133,9 +134,9 @@ async def update_issues_task(
                     issue_id__in=batch_ids,
                     organization_id=organization_id,
                 ).aupdate(issue=target_issue)
-                if moved_event_count:
-                    await IssueIndex.objects.filter(
-                        issue_id=target_issue.id, organization_id=organization_id
-                    ).aupdate(count=F("count") + moved_event_count)
-
-            await Issue.objects.filter(id__in=batch_ids).aupdate(is_deleted=True)
+                # The target is outside batch_ids, so moved events must leave the source selection.
+                if not moved_event_count:
+                    break
+                await IssueIndex.objects.filter(
+                    issue_id=target_issue.id, organization_id=organization_id
+                ).aupdate(count=F("count") + moved_event_count)
