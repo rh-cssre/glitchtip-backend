@@ -43,7 +43,13 @@ from .constants import (
 )
 from .exceptions import StripeError
 from .models import StripePrice, StripeProduct, StripeSubscription
-from .overage import cost_cents_for_units, overage_eligible, units_for_budget
+from .overage import (
+    billable_units,
+    cost_cents_for_units,
+    cycle_quota,
+    overage_eligible,
+    units_for_budget,
+)
 from .utils import compute_cycle, select_subscription_items, unix_to_datetime
 
 logger = logging.getLogger(__name__)
@@ -562,13 +568,24 @@ async def get_overage_status(request: AuthHttpRequest, organization_slug: str):
     quota = plan_events or settings.GLITCHTIP_FREE_TIER_EVENTS
 
     usage = 0
+    cap_units = units_for_budget(org.overage_spend_cap_cents)
+    billed_units = 0
     period = await get_current_period_dates(org)
     if period:
         usage = (await get_event_counts(org.id, *period)).total_event_count
-
-    cap_units = units_for_budget(org.overage_spend_cap_cents)
+        # The same quota and cap the sweep bills against, so the card can't
+        # show a smaller charge than the invoice after a downgrade or a lowered
+        # cap.
+        quota = cycle_quota(org, period[0], quota)
     overage_units = max(0, usage - quota)
-    billed_units = min(overage_units, cap_units) if org.metered_billing_enabled else 0
+    if period and org.metered_billing_enabled:
+        billed_units = billable_units(
+            overage_units,
+            cap_units,
+            org.overage_last_reported_units,
+            org.overage_last_reported_at,
+            *period,
+        )
 
     return {
         "enabled": org.metered_billing_enabled,
@@ -717,8 +734,8 @@ async def configure_overage(
         )
     else:
         # Keep the item attached and the last-report record intact: a re-enable
-        # is then a flag flip, and the in-cycle floor still holds so toggling
-        # can't retract usage already billed. A dormant item bills zero.
+        # is then a flag flip, and the cap stays floored at what the cycle has
+        # billed so toggling can't retract it. A dormant item bills zero.
         org.metered_billing_enabled = False
         await org.asave(update_fields=["metered_billing_enabled"])
 

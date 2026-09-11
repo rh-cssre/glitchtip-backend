@@ -115,8 +115,9 @@ class OrganizationThrottleCheckTestCase(TestCase):
 
         # No events, no throttle. One batch fetch with the subscription joined
         # in, six usage sums, and the empty next-batch probe; the period comes
-        # from the joined row, not a second query.
-        with self.assertNumQueries(8):
+        # from the joined row, not a second query. The first sweep of a cycle
+        # also stamps the cycle's quota record (one UPDATE, one read-back).
+        with self.assertNumQueries(10):
             check_all_organizations_throttle.call()
         org.refresh_from_db()
         self.assertEqual(org.event_throttle_rate, 0)
@@ -125,7 +126,8 @@ class OrganizationThrottleCheckTestCase(TestCase):
         # 3 issues (3.0) + 3 transactions (3.0) = 6.0 weighted events
         self._make_events(3, date=timezone.now() - timedelta(minutes=50))
         self._make_transaction_events(3, date=timezone.now() - timedelta(minutes=45))
-        check_all_organizations_throttle.call()
+        with self.assertNumQueries(8):  # steady state: the record is current
+            check_all_organizations_throttle.call()
         org.refresh_from_db()
         self.assertEqual(org.event_throttle_rate, 0)
         self.assertEqual(len(mail.outbox), 0)

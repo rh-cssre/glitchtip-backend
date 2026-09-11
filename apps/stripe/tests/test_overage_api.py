@@ -432,6 +432,31 @@ class OverageAPITestCase(TestCase):
             res = self._configure({"enabled": True, "capCents": 2000})
         self.assertEqual(res.status_code, 404)
 
+    def test_status_shows_the_cycle_quota_and_the_cap_floor(self):
+        """What the card shows must be what the sweep bills: the cycle's
+        quota high-water mark after a downgrade, and the cap floored at what
+        the cycle has already billed after the cap is lowered."""
+        from apps.organizations_ext.models import EventCounts
+
+        now = timezone.now()
+        self.org.metered_billing_enabled = True
+        self.org.overage_spend_cap_cents = 500  # ~3,333 affordable units
+        self.org.overage_cycle_start = self.sub.current_period_start
+        self.org.overage_cycle_quota = 150_000  # the plan before a downgrade
+        self.org.overage_last_reported_units = 40_000  # billed before the cap drop
+        self.org.overage_last_reported_at = now - timedelta(hours=1)
+        self.org.save()
+
+        with patch(
+            "apps.stripe.api.get_event_counts",
+            new=AsyncMock(return_value=EventCounts(issue_event_count=200_000)),
+        ):
+            body = self._status().json()
+        self.assertEqual(body["quota"], 150_000)
+        self.assertEqual(body["overageUnits"], 50_000)
+        # 40,000 billed units at $0.00015 = $6.00, not the $5 cap.
+        self.assertEqual(body["overageCostCents"], 600)
+
     def test_status_reports_overage_cost_when_enabled(self):
         from apps.organizations_ext.models import EventCounts
 

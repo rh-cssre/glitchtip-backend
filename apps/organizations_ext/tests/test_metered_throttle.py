@@ -12,9 +12,10 @@ from apps.stripe.constants import SubscriptionStatus
 from apps.stripe.exceptions import StripeError
 from apps.stripe.models import StripeSubscription
 
-from ..tasks import check_organization_throttle
+from ..tasks import _cycle_quota, check_organization_throttle
 
 _check = async_to_sync(check_organization_throttle.func)
+_cycle_quota_sync = async_to_sync(_cycle_quota)
 
 QUOTA = 100_000
 # $20 cap at $0.00015/event (first tier) -> 133,333 affordable overage units.
@@ -41,11 +42,14 @@ class MeteredThrottleTestCase(TestCase):
     """The throttle sweep's overage reports.
 
     The meter aggregates by ``last``, so every report is the cycle-to-date
-    billable total and the only local state is a record of the last one sent.
+    billable total, recomputed from current data each time. The local state is
+    a record of the last figure sent and the cycle's quota high-water mark.
     These tests pin the properties that make that safe: re-sends restate the
-    same figure, the figure never goes down within a cycle, out-of-order and
-    same-second measurements are skipped, a stale check from a closed cycle is
-    dropped, and nothing is sent to a meter that doesn't aggregate by ``last``.
+    same figure, a wrong figure is corrected by the next sweep, a lowered cap
+    stops growth without retracting billed usage, a smaller quota applies only
+    from the next cycle, out-of-order and same-second measurements are skipped,
+    a measurement outside the local period is dropped, and nothing is sent to a
+    meter that doesn't aggregate by ``last``.
     """
 
     def setUp(self):
@@ -344,11 +348,66 @@ class MeteredThrottleTestCase(TestCase):
         org.refresh_from_db()
         self.assertEqual(org.overage_cycle_quota, QUOTA)
 
-    def test_cycle_quota_is_not_tracked_while_overage_is_off(self):
-        org, _ = self._make_org(enabled=False, quota=1_000_000)
-        self._run(org, 500_000).assert_not_awaited()
+    def test_cycle_quota_tolerates_a_stale_copy_of_the_record(self):
+        # The sweep works from a batch copy that can be minutes old. If an
+        # ingest re-check has already stamped this cycle (and seen a larger
+        # plan), the sweep must neither refuse to report nor lower the mark.
+        org, sub = self._make_org()
+        start = sub.current_period_start
+        Organization.objects.filter(id=org.id).update(
+            overage_cycle_start=start, overage_cycle_quota=1_000_000
+        )
+        self.assertIsNone(org.overage_cycle_start)  # the stale copy
+        self.assertEqual(_cycle_quota_sync(org, start, QUOTA), 1_000_000)
         org.refresh_from_db()
-        self.assertIsNone(org.overage_cycle_start)
+        self.assertEqual(org.overage_cycle_quota, 1_000_000)
+
+    def test_cycle_quota_follows_an_anchor_that_moved_backwards(self):
+        # A primary subscription swapped for one on an earlier anchor (a lapsed
+        # monthly plan giving way to an annual one, say) is a new cycle, not a
+        # stale check: the caller only asks about the cycle its measurement is
+        # in. Refusing it would silence reporting until the old anchor passed.
+        org, sub = self._make_org()
+        start = sub.current_period_start
+        Organization.objects.filter(id=org.id).update(
+            overage_cycle_start=start, overage_cycle_quota=QUOTA
+        )
+        earlier = start - timedelta(days=11)
+        self.assertEqual(_cycle_quota_sync(org, earlier, 1_000_000), 1_000_000)
+        org.refresh_from_db()
+        self.assertEqual(org.overage_cycle_start, earlier)
+
+    def test_cycle_quota_is_tracked_while_overage_is_off(self):
+        # The downgrade the mark protects against can come before the opt-in.
+        org, sub = self._make_org(enabled=False, quota=1_000_000)
+        self._run(org, 900_000).assert_not_awaited()
+        org.refresh_from_db()
+        self.assertEqual(org.overage_cycle_quota, 1_000_000)
+
+        sub.price.product.events = 100_000
+        sub.price.product.save(update_fields=["events"])
+        org.metered_billing_enabled = True
+        org.save(update_fields=["metered_billing_enabled"])
+        # 900,000 used against a 100,000 plan would be the whole cap; it was
+        # all within quota when it happened.
+        self._run(org, 900_000).assert_not_awaited()
+        mock_meter = self._run(org, 1_010_000)
+        self.assertEqual(self._sent(mock_meter), 10_000)
+
+    def test_stale_check_does_not_restamp_the_cycle_record(self):
+        org, sub = self._make_org()
+        Organization.objects.filter(id=org.id).update(
+            overage_cycle_start=timezone.now() + timedelta(days=1),
+            overage_cycle_quota=1_000_000,
+        )
+        StripeSubscription.objects.filter(pk=sub.pk).update(
+            current_period_start=timezone.now() - timedelta(days=40),
+            current_period_end=timezone.now() - timedelta(minutes=1),
+        )
+        org.refresh_from_db()
+        self._run(org, 150_000).assert_not_awaited()
+        org.refresh_from_db()
+        self.assertEqual(org.overage_cycle_quota, 1_000_000)
 
     # -- ordering guards -------------------------------------------------------
 

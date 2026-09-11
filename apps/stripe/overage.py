@@ -86,6 +86,42 @@ def units_for_budget(cap_cents: int) -> int:
     return units
 
 
+def cycle_quota(org, cycle_start, plan_events: int) -> int:
+    """The quota overage is measured against in the cycle starting ``cycle_start``.
+
+    The largest quota the plan has held during the cycle, from the record the
+    throttle sweep keeps on the organization, or the plan's own when the record
+    is on another cycle. Measured against the current quota alone, a mid-cycle
+    downgrade would turn usage that was within quota when it happened into
+    billable overage; the smaller quota applies from the next cycle instead.
+    """
+    if org.overage_cycle_start == cycle_start:
+        return max(org.overage_cycle_quota, plan_events)
+    return plan_events
+
+
+def billable_units(
+    overage_units: int,
+    cap_units: int,
+    last_units: int,
+    last_at,
+    cycle_start,
+    cycle_end,
+) -> int:
+    """Units to bill: usage above quota, bounded by the spend cap.
+
+    Within a cycle the cap is floored at what has already been billed, so
+    lowering it stops growth from that point but doesn't retract billed usage
+    (or dropping the cap to a dollar on the last day would forgive the month).
+    The floor is on the cap, not on the figure, so a lower true total still
+    comes through. Shared by the sweep that reports to the meter and the status
+    view, so what the owner sees is what is invoiced.
+    """
+    if last_at is not None and cycle_start <= last_at < cycle_end:
+        cap_units = max(cap_units, last_units)
+    return min(overage_units, cap_units)
+
+
 def tier_problems(raw_price: dict) -> list[str]:
     """Differences between a Stripe price and the settings tier schedule.
 
