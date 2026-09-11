@@ -1,0 +1,262 @@
+"""The folded gate, exercised through the two routes that use it.
+
+``apps/alerts`` is the only consumer so far -- ``list_project_alerts`` is
+``@org_scoped_list`` and ``delete_project_alert`` is ``@org_scoped_qs``. What
+is under test is ``glitchtip.api.permissions``, not alerts, so these move if
+the decorators grow a second consumer worth testing them through.
+"""
+
+import inspect
+
+from django.core.exceptions import ImproperlyConfigured
+from django.db import models
+from django.test import SimpleTestCase, TestCase
+from django.urls import reverse
+from model_bakery import baker
+
+from apps.alerts.models import AlertRecipient, ProjectAlert
+from apps.organizations_ext.constants import OrganizationUserRole
+from glitchtip.api.permissions import org_scoped_qs
+from glitchtip.base_models import OrgScopedModel
+from glitchtip.test_utils import generators  # noqa: F401
+
+
+class OrgScopedModelDeclarationTestCase(SimpleTestCase):
+    """``org_field`` is checked when the class is created, not per request."""
+
+    def test_missing_org_field_is_rejected(self):
+        with self.assertRaises(ImproperlyConfigured) as ctx:
+
+            class NoOrgField(OrgScopedModel, models.Model):
+                class Meta:
+                    app_label = "alerts"
+
+        self.assertIn("org_field", str(ctx.exception))
+
+    def test_empty_org_field_is_rejected(self):
+        with self.assertRaises(ImproperlyConfigured):
+
+            class BlankOrgField(OrgScopedModel, models.Model):
+                org_field = ""
+
+                class Meta:
+                    app_label = "alerts"
+
+    def test_org_field_that_joins_organization_is_rejected(self):
+        # The expensive path the docstring warns about: ``__organization``
+        # joins the table, ``__organization_id`` reads the column already on
+        # the row being filtered.
+        with self.assertRaises(ImproperlyConfigured) as ctx:
+
+            class JoinsOrganization(OrgScopedModel, models.Model):
+                org_field = "project__organization"
+
+                class Meta:
+                    app_label = "alerts"
+
+        self.assertIn("project__organization_id", str(ctx.exception))
+
+
+class OrgScopedQsDeclarationTestCase(SimpleTestCase):
+    """``@org_scoped_qs`` fails at import, not on the first request."""
+
+    def test_model_that_is_not_org_scoped_is_rejected(self):
+        with self.assertRaises(ImproperlyConfigured) as ctx:
+            org_scoped_qs(["project:admin"], AlertRecipient)
+        self.assertIn("OrgScopedModel", str(ctx.exception))
+
+    def test_scope_no_role_holds_is_rejected(self):
+        with self.assertRaises(ImproperlyConfigured):
+            org_scoped_qs(["project:nonexistent"], ProjectAlert)
+
+    def test_view_without_a_qs_parameter_is_rejected(self):
+        with self.assertRaises(ImproperlyConfigured) as ctx:
+
+            @org_scoped_qs(["project:admin"], ProjectAlert)
+            async def view(request, organization_slug: str):
+                pass
+
+        self.assertIn("qs", str(ctx.exception))
+
+    def test_qs_is_hidden_from_the_signature_ninja_reads(self):
+        @org_scoped_qs(["project:admin"], ProjectAlert)
+        async def view(request, qs, organization_slug: str):
+            pass
+
+        params = inspect.signature(view).parameters
+        self.assertNotIn("qs", params)
+        self.assertIn("organization_slug", params)
+
+    def test_qs_is_not_a_parameter_on_the_real_route(self):
+        """The signature edit is only worth anything if ninja honours it.
+
+        An un-annotated param ninja can see becomes a required ``str`` query
+        param, so a leak here is a 422 on every call, not a cosmetic one.
+        """
+        from glitchtip.api.api import api
+
+        operations = [
+            operation
+            for path, item in api.get_openapi_schema()["paths"].items()
+            for method, operation in item.items()
+            if path.endswith("/alerts/{alert_id}/") and method == "delete"
+        ]
+        self.assertEqual(len(operations), 1)
+        names = [param["name"] for param in operations[0].get("parameters", [])]
+        self.assertNotIn("qs", names)
+        self.assertIn("alert_id", names)
+
+
+def _set_slug(obj, slug: str):
+    """``AutoSlugField`` regenerates on insert, so a slug has to land after it."""
+    type(obj).objects.filter(pk=obj.pk).update(slug=slug)
+    obj.slug = slug
+    return obj
+
+
+class OrgScopedGateTestCase(TestCase):
+    """Two organizations sharing a project slug, one user in both.
+
+    ``other_org`` is one the user *is* an owner of, so a row reached through
+    the wrong slug proves the org in the path is being ignored rather than
+    merely proving that membership filtering works.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = baker.make("users.user")
+        cls.outsider = baker.make("users.user")
+        cls.org = _set_slug(baker.make("organizations_ext.Organization"), "orga")
+        cls.other_org = _set_slug(baker.make("organizations_ext.Organization"), "orgb")
+        cls.org_user = cls.org.add_user(cls.user, OrganizationUserRole.OWNER)
+        cls.other_org.add_user(cls.user, OrganizationUserRole.OWNER)
+        cls.project = _set_slug(
+            baker.make("projects.Project", organization=cls.org), "shared"
+        )
+        cls.other_project = _set_slug(
+            baker.make("projects.Project", organization=cls.other_org), "shared"
+        )
+        cls.alert = baker.make("alerts.ProjectAlert", project=cls.project)
+        cls.other_alert = baker.make("alerts.ProjectAlert", project=cls.other_project)
+        cls.token = baker.make("api_tokens.APIToken", user=cls.user)
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def delete_url(self, org_slug="orga", project_slug="shared", alert_id=None):
+        return reverse(
+            "api:delete_project_alert",
+            args=[
+                org_slug,
+                project_slug,
+                self.alert.id if alert_id is None else alert_id,
+            ],
+        )
+
+    def list_url(self, org_slug="orga", project_slug="shared"):
+        return reverse("api:list_project_alerts", args=[org_slug, project_slug])
+
+    def set_role(self, role: OrganizationUserRole):
+        self.org_user.role = role
+        self.org_user.save(update_fields=["role"])
+
+    def bearer(self):
+        self.client.logout()
+        return {"authorization": f"Bearer {self.token.token}"}
+
+    # Role gate
+
+    def test_member_cannot_delete_and_is_told_their_role(self):
+        self.set_role(OrganizationUserRole.MEMBER)
+        res = self.client.delete(self.delete_url())
+        self.assertEqual(res.status_code, 403)
+        self.assertIn("Member", res.json()["detail"])
+        self.assertTrue(ProjectAlert.objects.filter(id=self.alert.id).exists())
+
+    def test_admin_can_delete(self):
+        self.set_role(OrganizationUserRole.ADMIN)
+        res = self.client.delete(self.delete_url())
+        self.assertEqual(res.status_code, 204)
+        self.assertFalse(ProjectAlert.objects.filter(id=self.alert.id).exists())
+
+    # Existence hiding
+
+    def test_non_member_gets_404_not_403(self):
+        self.client.force_login(self.outsider)
+        res = self.client.delete(self.delete_url())
+        self.assertEqual(res.status_code, 404)
+        self.assertTrue(ProjectAlert.objects.filter(id=self.alert.id).exists())
+
+    def test_an_org_you_cannot_see_is_indistinguishable_from_one_that_is_gone(self):
+        self.client.force_login(self.outsider)
+        hidden = self.client.delete(self.delete_url(org_slug="orga"))
+        missing = self.client.delete(self.delete_url(org_slug="no-such-org"))
+        self.assertEqual(hidden.status_code, missing.status_code)
+        self.assertEqual(hidden.json(), missing.json())
+
+    def test_a_missing_row_is_a_plain_404_for_someone_entitled_to_it(self):
+        # Entitled callers get the ordinary Http404, not the membership one:
+        # explain_error declines to speak when the gate was not the blocker.
+        self.set_role(OrganizationUserRole.ADMIN)
+        res = self.client.delete(self.delete_url(alert_id=self.alert.id + 1000))
+        self.assertEqual(res.status_code, 404)
+        self.assertNotIn("Organization", res.json()["detail"])
+
+    # Cross-org isolation on a shared slug
+
+    def test_delete_cannot_reach_another_orgs_alert_through_a_shared_slug(self):
+        self.set_role(OrganizationUserRole.ADMIN)
+        res = self.client.delete(self.delete_url(alert_id=self.other_alert.id))
+        self.assertEqual(res.status_code, 404)
+        self.assertTrue(ProjectAlert.objects.filter(id=self.other_alert.id).exists())
+
+    def test_list_is_scoped_to_the_org_in_the_path(self):
+        res = self.client.get(self.list_url())
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual([row["id"] for row in res.json()], [self.alert.id])
+
+        res = self.client.get(self.list_url(org_slug="orgb"))
+        self.assertEqual([row["id"] for row in res.json()], [self.other_alert.id])
+
+    # Token scopes
+
+    def test_token_without_the_scope_is_refused(self):
+        headers = self.bearer()
+        res = self.client.delete(self.delete_url(), headers=headers)
+        self.assertEqual(res.status_code, 403)
+        self.assertIn("token", res.json()["detail"])
+
+        self.token.add_permission("project:admin")
+        res = self.client.delete(self.delete_url(), headers=headers)
+        self.assertEqual(res.status_code, 204)
+
+    def test_token_cannot_grant_more_than_the_users_role(self):
+        self.set_role(OrganizationUserRole.MEMBER)
+        self.token.add_permission("project:admin")
+        res = self.client.delete(self.delete_url(), headers=self.bearer())
+        self.assertEqual(res.status_code, 403)
+        self.assertIn("Member", res.json()["detail"])
+        self.assertTrue(ProjectAlert.objects.filter(id=self.alert.id).exists())
+
+    # Cost
+
+    # Kept synchronous: assertNumQueries only observes Django's sync
+    # connection, and the async test client runs the view on the async one.
+    def test_list_query_count(self):
+        baker.make("alerts.ProjectAlert", project=self.project, _quantity=4)
+        headers = self.bearer()
+        self.token.add_permission("project:read")
+        # Token lookup, the page, the alertrecipient prefetch. The gate adds
+        # none of its own: the org id and the membership check are subqueries
+        # inside the page query, which is the whole point of folding them in.
+        with self.assertNumQueries(3):
+            res = self.client.get(self.list_url(), headers=headers)
+        self.assertEqual(len(res.json()), 5)
+
+    def test_an_empty_list_is_not_explained_by_default(self):
+        # ``explain_empty`` is off for this route, so a non-member sees the
+        # same empty page an entitled caller with no alerts would.
+        self.client.force_login(self.outsider)
+        res = self.client.get(self.list_url())
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json(), [])

@@ -145,7 +145,7 @@ def _org_gate(required: frozenset[Scopes], roles: tuple[int, ...], view):
 def org_scoped_list(scopes: list[Scopes], explain_empty: bool = False):
     """Folded gate for paginated views
 
-    For pagination, we can capture the queryset, fold in authz, then paginate 
+    For pagination, we can capture the queryset, fold in authz, then paginate
     (evaluate).
 
     ``explain_empty`` turns an empty page into the same 404/403 the
