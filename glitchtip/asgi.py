@@ -222,8 +222,9 @@ class RecycleConnectionsMiddleware:
     * ``close_old_connections`` on the ``request_started`` /
       ``request_finished`` signals ``BaseHandler`` emits (the sync,
       thread-local ``django.db.connections`` store); and
-    * the ``close_async_connections`` middleware (django-async-backend's
-      per-task ``async_connections`` store).
+    * ``close_old_async_connections`` on those same signals, connected by
+      django-async-backend's app config (its per-task
+      ``async_connections`` store).
 
     A connection that dies while held (Postgres failover, pgbouncer restart,
     ``pg_terminate_backend``, a network blip) is therefore never returned to
@@ -269,7 +270,7 @@ class RecycleConnectionsMiddleware:
         finally:
             # shield so a client disconnect mid-response can't cancel cleanup
             # and leak the connection into the next request (mirrors
-            # django_async_backend.middleware.close_async_connections).
+            # django-async-backend's own request_finished receiver).
             await asyncio.shield(_recycle_db_connections())
 
 

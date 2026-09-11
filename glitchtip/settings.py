@@ -608,6 +608,15 @@ INSTALLED_APPS = [
     "django.contrib.humanize",
     "django.contrib.postgres",
     "django_prometheus",
+    # Async DB cursors live in django-async-backend's ``async_connections``
+    # store (served by the gt_rust engine; see the ENGINE assignment in the
+    # DATABASES loop below). Installing the app is what releases them: its
+    # ``ready()`` connects ``close_old_async_connections`` to Django's
+    # request_started / request_finished signals. 6.1 removed the
+    # ``close_async_connections`` middleware that used to do this, so without
+    # the app every request would leak its async connection and eventually
+    # exhaust the pool.
+    "django_async_backend",
     "allauth",
     "allauth.account",
     "allauth.headless",
@@ -692,13 +701,6 @@ if "GRANIAN_STATIC_PATH_MOUNT" in os.environ:
 if ENABLE_OBSERVABILITY_API:
     MIDDLEWARE.insert(0, "django_prometheus.middleware.PrometheusBeforeMiddleware")
     MIDDLEWARE.append("django_prometheus.middleware.PrometheusAfterMiddleware")
-
-# Async DB cursors live in django-async-backend's ``async_connections``
-# store (served by the gt_rust engine; see the ENGINE assignment in the
-# DATABASES loop below). Inserted at the head of the chain so async cursors
-# are returned to the pool before any other middleware finalises the
-# response.
-MIDDLEWARE.insert(0, "django_async_backend.middleware.close_async_connections")
 
 ROOT_URLCONF = "glitchtip.urls"
 

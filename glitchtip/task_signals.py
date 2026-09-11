@@ -1,10 +1,10 @@
-"""Worker-side cleanup that mirrors HTTP middleware.
+"""Worker-side cleanup that mirrors the HTTP request signals.
 
 django-async-backend keeps its own per-asyncio-Task connection store
-(``async_connections``). The HTTP path calls ``close_all()`` in
-``django_async_backend.middleware.close_async_connections``; the task
-worker has no equivalent middleware, so async DB connections opened by a
-task leak when the task's coroutine ends.
+(``async_connections``). The HTTP path closes it from the
+``request_started`` / ``request_finished`` receivers its app config
+connects; the task worker emits neither signal, so async DB connections
+opened by a task leak when the task's coroutine ends.
 
 We re-close on both ``task_finished`` and ``task_failure``: vtasks fires
 exactly one of the two per task (including on cancellation), and both

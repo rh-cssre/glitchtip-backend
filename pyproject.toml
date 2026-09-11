@@ -6,7 +6,7 @@ authors = ["David Burke"]
 license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
-    "django>=6.0,<6.1",
+    "django>=6.1,<6.2",
     "django-vtasks[valkey]~=3.1.0",
     "django-allauth-async[mfa,socialaccount]==65.19.1.1",
     "django-cors-headers~=4.0",
@@ -36,8 +36,8 @@ dependencies = [
     "django-postgres-partition>=0.1.4",
     "pyyaml>=6.0.2", # allauth openapi spec
     "granian[reload,uvloop]>=2.6.0",
-    "django-vcache>=3.0.0",
-    "glitchtip-rust>=0.9.0",
+    "django-vcache>=3.2.0",
+    "glitchtip-rust>=0.10.0",
     "uuid6>=2024.1.12",
     # Bounded below 3: the SDK moves its server API across majors (v2 renamed
     # FastMCP to MCPServer), so a major bump is a code change, not a relock.
@@ -47,7 +47,7 @@ dependencies = [
     "arro3-core~=0.8",
     "arro3-io~=0.8",
     # Matches Django major/minor
-    "django-async-backend>=6.0,<6.1",
+    "django-async-backend>=6.1,<6.2",
     "opentelemetry-proto~=1.0",
 ]
 
