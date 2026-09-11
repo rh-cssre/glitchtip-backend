@@ -9,7 +9,7 @@ class OrgScopedModel:
 
     ``org_field`` is an ORM path ending in the organization id column. Prefer
     the local ``"organization_id"``; every ``__`` hop is a join on every gated
-    query, and reaching ``organization`` itself measured ~14x slower.
+    query, and reaching ``organization`` itself is much slower.
 
     Not a ``models.Model``: it carries no fields and adds no table, so mixing
     it in needs no migration.

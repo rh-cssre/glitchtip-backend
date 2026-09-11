@@ -46,7 +46,7 @@ class OrgScope:
     @property
     def org_id_expr(self) -> Subquery:
         # An UNCORRELATED scalar subquery, never a join to organization from
-        # the data model -- that measured ~14x slower.
+        # the data model. 
         return Subquery(
             Organization.objects.filter(slug=self.org_slug, is_deleted=False).values(
                 "id"
