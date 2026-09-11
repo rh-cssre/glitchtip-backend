@@ -116,7 +116,7 @@ def org_scoped_list(scopes: list[Scopes]):
     return decorator
 
 
-def org_scoped_qs(scopes: list[Scopes], queryset):
+def org_scoped_qs(scopes: list[Scopes], model: type[OrgScopedModel]):
     """Folded gate for a view whose response is not one queryset.
 
     An aggregate, a bulk mutation, or a route that resolves a single object
@@ -125,12 +125,19 @@ def org_scoped_qs(scopes: list[Scopes], queryset):
     before the view and after it, never in the middle -- so the only way to
     gate these is to fold on the way IN rather than on the way out.
 
-    ``queryset`` is an async ``(request, **kwargs) -> QuerySet`` called once the
-    scope exists, with ninja's already-parsed parameters, so it can narrow by
-    ``filters`` or a path id. Whatever it returns is gated before the view sees
-    it and handed over as ``qs``.
+    ``model`` names the rows. The view is handed ``qs``: every row of that
+    model in this organization that the caller's role reaches, and nothing
+    else. Narrowing past that -- a path id, a slug, a filter -- is the view's
+    own business and carries no isolation; roles are org-wide, and ``qs`` is
+    already org-isolated and role-gated before the view sees it.
     """
     required, roles = _resolve_roles(scopes)
+    if not (isinstance(model, type) and issubclass(model, OrgScopedModel)):
+        raise ImproperlyConfigured(
+            f"{model!r} is gated by @org_scoped_qs but is not an OrgScopedModel, "
+            "so the gate cannot isolate it. Declare org_field on it via "
+            "OrgScopedModel."
+        )
 
     def decorator(view):
         signature = inspect.signature(view)
@@ -143,9 +150,8 @@ def org_scoped_qs(scopes: list[Scopes], queryset):
         @wraps(view)  # ninja reads the signature for path params
         async def gated(request, **kwargs):
             scope = await _enter_scope(request, required, roles, kwargs)
-            return await view(
-                request, qs=scope.apply(await queryset(request, **kwargs)), **kwargs
-            )
+            qs = scope.apply(model._default_manager.all())
+            return await view(request, qs=qs, **kwargs)
 
         # ninja builds the operation's parameters from the signature, and ``qs``
         # is ours to supply -- it is not a query param and must not show up in

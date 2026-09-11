@@ -41,10 +41,6 @@ def alert_rows(project_slug: str) -> QuerySet[ProjectAlert]:
     return ProjectAlert.objects.filter(project__slug=project_slug)
 
 
-async def alert_qs(request, project_slug, **kwargs):  # provider for org_scoped_qs
-    return alert_rows(project_slug)
-
-
 def get_project_alert_queryset(user_id: int, organization_slug: str, project_slug: str):
     return ProjectAlert.objects.filter(
         project__organization__users=user_id,
@@ -159,7 +155,7 @@ async def update_project_alert(
     "projects/{slug:organization_slug}/{slug:project_slug}/alerts/{alert_id}/",
     response={204: None},
 )
-@org_scoped_qs(["project:admin"], alert_qs)
+@org_scoped_qs(["project:admin"], ProjectAlert)
 async def delete_project_alert(
     request: OrgScopedHttpRequest,
     qs: QuerySet[ProjectAlert],
@@ -167,8 +163,7 @@ async def delete_project_alert(
     project_slug: str,
     alert_id: int,
 ):
-    # The second ``.filter(role__gte=ADMIN)`` this route used to carry is gone,
-    result, _ = await qs.filter(id=alert_id).adelete()
+    result, _ = await qs.filter(project__slug=project_slug, id=alert_id).adelete()
     if result:
         return Status(204, None)
     raise Http404
