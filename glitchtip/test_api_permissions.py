@@ -311,7 +311,7 @@ class OrgScopedGateTestCase(TestCase):
 
     def test_a_missing_row_is_a_plain_404_for_someone_entitled_to_it(self):
         # Entitled callers get the ordinary Http404, not the membership one:
-        # explain_error declines to speak when the gate was not the blocker.
+        # explain_miss declines to speak when the gate was not the blocker.
         self.set_role(OrganizationUserRole.ADMIN)
         res = self.client.delete(self.delete_url(alert_id=self.alert.id + 1000))
         self.assertEqual(res.status_code, 404)

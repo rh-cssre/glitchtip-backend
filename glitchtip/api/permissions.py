@@ -21,6 +21,28 @@ class OrgScope:
     required: frozenset[Scopes]
     roles: tuple[int, ...]  # role values holding any required scope
 
+    @classmethod
+    def from_request(cls, request, required, roles, kwargs) -> "OrgScope":
+        """Token ceiling, then the scope the view will be gated by.
+
+        Publishes itself on the request: ``OrgScopedHttpRequest`` promises
+        views an ``org_scope``, and a gate that forgets to set it breaks that
+        contract quietly.
+        """
+        if request.auth.auth_type == "token":
+            effective = required & set(request.auth.data.get_scopes())
+            if not effective:
+                raise HttpError(
+                    403,
+                    f"Permission denied. This endpoint requires one of {sorted(required)}; "
+                    "your token grants none of them.",
+                )
+            roles = tuple(i for i, r in enumerate(ROLES) if effective & r["scopes"])
+
+        scope = cls(request.auth.user_id, kwargs["organization_slug"], required, roles)
+        request.org_scope = scope  # set before the view runs
+        return scope
+
     @property
     def org_id_expr(self) -> Subquery:
         # An UNCORRELATED scalar subquery, never a join to organization from
@@ -55,7 +77,7 @@ class OrgScope:
             )
         return qs.filter(self.gate, **{model.org_field: self.org_id_expr})
 
-    async def explain_error(self) -> HttpError | None:
+    async def explain_miss(self) -> HttpError | None:
         # membership lookup:
         row = await (
             Organization.objects.filter(slug=self.org_slug, is_deleted=False)
@@ -105,43 +127,6 @@ def _resolve_roles(scopes: list[Scopes]) -> tuple[frozenset[Scopes], tuple[int, 
     return required, roles
 
 
-async def _enter_scope(request, required, roles, kwargs) -> OrgScope:
-    """Token ceiling, then the scope the view will be gated by."""
-    if request.auth.auth_type == "token":
-        effective = required & set(request.auth.data.get_scopes())
-        if not effective:
-            raise HttpError(
-                403,
-                f"Permission denied. This endpoint requires one of {sorted(required)}; "
-                "your token grants none of them.",
-            )
-        roles = tuple(i for i, r in enumerate(ROLES) if effective & r["scopes"])
-
-    scope = OrgScope(request.auth.user_id, kwargs["organization_slug"], required, roles)
-    request.org_scope = scope  # set before the view runs
-    return scope
-
-
-def _org_gate(required: frozenset[Scopes], roles: tuple[int, ...], view):
-    """The gate, with nothing about response shape in it.
-
-    Checks the token, builds the `OrgScope``, runs the view, and folds the
-    gate into whatever queryset the view hands back. What happens to that
-    queryset afterwards -- paginated, or evaluated whole -- is the caller's
-    business, and is the ONLY thing the wrappers below differ in.
-    """
-
-    @wraps(view)  # ninja reads the signature for path params
-    async def gated(request, **kwargs):
-        scope = await _enter_scope(request, required, roles, kwargs)
-        qs = await view(request, **kwargs)
-        if not isinstance(qs, QuerySet):
-            raise TypeError(f"{view.__qualname__} must return a QuerySet")
-        return scope.apply(qs)
-
-    return gated
-
-
 def org_scoped_list(scopes: list[Scopes], explain_empty: bool = False):
     """Folded gate for paginated views
 
@@ -156,7 +141,17 @@ def org_scoped_list(scopes: list[Scopes], explain_empty: bool = False):
     required, roles = _resolve_roles(scopes)
 
     def decorator(view):
-        paginated = paginate(_org_gate(required, roles, view))
+        # The gate, with nothing about response shape in it: it folds into
+        # whatever queryset the view hands back, and pagination happens after.
+        @wraps(view)  # ninja reads the signature for path params
+        async def gated(request, **kwargs):
+            scope = OrgScope.from_request(request, required, roles, kwargs)
+            qs = await view(request, **kwargs)
+            if not isinstance(qs, QuerySet):
+                raise TypeError(f"{view.__qualname__} must return a QuerySet")
+            return scope.apply(qs)
+
+        paginated = paginate(gated)
         if not explain_empty:
             return paginated
 
@@ -169,7 +164,7 @@ def org_scoped_list(scopes: list[Scopes], explain_empty: bool = False):
             if page:
                 return page
 
-            if error := await request.org_scope.explain_error():
+            if error := await request.org_scope.explain_miss():
                 raise error
 
             return page
@@ -184,7 +179,7 @@ def org_scoped_qs(scopes: list[Scopes], model: type[OrgScopedModel]):
 
     An aggregate, a bulk mutation, or a route that resolves a single object
     needs *rows* in the middle of its body, so by the time it returns there is
-    nothing left for ``_org_gate`` to fold into. A decorator wraps -- it runs
+    nothing left for the gate to fold into. A decorator wraps -- it runs
     before the view and after it, never in the middle -- so the only way to
     gate these is to fold on the way IN rather than on the way out.
 
@@ -212,12 +207,12 @@ def org_scoped_qs(scopes: list[Scopes], model: type[OrgScopedModel]):
 
         @wraps(view)  # ninja reads the signature for path params
         async def gated(request, **kwargs):
-            scope = await _enter_scope(request, required, roles, kwargs)
+            scope = OrgScope.from_request(request, required, roles, kwargs)
             qs = scope.apply(model._default_manager.all())
             try:
                 return await view(request, qs=qs, **kwargs)
             except Http404:
-                if error := await scope.explain_error():
+                if error := await scope.explain_miss():
                     raise error from None
                 raise
 
