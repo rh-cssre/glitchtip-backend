@@ -113,8 +113,10 @@ class OrganizationThrottleCheckTestCase(TestCase):
         """
         org = self.organization
 
-        # No events, no throttle
-        with self.assertNumQueries(9):
+        # No events, no throttle. One batch fetch with the subscription joined
+        # in, six usage sums, and the empty next-batch probe; the period comes
+        # from the joined row, not a second query.
+        with self.assertNumQueries(8):
             check_all_organizations_throttle.call()
         org.refresh_from_db()
         self.assertEqual(org.event_throttle_rate, 0)

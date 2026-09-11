@@ -643,9 +643,13 @@ async def configure_overage(
                 status=400,
             )
         # A cap decrease on an already-enabled org only reduces exposure; it
-        # must never be refused, whatever state the account's subscriptions are in.
+        # must never be refused, whatever state the account's subscriptions are
+        # in. Only while the primary subscription already carries the item,
+        # though: with none attached the request below would attach one, and
+        # that is exactly what the check guards.
         lowering_cap = (
             org.metered_billing_enabled
+            and bool(sub.metered_item_id)
             and payload.cap_cents <= org.overage_spend_cap_cents
         )
         try:

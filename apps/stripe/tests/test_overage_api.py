@@ -370,6 +370,35 @@ class OverageAPITestCase(TestCase):
         self.org.refresh_from_db()
         self.assertEqual(self.org.overage_spend_cap_cents, 2000)
 
+    def test_cap_decrease_without_an_item_is_still_guarded(self):
+        # The bypass is for a cap change on an item that already exists. With
+        # no item on the primary subscription the request would attach one,
+        # which is exactly what the other-subscription check exists to stop:
+        # here the old subscription still carries the metered item.
+        self.sub.metered_item_id = ""
+        self.sub.save()
+        self.org.metered_billing_enabled = True
+        self.org.overage_spend_cap_cents = 5000
+        self.org.save()
+        self.other_subscriptions.return_value = [
+            self._stripe_subscription("sub_other", metered=True)
+        ]
+        with (
+            patch(
+                "apps.stripe.api.fetch_subscription", new_callable=AsyncMock
+            ) as fetch,
+            patch(
+                "apps.stripe.api.add_subscription_item", new_callable=AsyncMock
+            ) as add,
+        ):
+            res = self._configure({"enabled": True, "capCents": 2000})
+        self.assertEqual(res.status_code, 400)
+        self.other_subscriptions.assert_awaited_once()
+        fetch.assert_not_awaited()
+        add.assert_not_awaited()
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.metered_item_id, "")
+
     def test_enable_ignores_other_subscriptions_without_metered_item(self):
         self.other_subscriptions.return_value = [
             self._stripe_subscription("sub_1"),

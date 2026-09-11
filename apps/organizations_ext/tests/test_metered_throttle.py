@@ -62,6 +62,7 @@ class MeteredThrottleTestCase(TestCase):
         plan_price=15,
         status=SubscriptionStatus.ACTIVE,
         stripe_id="sub_1",
+        quota=QUOTA,
     ):
         now = timezone.now()
         org = baker.make(
@@ -70,7 +71,7 @@ class MeteredThrottleTestCase(TestCase):
             metered_billing_enabled=enabled,
             overage_spend_cap_cents=cap_cents,
         )
-        product = baker.make("stripe.StripeProduct", events=QUOTA)
+        product = baker.make("stripe.StripeProduct", events=quota)
         price = baker.make(
             "stripe.StripePrice", product=product, price=plan_price, no_throttle=False
         )
@@ -99,6 +100,9 @@ class MeteredThrottleTestCase(TestCase):
                 "apps.organizations_ext.tasks.get_event_counts",
                 new=AsyncMock(return_value=EventCounts(issue_event_count=usage)),
             ),
+            # ``tasks.timezone`` is django.utils.timezone itself, so this pins
+            # the clock for everything the check calls (cycle math included),
+            # not just the module. Load-bearing; don't narrow it.
             patch("apps.organizations_ext.tasks.timezone.now", return_value=at),
             patch(
                 "apps.stripe.client.find_meter",
@@ -224,15 +228,19 @@ class MeteredThrottleTestCase(TestCase):
 
     def test_rollover_under_quota_reports_nothing(self):
         # A new cycle with nothing billable sends nothing; Stripe bills the
-        # period at zero. There is no anchor to move any more.
+        # period at zero. In particular the previous cycle's figure is not
+        # "corrected" to zero: a zero restatement is only ever a correction
+        # within the cycle that holds the figure.
         org, _ = self._make_org()
         org.overage_last_reported_at = timezone.now() - timedelta(days=90)
         org.overage_last_reported_units = 50_000
         org.save(
             update_fields=["overage_last_reported_at", "overage_last_reported_units"]
         )
-        mock_meter = self._run(org, 50_000)
+        mock_meter = self._run(org, 90_000)
         mock_meter.assert_not_awaited()
+        org.refresh_from_db()
+        self.assertEqual(org.overage_last_reported_units, 50_000)
 
     def test_disable_then_reenable_same_cycle_restates_total(self):
         org, _ = self._make_org()
@@ -265,6 +273,82 @@ class MeteredThrottleTestCase(TestCase):
         org.save(update_fields=["overage_spend_cap_cents"])
         mock_meter = self._run(org, 160_000)
         self.assertEqual(self._sent(mock_meter), 60_000)
+
+    def test_lowered_cap_floor_still_lets_a_lower_true_total_through(self):
+        # The floor is on the cap, not on the figure: a lowered cap can't
+        # forgive the month, but it also can't pin a figure the true total no
+        # longer supports.
+        org, _ = self._make_org()
+        self._run(org, 150_000)  # 50,000 reported
+        org.overage_spend_cap_cents = 500
+        org.save(update_fields=["overage_spend_cap_cents"])
+        mock_meter = self._run(org, 130_000)
+        self.assertEqual(self._sent(mock_meter), 30_000)
+
+    def test_wrong_high_figure_is_corrected_by_the_next_sweep(self):
+        """Every report is recomputed from current data, so whatever put a
+        too-high figure on the meter, the next sweep restates the right one
+        and ``last`` takes it. This is what the old output floor prevented."""
+        org, _ = self._make_org()
+        org.overage_last_reported_units = 400_000
+        org.overage_last_reported_at = self.clock - timedelta(minutes=5)
+        org.save(
+            update_fields=["overage_last_reported_units", "overage_last_reported_at"]
+        )
+        mock_meter = self._run(org, 150_000)
+        self.assertEqual(self._sent(mock_meter), 50_000)
+        org.refresh_from_db()
+        self.assertEqual(org.overage_last_reported_units, 50_000)
+
+    # -- the cycle's quota -----------------------------------------------------
+
+    def test_downgrade_mid_cycle_keeps_the_larger_quota(self):
+        # Usage that was within quota when it happened must not become billable
+        # because the plan shrank afterwards. The smaller quota applies from
+        # the next cycle.
+        org, sub = self._make_org(quota=1_000_000)
+        self._run(org, 500_000).assert_not_awaited()
+        org.refresh_from_db()
+        self.assertEqual(org.overage_cycle_quota, 1_000_000)
+
+        sub.price.product.events = 100_000
+        sub.price.product.save(update_fields=["events"])
+        self._run(org, 500_000).assert_not_awaited()
+        mock_meter = self._run(org, 1_050_000)
+        self.assertEqual(self._sent(mock_meter), 50_000)
+        org.refresh_from_db()
+        self.assertEqual(org.overage_cycle_quota, 1_000_000)
+
+    def test_upgrade_mid_cycle_forgives_overage_for_the_cycle(self):
+        # The larger quota covers the whole cycle, so overage already billed
+        # under the smaller plan is restated downwards -- to zero here -- and
+        # the meter's ``last`` takes it.
+        org, sub = self._make_org()
+        self.assertEqual(self._sent(self._run(org, 150_000)), 50_000)
+
+        sub.price.product.events = 1_000_000
+        sub.price.product.save(update_fields=["events"])
+        mock_meter = self._run(org, 160_000)
+        self.assertEqual(self._sent(mock_meter), 0)
+        org.refresh_from_db()
+        self.assertEqual(org.overage_last_reported_units, 0)
+        self.assertEqual(org.overage_cycle_quota, 1_000_000)
+
+    def test_cycle_quota_resets_on_rollover(self):
+        org, _ = self._make_org()
+        org.overage_cycle_start = timezone.now() - timedelta(days=40)
+        org.overage_cycle_quota = 1_000_000
+        org.save(update_fields=["overage_cycle_start", "overage_cycle_quota"])
+        mock_meter = self._run(org, 150_000)
+        self.assertEqual(self._sent(mock_meter), 50_000)
+        org.refresh_from_db()
+        self.assertEqual(org.overage_cycle_quota, QUOTA)
+
+    def test_cycle_quota_is_not_tracked_while_overage_is_off(self):
+        org, _ = self._make_org(enabled=False, quota=1_000_000)
+        self._run(org, 500_000).assert_not_awaited()
+        org.refresh_from_db()
+        self.assertIsNone(org.overage_cycle_start)
 
     # -- ordering guards -------------------------------------------------------
 
@@ -320,6 +404,30 @@ class MeteredThrottleTestCase(TestCase):
         mock_meter = self._run(org, 120_000)
         self.assertEqual(self._sent(mock_meter), 20_000)
 
+    def test_annual_plan_reports_in_its_virtual_month(self):
+        """Annual plans meter against a virtual monthly cycle that only
+        advances in the daily maintenance run. Until it does, a measurement
+        past the local month is dropped, not filed against the stale month;
+        once it has, the new month's own total goes out."""
+        org, sub = self._make_org()
+        now = timezone.now()
+        StripeSubscription.objects.filter(pk=sub.pk).update(
+            current_period_start=now - timedelta(days=200),
+            current_period_end=now + timedelta(days=165),
+            subscription_cycle_start=now - timedelta(days=35),
+            subscription_cycle_end=now - timedelta(days=5),
+        )
+        org.refresh_from_db()
+        self._run(org, 150_000).assert_not_awaited()
+
+        StripeSubscription.objects.filter(pk=sub.pk).update(
+            subscription_cycle_start=now - timedelta(days=5),
+            subscription_cycle_end=now + timedelta(days=25),
+        )
+        org.refresh_from_db()
+        mock_meter = self._run(org, 120_000)
+        self.assertEqual(self._sent(mock_meter), 20_000)
+
     def test_stale_check_from_a_closed_cycle_is_dropped(self):
         # The period dates advanced under this check; its timestamp would file
         # the event in the closed period, where a late arrival is billed on the
@@ -367,12 +475,14 @@ class MeteredThrottleTestCase(TestCase):
 
     def test_meter_is_not_consulted_when_nothing_is_due(self):
         # Under quota or unchanged, the sweep must cost no Stripe call at all;
-        # otherwise a Stripe outage turns every metered org into a probe.
+        # otherwise a Stripe outage turns every metered org into a probe. (A
+        # total that *drops* within a cycle is a correction and does go out.)
         org, _ = self._make_org()
         self._run(org, 150_000)
+        under_quota, _ = self._make_org(stripe_id="sub_2")
         find = AsyncMock(return_value=_meter())
         with patch("apps.stripe.client.find_meter", new=find):
-            for usage in (50_000, 150_000):
+            for target, usage in ((under_quota, 50_000), (org, 150_000)):
                 self.clock += timedelta(seconds=10)
                 with (
                     patch(
@@ -391,7 +501,7 @@ class MeteredThrottleTestCase(TestCase):
                     ) as mock_meter,
                 ):
                     cache.delete("overage-meter-formula:glitchtip_overage_events_total")
-                    _check(org.id, bypass_cache=True)
+                    _check(target.id, bypass_cache=True)
                 mock_meter.assert_not_awaited()
         find.assert_not_awaited()
 
