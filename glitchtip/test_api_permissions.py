@@ -8,16 +8,25 @@ the decorators grow a second consumer worth testing them through.
 
 import inspect
 
+from django.apps import apps
 from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from django.test import SimpleTestCase, TestCase
+from django.test.utils import isolate_apps
 from django.urls import reverse
 from model_bakery import baker
 
 from apps.alerts.models import AlertRecipient, ProjectAlert
 from apps.organizations_ext.constants import OrganizationUserRole
+from apps.organizations_ext.models import Organization
+from apps.projects.models import Project
 from glitchtip.api.permissions import org_scoped_qs
-from glitchtip.base_models import OrgScopedModel
+from glitchtip.base_models import ORG_SCOPED_MODELS, OrgScopedModel
+from glitchtip.checks import (
+    check_org_field,
+    check_org_scoped_models,
+    registered_models,
+)
 from glitchtip.test_utils import generators  # noqa: F401
 
 
@@ -43,9 +52,10 @@ class OrgScopedModelDeclarationTestCase(SimpleTestCase):
                     app_label = "alerts"
 
     def test_org_field_that_joins_organization_is_rejected(self):
-        # The expensive path the docstring warns about: ``__organization``
-        # joins the table, ``__organization_id`` reads the column already on
-        # the row being filtered.
+        # A spelling rule, enforced here because it is one: both spellings
+        # compile to the same column comparison. ``_id`` states that the gate
+        # stops at the foreign key, and keeps the path one segment away from
+        # ``__organization__<column>``, which does join the table.
         with self.assertRaises(ImproperlyConfigured) as ctx:
 
             class JoinsOrganization(OrgScopedModel, models.Model):
@@ -55,6 +65,111 @@ class OrgScopedModelDeclarationTestCase(SimpleTestCase):
                     app_label = "alerts"
 
         self.assertIn("project__organization_id", str(ctx.exception))
+
+
+@isolate_apps("apps.alerts")
+class OrgScopedModelCheckTestCase(SimpleTestCase):
+    """``manage.py check`` resolves what ``__init_subclass__`` cannot.
+
+    The app registry is still filling when a model class is created, so the
+    declaration can only be checked as a string there. The path it names is
+    resolved later, by the system check.
+    """
+
+    def setUp(self):
+        # The mixin appends every subclass it sees, and these tests create
+        # models. Hand the registry back unchanged.
+        snapshot = ORG_SCOPED_MODELS[:]
+        self.addCleanup(ORG_SCOPED_MODELS.__setitem__, slice(None), snapshot)
+
+    def test_the_registered_models_resolve(self):
+        self.assertEqual(check_org_scoped_models(None), [])
+
+    def test_a_path_that_stops_short_of_the_organization_is_rejected(self):
+        class StopsAtProject(OrgScopedModel, models.Model):
+            org_field = "project_id"
+            project = models.ForeignKey(Project, on_delete=models.CASCADE)
+
+            class Meta:
+                app_label = "alerts"
+
+        error = check_org_field(StopsAtProject)
+        self.assertEqual(error.id, "glitchtip.E002")
+        self.assertIn("project_id", error.msg)
+
+    def test_a_path_reaching_past_the_foreign_key_is_rejected(self):
+        # Resolves, and filtering on it would even run -- it just joins
+        # organization to compare the wrong column.
+        class ReachesOrganizationColumn(OrgScopedModel, models.Model):
+            org_field = "project__organization__slug"
+            project = models.ForeignKey(Project, on_delete=models.CASCADE)
+
+            class Meta:
+                app_label = "alerts"
+
+        error = check_org_field(ReachesOrganizationColumn)
+        self.assertEqual(error.id, "glitchtip.E002")
+
+    def test_a_path_that_does_not_resolve_is_rejected(self):
+        class Typo(OrgScopedModel, models.Model):
+            org_field = "porject__organization_id"
+            project = models.ForeignKey(Project, on_delete=models.CASCADE)
+
+            class Meta:
+                app_label = "alerts"
+
+        error = check_org_field(Typo)
+        self.assertEqual(error.id, "glitchtip.E001")
+
+    def test_both_spellings_of_the_foreign_key_are_accepted(self):
+        # ``__init_subclass__`` rejects the bare spelling, so the check must
+        # not be the thing enforcing it -- two rules over one string, disagreeing
+        # about which layer owns it, is how a valid model gets refused twice.
+        class LocalKey(OrgScopedModel, models.Model):
+            org_field = "organization_id"
+            organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+
+            class Meta:
+                app_label = "alerts"
+
+        self.assertIsNone(check_org_field(LocalKey))
+
+    def test_an_abstract_base_is_not_checked(self):
+        # It is still appended to the registry -- ``__init_subclass__`` cannot
+        # tell yet -- but it has no table, and the path names a relation it
+        # does not have, so resolving it would fail.
+        class AbstractBase(OrgScopedModel, models.Model):
+            org_field = "project__organization_id"
+
+            class Meta:
+                abstract = True
+                app_label = "alerts"
+
+        self.assertIn(AbstractBase, ORG_SCOPED_MODELS)
+        self.assertNotIn(AbstractBase, registered_models(None))
+        self.assertEqual(check_org_scoped_models(None), [])
+
+
+class OrgScopedModelRegistryTestCase(SimpleTestCase):
+    """The registry as the running app sees it, not an isolated one."""
+
+    def test_the_real_models_are_registered(self):
+        # The reader that makes the registry worth keeping: a model declared
+        # with the mixin is validated whether or not a route uses it yet.
+        self.assertEqual(
+            sorted(model._meta.label for model in registered_models(None)),
+            ["alerts.ProjectAlert", "projects.Project"],
+        )
+
+    def test_the_check_narrows_to_the_apps_it_is_given(self):
+        # ``manage.py check alerts`` should not walk the whole registry.
+        self.assertEqual(
+            [
+                model._meta.label
+                for model in registered_models([apps.get_app_config("alerts")])
+            ],
+            ["alerts.ProjectAlert"],
+        )
 
 
 class OrgScopedQsDeclarationTestCase(SimpleTestCase):

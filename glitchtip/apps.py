@@ -5,7 +5,7 @@ class GlitchtipConfig(AppConfig):
     name = "glitchtip"
 
     def ready(self):
-        from . import task_signals  # noqa: F401
+        from . import checks, task_signals  # noqa: F401
 
         self._skip_hstore_oid_lookup()
 
