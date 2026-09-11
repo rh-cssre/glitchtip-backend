@@ -55,8 +55,7 @@ class OrgScope:
             )
         return qs.filter(self.gate, **{model.org_field: self.org_id_expr})
 
-    async def explain_error(self) -> HttpError:
-        # return type is a Exception that can be raised in the decorators.
+    async def explain_error(self) -> HttpError | None:
         # membership lookup:
         row = await (
             Organization.objects.filter(slug=self.org_slug, is_deleted=False)
@@ -77,7 +76,7 @@ class OrgScope:
         # Does the object they want exist? (if they passed the gate, then
         # why would a user be here except because the item doesn't exist?)
         if row["membership_role"] in self.roles:
-            return HttpError(404, "Not found.")
+            return None
 
         role = ROLES[row["membership_role"]]
         if self.required & role["scopes"]:
@@ -85,9 +84,9 @@ class OrgScope:
             # token's scopes are the blocker.
             return HttpError(
                 403,
-                f"Permission denied. Your role ({role['name']}) grants this, but "
-                f"the API token you used does not. This endpoint requires one of "
-                f"{sorted(self.required)}.",
+                f"Permission denied. This endpoint requires one of "
+                f"{sorted(self.required)}; your role ({role['name']}) grants "
+                f"them but the API token you used does not.",
             )
         return HttpError(
             403,
@@ -95,6 +94,7 @@ class OrgScope:
             f"{sorted(self.required)}; your role in {self.org_slug} "
             f"({role['name']}) holds none of them.",
         )
+
 
 def _resolve_roles(scopes: list[Scopes]) -> tuple[frozenset[Scopes], tuple[int, ...]]:
     """Import time: which role ints hold at least one required scope."""
@@ -142,16 +142,39 @@ def _org_gate(required: frozenset[Scopes], roles: tuple[int, ...], view):
     return gated
 
 
-def org_scoped_list(scopes: list[Scopes]):
+def org_scoped_list(scopes: list[Scopes], explain_empty: bool = False):
     """Folded gate for paginated views
 
     only ~14 endpoints are paginated. For pagination, we can capture the
     queryset, fold in authz, then paginate (evaluate).
+
+    ``explain_empty`` turns an empty page into the same 404/403 the
+    non-paginated routes give, at the cost of a query on every empty page.
+    Off by default: an empty page is an ordinary answer here, unlike the
+    ``Http404`` that drives ``org_scoped_qs``.
     """
     required, roles = _resolve_roles(scopes)
 
     def decorator(view):
-        return paginate(_org_gate(required, roles, view))
+        paginated = paginate(_org_gate(required, roles, view))
+        if not explain_empty:
+            return paginated
+
+        # Outside ``paginate``, because the gate hands back an unevaluated
+        # queryset -- there is nothing to look at until pagination has run it.
+        @wraps(paginated)
+        async def checked(request: OrgScopedHttpRequest, **kwargs):
+            page = await paginated(request, **kwargs)
+
+            if page:
+                return page
+
+            if error := await request.org_scope.explain_error():
+                raise error
+
+            return page
+
+        return checked
 
     return decorator
 
@@ -191,10 +214,12 @@ def org_scoped_qs(scopes: list[Scopes], model: type[OrgScopedModel]):
         async def gated(request, **kwargs):
             scope = await _enter_scope(request, required, roles, kwargs)
             qs = scope.apply(model._default_manager.all())
-            try: 
+            try:
                 return await view(request, qs=qs, **kwargs)
             except Http404:
-                raise await scope.explain_error() from None
+                if error := await scope.explain_error():
+                    raise error from None
+                raise
 
         # ninja builds the operation's parameters from the signature, and ``qs``
         # is ours to supply -- it is not a query param and must not show up in
