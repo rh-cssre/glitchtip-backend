@@ -53,17 +53,16 @@ class OrgScope:
             )[:1]
         )
 
-    @property
-    def gate(self) -> Exists:
+    def gate(self, org_id: Subquery) -> Exists:
         # No OuterRef. Deliberately UNCORRELATED, so Postgres evaluates
         # this once as an InitPlan instead of once per row. Adding an
         # OuterRef here looks more correct and silently makes it per-row.
         qs = OrganizationUser.objects.filter(
             user_id=self.user_id,
-            organization_id=self.org_id_expr,
+            organization_id=org_id,
         )
         if len(self.roles) < len(ROLES):
-            # A no-op on event:* routes, where every role qualifies.
+            # A no-op on routes every role qualifies for.
             qs = qs.filter(role__in=self.roles)
         return Exists(qs)
 
@@ -75,7 +74,10 @@ class OrgScope:
                 "an OrgScopedModel, so the gate cannot isolate it. Declare "
                 "org_field on it via OrgScopedModel."
             )
-        return qs.filter(self.gate, **{model.org_field: self.org_id_expr})
+        # One object, not one InitPlan: Django resolves
+        # each filter position on its own.
+        org_id = self.org_id_expr
+        return qs.filter(self.gate(org_id), **{model.org_field: org_id})
 
     async def explain_miss(self) -> HttpError | None:
         # membership lookup:
