@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from functools import wraps
 
 from django.core.exceptions import ImproperlyConfigured
-from django.db.models import Exists, QuerySet, Subquery
-from ninja.errors import HttpError
+from django.db.models import Exists, OuterRef, QuerySet, Subquery
+from ninja.errors import Http404, HttpError
 from ninja.pagination import paginate
 
 from apps.organizations_ext.constants import ROLES, Scopes
@@ -55,6 +55,46 @@ class OrgScope:
             )
         return qs.filter(self.gate, **{model.org_field: self.org_id_expr})
 
+    async def explain_error(self) -> HttpError:
+        # return type is a Exception that can be raised in the decorators.
+        # membership lookup:
+        row = await (
+            Organization.objects.filter(slug=self.org_slug, is_deleted=False)
+            .annotate(
+                membership_role=Subquery(
+                    OrganizationUser.objects.filter(
+                        organization_id=OuterRef("pk"), user_id=self.user_id
+                    ).values("role")[:1]
+                )
+            )
+            .values("membership_role")
+            .afirst()
+        )
+        # Does the org exist? Does the user exist in the org?
+        if row is None or row["membership_role"] is None:
+            return HttpError(404, "Organization not found.")
+
+        # Does the object they want exist? (if they passed the gate, then
+        # why would a user be here except because the item doesn't exist?)
+        if row["membership_role"] in self.roles:
+            return HttpError(404, "Not found.")
+
+        role = ROLES[row["membership_role"]]
+        if self.required & role["scopes"]:
+            # The role holds a required scope but was still excluded, so the
+            # token's scopes are the blocker.
+            return HttpError(
+                403,
+                f"Permission denied. Your role ({role['name']}) grants this, but "
+                f"the API token you used does not. This endpoint requires one of "
+                f"{sorted(self.required)}.",
+            )
+        return HttpError(
+            403,
+            f"Permission denied. This endpoint requires one of "
+            f"{sorted(self.required)}; your role in {self.org_slug} "
+            f"({role['name']}) holds none of them.",
+        )
 
 def _resolve_roles(scopes: list[Scopes]) -> tuple[frozenset[Scopes], tuple[int, ...]]:
     """Import time: which role ints hold at least one required scope."""
@@ -151,7 +191,10 @@ def org_scoped_qs(scopes: list[Scopes], model: type[OrgScopedModel]):
         async def gated(request, **kwargs):
             scope = await _enter_scope(request, required, roles, kwargs)
             qs = scope.apply(model._default_manager.all())
-            return await view(request, qs=qs, **kwargs)
+            try: 
+                return await view(request, qs=qs, **kwargs)
+            except Http404:
+                raise await scope.explain_error() from None
 
         # ninja builds the operation's parameters from the signature, and ``qs``
         # is ours to supply -- it is not a query param and must not show up in
