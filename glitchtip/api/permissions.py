@@ -125,7 +125,7 @@ async def _enter_scope(request, required, roles, kwargs) -> OrgScope:
 def _org_gate(required: frozenset[Scopes], roles: tuple[int, ...], view):
     """The gate, with nothing about response shape in it.
 
-    Checks the token, builds the ``OrgScope``, runs the view, and folds the
+    Checks the token, builds the `OrgScope``, runs the view, and folds the
     gate into whatever queryset the view hands back. What happens to that
     queryset afterwards -- paginated, or evaluated whole -- is the caller's
     business, and is the ONLY thing the wrappers below differ in.
@@ -145,8 +145,8 @@ def _org_gate(required: frozenset[Scopes], roles: tuple[int, ...], view):
 def org_scoped_list(scopes: list[Scopes], explain_empty: bool = False):
     """Folded gate for paginated views
 
-    only ~14 endpoints are paginated. For pagination, we can capture the
-    queryset, fold in authz, then paginate (evaluate).
+    For pagination, we can capture the queryset, fold in authz, then paginate 
+    (evaluate).
 
     ``explain_empty`` turns an empty page into the same 404/403 the
     non-paginated routes give, at the cost of a query on every empty page.
