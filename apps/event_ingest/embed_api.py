@@ -149,7 +149,10 @@ async def submit_embed_error_page(
         report = form.save(commit=False)
         report.project_id = request.auth.id
         report.event_id = event_id
-        event = await IssueEvent.objects.filter(id=event_id).afirst()
+        # eventId is the SDK's client-generated event_id (what the ingest
+        # response echoes back as "id" for Sentry.lastEventId()), not
+        # IssueEvent's server-generated UUIDv7 primary key.
+        event = await IssueEvent.objects.filter(event_id=event_id).afirst()
         if event:
             report.issue_id = event.issue_id
         try:

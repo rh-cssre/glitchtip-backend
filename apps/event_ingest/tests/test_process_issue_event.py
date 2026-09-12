@@ -128,6 +128,24 @@ class IssueEventIngestTestCase(EventIngestTestCase):
         self.assertEqual(Issue.objects.first().short_id, 1)
         self.assertEqual(Issue.objects.last().short_id, 2)
 
+    def test_backfills_user_report_submitted_before_event(self):
+        """A UserReport can be saved (embed API or SDK feedback) before its
+        associated event finishes ingesting, leaving issue_id NULL. Once the
+        event lands, the report should be backfilled instead of staying
+        orphaned forever."""
+        event_id = uuid.uuid4()
+        report = baker.make(
+            "issue_events.UserReport",
+            project=self.project,
+            event_id=event_id,
+            issue=None,
+        )
+        self.process_events([{"event_id": str(event_id)}])
+        report.refresh_from_db()
+        self.assertEqual(
+            report.issue_id, IssueEvent.objects.get(event_id=event_id).issue_id
+        )
+
     def test_transaction_truncation(self):
         long_string = "x" * 201
         truncated_string = "x" * 199 + "…"
