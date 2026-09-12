@@ -1025,8 +1025,6 @@ async def process_issue_events(
 
     issue_events: list[IssueEvent] = []
     issues_to_reopen = []
-    # (project_id, event_id, issue_id) for UserReport rows to backfill below,
-    # for reports submitted before their event finished ingesting.
     user_report_backfill: list[tuple[int, uuid.UUID, int]] = []
     # Group events by time and project for event count statistics
     data_stats: defaultdict[datetime, defaultdict[int, dict]] = defaultdict(
@@ -1252,10 +1250,6 @@ async def process_issue_events(
             )
 
     if user_report_backfill:
-        # A UserReport can be saved before its event finishes ingesting
-        # (embed_api.submit_embed_error_page, tasks.ingest_user_report), in
-        # which case issue_id is left NULL with no retry. Backfill it now
-        # that the event (and its issue) exist.
         await execute_unnest(
             sql=(
                 "UPDATE issue_events_userreport ur "

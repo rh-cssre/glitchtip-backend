@@ -51,7 +51,6 @@ class ErrorPageEmbedTestCase(EventIngestTestCase):
         event = await baker.amake(
             "issue_events.IssueEvent", issue=issue, event_id=uuid.uuid4()
         )
-        # eventId is the SDK's client event_id, not IssueEvent's server-generated id
         params = f"?dsn={self.project_key.get_dsn()}&eventId={event.event_id.hex}"
         data = {"name": "Test Name", "email": "test@example.com", "comments": "hmm"}
         res = await self.async_client.post(self.url + params, data)
