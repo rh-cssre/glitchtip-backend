@@ -17,6 +17,8 @@ from ..tasks import _cycle_quota, check_organization_throttle
 _check = async_to_sync(check_organization_throttle.func)
 _cycle_quota_sync = async_to_sync(_cycle_quota)
 
+BASE_PERIOD = object()  # _make_org: the metered item's period is the plan's
+
 QUOTA = 100_000
 # $20 cap at $0.00015/event (first tier) -> 133,333 affordable overage units.
 CAP_CENTS = 2000
@@ -50,6 +52,10 @@ class MeteredThrottleTestCase(TestCase):
     from the next cycle, out-of-order and same-second measurements are skipped,
     a measurement outside the local period is dropped, and nothing is sent to a
     meter that doesn't aggregate by ``last``.
+
+    The window all of this happens in is the metered item's own Stripe period
+    once one is attached (``billing_window``), refreshed from Stripe when it
+    runs out; the plan's period or virtual month applies only without one.
     """
 
     def setUp(self):
@@ -63,12 +69,15 @@ class MeteredThrottleTestCase(TestCase):
         enabled=True,
         cap_cents=CAP_CENTS,
         metered_item="si_1",
+        metered_period=BASE_PERIOD,
         plan_price=15,
         status=SubscriptionStatus.ACTIVE,
         stripe_id="sub_1",
         quota=QUOTA,
     ):
-        now = timezone.now()
+        # Whole seconds: Stripe's timestamps are, and a period that has been
+        # through Stripe and back must compare equal to the one it was made from.
+        now = timezone.now().replace(microsecond=0)
         org = baker.make(
             "organizations_ext.Organization",
             stripe_customer_id="cus_1",
@@ -79,35 +88,52 @@ class MeteredThrottleTestCase(TestCase):
         price = baker.make(
             "stripe.StripePrice", product=product, price=plan_price, no_throttle=False
         )
+        period = (now - timedelta(days=5), now + timedelta(days=25))
+        if metered_period is BASE_PERIOD:
+            metered_period = period if metered_item else (None, None)
         sub = StripeSubscription.objects.create(
             stripe_id=stripe_id,
             created=now,
-            current_period_start=now - timedelta(days=5),
-            current_period_end=now + timedelta(days=25),
+            current_period_start=period[0],
+            current_period_end=period[1],
             start_date=now,
             price=price,
             organization=org,
             status=status,
             metered_item_id=metered_item,
+            metered_period_start=metered_period[0],
+            metered_period_end=metered_period[1],
         )
         org.stripe_primary_subscription = sub
         org.save(update_fields=["stripe_primary_subscription"])
         return org, sub
 
-    def _run(self, org, usage, meter_error=None, at=None, formula="last"):
-        """Run the throttle check with usage and clock pinned; return the meter mock."""
+    def _run(self, org, usage, meter_error=None, at=None, formula="last", fetched=None):
+        """Run the throttle check with usage and clock pinned; return the meter mock.
+
+        ``fetched`` is what Stripe answers should the check re-read the
+        subscription (a stale metered period); by default Stripe is
+        unreachable, so an unexpected refresh leaves the window as it was.
+        The counting window the check used is kept in ``self.counted``.
+        """
         if at is None:
             self.clock += timedelta(seconds=10)
             at = self.clock
+        fetch = (
+            AsyncMock(return_value=fetched)
+            if fetched is not None
+            else AsyncMock(side_effect=StripeError("unreachable", status=503))
+        )
         with (
             patch(
                 "apps.organizations_ext.tasks.get_event_counts",
                 new=AsyncMock(return_value=EventCounts(issue_event_count=usage)),
-            ),
+            ) as counts,
             # ``tasks.timezone`` is django.utils.timezone itself, so this pins
             # the clock for everything the check calls (cycle math included),
             # not just the module. Load-bearing; don't narrow it.
             patch("apps.organizations_ext.tasks.timezone.now", return_value=at),
+            patch("apps.stripe.models.fetch_subscription", new=fetch),
             patch(
                 "apps.stripe.client.find_meter",
                 new=AsyncMock(return_value=_meter(formula)),
@@ -118,7 +144,32 @@ class MeteredThrottleTestCase(TestCase):
             ) as mock_meter,
         ):
             _check(org.id, bypass_cache=True)
+        self.fetched = fetch
+        self.counted = counts.await_args.args[1:] if counts.await_args else None
         return mock_meter
+
+    @staticmethod
+    def _stripe_subscription(base_period, metered_period=None):
+        """A subscription as Stripe returns it: a base item and maybe a metered one."""
+
+        def item(id, period, recurring):
+            it = MagicMock(id=id)
+            it.price.recurring = recurring
+            it.current_period_start = int(period[0].timestamp())
+            it.current_period_end = int(period[1].timestamp())
+            return it
+
+        items = [item("si_base", base_period, {"interval": "month"})]
+        if metered_period is not None:
+            items.append(item("si_1", metered_period, {"usage_type": "metered"}))
+        sub = MagicMock(
+            status="active",
+            created=int(base_period[0].timestamp()),
+            start_date=int(base_period[0].timestamp()),
+            collection_method="charge_automatically",
+        )
+        sub.items.data = items
+        return sub
 
     def _throttle(self, org):
         return Organization.objects.get(id=org.id).event_throttle_rate
@@ -208,6 +259,8 @@ class MeteredThrottleTestCase(TestCase):
             organization=org,
             status=SubscriptionStatus.ACTIVE,
             metered_item_id="si_2",
+            metered_period_start=sub_a.metered_period_start + timedelta(seconds=5),
+            metered_period_end=sub_a.metered_period_end + timedelta(seconds=5),
         )
         org.stripe_primary_subscription = sub_b
         org.save(update_fields=["stripe_primary_subscription"])
@@ -401,8 +454,8 @@ class MeteredThrottleTestCase(TestCase):
             overage_cycle_quota=1_000_000,
         )
         StripeSubscription.objects.filter(pk=sub.pk).update(
-            current_period_start=timezone.now() - timedelta(days=40),
-            current_period_end=timezone.now() - timedelta(minutes=1),
+            metered_period_start=timezone.now() - timedelta(days=40),
+            metered_period_end=timezone.now() - timedelta(minutes=1),
         )
         org.refresh_from_db()
         self._run(org, 150_000).assert_not_awaited()
@@ -437,17 +490,19 @@ class MeteredThrottleTestCase(TestCase):
         dates still describe the old cycle. The figure is the old cycle's total,
         but its timestamp is in the new one: Stripe would file it there and the
         in-cycle floor would then hold it for the whole month -- the prior cycle
-        billed twice. A measurement past the local period end is dropped.
+        billed twice. A measurement past the local period end is dropped (and
+        with Stripe unreachable, as here, the period can't be refreshed).
         """
         org, sub = self._make_org()
         self._run(org, 150_000)  # 50,000 reported in the current cycle
         StripeSubscription.objects.filter(pk=sub.pk).update(
-            current_period_start=timezone.now() - timedelta(days=40),
-            current_period_end=timezone.now() - timedelta(minutes=1),
+            metered_period_start=timezone.now() - timedelta(days=40),
+            metered_period_end=timezone.now() - timedelta(minutes=1),
         )
         org.refresh_from_db()
         mock_meter = self._run(org, 150_000)
         mock_meter.assert_not_awaited()
+        self.fetched.assert_awaited()  # it did ask Stripe
         mock_meter = self._run(org, 999_999)
         mock_meter.assert_not_awaited()
 
@@ -463,11 +518,40 @@ class MeteredThrottleTestCase(TestCase):
         mock_meter = self._run(org, 120_000)
         self.assertEqual(self._sent(mock_meter), 20_000)
 
-    def test_annual_plan_reports_in_its_virtual_month(self):
-        """Annual plans meter against a virtual monthly cycle that only
-        advances in the daily maintenance run. Until it does, a measurement
-        past the local month is dropped, not filed against the stale month;
-        once it has, the new month's own total goes out."""
+    def test_stale_check_from_a_closed_cycle_is_dropped(self):
+        # The period dates advanced under this check; its timestamp would file
+        # the event in the closed period, where a late arrival is billed on the
+        # next invoice as a fresh total.
+        org, sub = self._make_org()
+        StripeSubscription.objects.filter(pk=sub.pk).update(
+            metered_period_start=timezone.now() + timedelta(days=1),
+            metered_period_end=timezone.now() + timedelta(days=31),
+        )
+        mock_meter = self._run(org, 150_000)
+        mock_meter.assert_not_awaited()
+        org.refresh_from_db()
+        self.assertIsNone(org.overage_last_reported_at)
+
+    # -- the window is the metered item's period --------------------------------
+
+    def test_metered_item_period_is_the_window_not_the_plans(self):
+        """Stripe files the event under the metered item's period, so that is
+        what usage is counted over and reported against, even where the plan's
+        own period says otherwise."""
+        now = self.clock
+        item_period = (now - timedelta(days=2), now + timedelta(days=28))
+        org, _ = self._make_org(metered_period=item_period)
+        mock_meter = self._run(org, 150_000)
+        self.assertEqual(self._sent(mock_meter), 50_000)
+        self.assertEqual(self.counted, item_period)
+        org.refresh_from_db()
+        # The cycle's quota record is keyed on the same window.
+        self.assertEqual(org.overage_cycle_start, item_period[0])
+
+    def test_annual_plan_meters_in_the_items_period_not_the_virtual_month(self):
+        """The virtual month is local arithmetic over the annual period, and
+        Stripe knows nothing of it. With a metered item attached the item's
+        period is the window, however stale or fresh the virtual month is."""
         org, sub = self._make_org()
         now = timezone.now()
         StripeSubscription.objects.filter(pk=sub.pk).update(
@@ -477,29 +561,136 @@ class MeteredThrottleTestCase(TestCase):
             subscription_cycle_end=now - timedelta(days=5),
         )
         org.refresh_from_db()
-        self._run(org, 150_000).assert_not_awaited()
-
-        StripeSubscription.objects.filter(pk=sub.pk).update(
-            subscription_cycle_start=now - timedelta(days=5),
-            subscription_cycle_end=now + timedelta(days=25),
-        )
-        org.refresh_from_db()
-        mock_meter = self._run(org, 120_000)
-        self.assertEqual(self._sent(mock_meter), 20_000)
-
-    def test_stale_check_from_a_closed_cycle_is_dropped(self):
-        # The period dates advanced under this check; its timestamp would file
-        # the event in the closed period, where a late arrival is billed on the
-        # next invoice as a fresh total.
-        org, sub = self._make_org()
-        StripeSubscription.objects.filter(pk=sub.pk).update(
-            current_period_start=timezone.now() + timedelta(days=1),
-            current_period_end=timezone.now() + timedelta(days=31),
-        )
         mock_meter = self._run(org, 150_000)
-        mock_meter.assert_not_awaited()
+        self.assertEqual(self._sent(mock_meter), 50_000)
+        self.assertEqual(
+            self.counted, (sub.metered_period_start, sub.metered_period_end)
+        )
+
+    def test_window_stays_put_while_overage_is_off(self):
+        # The item stays attached when overage is switched off, and so does
+        # its window: toggling can't move the count to a fresh period.
+        now = self.clock
+        item_period = (now - timedelta(days=2), now + timedelta(days=28))
+        org, _ = self._make_org(enabled=False, metered_period=item_period)
+        self._run(org, 150_000).assert_not_awaited()
+        self.assertEqual(self.counted, item_period)
+        self.assertEqual(self._throttle(org), 10)
+
+    def test_without_an_item_the_plans_period_is_the_window(self):
+        org, sub = self._make_org(enabled=False, metered_item="")
+        self._run(org, 50_000)
+        self.assertEqual(
+            self.counted, (sub.current_period_start, sub.current_period_end)
+        )
+        self.fetched.assert_not_awaited()
+
+    def test_run_out_metered_period_is_refreshed_from_stripe(self):
+        """When the item's period has ended and no webhook has said what the
+        next one is, the check asks Stripe rather than guessing, then counts
+        and reports in the period Stripe answered with."""
+        now = self.clock
+        org, sub = self._make_org(
+            metered_period=(now - timedelta(days=32), now - timedelta(hours=1))
+        )
+        new_period = (now - timedelta(hours=1), now + timedelta(days=29))
+        fetched = self._stripe_subscription(
+            (sub.current_period_start, sub.current_period_end), new_period
+        )
+        mock_meter = self._run(org, 150_000, fetched=fetched)
+        self.assertEqual(self._sent(mock_meter), 50_000)
+        self.assertEqual(self.counted, new_period)
+        sub.refresh_from_db()
+        self.assertEqual(sub.metered_period_start, new_period[0])
+        self.assertEqual(sub.metered_period_end, new_period[1])
+
+    def test_unrecorded_metered_period_is_fetched(self):
+        # An item attached before its period was recorded (or by a webhook
+        # that hasn't landed) is looked up rather than left on the plan's window.
+        now = self.clock
+        org, sub = self._make_org(metered_period=(None, None))
+        item_period = (now - timedelta(days=3), now + timedelta(days=27))
+        fetched = self._stripe_subscription(
+            (sub.current_period_start, sub.current_period_end), item_period
+        )
+        self._run(org, 150_000, fetched=fetched)
+        self.assertEqual(self.counted, item_period)
+
+    def test_refresh_is_rate_limited_per_subscription(self):
+        # A Stripe outage during a sweep costs one call per subscription every
+        # few minutes, not one per check.
+        now = self.clock
+        org, _ = self._make_org(
+            metered_period=(now - timedelta(days=32), now - timedelta(hours=1))
+        )
+        self._run(org, 150_000).assert_not_awaited()
+        self.fetched.assert_awaited_once()
+        self._run(org, 150_000).assert_not_awaited()
+        self.fetched.assert_not_awaited()
+
+    def test_failed_refresh_keeps_the_stale_window_and_reports_nothing(self):
+        now = self.clock
+        stale = (now - timedelta(days=32), now - timedelta(hours=1))
+        org, sub = self._make_org(metered_period=stale)
+        self._run(org, 300_000).assert_not_awaited()
+        self.assertEqual(self.counted, stale)
+        sub.refresh_from_db()
+        self.assertEqual(sub.metered_period_end, stale[1])
+        # The throttle is still set from what was counted: well past quota
+        # and cap (300,000 against 233,333 allowed).
+        self.assertEqual(self._throttle(org), 50)
+
+    def test_unknown_metered_period_throttles_but_does_not_report(self):
+        """An item whose period Stripe hasn't told us yet, with Stripe down.
+        Counting over the plan's window is fine for the throttle; reporting
+        that total would file it under the item's period, and where the two
+        differ the overlap is billed twice. So: throttled, not reported."""
+        org, sub = self._make_org(metered_period=(None, None))
+        self._run(org, 150_000).assert_not_awaited()
+        self.fetched.assert_awaited_once()
+        self.assertEqual(
+            self.counted, (sub.current_period_start, sub.current_period_end)
+        )
+        # Over quota with no paid headroom to count on: the plain ramp.
+        self.assertEqual(self._throttle(org), 10)
         org.refresh_from_db()
         self.assertIsNone(org.overage_last_reported_at)
+
+    def test_refresh_that_finds_the_subscription_canceled_drops_the_item(self):
+        # As the webhook does on a terminal status: the item died with the
+        # subscription, and a kept id would let a later enable reuse it.
+        now = self.clock
+        org, sub = self._make_org(
+            metered_period=(now - timedelta(days=32), now - timedelta(hours=1))
+        )
+        fetched = self._stripe_subscription(
+            (sub.current_period_start, sub.current_period_end),
+            (now - timedelta(hours=1), now + timedelta(days=29)),
+        )
+        fetched.status = "canceled"
+        self._run(org, 150_000, fetched=fetched).assert_not_awaited()
+        sub.refresh_from_db()
+        self.assertEqual(sub.status, "canceled")
+        self.assertEqual(sub.metered_item_id, "")
+        self.assertIsNone(sub.metered_period_start)
+
+    def test_item_gone_at_stripe_falls_back_to_the_plans_period(self):
+        # The item was removed in the Stripe dashboard: the refresh clears it
+        # and the plan's period is the window again. Nothing is reported.
+        now = self.clock
+        org, sub = self._make_org(
+            metered_period=(now - timedelta(days=32), now - timedelta(hours=1))
+        )
+        fetched = self._stripe_subscription(
+            (sub.current_period_start, sub.current_period_end), metered_period=None
+        )
+        self._run(org, 150_000, fetched=fetched).assert_not_awaited()
+        self.assertEqual(
+            self.counted, (sub.current_period_start, sub.current_period_end)
+        )
+        sub.refresh_from_db()
+        self.assertEqual(sub.metered_item_id, "")
+        self.assertIsNone(sub.metered_period_end)
 
     # -- failure handling ------------------------------------------------------
 

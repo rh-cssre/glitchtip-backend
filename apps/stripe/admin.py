@@ -53,6 +53,7 @@ class StripeSubscriptionAdmin(StripeBaseAdmin):
         "price__product",
         "current_period_start",
         "current_period_end",
+        "metered_period_end",
         "status",
     ]
     list_filter = ["status", "price__product"]

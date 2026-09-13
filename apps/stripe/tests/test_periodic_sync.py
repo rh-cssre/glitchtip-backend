@@ -129,6 +129,113 @@ class TestPeriodicSync(TestCase):
             expected_cycle_start + relativedelta(months=1),
         )
 
+    async def test_update_outdated_subscriptions_refreshes_a_stale_metered_period(
+        self,
+    ):
+        """A subscription whose plan period is current but whose metered item's
+        period ran out days ago (a renewal webhook that never landed) is
+        re-read, and the item's new period stored."""
+        organization = await Organization.objects.acreate(name="Test Org", id=2)
+        product = await StripeProduct.objects.acreate(
+            stripe_id="prod_m", name="Monthly", events=1000, is_public=True
+        )
+        price = await StripePrice.objects.acreate(
+            stripe_id="price_m", product=product, price=15.00, nickname="Monthly"
+        )
+        now = timezone.now()
+        base_start = int((now - relativedelta(days=10)).timestamp())
+        base_end = int((now + relativedelta(days=20)).timestamp())
+        stale_end = now - relativedelta(days=3)
+        subscription = await StripeSubscription.objects.acreate(
+            stripe_id="sub_m",
+            created=unix_to_datetime(base_start),
+            current_period_start=unix_to_datetime(base_start),
+            current_period_end=unix_to_datetime(base_end),
+            price=price,
+            organization=organization,
+            status=SubscriptionStatus.ACTIVE,
+            start_date=unix_to_datetime(base_start),
+            collection_method="charge_automatically",
+            metered_item_id="si_m",
+            metered_period_start=stale_end - relativedelta(months=1),
+            metered_period_end=stale_end,
+        )
+        new_start = int(stale_end.timestamp())
+        new_end = int((stale_end + relativedelta(months=1)).timestamp())
+
+        def item(id, start, end, price_id, recurring):
+            return SubscriptionItem(
+                id=id,
+                object="subscription_item",
+                created=start,
+                current_period_start=start,
+                current_period_end=end,
+                metadata={},
+                quantity=1,
+                subscription="sub_m",
+                tax_rates=[],
+                price=Price(
+                    id=price_id,
+                    object="price",
+                    active=True,
+                    billing_scheme="per_unit",
+                    created=base_start,
+                    currency="usd",
+                    livemode=False,
+                    lookup_key=None,
+                    nickname=None,
+                    product=product.stripe_id,
+                    recurring=recurring,
+                    tax_behavior="unspecified",
+                    tiers_mode=None,
+                    type="recurring",
+                    unit_amount=None,
+                    unit_amount_decimal=None,
+                    metadata={},
+                ),
+            )
+
+        fetched = Subscription(
+            object="subscription",
+            id="sub_m",
+            customer="cus_test",
+            status="active",
+            created=base_start,
+            start_date=base_start,
+            collection_method="charge_automatically",
+            items=SubscriptionItems(
+                object="list",
+                data=[
+                    item(
+                        "si_base",
+                        base_start,
+                        base_end,
+                        price.stripe_id,
+                        {"interval": "month"},
+                    ),
+                    item(
+                        "si_m",
+                        new_start,
+                        new_end,
+                        "price_overage",
+                        {"usage_type": "metered"},
+                    ),
+                ],
+            ),
+            metadata={},
+            livemode=False,
+            cancel_at_period_end=False,
+        )
+        with patch(
+            "apps.stripe.models.fetch_subscription", new=AsyncMock(return_value=fetched)
+        ) as mock_fetch:
+            await StripeSubscription.update_outdated_subscriptions()
+        mock_fetch.assert_awaited_once_with("sub_m")
+        await subscription.arefresh_from_db()
+        self.assertEqual(subscription.metered_period_start, unix_to_datetime(new_start))
+        self.assertEqual(subscription.metered_period_end, unix_to_datetime(new_end))
+        self.assertEqual(subscription.current_period_end, unix_to_datetime(base_end))
+
     @override_settings(STRIPE_WEBHOOK_SECRET="test")
     async def test_update_outdated_subscriptions_mid_year_cycle(self):
         """Annual sub 5 months into its period should get a cycle covering now,
