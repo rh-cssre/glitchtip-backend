@@ -257,6 +257,34 @@ class Organization(SharedBaseModel, OrganizationBase):
         help_text="Max overage spend per billing cycle, in cents. Metered "
         "billing stops reporting (and throttling resumes) once reached.",
     )
+    # The last cycle-to-date overage total sent to the Stripe meter, and when it
+    # was measured. The meter aggregates by ``last`` and every report is
+    # recomputed from current data, so this is never the figure's source; it
+    # floors the spend cap within a cycle (a lowered cap stops growth, it
+    # doesn't retract billed usage) and skips unchanged or out-of-order
+    # reports. Per organization because the meter aggregates per customer,
+    # which the organization owns.
+    overage_last_reported_units = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Cycle-to-date billable overage last reported to the meter.",
+    )
+    overage_last_reported_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Measurement time of the last overage report.",
+    )
+    # The quota overage is measured against for the current cycle: the largest
+    # the plan has held during it, so a mid-cycle downgrade can't turn usage
+    # that was within quota when it happened into billable overage.
+    overage_cycle_start = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Billing cycle the overage quota high-water mark belongs to.",
+    )
+    overage_cycle_quota = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Largest plan event quota held during that cycle.",
+    )
     stripe_customer_id = models.CharField(max_length=28, blank=True)
     stripe_primary_subscription = models.ForeignKey(
         "stripe.StripeSubscription",

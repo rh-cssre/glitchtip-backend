@@ -256,7 +256,10 @@ GLITCHTIP_FREE_TIER_EVENTS = env.int("GLITCHTIP_FREE_TIER_EVENTS", 1000)
 # routes each event to the right customer by stripe_customer_id, not by which
 # instance sent it.) Re-provisioning a fresh meter is the only reason this would
 # ever change, and Stripe meter event_names are immutable once created.
-GLITCHTIP_OVERAGE_METER_EVENT_NAME = "glitchtip_overage_events"
+# The meter this names must aggregate by ``last``: each report is the cycle-to-date
+# total, not an increment. The ``_total`` suffix keeps reports off any older
+# ``sum`` meter, where the same figures would compound on every sweep.
+GLITCHTIP_OVERAGE_METER_EVENT_NAME = "glitchtip_overage_events_total"
 # Upper bound on a per-org overage spend cap, in cents. Guards against a
 # fat-fingered or malicious cap; also keeps the value within PositiveIntegerField
 # range. Default $10,000/cycle — a cap this high is effectively a "contact us"

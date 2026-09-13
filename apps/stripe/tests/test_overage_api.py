@@ -54,6 +54,27 @@ class OverageAPITestCase(TestCase):
         self.overage_price = baker.make(
             "stripe.StripePrice", product=self.overage_product, price=0, is_metered=True
         )
+        # Enabling first checks the customer's other Stripe subscriptions for a
+        # metered item; default to "none" so each test only stubs what it's about.
+        self.other_subscriptions = AsyncMock(return_value=[])
+        patcher = patch(
+            "apps.stripe.api.list_customer_subscriptions", new=self.other_subscriptions
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _stripe_subscription(self, id, metered=False):
+        """A fetched Stripe subscription with a base item and maybe a metered one."""
+        base = MagicMock()
+        base.price.recurring = {"usage_type": "licensed"}
+        items = [base]
+        if metered:
+            item = MagicMock()
+            item.price.recurring = {"usage_type": "metered"}
+            items.append(item)
+        sub = MagicMock(id=id)
+        sub.items.data = items
+        return sub
 
     def _status(self):
         url = reverse("api:get_overage_status", args=[self.org.slug])
@@ -250,14 +271,15 @@ class OverageAPITestCase(TestCase):
         self.org.refresh_from_db()
         self.assertFalse(self.org.metered_billing_enabled)
 
-    def test_disable_keeps_item_and_counter(self):
-        # Disabling must not detach the item or reset the counter: the meter is
-        # cumulative per customer for the cycle, so a re-enable would otherwise
-        # re-bill already-reported usage (the mid-cycle double-charge bug).
+    def test_disable_keeps_item_and_last_report(self):
+        # Disabling only clears the flag. The item stays attached so a re-enable
+        # is a flag flip, and the last-report record stays so the in-cycle floor
+        # still holds: usage billed while enabled isn't retracted by toggling.
         self.sub.metered_item_id = "si_old"
-        self.sub.overage_units_reported = 1234
         self.sub.save()
         self.org.metered_billing_enabled = True
+        self.org.overage_last_reported_units = 1234
+        self.org.overage_last_reported_at = timezone.now()
         self.org.save()
 
         with patch(
@@ -270,7 +292,134 @@ class OverageAPITestCase(TestCase):
         self.sub.refresh_from_db()
         self.assertFalse(self.org.metered_billing_enabled)
         self.assertEqual(self.sub.metered_item_id, "si_old")
-        self.assertEqual(self.sub.overage_units_reported, 1234)
+        self.assertEqual(self.org.overage_last_reported_units, 1234)
+        self.assertIsNotNone(self.org.overage_last_reported_at)
+
+    def test_enable_refused_when_another_subscription_is_metered(self):
+        """Two metered items on one customer both bill the whole meter.
+
+        Stripe aggregates the meter per customer, not per subscription, so a
+        second subscription carrying the metered price double-bills every unit.
+        Enabling is refused, and nothing is attached, until the account is
+        consolidated.
+        """
+        self.other_subscriptions.return_value = [
+            self._stripe_subscription("sub_1"),
+            self._stripe_subscription("sub_other", metered=True),
+        ]
+        add = AsyncMock()
+        with (
+            patch("apps.stripe.api.fetch_subscription", new_callable=AsyncMock),
+            patch("apps.stripe.api.add_subscription_item", new=add),
+            patch(
+                "apps.stripe.api.check_organization_throttle",
+                new=MagicMock(aenqueue=AsyncMock()),
+            ),
+        ):
+            res = self._configure({"enabled": True, "capCents": 2000})
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("Another subscription", res.json()["detail"])
+        add.assert_not_awaited()
+        self.org.refresh_from_db()
+        self.assertFalse(self.org.metered_billing_enabled)
+
+    def test_enable_skips_the_orgs_own_metered_subscription(self):
+        # The org's own subscription carrying the item is the normal re-enable
+        # state, not a second subscription.
+        self.sub.metered_item_id = "si_old"
+        self.sub.save()
+        self.other_subscriptions.return_value = [
+            self._stripe_subscription("sub_1", metered=True),
+            self._stripe_subscription("sub_other"),
+        ]
+        with patch(
+            "apps.stripe.api.check_organization_throttle",
+            new=MagicMock(aenqueue=AsyncMock()),
+        ):
+            res = self._configure({"enabled": True, "capCents": 2000})
+        self.assertEqual(res.status_code, 200)
+        self.other_subscriptions.assert_awaited_once()
+        self.org.refresh_from_db()
+        self.assertTrue(self.org.metered_billing_enabled)
+
+    def test_enable_requires_a_billing_account(self):
+        self.org.stripe_customer_id = ""
+        self.org.save()
+        res = self._configure({"enabled": True, "capCents": 2000})
+        self.assertEqual(res.status_code, 400)
+        self.other_subscriptions.assert_not_awaited()
+
+    def test_cap_decrease_is_not_refused_by_another_metered_subscription(self):
+        # Lowering the cap only reduces exposure; an account already in the
+        # two-metered-subscriptions state must still be able to do it.
+        self.sub.metered_item_id = "si_old"
+        self.sub.save()
+        self.org.metered_billing_enabled = True
+        self.org.overage_spend_cap_cents = 5000
+        self.org.save()
+        self.other_subscriptions.return_value = [
+            self._stripe_subscription("sub_other", metered=True)
+        ]
+        with patch(
+            "apps.stripe.api.check_organization_throttle",
+            new=MagicMock(aenqueue=AsyncMock()),
+        ):
+            res = self._configure({"enabled": True, "capCents": 2000})
+        self.assertEqual(res.status_code, 200)
+        self.other_subscriptions.assert_not_awaited()
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.overage_spend_cap_cents, 2000)
+
+    def test_cap_decrease_without_an_item_is_still_guarded(self):
+        # The bypass is for a cap change on an item that already exists. With
+        # no item on the primary subscription the request would attach one,
+        # which is exactly what the other-subscription check exists to stop:
+        # here the old subscription still carries the metered item.
+        self.sub.metered_item_id = ""
+        self.sub.save()
+        self.org.metered_billing_enabled = True
+        self.org.overage_spend_cap_cents = 5000
+        self.org.save()
+        self.other_subscriptions.return_value = [
+            self._stripe_subscription("sub_other", metered=True)
+        ]
+        with (
+            patch(
+                "apps.stripe.api.fetch_subscription", new_callable=AsyncMock
+            ) as fetch,
+            patch(
+                "apps.stripe.api.add_subscription_item", new_callable=AsyncMock
+            ) as add,
+        ):
+            res = self._configure({"enabled": True, "capCents": 2000})
+        self.assertEqual(res.status_code, 400)
+        self.other_subscriptions.assert_awaited_once()
+        fetch.assert_not_awaited()
+        add.assert_not_awaited()
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.metered_item_id, "")
+
+    def test_enable_ignores_other_subscriptions_without_metered_item(self):
+        self.other_subscriptions.return_value = [
+            self._stripe_subscription("sub_1"),
+            self._stripe_subscription("sub_other"),
+        ]
+        fetched = self._stripe_subscription("sub_1")
+        item = AsyncMock(return_value=MagicMock(id="si_new"))
+        with (
+            patch(
+                "apps.stripe.api.fetch_subscription",
+                new=AsyncMock(return_value=fetched),
+            ),
+            patch("apps.stripe.api.add_subscription_item", new=item),
+            patch(
+                "apps.stripe.api.check_organization_throttle",
+                new=MagicMock(aenqueue=AsyncMock()),
+            ),
+        ):
+            res = self._configure({"enabled": True, "capCents": 2000})
+        self.assertEqual(res.status_code, 200)
+        item.assert_awaited_once()
 
     def test_non_owner_cannot_configure(self):
         member = baker.make("users.user")
@@ -282,6 +431,31 @@ class OverageAPITestCase(TestCase):
         ):
             res = self._configure({"enabled": True, "capCents": 2000})
         self.assertEqual(res.status_code, 404)
+
+    def test_status_shows_the_cycle_quota_and_the_cap_floor(self):
+        """What the card shows must be what the sweep bills: the cycle's
+        quota high-water mark after a downgrade, and the cap floored at what
+        the cycle has already billed after the cap is lowered."""
+        from apps.organizations_ext.models import EventCounts
+
+        now = timezone.now()
+        self.org.metered_billing_enabled = True
+        self.org.overage_spend_cap_cents = 500  # ~3,333 affordable units
+        self.org.overage_cycle_start = self.sub.current_period_start
+        self.org.overage_cycle_quota = 150_000  # the plan before a downgrade
+        self.org.overage_last_reported_units = 40_000  # billed before the cap drop
+        self.org.overage_last_reported_at = now - timedelta(hours=1)
+        self.org.save()
+
+        with patch(
+            "apps.stripe.api.get_event_counts",
+            new=AsyncMock(return_value=EventCounts(issue_event_count=200_000)),
+        ):
+            body = self._status().json()
+        self.assertEqual(body["quota"], 150_000)
+        self.assertEqual(body["overageUnits"], 50_000)
+        # 40,000 billed units at $0.00015 = $6.00, not the $5 cap.
+        self.assertEqual(body["overageCostCents"], 600)
 
     def test_status_reports_overage_cost_when_enabled(self):
         from apps.organizations_ext.models import EventCounts

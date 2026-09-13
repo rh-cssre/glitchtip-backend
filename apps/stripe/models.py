@@ -285,17 +285,6 @@ class StripeSubscription(StripeModel):
         default="",
         help_text="Stripe subscription item id for the metered overage price.",
     )
-    overage_units_reported = models.PositiveBigIntegerField(
-        default=0,
-        help_text="Cumulative billable overage events reported to the meter "
-        "this cycle. Meter events are additive, so we report deltas.",
-    )
-    overage_period_start = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Cycle anchor for overage_units_reported; counter resets when "
-        "the current cycle start moves past this.",
-    )
 
     def __str__(self):
         return f"{self.stripe_id}"
