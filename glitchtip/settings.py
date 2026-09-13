@@ -504,7 +504,9 @@ if SENTRY_DSN:
 
         return event
 
-    # Ignore whitenoise served static routes. The path comes off the ASGI
+    # Ignore static file routes. Granian serves them from its own mount
+    # before the request reaches Django, so these only appear when Django
+    # serves static itself (DEBUG). The path comes off the ASGI
     # scope; STATIC_URL is stored without a leading slash, so it is compared
     # against the request path in the rooted form the scope carries, including
     # any BASE_PATH the app is mounted under. A prefix of "/" would match every
@@ -676,7 +678,6 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.csp.ContentSecurityPolicyMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
 ]
 if DEBUG_TOOLBAR:
     MIDDLEWARE.append("debug_toolbar.middleware.DebugToolbarMiddleware")
@@ -689,9 +690,6 @@ MIDDLEWARE += [
     "django.middleware.locale.LocaleMiddleware",
     "allauth_async.account.middleware.AsyncAccountMiddleware",
 ]
-
-if "GRANIAN_STATIC_PATH_MOUNT" in os.environ:
-    MIDDLEWARE.remove("whitenoise.middleware.WhiteNoiseMiddleware")
 
 if ENABLE_OBSERVABILITY_API:
     MIDDLEWARE.insert(0, "django_prometheus.middleware.PrometheusBeforeMiddleware")
@@ -1130,7 +1128,7 @@ STORAGES = {
     "staticfiles": {
         "BACKEND": env.str(
             "STATICFILES_STORAGE",
-            "whitenoise.storage.CompressedManifestStaticFilesStorage",
+            "django.contrib.staticfiles.storage.ManifestStaticFilesStorage",
         )
     },
 }
@@ -1355,10 +1353,6 @@ if TESTING:
     }
     SESSION_ENGINE = "django.contrib.sessions.backends.cache"
     STORAGES = global_settings.STORAGES
-    # https://github.com/evansd/whitenoise/issues/215
-    warnings.filterwarnings(
-        "ignore", message="No directory at", module="whitenoise.base"
-    )
 if TESTING:
     CACHES = {
         "default": {

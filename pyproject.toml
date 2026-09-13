@@ -14,7 +14,6 @@ dependencies = [
     "django-extensions~=4.0",
     "django-organizations~=2.7",
     "django-storages[boto3,azure,google]~=1.12",
-    "whitenoise~=6.0",
     "sentry-sdk~=2.20",
     "django-anymail~=15.0",
     "user-agents~=2.1",

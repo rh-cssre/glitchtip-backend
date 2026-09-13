@@ -50,7 +50,6 @@ class IngestDispatcher:
     Skipped for ingest (saves ~8 middleware calls per request):
     - SessionMiddleware
     - CSP / XFrameOptions / Clickjacking
-    - WhiteNoise
     - CommonMiddleware
     - CsrfViewMiddleware
     - AuthenticationMiddleware
