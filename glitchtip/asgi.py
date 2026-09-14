@@ -10,6 +10,7 @@ https://docs.djangoproject.com/en/dev/howto/deployment/asgi/
 import asyncio
 import logging
 import os
+import re
 
 from django.core.asgi import get_asgi_application
 
@@ -323,18 +324,38 @@ if settings.GLITCHTIP_ENABLE_MCP:
 # stale across an upgrade.
 from servestatic import ServeStaticASGI
 
-# Matches the frontend build's own content hashes (e.g. chunk-B5PKTg24.js).
-# Those filenames change whenever the contents do, so they are safe to cache
-# forever; anything that does not match falls back to STATIC_MAX_AGE.
-_HASHED_ASSET = r"-[A-Za-z0-9_-]{8}\.(js|css)$"
 _STATIC_MAX_AGE = 3600
+
+# The frontend build emits content-hashed bundles at the root of the collected
+# tree (main-KVU4SSHB.js, chunk-B0tvkw2C2.js). Their names change whenever
+# their contents do, so they are safe to cache forever.
+#
+# Hash length is NOT fixed: the current build ships 48 files with 8-character
+# hashes and 22 with 9. An {8} pattern silently downgraded those 22 to the
+# short TTL, so they were refetched hourly despite being immutable. The range
+# is deliberately wider than any observed value.
+_HASHED_BUNDLE = re.compile(r"-[A-Za-z0-9_-]{8,10}\.(?:js|css)$")
+
+
+def _is_hashed_asset(path: str, url: str) -> bool:
+    """True only for the build's own hashed bundles at the tree root.
+
+    Everything in a subdirectory -- assets/ (i18n, fonts, images, 139 of 140
+    stable-named), admin/, allauth's -- keeps the short TTL, so a release
+    cannot leave a client pinned to a stale copy.
+    """
+    rel = url.removeprefix(settings.STATIC_URL)
+    if "/" in rel:
+        return False
+    return bool(_HASHED_BUNDLE.search(rel))
+
 
 application = ServeStaticASGI(
     application,
     root=settings.STATIC_ROOT,
     prefix=settings.STATIC_URL,
     max_age=_STATIC_MAX_AGE,
-    immutable_file_test=_HASHED_ASSET,
+    immutable_file_test=_is_hashed_asset,
 )
 
 # Wrap application with granian proxy headers support
