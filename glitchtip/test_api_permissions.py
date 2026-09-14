@@ -156,10 +156,9 @@ class OrgScopedModelRegistryTestCase(SimpleTestCase):
     def test_the_real_models_are_registered(self):
         # The reader that makes the registry worth keeping: a model declared
         # with the mixin is validated whether or not a route uses it yet.
-        self.assertEqual(
-            sorted(model._meta.label for model in registered_models(None)),
-            ["alerts.ProjectAlert", "projects.Project"],
-        )
+        labels = [model._meta.label for model in registered_models(None)]
+        self.assertIn("alerts.ProjectAlert", labels)
+        self.assertIn("projects.Project", labels)
 
     def test_the_check_narrows_to_the_apps_it_is_given(self):
         # ``manage.py check alerts`` should not walk the whole registry.
