@@ -37,10 +37,6 @@ def _prepare_recipient_data(recipient: dict) -> dict:
     return cleaned
 
 
-def alert_rows(project_slug: str) -> QuerySet[ProjectAlert]:
-    return ProjectAlert.objects.filter(project__slug=project_slug)
-
-
 def get_project_alert_queryset(user_id: int, organization_slug: str, project_slug: str):
     return ProjectAlert.objects.filter(
         project__organization__users=user_id,
@@ -61,7 +57,10 @@ async def list_project_alerts(
     organization_slug: str,
     project_slug: str,
 ):
-    return alert_rows(project_slug).prefetch_related("alertrecipient_set")
+    # The slug alone is not unique across orgs; the gate adds the org.
+    return ProjectAlert.objects.filter(project__slug=project_slug).prefetch_related(
+        "alertrecipient_set"
+    )
 
 
 @router.post(
