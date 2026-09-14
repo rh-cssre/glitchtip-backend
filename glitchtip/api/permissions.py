@@ -4,7 +4,8 @@ from functools import wraps
 
 from django.core.exceptions import ImproperlyConfigured
 from django.db.models import Exists, OuterRef, QuerySet, Subquery
-from ninja.errors import Http404, HttpError
+from django.http import Http404  # ninja.errors re-exports it but does not own it
+from ninja.errors import HttpError
 from ninja.pagination import paginate
 
 from apps.organizations_ext.constants import ROLES, Scopes
