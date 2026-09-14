@@ -75,13 +75,10 @@ class OrgScope:
                 "an OrgScopedModel, so the gate cannot isolate it. Declare "
                 "org_field on it via OrgScopedModel."
             )
-        # One object, not one InitPlan: Django resolves
-        # each filter position on its own.
         org_id = self.org_id_expr
         return qs.filter(self.gate(org_id), **{model.org_field: org_id})
 
     async def explain_miss(self) -> HttpError | None:
-        # membership lookup:
         row = await (
             Organization.objects.filter(slug=self.org_slug, is_deleted=False)
             .annotate(
@@ -94,12 +91,9 @@ class OrgScope:
             .values("membership_role")
             .afirst()
         )
-        # Does the org exist? Does the user exist in the org?
         if row is None or row["membership_role"] is None:
             return HttpError(404, "Organization not found.")
 
-        # Does the object they want exist? (if they passed the gate, then
-        # why would a user be here except because the item doesn't exist?)
         if row["membership_role"] in self.roles:
             return None
 

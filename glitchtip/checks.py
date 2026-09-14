@@ -1,8 +1,8 @@
 """Startup validation for the folded gate's model registry.
 
-They run on ``manage.py check``, ``runserver``, ``migrate``, and in the test
-runner, so an ``org_field`` that does not reach the organization foreign key
-fails at startup rather than in a request on a gated route.
+These checks run on ``manage.py check``, ``runserver``, ``migrate``, and in
+the test runner, so an ``org_field`` that does not reach the organization
+foreign key fails at startup rather than in a request on a gated route.
 """
 
 from collections.abc import Iterator
