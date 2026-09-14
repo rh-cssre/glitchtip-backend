@@ -674,6 +674,21 @@ PROMETHEUS_EXPORT_MIGRATIONS = False
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Compresses what Django itself serves: the SPA's index.html and every API
+    # response. Static files never reach here -- granian serves /static/ from
+    # its own mount, and it cannot compress, so this is the only compression
+    # GlitchTip has out of the box. Put a CDN or a compressing proxy in front
+    # to cover /static/ too.
+    #
+    # Listed early (outermost) so the body is compressed after every other
+    # middleware has finished writing it. The ingest hot path is unaffected:
+    # it runs its own minimal middleware list (glitchtip/ingest_asgi.py) and
+    # its responses are a few bytes anyway.
+    #
+    # BREACH applies to any compression of authenticated responses, whether
+    # done here or at a proxy; Django's per-request CSRF token masking
+    # mitigates the classic token-extraction variant.
+    "django.middleware.gzip.GZipMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.csp.ContentSecurityPolicyMiddleware",
@@ -1128,7 +1143,14 @@ STORAGES = {
     "staticfiles": {
         "BACKEND": env.str(
             "STATICFILES_STORAGE",
-            "django.contrib.staticfiles.storage.ManifestStaticFilesStorage",
+            # Plain, not Manifest*: the frontend build already content-hashes
+            # its own filenames, which is what the browser requests. Manifest
+            # hashing added a second, unused copy of every file plus a public
+            # staticfiles.json, and made a single missing reference a hard
+            # collectstatic failure mid-deploy. Operators who serve Django's
+            # own {% static %} assets from a long-lived cache can opt back in
+            # via the STATICFILES_STORAGE env var.
+            "django.contrib.staticfiles.storage.StaticFilesStorage",
         )
     },
 }
