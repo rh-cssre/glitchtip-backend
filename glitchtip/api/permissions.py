@@ -46,7 +46,7 @@ class OrgScope:
     @property
     def org_id_expr(self) -> Subquery:
         # An UNCORRELATED scalar subquery, never a join to organization from
-        # the data model. 
+        # the data model.
         return Subquery(
             Organization.objects.filter(slug=self.org_slug, is_deleted=False).values(
                 "id"
@@ -129,6 +129,16 @@ def _resolve_roles(scopes: list[Scopes]) -> tuple[frozenset[Scopes], tuple[int, 
     return required, roles
 
 
+def _require_org_slug(view, parameters) -> None:
+    """Both gates read ``organization_slug`` out of the path at request time."""
+    if "organization_slug" not in parameters:
+        raise ImproperlyConfigured(
+            f"{view.__qualname__} is org-scoped but takes no "
+            "`organization_slug` parameter -- the gate has no organization to "
+            "scope it to"
+        )
+
+
 def org_scoped_list(scopes: list[Scopes], explain_empty: bool = False):
     """Folded gate for paginated views
 
@@ -143,6 +153,8 @@ def org_scoped_list(scopes: list[Scopes], explain_empty: bool = False):
     required, roles = _resolve_roles(scopes)
 
     def decorator(view):
+        _require_org_slug(view, inspect.signature(view).parameters)
+
         # The gate, with nothing about response shape in it: it folds into
         # whatever queryset the view hands back, and pagination happens after.
         @wraps(view)  # ninja reads the signature for path params
@@ -201,6 +213,7 @@ def org_scoped_qs(scopes: list[Scopes], model: type[OrgScopedModel]):
 
     def decorator(view):
         signature = inspect.signature(view)
+        _require_org_slug(view, signature.parameters)
         if "qs" not in signature.parameters:
             raise ImproperlyConfigured(
                 f"{view.__qualname__} is @org_scoped_qs but takes no `qs` "

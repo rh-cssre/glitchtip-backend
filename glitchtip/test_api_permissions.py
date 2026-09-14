@@ -20,7 +20,7 @@ from apps.alerts.models import AlertRecipient, ProjectAlert
 from apps.organizations_ext.constants import OrganizationUserRole
 from apps.organizations_ext.models import Organization
 from apps.projects.models import Project
-from glitchtip.api.permissions import org_scoped_qs
+from glitchtip.api.permissions import org_scoped_list, org_scoped_qs
 from glitchtip.base_models import ORG_SCOPED_MODELS, OrgScopedModel
 from glitchtip.checks import (
     check_org_field,
@@ -193,6 +193,17 @@ class OrgScopedQsDeclarationTestCase(SimpleTestCase):
 
         self.assertIn("qs", str(ctx.exception))
 
+    def test_view_without_an_organization_slug_is_rejected(self):
+        # The gate reads it out of the path at request time, where a missing
+        # one is a KeyError 500 rather than a refusal.
+        with self.assertRaises(ImproperlyConfigured) as ctx:
+
+            @org_scoped_qs(["project:admin"], ProjectAlert)
+            async def view(request, qs, project_slug: str):
+                pass
+
+        self.assertIn("organization_slug", str(ctx.exception))
+
     def test_qs_is_hidden_from_the_signature_ninja_reads(self):
         @org_scoped_qs(["project:admin"], ProjectAlert)
         async def view(request, qs, organization_slug: str):
@@ -220,6 +231,30 @@ class OrgScopedQsDeclarationTestCase(SimpleTestCase):
         names = [param["name"] for param in operations[0].get("parameters", [])]
         self.assertNotIn("qs", names)
         self.assertIn("alert_id", names)
+
+
+class OrgScopedListDeclarationTestCase(SimpleTestCase):
+    """``@org_scoped_list`` fails at import, not on the first request."""
+
+    def test_scope_no_role_holds_is_rejected(self):
+        with self.assertRaises(ImproperlyConfigured):
+            org_scoped_list(["project:nonexistent"])
+
+    def test_view_without_an_organization_slug_is_rejected(self):
+        with self.assertRaises(ImproperlyConfigured) as ctx:
+
+            @org_scoped_list(["project:read"])
+            async def view(request, project_slug: str):
+                pass
+
+        self.assertIn("organization_slug", str(ctx.exception))
+
+    def test_a_view_with_one_is_accepted(self):
+        @org_scoped_list(["project:read"])
+        async def view(request, organization_slug: str):
+            pass
+
+        self.assertIn("organization_slug", inspect.signature(view).parameters)
 
 
 def _set_slug(obj, slug: str):
