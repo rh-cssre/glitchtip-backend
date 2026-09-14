@@ -38,6 +38,7 @@ dependencies = [
     "django-postgres-partition>=0.1.4",
     "pyyaml>=6.0.2", # allauth openapi spec
     "granian[reload,uvloop]>=2.6.0",
+    "servestatic>=4.3",
     "django-vcache>=3.2.0",
     "glitchtip-rust>=0.10.0",
     "uuid6>=2024.1.12",

@@ -28,11 +28,18 @@ PORT=${GRANIAN_PORT:-${PORT:-8000}}
 
 G_LOG_LEVEL=${GRANIAN_LOG_LEVEL:-INFO}
 
-# Serve static files by default if the directory exists
+# Static files are served by ServeStatic inside the ASGI app (glitchtip/asgi.py).
+# It negotiates the precompressed .gz/.br variants collectstatic writes and sets
+# cache headers per file; granian's own mount can do neither -- it has no
+# compression support and applies one expiry to the whole tree.
+#
+# An operator who would rather granian serve them can still set
+# GRANIAN_STATIC_PATH_MOUNT explicitly: granian then answers those requests
+# first and ServeStatic never sees them. That trades compression and per-file
+# caching for granian's raw throughput, which only matters without a CDN in
+# front and with a cold client cache.
 if [ -n "$GRANIAN_STATIC_PATH_MOUNT" ]; then
     export GRANIAN_STATIC_PATH_MOUNT
-elif [ -d "static" ]; then
-    export GRANIAN_STATIC_PATH_MOUNT="static"
 fi
 
 if [ "${ENABLE_OBSERVABILITY_API}" = "True" ] || [ "${ENABLE_OBSERVABILITY_API}" = "true" ] || [ "${ENABLE_OBSERVABILITY_API}" = "1" ]; then

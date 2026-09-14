@@ -1143,14 +1143,14 @@ STORAGES = {
     "staticfiles": {
         "BACKEND": env.str(
             "STATICFILES_STORAGE",
-            # Plain, not Manifest*: the frontend build already content-hashes
+            # Compressed, not Manifest*: the frontend build already content-hashes
             # its own filenames, which is what the browser requests. Manifest
             # hashing added a second, unused copy of every file plus a public
             # staticfiles.json, and made a single missing reference a hard
             # collectstatic failure mid-deploy. Operators who serve Django's
             # own {% static %} assets from a long-lived cache can opt back in
             # via the STATICFILES_STORAGE env var.
-            "django.contrib.staticfiles.storage.StaticFilesStorage",
+            "servestatic.storage.CompressedStaticFilesStorage",
         )
     },
 }
@@ -1183,6 +1183,13 @@ STATICFILES_DIRS = [
     "dist",
 ]
 STATIC_ROOT = path("static/")
+
+# ServeStatic writes .gz and .zstd variants during collectstatic and negotiates
+# them per request. Its default zstd level (3) compresses *worse* than gzip -9
+# on this frontend (+6.1% over a 60-file JS sample); level 19 beats gzip by
+# 6.6% and level 22 gains nothing further. Build-time cost only -- the variants
+# are written once per image build.
+SERVESTATIC_ZSTD_LEVEL = 19
 
 EMAIL_BACKEND = env.str(
     "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
