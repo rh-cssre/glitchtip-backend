@@ -123,6 +123,8 @@ class OrgScope:
 def _resolve_roles(scopes: list[Scopes]) -> tuple[frozenset[Scopes], tuple[int, ...]]:
     """Import time: which role ints hold at least one required scope."""
     required = frozenset(scopes)
+    # 'i' below is the same int used in OrganizationUserRole (0-member, 1-admin, etc.)
+    # Also, this is not role >= X, but at least on scope derived from role are in scopes
     roles = tuple(i for i, r in enumerate(ROLES) if required & r["scopes"])
     if not roles:
         raise ImproperlyConfigured(f"no role holds any of {sorted(required)}")
