@@ -3,9 +3,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
+from model_bakery import baker
 
-from apps.stripe.overage import cost_cents_for_units, tier_problems, units_for_budget
+from apps.organizations_ext.models import Organization
+from apps.stripe.constants import SubscriptionStatus
+from apps.stripe.overage import (
+    cost_cents_for_units,
+    overage_active,
+    tier_problems,
+    units_for_budget,
+)
 
 # A small, easy-to-reason-about graduated schedule: $0.10/unit for the first
 # 100 units, then $0.05/unit beyond.
@@ -306,3 +314,40 @@ class VerifyCommandTestCase(SimpleTestCase):
         with self.assertRaises(CommandError) as ctx:
             self._verify([self._price()])
         self.assertIn("STRIPE_WEBHOOK_SECRET_METER", str(ctx.exception))
+
+
+class OverageActiveTestCase(TestCase):
+    """Truth table for the predicate the throttle task and the API share."""
+
+    def _org(self, *, enabled=True, item="si_1", sub=True):
+        org = baker.make(
+            "organizations_ext.Organization", metered_billing_enabled=enabled
+        )
+        if sub:
+            product = baker.make("stripe.StripeProduct", events=100_000)
+            sub_obj = baker.make(
+                "stripe.StripeSubscription",
+                price=baker.make("stripe.StripePrice", product=product, price=15),
+                organization=org,
+                status=SubscriptionStatus.ACTIVE,
+                metered_item_id=item,
+            )
+            org.stripe_primary_subscription = sub_obj
+            org.save(update_fields=["stripe_primary_subscription"])
+        return Organization.objects.select_related(
+            "stripe_primary_subscription__price__product"
+        ).get(id=org.id)
+
+    def test_all_conditions_met(self):
+        org = self._org()
+        with self.assertNumQueries(0):
+            self.assertTrue(overage_active(org))
+
+    def test_no_subscription(self):
+        self.assertFalse(overage_active(self._org(sub=False)))
+
+    def test_flag_off(self):
+        self.assertFalse(overage_active(self._org(enabled=False)))
+
+    def test_metered_item_gone(self):
+        self.assertFalse(overage_active(self._org(item="")))
