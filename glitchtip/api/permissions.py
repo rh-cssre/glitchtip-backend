@@ -142,6 +142,10 @@ def org_scoped_list(scopes: list[Scopes], explain_empty: bool = False):
     For pagination, we can capture the queryset, fold in authz, then paginate
     (evaluate).
 
+    The model is only known once the view returns, so an un-scoped one is
+    caught by ``apply`` on the first request rather than at import like
+    ``org_scoped_qs``.
+
     ``explain_empty`` turns an empty page into the same 404/403 the
     non-paginated routes give, at the cost of a query on every empty page.
     Off by default: an empty page is an ordinary answer here, unlike the
