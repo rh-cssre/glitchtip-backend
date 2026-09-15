@@ -72,13 +72,6 @@ class IngestDispatcher:
                 @classmethod
                 def _get_middleware_setting(cls):
                     return [
-                        # Async pool connections are returned by
-                        # django-async-backend's request_started /
-                        # request_finished receivers (connected by its app
-                        # config), which ASGIHandler.handle() emits regardless
-                        # of this list, so no cleanup middleware is needed
-                        # here. Before 6.1 that cleanup was a middleware and
-                        # had to be named explicitly.
                         "django.middleware.security.SecurityMiddleware",
                         "corsheaders.middleware.CorsMiddleware",
                     ]
