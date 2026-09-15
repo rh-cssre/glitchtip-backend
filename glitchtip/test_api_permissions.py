@@ -121,6 +121,29 @@ class OrgScopedModelCheckTestCase(SimpleTestCase):
         error = check_org_field(Typo)
         self.assertEqual(error.id, "glitchtip.E001")
 
+    def test_a_path_that_crosses_a_multi_valued_relation_is_rejected(self):
+        # Resolves, and ends on the organization foreign key -- but by joining
+        # back down a reverse relation rather than walking up keys. The gate
+        # would duplicate rows and admit a row whenever *any* related row is in
+        # the organization, which is not isolation.
+        class Bucket(OrgScopedModel, models.Model):
+            org_field = "items__project__organization_id"
+
+            class Meta:
+                app_label = "alerts"
+
+        class Item(models.Model):
+            bucket = models.ForeignKey(
+                Bucket, related_name="items", on_delete=models.CASCADE
+            )
+            project = models.ForeignKey(Project, on_delete=models.CASCADE)
+
+            class Meta:
+                app_label = "alerts"
+
+        error = check_org_field(Bucket)
+        self.assertEqual(error.id, "glitchtip.E003")
+
     def test_both_spellings_of_the_foreign_key_are_accepted(self):
         # ``__init_subclass__`` rejects the bare spelling, so the check must
         # not be the thing enforcing it -- two rules over one string, disagreeing

@@ -11,6 +11,7 @@ from django.core.checks import Error, Tags, register
 from django.core.exceptions import FieldError
 from django.db.models import Model
 from django.db.models.constants import LOOKUP_SEP
+from django.db.models.sql.datastructures import MultiJoin
 from django.db.models.sql.query import Query
 
 from apps.organizations_ext.models import Organization
@@ -44,7 +45,20 @@ def check_org_field(model: type[Model]) -> Error | None:
     """
     try:
         _, final_field, _, _ = Query(model).names_to_path(
-            model.org_field.split(LOOKUP_SEP), model._meta, fail_on_missing=True
+            model.org_field.split(LOOKUP_SEP),
+            model._meta,
+            allow_many=False,
+            fail_on_missing=True,
+        )
+    except MultiJoin:
+        return Error(
+            f"{model._meta.label}.org_field is {model.org_field!r}, which crosses a "
+            "multi-valued relation rather than following foreign keys. The gate "
+            "would duplicate rows and admit a row whenever any related row is in "
+            "the organization, which isolates nothing.",
+            hint="Every segment of org_field must be a forward foreign key.",
+            obj=model,
+            id="glitchtip.E003",
         )
     except FieldError as err:
         return Error(
