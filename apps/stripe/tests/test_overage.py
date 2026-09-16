@@ -319,7 +319,7 @@ class VerifyCommandTestCase(SimpleTestCase):
 class OverageActiveTestCase(TestCase):
     """Truth table for the predicate the throttle task and the API share."""
 
-    def _org(self, *, enabled=True, item="si_1", sub=True):
+    def _org(self, *, enabled=True, item="si_1", sub=True, price=15):
         org = baker.make(
             "organizations_ext.Organization", metered_billing_enabled=enabled
         )
@@ -327,7 +327,7 @@ class OverageActiveTestCase(TestCase):
             product = baker.make("stripe.StripeProduct", events=100_000)
             sub_obj = baker.make(
                 "stripe.StripeSubscription",
-                price=baker.make("stripe.StripePrice", product=product, price=15),
+                price=baker.make("stripe.StripePrice", product=product, price=price),
                 organization=org,
                 status=SubscriptionStatus.ACTIVE,
                 metered_item_id=item,
@@ -351,3 +351,7 @@ class OverageActiveTestCase(TestCase):
 
     def test_metered_item_gone(self):
         self.assertFalse(overage_active(self._org(item="")))
+
+    def test_plan_ineligible(self):
+        # A downgrade to a free plan leaves the flag and the item behind.
+        self.assertFalse(overage_active(self._org(price=0)))
