@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from django.test import TestCase, override_settings
@@ -7,6 +7,7 @@ from django.utils import timezone
 from model_bakery import baker
 
 from apps.organizations_ext.constants import OrganizationUserRole
+from apps.organizations_ext.models import EventCounts
 from apps.stripe.constants import SubscriptionStatus
 from apps.stripe.exceptions import StripeError
 from apps.stripe.models import StripeSubscription
@@ -69,12 +70,20 @@ class OverageAPITestCase(TestCase):
         base.price.recurring = {"usage_type": "licensed"}
         items = [base]
         if metered:
-            item = MagicMock()
-            item.price.recurring = {"usage_type": "metered"}
-            items.append(item)
+            items.append(self._item("si_other"))
         sub = MagicMock(id=id)
         sub.items.data = items
         return sub
+
+    def _item(self, id, period=None):
+        """A metered subscription item as Stripe returns it, with its period."""
+        now = timezone.now().replace(microsecond=0)
+        start, end = period or (now - timedelta(days=1), now + timedelta(days=29))
+        item = MagicMock(id=id)
+        item.price.recurring = {"usage_type": "metered"}
+        item.current_period_start = int(start.timestamp())
+        item.current_period_end = int(end.timestamp())
+        return item
 
     def _status(self):
         url = reverse("api:get_overage_status", args=[self.org.slug])
@@ -165,7 +174,9 @@ class OverageAPITestCase(TestCase):
                 self.assertIs(self._status().json()["eligible"], expected)
 
     def test_enable_attaches_item_and_sets_cap(self):
-        item = AsyncMock(return_value=type("I", (), {"id": "si_new"})())
+        now = timezone.now().replace(microsecond=0)
+        period = (now - timedelta(days=1), now + timedelta(days=29))
+        item = AsyncMock(return_value=self._item("si_new", period))
         with (
             patch("apps.stripe.api.fetch_subscription", new_callable=AsyncMock),
             patch(
@@ -185,12 +196,18 @@ class OverageAPITestCase(TestCase):
         self.assertTrue(self.org.metered_billing_enabled)
         self.assertEqual(self.org.overage_spend_cap_cents, 2000)
         self.assertEqual(self.sub.metered_item_id, "si_new")
+        # The item's own Stripe period is the window from here on; recorded at
+        # once so the re-check enqueued by this request bills against it.
+        self.assertEqual(self.sub.metered_period_start, period[0])
+        self.assertEqual(self.sub.metered_period_end, period[1])
         item.assert_awaited_once_with(self.sub.stripe_id, self.overage_price.stripe_id)
 
     def test_enable_reuses_existing_stripe_item(self):
         # An item orphaned by a prior crash (before we saved its id) is reused
         # rather than re-added, which Stripe would reject as a duplicate.
-        existing = type("I", (), {"id": "si_orphan"})()
+        now = timezone.now().replace(microsecond=0)
+        period = (now - timedelta(days=1), now + timedelta(days=29))
+        existing = self._item("si_orphan", period)
         add = AsyncMock()
         with (
             patch("apps.stripe.api.fetch_subscription", new_callable=AsyncMock),
@@ -208,6 +225,8 @@ class OverageAPITestCase(TestCase):
         self.assertEqual(res.status_code, 200)
         self.sub.refresh_from_db()
         self.assertEqual(self.sub.metered_item_id, "si_orphan")
+        self.assertEqual(self.sub.metered_period_start, period[0])
+        self.assertEqual(self.sub.metered_period_end, period[1])
         add.assert_not_awaited()
 
     def test_enable_card_error_returns_402(self):
@@ -405,7 +424,7 @@ class OverageAPITestCase(TestCase):
             self._stripe_subscription("sub_other"),
         ]
         fetched = self._stripe_subscription("sub_1")
-        item = AsyncMock(return_value=MagicMock(id="si_new"))
+        item = AsyncMock(return_value=self._item("si_new"))
         with (
             patch(
                 "apps.stripe.api.fetch_subscription",
@@ -436,8 +455,6 @@ class OverageAPITestCase(TestCase):
         """What the card shows must be what the sweep bills: the cycle's
         quota high-water mark after a downgrade, and the cap floored at what
         the cycle has already billed after the cap is lowered."""
-        from apps.organizations_ext.models import EventCounts
-
         now = timezone.now()
         self.org.metered_billing_enabled = True
         self.org.overage_spend_cap_cents = 500  # ~3,333 affordable units
@@ -457,9 +474,38 @@ class OverageAPITestCase(TestCase):
         # 40,000 billed units at $0.00015 = $6.00, not the $5 cap.
         self.assertEqual(body["overageCostCents"], 600)
 
-    def test_status_reports_overage_cost_when_enabled(self):
-        from apps.organizations_ext.models import EventCounts
+    def test_status_counts_usage_in_the_metered_items_period(self):
+        """What the card shows is counted over the window the sweep bills in:
+        the metered item's own Stripe period once one is attached."""
+        # Whole seconds, as Stripe's timestamps are (the JSON serializer keeps
+        # milliseconds only).
+        now = timezone.now().replace(microsecond=0)
+        item_period = (now - timedelta(days=2), now + timedelta(days=28))
+        self.sub.metered_item_id = "si_1"
+        self.sub.metered_period_start, self.sub.metered_period_end = item_period
+        self.sub.save()
+        self.org.metered_billing_enabled = True
+        self.org.overage_spend_cap_cents = 5000
+        self.org.save()
 
+        with patch(
+            "apps.stripe.api.get_event_counts",
+            new=AsyncMock(return_value=EventCounts(issue_event_count=150_000)),
+        ) as counts:
+            body = self._status().json()
+        self.assertEqual(body["overageUnits"], 50_000)
+        self.assertEqual(counts.await_args.args[1:], item_period)
+
+        # And the subscription's cycle, as the billing page shows it.
+        res = self.client.get(
+            reverse("api:get_stripe_subscription", args=[self.org.slug])
+        )
+        self.assertEqual(
+            datetime.fromisoformat(res.json()["subscriptionCycleStart"]),
+            item_period[0],
+        )
+
+    def test_status_reports_overage_cost_when_enabled(self):
         self.org.metered_billing_enabled = True
         self.org.overage_spend_cap_cents = 5000
         self.org.save()

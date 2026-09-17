@@ -273,6 +273,43 @@ class StripeAPITestCase(TestCase):
         # 25 issues + 40 logs * 0.1 + 50 uptime * 0.1 = 25 + 4 + 5
         self.assertEqual(data["total"], 34)
 
+    async def test_subscription_events_count_follows_the_metered_items_period(self):
+        """With a metered item attached, the usage endpoints report the same
+        window the sweep bills in: the item's own Stripe period, and monthly
+        steps back from it for earlier periods."""
+        project = await baker.amake("projects.Project", organization=self.organization)
+        await baker.amake(
+            "stripe.StripeSubscription",
+            organization=self.organization,
+            status=SubscriptionStatus.ACTIVE,
+            current_period_start=timezone.make_aware(datetime(2020, 2, 1)),
+            current_period_end=timezone.make_aware(datetime(2020, 3, 1)),
+            metered_item_id="si_1",
+            metered_period_start=timezone.make_aware(datetime(2020, 2, 10)),
+            metered_period_end=timezone.make_aware(datetime(2020, 3, 10)),
+        )
+        await StripeSubscription.set_primary_subscriptions_for_organizations(
+            {self.organization.id}
+        )
+        for day, count in ((5, 3), (15, 10), (25, 30)):  # Feb 5 / 15 / 25
+            await baker.amake(
+                "projects.IssueEventProjectHourlyStatistic",
+                project=project,
+                organization=self.organization,
+                date=timezone.make_aware(datetime(2020, 2, day, 10)),
+                count=count,
+            )
+        url = reverse(
+            "api:subscription_events_count_for_period",
+            args=[self.organization.slug],
+        )
+        res = await self.async_client.get(url)
+        # Feb 10 - Mar 10: the 15th and 25th, not the 5th.
+        self.assertEqual(res.json()["eventCount"], 40)
+        res = await self.async_client.get(url, {"periods_ago": 1})
+        # Jan 10 - Feb 10: the 5th.
+        self.assertEqual(res.json()["eventCount"], 3)
+
     async def test_subscription_events_count_for_period_retention_limit(self):
         url = reverse(
             "api:subscription_events_count_for_period",
