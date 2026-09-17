@@ -7,7 +7,20 @@ class GlitchtipConfig(AppConfig):
     def ready(self):
         from . import task_signals  # noqa: F401
 
+        self._connect_async_connection_recycling()
         self._skip_hstore_oid_lookup()
+
+    @staticmethod
+    def _connect_async_connection_recycling():
+        # Replaces django-async-backend's own request receivers, switched
+        # off via ASYNC_BACKEND_DISABLE_REQUEST_SIGNALS; see
+        # glitchtip.async_db for why closing alone isn't enough.
+        from django.core import signals
+
+        from .async_db import recycle_async_connections
+
+        signals.request_started.connect(recycle_async_connections, weak=False)
+        signals.request_finished.connect(recycle_async_connections, weak=False)
 
     @staticmethod
     def _skip_hstore_oid_lookup():

@@ -18,6 +18,7 @@ from django.tasks import task_backends
 from apps.issue_events.models import IssueEvent, UserReport
 from apps.logs.models import LogEvent
 from apps.performance.models import TransactionGroup
+from glitchtip.async_db import recycle_async_connections
 
 from .utils import (
     CLIENT_IP,
@@ -55,6 +56,11 @@ class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
             # Ingest tasks are batched consumers: each call takes a list of
             # task-message dicts.
             await vtask.func([message])
+            # A worker recycles its async connections between tasks (see
+            # glitchtip.task_signals); do the same, or the wrapper this
+            # task claimed is inherited by — and refused to — whatever
+            # runs the next one.
+            await recycle_async_connections()
 
     def _envelope(self, replace_id=True) -> tuple[list, str]:
         data = self.get_json_data(

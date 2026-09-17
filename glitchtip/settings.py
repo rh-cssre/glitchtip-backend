@@ -694,6 +694,13 @@ if ENABLE_OBSERVABILITY_API:
     MIDDLEWARE.insert(0, "django_prometheus.middleware.PrometheusBeforeMiddleware")
     MIDDLEWARE.append("django_prometheus.middleware.PrometheusAfterMiddleware")
 
+# django-async-backend connects close_old_async_connections to
+# request_started / request_finished. That closes each request's async
+# connections but leaves the wrapper stamped with the task that claimed it,
+# so the next task to use the alias is refused. glitchtip.async_db connects
+# a receiver that closes *and* unclaims instead; see that module.
+ASYNC_BACKEND_DISABLE_REQUEST_SIGNALS = True
+
 ROOT_URLCONF = "glitchtip.urls"
 
 TEMPLATES = [

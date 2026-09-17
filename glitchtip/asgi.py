@@ -208,7 +208,8 @@ class MCPDjangoDispatcher:
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.db import close_old_connections
-from django_async_backend.db import close_old_async_connections
+
+from glitchtip.async_db import recycle_async_connections
 
 
 class RecycleConnectionsMiddleware:
@@ -222,8 +223,8 @@ class RecycleConnectionsMiddleware:
     * ``close_old_connections`` on the ``request_started`` /
       ``request_finished`` signals ``BaseHandler`` emits (the sync,
       thread-local ``django.db.connections`` store); and
-    * ``close_old_async_connections`` on those same signals, connected by
-      django-async-backend's app config (its per-task
+    * ``recycle_async_connections`` on those same signals, connected by
+      ``glitchtip.apps`` (django-async-backend's per-task
       ``async_connections`` store).
 
     A connection that dies while held (Postgres failover, pgbouncer restart,
@@ -244,8 +245,9 @@ class RecycleConnectionsMiddleware:
     exact wrapper those queries use — including the queries the MCP SDK
     dispatches in its stateless child task, which shares the same executor
     thread (no ``ThreadSensitiveContext`` splits the MCP path). MCP does not
-    currently touch the ``async_connections`` store, but ``close_old_async_-
-    connections`` is called too for parity with the normal request path. On a
+    currently touch the ``async_connections`` store, but
+    ``recycle_async_connections`` is called too for parity with the normal
+    request path. On a
     healthy connection both calls are no-ops, so steady-state cost is
     negligible.
 
@@ -268,21 +270,22 @@ class RecycleConnectionsMiddleware:
         try:
             await self.app(scope, receive, send)
         finally:
-            # shield so a client disconnect mid-response can't cancel cleanup
-            # and leak the connection into the next request (mirrors
-            # django-async-backend's own request_finished receiver).
-            await asyncio.shield(_recycle_db_connections())
+            await _recycle_db_connections()
 
 
 async def _recycle_db_connections():
-    # Guard like glitchtip.task_signals._close_async_connections: returning a
+    # Guard like glitchtip.task_signals._recycle_async_connections: returning a
     # broken connection can itself raise (e.g. putconn under
     # wrap_database_errors during a failover), and an unhandled raise here
     # would 500 the request (pre-call) or mask the response's own exception
     # (post-call). Log and move on; the next query reconnects on demand.
     try:
-        await sync_to_async(close_old_connections)()
-        await close_old_async_connections()
+        # Shielded so a client disconnect mid-response can't cancel cleanup
+        # and leak the connection into the next request. The async half
+        # shields itself and must not be wrapped here — it rewrites a
+        # context-variable store, so it has to run in this task's context.
+        await asyncio.shield(sync_to_async(close_old_connections)())
+        await recycle_async_connections()
     except Exception:
         logger.exception("Failed to recycle DB connections for MCP request")
 

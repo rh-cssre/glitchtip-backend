@@ -1645,27 +1645,89 @@ class ProductionWarningTests(SimpleTestCase):
         self.assertNotIn("ALLOWED_HOSTS is the wildcard default", r.stderr)
 
 
-class TaskSignalsTestCase(SimpleTestCase):
-    """The worker has no HTTP middleware, so async DB connections opened
-    by an async task would leak. ``glitchtip.task_signals`` connects a
-    receiver to vtasks' ``task_finished`` / ``task_failure`` signals that
-    closes ``async_connections`` the same way the request middleware does."""
+class AsyncConnectionRecyclingTestCase(SimpleTestCase):
+    """``recycle_async_connections`` has to close the connection *and*
+    put a fresh wrapper in the store: django-async-backend stamps a
+    wrapper with the task that first used it and never clears the stamp,
+    so a closed-but-kept wrapper is refused to every later task."""
 
-    async def _assert_signal_closes_async_connections(self, signal, **payload):
+    async def test_recycles_initialized_aliases(self):
         from unittest.mock import AsyncMock
 
         from django_async_backend.db import async_connections
 
-        with patch.object(
-            async_connections, "close_all", new_callable=AsyncMock
-        ) as close_all:
-            await signal.asend(sender=type(self), **payload)
-            close_all.assert_awaited_once()
+        from glitchtip.async_db import recycle_async_connections
 
-    async def test_task_finished_closes_async_connections(self):
+        original = async_connections["default"]
+        original.close = AsyncMock()
+
+        await recycle_async_connections()
+
+        original.close.assert_awaited_once()
+        # A fresh wrapper is unstamped, so the next task may claim it.
+        self.assertIsNot(async_connections["default"], original)
+
+    async def test_recycles_despite_a_failing_close(self):
+        """A connection that can't be returned (a failover mid-request)
+        must still be dropped, or the alias stays stamped for good."""
+        from unittest.mock import AsyncMock
+
+        from django_async_backend.db import async_connections
+
+        from glitchtip.async_db import recycle_async_connections
+
+        original = async_connections["default"]
+        original.close = AsyncMock(side_effect=OSError("connection reset"))
+
+        with self.assertLogs("glitchtip.async_db", level="ERROR"):
+            await recycle_async_connections()
+
+        self.assertIsNot(async_connections["default"], original)
+
+
+class RequestSignalsTestCase(SimpleTestCase):
+    """django-async-backend's own request receivers close without
+    unstamping, so they are switched off and ours takes their place."""
+
+    def test_async_backend_request_signals_are_disabled(self):
+        self.assertTrue(settings.ASYNC_BACKEND_DISABLE_REQUEST_SIGNALS)
+
+    def test_recycle_receiver_is_connected(self):
+        from django.core import signals
+
+        from glitchtip.async_db import recycle_async_connections
+
+        for signal in (signals.request_started, signals.request_finished):
+            # Connected with weak=False, so the entry holds the function
+            # itself rather than a weakref.
+            receivers = [entry[1] for entry in signal.receivers]
+            self.assertIn(recycle_async_connections, receivers)
+
+
+class TaskSignalsTestCase(SimpleTestCase):
+    """The worker has no HTTP request cycle, so async DB connections
+    opened by an async task would leak — and stay stamped with that
+    task. ``glitchtip.task_signals`` connects a receiver to vtasks'
+    ``task_finished`` / ``task_failure`` signals that recycles
+    ``async_connections`` the same way the request signals do."""
+
+    async def _assert_signal_recycles_async_connections(self, signal, **payload):
+        from unittest.mock import AsyncMock
+
+        from django_async_backend.db import async_connections
+
+        original = async_connections["default"]
+        original.close = AsyncMock()
+
+        await signal.asend(sender=type(self), **payload)
+
+        original.close.assert_awaited_once()
+        self.assertIsNot(async_connections["default"], original)
+
+    async def test_task_finished_recycles_async_connections(self):
         from django_vtasks.signals import task_finished
 
-        await self._assert_signal_closes_async_connections(
+        await self._assert_signal_recycles_async_connections(
             task_finished,
             task_id="x",
             task_ids=None,
@@ -1673,10 +1735,10 @@ class TaskSignalsTestCase(SimpleTestCase):
             duration=0.0,
         )
 
-    async def test_task_failure_closes_async_connections(self):
+    async def test_task_failure_recycles_async_connections(self):
         from django_vtasks.signals import task_failure
 
-        await self._assert_signal_closes_async_connections(
+        await self._assert_signal_recycles_async_connections(
             task_failure,
             task_id="x",
             task_ids=None,
