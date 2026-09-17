@@ -8,7 +8,6 @@ wire format, and worker-side re-validation of the payloads.
 """
 
 import gzip
-import importlib
 import json
 import uuid
 
@@ -18,7 +17,6 @@ from django.tasks import task_backends
 from apps.issue_events.models import IssueEvent, UserReport
 from apps.logs.models import LogEvent
 from apps.performance.models import TransactionGroup
-from glitchtip.async_db import recycle_async_connections
 
 from .utils import (
     CLIENT_IP,
@@ -27,6 +25,7 @@ from .utils import (
     flush_rust_ingest_state,
     list_to_envelope,
     pop_rust_ingest_messages,
+    run_task_messages,
 )
 
 
@@ -49,18 +48,9 @@ class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
         the Rust-written bytes are exactly what a worker would consume."""
         from django_vtasks.serialization import deserialize
 
-        for raw in await pop_rust_ingest_messages():
-            message = deserialize(raw)
-            module, name = message["func"].rsplit(".", 1)
-            vtask = getattr(importlib.import_module(module), name)
-            # Ingest tasks are batched consumers: each call takes a list of
-            # task-message dicts.
-            await vtask.func([message])
-            # A worker recycles its async connections between tasks (see
-            # glitchtip.task_signals); do the same, or the wrapper this
-            # task claimed is inherited by — and refused to — whatever
-            # runs the next one.
-            await recycle_async_connections()
+        await run_task_messages(
+            [deserialize(raw) for raw in await pop_rust_ingest_messages()]
+        )
 
     def _envelope(self, replace_id=True) -> tuple[list, str]:
         data = self.get_json_data(

@@ -22,6 +22,9 @@ dependencies = [
     "anonymizeip~=1.0",
     "aiohttp~=3.14",
     "google-cloud-logging~=3.0",
+    # Resolves to 2.4.0, not the newer 2.5.0: that release caps Django below
+    # 6.1. 2.4.0 declares no Django constraint at all, so it will not fail
+    # loudly on a future Django bump — re-check it whenever Django moves.
     "django-prometheus~=2.2",
     "django-import-export~=4.1",
     # Library-only: psycopg.sql composition and Jsonb/Json parameter

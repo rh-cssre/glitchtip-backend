@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import importlib
 import json
 import time
 import uuid
@@ -164,6 +165,25 @@ async def pop_rust_ingest_messages() -> list[bytes]:
         messages.append(bytes(task.data))
     await queued.adelete()
     return messages
+
+
+async def run_task_messages(messages: list[dict]) -> None:
+    """Run deserialized vtasks messages through the real task functions the
+    way a worker would, then recycle this task's async connections.
+
+    Ingest tasks are batched consumers, so each call takes a list of
+    task-message dicts. The recycle is what a worker does between tasks
+    (see ``glitchtip.task_signals``), and it is needed here because every
+    call above shares the caller's asyncio task: the wrapper those tasks
+    claim is otherwise inherited by — and refused to — whatever crosses an
+    ``async_to_sync`` boundary next, such as the immediate task backend's
+    ``flush_batches``.
+    """
+    for message in messages:
+        module, name = message["func"].rsplit(".", 1)
+        vtask = getattr(importlib.import_module(module), name)
+        await vtask.func([message])
+    await recycle_async_connections()
 
 
 def generate_event(

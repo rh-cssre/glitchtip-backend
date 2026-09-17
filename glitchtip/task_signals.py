@@ -1,15 +1,20 @@
-"""Worker-side cleanup that mirrors the HTTP request signals.
+"""Worker-side cleanup that mirrors the HTTP request middleware.
 
 django-async-backend keeps its own per-asyncio-Task connection store
-(``async_connections``). The HTTP path recycles it from the
-``request_started`` / ``request_finished`` receivers ``glitchtip.apps``
-connects; the task worker emits neither signal, so async DB connections
-opened by a task leak when the task's coroutine ends.
+(``async_connections``). The HTTP path recycles it in
+``glitchtip.async_db.recycle_async_connections_middleware``; the task
+worker runs no middleware, so async DB connections opened by a task leak
+when the task's coroutine ends — and the alias stays claimed by it.
 
-We re-recycle on both ``task_finished`` and ``task_failure``: vtasks fires
-exactly one of the two per task (including on cancellation), and both
-receivers run inside the same asyncio.Task that executed the user task,
-which is the Task that owns the connection wrappers.
+We recycle on both ``task_finished`` and ``task_failure``: vtasks fires
+exactly one of the two per task, including on cancellation.
+
+``Signal.asend`` runs an async receiver in a child task rather than the
+one that executed the user task, so the fresh wrappers this plants would
+be invisible here were it not for asgiref's ``_restore_context``, which
+``asend`` calls on the way out and which copies them back. That is also
+why the receiver awaits the recycle directly: a bare ``asyncio.shield()``
+or ``create_task()`` restores nothing.
 """
 
 import logging
@@ -22,9 +27,6 @@ logger = logging.getLogger(__name__)
 
 
 async def _recycle_async_connections(**_kwargs):
-    # Awaited directly, not shielded: recycle_async_connections() shields
-    # its own close and has to run in this task's context to unclaim the
-    # aliases this task claimed.
     try:
         await recycle_async_connections()
     except Exception:

@@ -223,8 +223,8 @@ class RecycleConnectionsMiddleware:
     * ``close_old_connections`` on the ``request_started`` /
       ``request_finished`` signals ``BaseHandler`` emits (the sync,
       thread-local ``django.db.connections`` store); and
-    * ``recycle_async_connections`` on those same signals, connected by
-      ``glitchtip.apps`` (django-async-backend's per-task
+    * ``recycle_async_connections_middleware`` in the configured
+      ``MIDDLEWARE``, for the same reason (django-async-backend's per-task
       ``async_connections`` store).
 
     A connection that dies while held (Postgres failover, pgbouncer restart,
@@ -247,9 +247,8 @@ class RecycleConnectionsMiddleware:
     thread (no ``ThreadSensitiveContext`` splits the MCP path). MCP does not
     currently touch the ``async_connections`` store, but
     ``recycle_async_connections`` is called too for parity with the normal
-    request path. On a
-    healthy connection both calls are no-ops, so steady-state cost is
-    negligible.
+    request path. On a healthy connection both calls are no-ops, so
+    steady-state cost is negligible.
 
     Recovery matches the rest of GlitchTip: a request in flight during the
     switchover may still see a transient error, but the sub-app no longer
@@ -270,6 +269,9 @@ class RecycleConnectionsMiddleware:
         try:
             await self.app(scope, receive, send)
         finally:
+            # Cancellation safety lives inside _recycle_db_connections:
+            # shielding the call from here would run the async half in a
+            # child task, whose context changes never reach this one.
             await _recycle_db_connections()
 
 
@@ -280,12 +282,17 @@ async def _recycle_db_connections():
     # would 500 the request (pre-call) or mask the response's own exception
     # (post-call). Log and move on; the next query reconnects on demand.
     try:
-        # Shielded so a client disconnect mid-response can't cancel cleanup
-        # and leak the connection into the next request. The async half
-        # shields itself and must not be wrapped here — it rewrites a
-        # context-variable store, so it has to run in this task's context.
-        await asyncio.shield(sync_to_async(close_old_connections)())
-        await recycle_async_connections()
+        # Both halves have to survive a client disconnect mid-response, or a
+        # connection leaks into the next request. The async half goes first
+        # because it must not be wrapped in a shield of its own — it rewrites
+        # a context-variable store, so it has to run in this task's context,
+        # and it shields its own closing internally. The sync half runs from
+        # a ``finally``, so a cancellation delivered to the first still
+        # reaches it.
+        try:
+            await recycle_async_connections()
+        finally:
+            await asyncio.shield(sync_to_async(close_old_connections)())
     except Exception:
         logger.exception("Failed to recycle DB connections for MCP request")
 
