@@ -611,6 +611,7 @@ INSTALLED_APPS = [
     "django.contrib.humanize",
     "django.contrib.postgres",
     "django_prometheus",
+    "django_async_backend",
     "allauth",
     "allauth.account",
     "allauth.headless",
@@ -696,12 +697,21 @@ if ENABLE_OBSERVABILITY_API:
     MIDDLEWARE.insert(0, "django_prometheus.middleware.PrometheusBeforeMiddleware")
     MIDDLEWARE.append("django_prometheus.middleware.PrometheusAfterMiddleware")
 
+# django-async-backend 6.1 connects close_old_async_connections to
+# request_started / request_finished. That closes each request's async
+# connections but leaves the wrapper stamped with the task that claimed it,
+# so the next task to use the alias is refused — and an async receiver makes
+# every response pay a Signal.send -> async_to_sync hop. Switch them off and
+# use our own middleware, which closes *and* unclaims; see glitchtip.async_db.
+ASYNC_BACKEND_DISABLE_REQUEST_SIGNALS = True
+
 # Async DB cursors live in django-async-backend's ``async_connections``
 # store (served by the gt_rust engine; see the ENGINE assignment in the
 # DATABASES loop below). Inserted at the head of the chain so async cursors
 # are returned to the pool before any other middleware finalises the
-# response.
-MIDDLEWARE.insert(0, "django_async_backend.middleware.close_async_connections")
+# response. glitchtip.async_db.check_async_connection_recycling fails the
+# system checks if this goes missing.
+MIDDLEWARE.insert(0, "glitchtip.async_db.recycle_async_connections_middleware")
 
 ROOT_URLCONF = "glitchtip.urls"
 
