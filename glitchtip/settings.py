@@ -1185,12 +1185,17 @@ STATICFILES_DIRS = [
 ]
 STATIC_ROOT = path("static/")
 
-# ServeStatic writes .gz and .zstd variants during collectstatic and negotiates
-# them per request. Its default zstd level (3) compresses *worse* than gzip -9
-# on this frontend (+6.1% over a 60-file JS sample); level 19 beats gzip by
-# 6.6% and level 22 gains nothing further. Build-time cost only -- the variants
-# are written once per image build.
-SERVESTATIC_ZSTD_LEVEL = 19
+# collectstatic writes a compressed copy beside every compressible file and
+# ServeStatic hands out the smallest one the client accepts. Cost is paid once
+# per image build, never at request time.
+#
+# Zstandard is off. Measured over the collected tree, brotli produced the
+# smaller file for 493 of the 494 compressible files even against zstd at its
+# highest level (4.70 MB of .br against 4.96 MB of .zstd), and every browser
+# that sends `zstd` in Accept-Encoding also sends `br` -- so the .zstd copies
+# would never be the smallest acceptable option and never be served. Leaving
+# them on would add ~5 MB to the image for nothing.
+SERVESTATIC_USE_ZSTD = False
 
 EMAIL_BACKEND = env.str(
     "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
