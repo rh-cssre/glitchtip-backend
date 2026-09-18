@@ -960,15 +960,15 @@ wheels = [
 
 [[package]]
 name = "django-debug-toolbar"
-version = "7.1.1"
+version = "8.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
     { name = "sqlparse" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/00/da/df67a8e407ab6141affee4ee5cb2704403b9d5465cc35abbb42f5190a3fa/django_debug_toolbar-7.1.1.tar.gz", hash = "sha256:2fb4093d95e6f87258606c55f4d2aa45d1847b17a415525a9dceac02e937a836", size = 363531, upload-time = "2026-08-14T13:18:47.219Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4f/3d/aa093a841f32837311538e7952f5548b1a9c605a5aba5395163fbc54ac59/django_debug_toolbar-8.0.0.tar.gz", hash = "sha256:cae32d3e441e608f39f3f1ca6b3f028c38d5d04d74c98d8ab96d46022dee3163", size = 1239141, upload-time = "2026-09-01T18:27:56.934Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/de/c8/f473a965186510233129c2ab22e4808a1938afcbe9a287145d17693adf70/django_debug_toolbar-7.1.1-py3-none-any.whl", hash = "sha256:e1385b22fb17bff4dc51cf782679a7926676405e8d013ada1e3d8a6bfc47fdb3", size = 304387, upload-time = "2026-08-14T13:18:45.642Z" },
+    { url = "https://files.pythonhosted.org/packages/22/bd/ffd3f171940c58cca7971d1e5b81d6ab67b85a9569fe9d9fe13f7fbd1c99/django_debug_toolbar-8.0.0-py3-none-any.whl", hash = "sha256:329dfd6e1c26d9b4501a5cc69294c8bb734206ccb1bd36e96afc4d14128b630a", size = 437877, upload-time = "2026-09-01T18:27:55.018Z" },
 ]
 
 [[package]]
@@ -1202,16 +1202,16 @@ wheels = [
 
 [[package]]
 name = "django-vtasks"
-version = "3.1.0"
+version = "3.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "croniter" },
     { name = "django" },
     { name = "orjson" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/65/58/dbd270b8a6b3cdf1e714c6fcd101d2f948bea10e387dce6a988eb5b88bb4/django_vtasks-3.1.0.tar.gz", hash = "sha256:69db1418d7fa8c0c6531680bfc46353179786d1dc80149d136721cd2c2860a55", size = 45528, upload-time = "2026-07-25T01:49:16.334Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/54/18380d590062a43f1caffd82bea1c6abb630c572d02dc048c25a058eb10f/django_vtasks-3.2.0.tar.gz", hash = "sha256:c4386d64b3784870c1bee2b556a22a028d821b87381dc11bd39a1768acaa1eb2", size = 66613, upload-time = "2026-09-18T14:03:22.296Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1f/b7/8d1b40ce5c54cc32a66f563e8b289e6e291bd3671a6b31bbd50487648381/django_vtasks-3.1.0-py3-none-any.whl", hash = "sha256:7e64475401acd3b5e798d98d916d73dca929ed4d4c81470fc34cb24683ede974", size = 58070, upload-time = "2026-07-25T01:49:15.387Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/55/3e34f7621b18feac268cf242302362d0329b343535cef9c2deadd84a4f73/django_vtasks-3.2.0-py3-none-any.whl", hash = "sha256:c8027a48f7dfa3ba9d099cfd8627a310b3313066f2a99c0b0e2fa6dff4401579", size = 73536, upload-time = "2026-09-18T14:03:21.339Z" },
 ]
 
 [package.optional-dependencies]
@@ -1480,7 +1480,7 @@ requires-dist = [
     { name = "django-prometheus", specifier = "~=2.2" },
     { name = "django-storages", extras = ["boto3", "azure", "google"], specifier = "~=1.12" },
     { name = "django-vcache", specifier = ">=3.2.0" },
-    { name = "django-vtasks", extras = ["valkey"], specifier = "~=3.1.0" },
+    { name = "django-vtasks", extras = ["valkey"], specifier = "~=3.2.0" },
     { name = "duckdb", specifier = ">=1.2.0" },
     { name = "glitchtip-rust", specifier = ">=0.10.0" },
     { name = "google-cloud-logging", specifier = "~=3.0" },
@@ -1501,7 +1501,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "coverage", specifier = ">=7.13.4" },
-    { name = "django-debug-toolbar", specifier = "~=7.0" },
+    { name = "django-debug-toolbar", specifier = "~=8.0" },
     { name = "django-sslserver", specifier = "~=0.22" },
     { name = "django-stubs", extras = ["compatible-mypy"], specifier = "~=6.0" },
     { name = "freezegun", specifier = "~=1.1" },
