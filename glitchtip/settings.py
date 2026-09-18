@@ -1209,6 +1209,11 @@ MEDIA_ROOT = env.str("MEDIA_ROOT", "")
 
 STATICFILES_DIRS = [
     "assets",
+    # The frontend build, source maps included. Publishing them is deliberate:
+    # GlitchTip is open source, and a stack trace an operator can read back to
+    # real source is worth more than the bytes. They are not dead weight in the
+    # image either -- they compress to a fifth of their size and a browser only
+    # fetches one when devtools is open. Do not strip them to save space.
     "dist",
 ]
 STATIC_ROOT = path("static/")
