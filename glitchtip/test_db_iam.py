@@ -6,7 +6,7 @@ refusal to configure a live credential onto an unencrypted or unverified
 connection.
 """
 
-from unittest import skipUnless
+import inspect
 
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
@@ -132,35 +132,34 @@ class ConfigureOptionsTestCase(SimpleTestCase):
         )
 
 
-def _provider_available():
-    """Can the *loaded extension* actually honour credential_provider?
-
-    Checking that ``django_vpg.contrib.aws`` imports is not enough: gt_rust
-    substitutes its own compiled module for ``django_vpg._vpg_driver``, and
-    that substituted extension is what decides at runtime. The Python layer
-    can be new while the extension is old.
-    """
-    try:
-        import inspect
-
-        import_string(db_iam.RDS_IAM_PROVIDER)
-        from django_vpg._vpg_driver import RustPgDriver
-
-        return (
-            "credential_provider" in inspect.signature(RustPgDriver.connect).parameters
-        )
-    except Exception:
-        return False
-
-
 class ProviderWiringTestCase(SimpleTestCase):
-    @skipUnless(
-        _provider_available(),
-        f"{db_iam.RDS_IAM_PROVIDER} needs a django-vpg with rotating-credential "
-        "support; this skip disappears once glitchtip-rust pins that release. "
-        "Until then, DATABASE_IAM_AUTH cannot work at runtime.",
-    )
+    """The two things DATABASE_IAM_AUTH needs from the installed driver.
+
+    Both are guaranteed by the ``glitchtip-rust`` floor in ``pyproject.toml``,
+    which is why these assert rather than probe: a pin that moved backwards,
+    or an extension rebuilt without the feature, should fail the suite instead
+    of leaving DATABASE_IAM_AUTH quietly authenticating with the password it
+    was meant to replace.
+    """
+
     def test_the_configured_provider_is_importable_and_callable(self):
         # The dotted path is resolved by the driver at connect time, so a typo
         # would otherwise surface only on a deployment with IAM enabled.
         assert callable(import_string(db_iam.RDS_IAM_PROVIDER))
+
+    def test_the_loaded_extension_accepts_a_credential_provider(self):
+        # That django_vpg.contrib.aws imports is not enough: gt_rust
+        # substitutes its own compiled module for django_vpg._vpg_driver, and
+        # that substituted extension is what decides at runtime — the Python
+        # layer can be new while the extension is old. Without support the
+        # backend warns about an unsupported OPTIONS key, drops it, and
+        # connects with the static PASSWORD instead.
+        #
+        # Imported in the test body, not at module scope: gt_rust refuses to
+        # install itself if django_vpg was imported ahead of it, and test
+        # modules are imported during discovery.
+        from django_vpg._vpg_driver import RustPgDriver
+
+        assert (
+            "credential_provider" in inspect.signature(RustPgDriver.connect).parameters
+        )
