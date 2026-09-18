@@ -1143,22 +1143,44 @@ USE_I18N = True
 
 USE_TZ = True
 
+# Underscored: Django removed its own STATICFILES_STORAGE setting, and a
+# module-level upper-case name here is a Django setting. The environment
+# variable keeps the familiar name.
+_staticfiles_storage = env.str(
+    "STATICFILES_STORAGE", "servestatic.storage.CompressedStaticFilesStorage"
+)
+if _staticfiles_storage.startswith("whitenoise.storage."):
+    # GlitchTip served static through WhiteNoise until it moved to ServeStatic,
+    # a fork of it that keeps the same backend class names. WhiteNoise is no
+    # longer installed, so an operator who pinned one of its backends would get
+    # an ImportError at boot. Translate and warn instead of refusing to start;
+    # remove this on the next major release.
+    _servestatic_backend = _staticfiles_storage.replace(
+        "whitenoise.storage.", "servestatic.storage.", 1
+    )
+    warnings.warn(
+        f"STATICFILES_STORAGE={_staticfiles_storage} names a WhiteNoise backend, "
+        f"which GlitchTip no longer ships. Falling back to "
+        f"{_servestatic_backend}. Update the setting: this fallback is removed "
+        f"in the next major release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    _staticfiles_storage = _servestatic_backend
+
 STORAGES = {
     "default": {
         "BACKEND": env("DEFAULT_FILE_STORAGE"),
     },
     "staticfiles": {
-        "BACKEND": env.str(
-            "STATICFILES_STORAGE",
-            # Compressed, not Manifest*: the frontend build already content-hashes
-            # its own filenames, which is what the browser requests. Manifest
-            # hashing added a second, unused copy of every file plus a public
-            # staticfiles.json, and made a single missing reference a hard
-            # collectstatic failure mid-deploy. Operators who serve Django's
-            # own {% static %} assets from a long-lived cache can opt back in
-            # via the STATICFILES_STORAGE env var.
-            "servestatic.storage.CompressedStaticFilesStorage",
-        )
+        # Compressed, not Manifest*: the frontend build already content-hashes
+        # its own filenames, which is what the browser requests. Manifest
+        # hashing added a second, unused copy of every file plus a public
+        # staticfiles.json, and made a single missing reference a hard
+        # collectstatic failure mid-deploy. Operators who serve Django's own
+        # {% static %} assets from a long-lived cache can opt back in via the
+        # STATICFILES_STORAGE env var.
+        "BACKEND": _staticfiles_storage
     },
 }
 
