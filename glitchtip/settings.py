@@ -1388,6 +1388,11 @@ if TESTING:
     }
     SESSION_ENGINE = "django.contrib.sessions.backends.cache"
     STORAGES = global_settings.STORAGES
+    # Tests import glitchtip.asgi, which indexes STATIC_ROOT. A test run has
+    # not collected static and does not serve it either. No ``module`` filter:
+    # ServeStatic warns with a stacklevel that attributes it to its caller,
+    # so the only stable thing to match on is the message.
+    warnings.filterwarnings("ignore", message="No directory at")
 if TESTING:
     CACHES = {
         "default": {

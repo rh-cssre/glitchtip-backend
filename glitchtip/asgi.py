@@ -208,6 +208,7 @@ class MCPDjangoDispatcher:
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
+from django.contrib.staticfiles import finders
 from django.db import close_old_connections
 
 from glitchtip.async_db import recycle_async_connections
@@ -315,26 +316,25 @@ if settings.GLITCHTIP_ENABLE_MCP:
 # library installed as Django middleware served 305 req/s; here it serves
 # 1764 -- Django's request pipeline, not the file serving, was the cost.
 #
-# It also negotiates the .gz/.br variants CompressedStaticFilesStorage writes
-# during collectstatic, which granian's --static-path-mount cannot do (granian
-# has no compression support at all), and it applies cache headers per file
-# rather than one TTL for the whole tree: the frontend build's content-hashed
-# chunks get `immutable`, while the stable-named files under assets/ (i18n,
-# fonts, images -- 139 of 140 are unhashed) keep a short TTL so they cannot go
-# stale across an upgrade.
+# It also negotiates the .br/.gz copies collectstatic writes beside each file
+# (see STORAGES["staticfiles"]), which granian's --static-path-mount cannot do
+# -- granian has no compression support at all -- and it applies cache headers
+# per file rather than one expiry for the whole tree.
 from servestatic import ServeStaticASGI
 
+# Everything that is not content-addressed is refetched this often, so an
+# upgrade cannot leave a client pinned to a stale copy for longer than this.
 _STATIC_MAX_AGE = 3600
 
 # The frontend build emits content-hashed bundles at the root of the collected
-# tree (main-KVU4SSHB.js, chunk-B0tvkw2C2.js). Their names change whenever
-# their contents do, so they are safe to cache forever.
+# tree (main-KVU4SSHB.js, chunk-B0tvkw2C2.js, and the .map beside each). Their
+# names change whenever their contents do, so they are safe to cache forever.
 #
 # Hash length is NOT fixed: the current build ships 48 files with 8-character
 # hashes and 22 with 9. An {8} pattern silently downgraded those 22 to the
 # short TTL, so they were refetched hourly despite being immutable. The range
 # is deliberately wider than any observed value.
-_HASHED_BUNDLE = re.compile(r"-[A-Za-z0-9_-]{8,10}\.(?:js|css)$")
+_HASHED_BUNDLE = re.compile(r"-[A-Za-z0-9_-]{8,10}\.(?:js|css)(?:\.map)?$")
 
 
 def _is_hashed_asset(path: str, url: str) -> bool:
@@ -350,13 +350,54 @@ def _is_hashed_asset(path: str, url: str) -> bool:
     return bool(_HASHED_BUNDLE.search(rel))
 
 
-application = ServeStaticASGI(
-    application,
-    root=settings.STATIC_ROOT,
-    prefix=settings.STATIC_URL,
-    max_age=_STATIC_MAX_AGE,
-    immutable_file_test=_is_hashed_asset,
-)
+class FindersServeStatic(ServeStaticASGI):
+    """Resolve /static/ through the staticfiles finders instead of an index.
+
+    Only used under DEBUG. A development checkout has no collected tree --
+    ``docker compose up`` runs the repo as-is and never calls collectstatic --
+    so indexing STATIC_ROOT at startup would find nothing and every asset the
+    admin, allauth and the SPA ask for would 404. Deferring to the finders is
+    what Django's own runserver does; it also picks up a rebuilt frontend
+    without restarting the server.
+
+    Requires ``autorefresh=True``: that is what makes ServeStatic consult
+    ``candidate_paths_for_url`` per request rather than a dict built at
+    startup.
+    """
+
+    def candidate_paths_for_url(self, url):
+        if url.startswith(settings.STATIC_URL):
+            # url_is_canonical() has already rejected any traversal, and
+            # finders.find() only ever returns paths inside a configured
+            # static directory.
+            path = finders.find(url.removeprefix(settings.STATIC_URL))
+            if path:
+                yield path
+        yield from super().candidate_paths_for_url(url)
+
+
+def serve_static(app):
+    """Wrap ``app`` so requests under STATIC_URL are answered before Django."""
+    if settings.DEBUG:
+        return FindersServeStatic(
+            app,
+            autorefresh=True,
+            # An asset rebuilt under its own name has to show up on the next
+            # reload, so the only thing cached in dev is a content-hashed
+            # bundle -- whose name changes with its content anyway.
+            max_age=0,
+            immutable_file_test=_is_hashed_asset,
+        )
+    return ServeStaticASGI(
+        app,
+        root=settings.STATIC_ROOT,
+        prefix=settings.STATIC_URL,
+        max_age=_STATIC_MAX_AGE,
+        immutable_file_test=_is_hashed_asset,
+    )
+
+
+application = serve_static(application)
 
 # Wrap application with granian proxy headers support
 # This allows granian to properly handle X-Forwarded-For and X-Forwarded-Proto headers
