@@ -716,7 +716,8 @@ MIDDLEWARE.insert(0, "glitchtip.async_db.recycle_async_connections_middleware")
 # response. Static files never reach here -- ServeStatic answers /static/ above
 # Django and hands out the .br/.gz copies collectstatic already wrote, so
 # between the two every response GlitchTip sends is compressed out of the box,
-# with no proxy or CDN to configure first.
+# with no proxy or CDN to configure first. See glitchtip/compression.py for why
+# this is not Django's GZipMiddleware.
 #
 # Inserted last, which makes it the outermost middleware: the response phase
 # runs in reverse, so compression happens after every other middleware has
@@ -727,11 +728,10 @@ MIDDLEWARE.insert(0, "glitchtip.async_db.recycle_async_connections_middleware")
 # few bytes anyway.
 #
 # BREACH applies to any compression of authenticated responses, whether done
-# here or at a proxy. Django pads every compressed response with up to
-# max_random_bytes (100) of random bytes, which is the mitigation doing the
-# work; per-request CSRF token masking covers the classic token-extraction
-# variant on top of that.
-MIDDLEWARE.insert(0, "django.middleware.gzip.GZipMiddleware")
+# here or at a proxy. Every compressed response is padded with a random number
+# of bytes, which is the mitigation doing the work; per-request CSRF token
+# masking covers the classic token-extraction variant on top of that.
+MIDDLEWARE.insert(0, "glitchtip.compression.compression_middleware")
 
 ROOT_URLCONF = "glitchtip.urls"
 
