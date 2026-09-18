@@ -675,21 +675,6 @@ PROMETHEUS_EXPORT_MIGRATIONS = False
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    # Compresses what Django itself serves: the SPA's index.html and every API
-    # response. Static files never reach here -- ServeStatic answers /static/
-    # above Django and hands out the .br/.gz copies collectstatic already
-    # wrote, so between the two every response GlitchTip sends is compressed
-    # out of the box, with no proxy or CDN to configure first.
-    #
-    # Listed early (outermost) so the body is compressed after every other
-    # middleware has finished writing it. The ingest hot path is unaffected:
-    # it runs its own minimal middleware list (glitchtip/ingest_asgi.py) and
-    # its responses are a few bytes anyway.
-    #
-    # BREACH applies to any compression of authenticated responses, whether
-    # done here or at a proxy; Django's per-request CSRF token masking
-    # mitigates the classic token-extraction variant.
-    "django.middleware.gzip.GZipMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.csp.ContentSecurityPolicyMiddleware",
@@ -726,6 +711,27 @@ ASYNC_BACKEND_DISABLE_REQUEST_SIGNALS = True
 # response. glitchtip.async_db.check_async_connection_recycling fails the
 # system checks if this goes missing.
 MIDDLEWARE.insert(0, "glitchtip.async_db.recycle_async_connections_middleware")
+
+# Compresses what Django itself serves: the SPA's index.html and every API
+# response. Static files never reach here -- ServeStatic answers /static/ above
+# Django and hands out the .br/.gz copies collectstatic already wrote, so
+# between the two every response GlitchTip sends is compressed out of the box,
+# with no proxy or CDN to configure first.
+#
+# Inserted last, which makes it the outermost middleware: the response phase
+# runs in reverse, so compression happens after every other middleware has
+# finished with the response -- including close_async_connections, which means
+# the pooled database connection is back before the body is compressed rather
+# than held for the length of it. The ingest hot path is unaffected: it runs its
+# own minimal middleware list (glitchtip/ingest_asgi.py) and its responses are a
+# few bytes anyway.
+#
+# BREACH applies to any compression of authenticated responses, whether done
+# here or at a proxy. Django pads every compressed response with up to
+# max_random_bytes (100) of random bytes, which is the mitigation doing the
+# work; per-request CSRF token masking covers the classic token-extraction
+# variant on top of that.
+MIDDLEWARE.insert(0, "django.middleware.gzip.GZipMiddleware")
 
 ROOT_URLCONF = "glitchtip.urls"
 
