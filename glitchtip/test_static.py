@@ -21,17 +21,30 @@ class MockASGIApp:
         self.called = True
 
 
-async def request(app, path, accept_encoding=None):
-    """Drive one GET through an ASGI app and return (status, headers, body)."""
-    headers = []
+PATHSEND = {"http.response.pathsend": {}}
+
+# Filled by each request() call, so a test can assert which path answered it.
+message_types: list[str] = []
+
+
+async def request(
+    app, path, accept_encoding=None, extensions=None, method="GET", extra_headers=()
+):
+    """Drive one GET through an ASGI app and return (status, headers, body).
+
+    ``extensions`` models what the ASGI server advertises. The default is a
+    server offering nothing, i.e. the streaming path.
+    """
+    headers = [(k.encode(), v.encode()) for k, v in extra_headers]
     if accept_encoding is not None:
         headers.append((b"accept-encoding", accept_encoding.encode()))
     scope = {
         "type": "http",
         "asgi": {"version": "3.0"},
         "http_version": "1.1",
-        "method": "GET",
+        "method": method,
         "path": path,
+        "extensions": extensions or {},
         "raw_path": path.encode(),
         "query_string": b"",
         "root_path": "",
@@ -49,10 +62,17 @@ async def request(app, path, accept_encoding=None):
         messages.append(message)
 
     await app(scope, receive, send)
+    message_types.clear()
+    message_types.extend(m["type"] for m in messages)
     if not messages:
         return None, {}, b""
     start = messages[0]
+    # A pathsend response names a file instead of carrying bytes; read it here
+    # so a test can compare the two paths byte for byte.
     body = b"".join(m.get("body", b"") for m in messages[1:])
+    for message in messages[1:]:
+        if message["type"] == "http.response.pathsend":
+            body = Path(message["path"]).read_bytes()
     return (
         start["status"],
         {k.decode().lower(): v.decode() for k, v in start["headers"]},
@@ -172,6 +192,107 @@ class StaticRootTestCase(SimpleTestCase):
         _, headers, _ = await request(self.app, "/static/index.html", "gzip")
         self.assertEqual(headers["x-frame-options"], "DENY")
         self.assertEqual(headers["content-security-policy"], "frame-ancestors 'none'")
+
+
+class PathSendTestCase(SimpleTestCase):
+    """A server that advertises http.response.pathsend gets the file named
+    rather than read: Python makes no filesystem call for the body at all."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name)
+        self.bundle = b"console.log('x');" * 100
+        (root / "main-ABCDEFGH.js").write_bytes(self.bundle)
+        (root / "main-ABCDEFGH.js.br").write_bytes(brotli.compress(self.bundle))
+        (root / "main-ABCDEFGH.js.gz").write_bytes(gzip.compress(self.bundle))
+        self.inner = MockASGIApp()
+        with override_settings(DEBUG=False, STATIC_ROOT=str(root)):
+            self.app = serve_static(self.inner)
+
+    async def test_the_file_is_named_not_read(self):
+        _, _, body = await request(
+            self.app, "/static/main-ABCDEFGH.js", "br", extensions=PATHSEND
+        )
+        self.assertEqual(
+            message_types, ["http.response.start", "http.response.pathsend"]
+        )
+        self.assertEqual(brotli.decompress(body), self.bundle)
+
+    async def test_a_server_without_the_extension_still_gets_the_file(self):
+        """The fallback matters: GlitchTip ships granian, but nothing stops
+        someone pointing another ASGI server at this application."""
+        status, headers, body = await request(
+            self.app, "/static/main-ABCDEFGH.js", "br"
+        )
+        self.assertIn("http.response.body", message_types)
+        self.assertNotIn("http.response.pathsend", message_types)
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["content-encoding"], "br")
+        self.assertEqual(brotli.decompress(body), self.bundle)
+
+    async def test_both_paths_produce_the_same_response(self):
+        for accept in ("br, gzip", "gzip", None):
+            with self.subTest(accept_encoding=accept):
+                streamed = await request(self.app, "/static/main-ABCDEFGH.js", accept)
+                named = await request(
+                    self.app, "/static/main-ABCDEFGH.js", accept, extensions=PATHSEND
+                )
+                self.assertEqual(streamed, named)
+
+    async def test_a_range_request_falls_back_to_streaming(self):
+        """pathsend sends a whole file; a 206 has to come from the library."""
+        status, _, _ = await request(
+            self.app,
+            "/static/main-ABCDEFGH.js",
+            "br",
+            extensions=PATHSEND,
+            extra_headers=(("range", "bytes=0-9"),),
+        )
+        self.assertEqual(status, 206)
+        self.assertNotIn("http.response.pathsend", message_types)
+
+    async def test_a_conditional_request_falls_back_to_streaming(self):
+        _, headers, _ = await request(self.app, "/static/main-ABCDEFGH.js", "br")
+        status, _, _ = await request(
+            self.app,
+            "/static/main-ABCDEFGH.js",
+            "br",
+            extensions=PATHSEND,
+            extra_headers=(("if-none-match", headers["etag"]),),
+        )
+        self.assertEqual(status, 304)
+        self.assertNotIn("http.response.pathsend", message_types)
+
+    async def test_head_falls_back_to_streaming(self):
+        status, _, body = await request(
+            self.app,
+            "/static/main-ABCDEFGH.js",
+            "br",
+            extensions=PATHSEND,
+            method="HEAD",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body, b"")
+        self.assertNotIn("http.response.pathsend", message_types)
+
+    async def test_an_unknown_path_still_falls_through_to_django(self):
+        await request(self.app, "/api/0/organizations/", "br", extensions=PATHSEND)
+        self.assertTrue(self.inner.called)
+
+    async def test_development_does_not_use_pathsend(self):
+        """Dev resolves per request against the finders, so there is no startup
+        index to name a file from."""
+        with tempfile.TemporaryDirectory() as source:
+            (Path(source) / "logo.svg").write_bytes(b"<svg/>")
+            with override_settings(DEBUG=True, STATICFILES_DIRS=[source]):
+                app = serve_static(MockASGIApp())
+                status, _, body = await request(
+                    app, "/static/logo.svg", "br", extensions=PATHSEND
+                )
+        self.assertEqual(status, 200)
+        self.assertEqual(body, b"<svg/>")
+        self.assertNotIn("http.response.pathsend", message_types)
 
 
 class DebugFindersTestCase(SimpleTestCase):

@@ -322,6 +322,8 @@ if settings.GLITCHTIP_ENABLE_MCP:
 # settings: those are read by its Django middleware, which this deliberately
 # does not use. Only the ones the storage backend reads apply.
 from servestatic import ServeStaticASGI
+from servestatic.responders import StaticFile
+from servestatic.utils import decode_path_info
 
 # Frozen at import, which is the only point it is well defined: django.setup()
 # has already installed FORCE_SCRIPT_NAME as the script prefix, so this carries
@@ -380,10 +382,78 @@ def _add_security_headers(headers, path: str, url: str) -> None:
         headers["Content-Security-Policy"] = "frame-ancestors 'none'"
 
 
+class PathSendServeStatic(ServeStaticASGI):
+    """ServeStatic that hands the file to the server instead of reading it.
+
+    Reading a static file from Python costs a thread, because asyncio has no
+    file I/O to offer: epoll refuses regular files, so every "async file" in the
+    ecosystem is a thread pool underneath. servestatic builds one
+    ``ThreadPoolExecutor`` per response and reads in 8 KiB blocks, and the bytes
+    cross into Python only to be handed straight back for the socket write.
+
+    The ``http.response.pathsend`` ASGI extension removes that round trip: we
+    send the headers this layer computed, then name the file, and the server
+    transfers it from its own runtime. Python never opens it -- a static hit
+    makes no filesystem call at all.
+
+    Servers that do not implement the extension leave it out of
+    ``scope["extensions"]`` and get the streaming path unchanged, so this stays
+    a pure optimisation rather than a requirement. GlitchTip ships granian,
+    which implements it.
+    """
+
+    async def __call__(self, scope, receive, send) -> None:
+        target = self._pathsend_target(scope)
+        if target is None:
+            await super().__call__(scope, receive, send)
+            return
+        path, headers = target
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (key.lower().encode("latin-1"), value.encode("latin-1"))
+                    for key, value in headers
+                    if value is not None
+                ],
+            }
+        )
+        await send({"type": "http.response.pathsend", "path": path})
+
+    def _pathsend_target(self, scope):
+        """The file to hand over, or None to fall back to streaming."""
+        if scope["type"] != "http" or scope.get("method") != "GET":
+            return None
+        if "http.response.pathsend" not in (scope.get("extensions") or {}):
+            return None
+        if self.autorefresh:
+            # Development resolves per request against the finders rather than
+            # a startup index, and has no precompressed copies to choose
+            # between; it gains nothing here.
+            return None
+        static_file = self.files.get(decode_path_info(scope["path"]))
+        if not isinstance(static_file, StaticFile):
+            return None
+        request_headers = {
+            "HTTP_" + key.decode("latin-1").upper().replace("-", "_"): value.decode(
+                "latin-1"
+            )
+            for key, value in scope["headers"]
+        }
+        # Conditional and range requests have responses of their own, and the
+        # library already builds those correctly.
+        if "HTTP_RANGE" in request_headers or static_file.is_not_modified(
+            request_headers
+        ):
+            return None
+        return static_file.get_path_and_headers(request_headers)
+
+
 def serve_static(app):
     """Wrap ``app`` so requests under STATIC_URL are answered before Django."""
     if not settings.DEBUG:
-        return ServeStaticASGI(
+        return PathSendServeStatic(
             app,
             root=settings.STATIC_ROOT,
             prefix=_STATIC_PREFIX,
@@ -406,7 +476,7 @@ def serve_static(app):
     # Nothing is cached, including the hashed bundles: a dev build can be
     # configured not to hash at all, and an asset rebuilt under its own name has
     # to show up on the next reload.
-    static_app = ServeStaticASGI(
+    static_app = PathSendServeStatic(
         app,
         autorefresh=True,
         max_age=0,
