@@ -20,7 +20,10 @@ from corsheaders.defaults import default_headers
 from django.conf import global_settings
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.csp import CSP
+from django.utils.module_loading import import_string
 from django_vtasks.scheduler import crontab
+
+from glitchtip import db_iam as _db_iam
 
 env = environ.FileAwareEnv(
     ALLOWED_HOSTS=(list, ["*"]),
@@ -940,12 +943,6 @@ if env.str("DATABASE_HOST", None):
 # extends — performs at load), but no database I/O flows through it.
 DATABASE_ENGINE = "gt_rust.django_backend"
 
-
-# Imported here rather than at the top of the file: ``glitchtip/__init__.py``
-# pulls in ``glitchtip.lookups``, which reaches into Django's ORM, and that
-# must not happen while settings are still being assembled.
-from glitchtip import db_iam as _db_iam
-
 # Valkey/Redis connection. VALKEY_URL is the source of truth — supports any scheme
 # that django-vcache understands: redis://, rediss://, valkey://, valkeys://, sentinel://
 # Component env vars (VALKEY_HOST, etc.) are a convenience for simple single-node setups.
@@ -964,6 +961,18 @@ else:
     VALKEY_URL = env.str("VALKEY_URL", env.str("REDIS_URL", "redis://redis:6379/0"))
 
 if DATABASE_IAM_AUTH:
+    if not DATABASE_IAM_AUTH_ALIASES:
+        # An env var that is set but empty reads as "" rather than falling
+        # back to the default, and an empty value is the normal rendering of
+        # an unset Helm/compose variable. Without this the list is empty, no
+        # alias is covered, and every connection quietly keeps using the
+        # password that enabling IAM auth was meant to remove.
+        raise ImproperlyConfigured(
+            "DATABASE_IAM_AUTH is enabled but DATABASE_IAM_AUTH_ALIASES is "
+            "empty, so no alias would use IAM and every connection would "
+            "authenticate with its static password. Name at least one alias, "
+            "or leave DATABASE_IAM_AUTH_ALIASES unset to cover 'default'."
+        )
     _unknown = set(DATABASE_IAM_AUTH_ALIASES) - set(DATABASES)
     if _unknown:
         raise ImproperlyConfigured(
@@ -995,11 +1004,15 @@ if DATABASE_IAM_AUTH:
         raise ImproperlyConfigured(
             "DATABASE_IAM_AUTH requires a database driver with "
             "rotating-credential support, but the loaded "
-            f"{sys.modules['django_vpg._vpg_driver'].__name__} extension "
-            "does not accept "
+            f"{_vpg_driver_cls.__module__} extension does not accept "
             "credential_provider and would fall back to password "
             "authentication. Upgrade glitchtip-rust, which supplies it."
         )
+    # The provider is a dotted path the driver resolves at connect time, so an
+    # absent django_vpg.contrib.aws (or a slim image without boto3) would sail
+    # past a guard whose whole purpose is to fail closed at startup, and show
+    # up as an InterfaceError on the first query instead.
+    import_string(_db_iam.RDS_IAM_PROVIDER)
 
 # Settings applied to every DATABASES entry, however it was configured above.
 for _db_alias, db_config in DATABASES.items():

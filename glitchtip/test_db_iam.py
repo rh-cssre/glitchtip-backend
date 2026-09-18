@@ -74,10 +74,49 @@ class ConfigureOptionsTestCase(SimpleTestCase):
             with self.subTest(mode=mode):
                 with self.assertRaises(ImproperlyConfigured):
                     db_iam.configure_options({}, iam_auth=True, sslmode=mode)
-                options = db_iam.configure_options(
-                    {}, iam_auth=True, sslmode=mode, allow_unverified_tls=True
-                )
+                with self.assertWarns(UserWarning):
+                    options = db_iam.configure_options(
+                        {},
+                        iam_auth=True,
+                        sslmode=mode,
+                        sslrootcert="/certs/rds.pem",
+                        allow_unverified_tls=True,
+                    )
                 assert options["sslmode"] == mode
+                # The opt-out waives server verification, not IAM auth itself:
+                # an early return here would silently revert that deployment
+                # to the password the feature exists to remove.
+                assert options["credential_provider"] == db_iam.RDS_IAM_PROVIDER
+
+    def test_the_opt_out_does_not_also_waive_the_ca_bundle(self):
+        # verify-ca validates a chain, so without an anchor the driver falls
+        # back to the system roots — and it does not check the hostname, so
+        # any publicly trusted certificate for any name would be handed the
+        # token. The opt-out is about hostname verification, not about
+        # trusting the whole public WebPKI.
+        with self.assertRaises(ImproperlyConfigured) as ctx:
+            db_iam.configure_options(
+                {}, iam_auth=True, sslmode="verify-ca", allow_unverified_tls=True
+            )
+        assert "DATABASE_SSLROOTCERT" in str(ctx.exception)
+
+    def test_require_needs_no_ca_bundle(self):
+        # require encrypts without validating any chain, so unlike verify-ca
+        # there is no anchor for it to need.
+        with self.assertWarns(UserWarning):
+            options = db_iam.configure_options(
+                {}, iam_auth=True, sslmode="require", allow_unverified_tls=True
+            )
+        assert options["sslmode"] == "require"
+
+    def test_a_negative_token_ttl_is_refused(self):
+        # Truthy, so it would otherwise reach the driver and raise at the
+        # first connection instead of at settings load like every other knob.
+        with self.assertRaises(ImproperlyConfigured) as ctx:
+            db_iam.configure_options(
+                {}, iam_auth=True, token_ttl=-1, sslrootcert="/certs/rds.pem"
+            )
+        assert "DATABASE_IAM_TOKEN_TTL" in str(ctx.exception)
 
     def test_unencrypted_modes_are_refused(self):
         # The driver rejects these too, but only at connect time and as an
@@ -112,7 +151,17 @@ class ConfigureOptionsTestCase(SimpleTestCase):
 
     def test_nothing_is_written_when_a_guard_rejects(self):
         # Validated before mutating, so a caller that catches the error is not
-        # left with IAM half-wired onto a rejected sslmode.
+        # left with IAM half-wired onto a rejected sslmode. The inputs matter:
+        # with sslmode already set, every pre-raise write is a setdefault
+        # no-op, so an implementation with no copy at all would still pass.
+        # Leaving it unset makes the writes visible if they escape.
+        options = {}
+        with self.assertRaises(ImproperlyConfigured):
+            db_iam.configure_options(
+                options, iam_auth=True, sslmode="prefer", sslrootcert="/certs/rds.pem"
+            )
+        assert options == {}
+
         options = {"sslmode": "prefer"}
         with self.assertRaises(ImproperlyConfigured):
             db_iam.configure_options(options, iam_auth=True)
