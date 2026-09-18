@@ -25,7 +25,7 @@ from apps.stripe.overage import (
     METER_FORMULA,
     billable_units,
     cycle_quota,
-    overage_eligible,
+    overage_active,
     units_for_budget,
 )
 from apps.stripe.utils import billing_window, has_metered_window
@@ -406,22 +406,18 @@ async def _check_and_update_throttle(org: Organization):
             if _in_window(measured_at, start, end):
                 quota = await _cycle_quota(org, start, plan_events)
 
-            # Both flags are sticky DB state that outlives the plan that
-            # justified them: a downgrade to a free plan keeps the subscription
-            # active, and the primary-subscription pointer is only cleared
-            # asynchronously. Without the eligibility test here the API refuses
-            # to *enable* overage on such an org while this path keeps invoicing
-            # it. `select_related` on both callers keeps this DB-free.
-            # Reporting also waits for the item's own period to be known
-            # (has_metered_window): a total counted over the plan's window
-            # would be filed under the item's, and where the two differ that
-            # bills the overlap twice. Until the refresh above succeeds the
-            # organization is throttled at quota plus cap but nothing is sent.
-            if (
-                org.metered_billing_enabled
-                and has_metered_window(sub)
-                and overage_eligible(sub)
-            ):
+            # The predicate the status endpoint reports as `active`, so what the
+            # UI shows cannot drift from what is enforced here. The flags it
+            # tests are sticky DB state that outlives the plan that justified
+            # them: a downgrade to a free plan keeps the subscription active,
+            # and the primary-subscription pointer is only cleared
+            # asynchronously. `select_related` on both callers keeps it DB-free.
+            # Reporting additionally waits for the item's own period to be known
+            # (has_metered_window): a total counted over the plan's window would
+            # be filed under the item's, and where the two differ that bills the
+            # overlap twice. Until the refresh above succeeds the organization is
+            # throttled at quota plus cap but nothing is sent.
+            if overage_active(org) and has_metered_window(sub):
                 # Paid overage: charge for usage above the cycle's quota up to
                 # the spend cap, then resume the progressive ramp (no further
                 # charges).

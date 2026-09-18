@@ -12,6 +12,7 @@ from apps.organizations_ext.models import EventCounts
 from apps.stripe.constants import SubscriptionStatus
 from apps.stripe.exceptions import StripeError
 from apps.stripe.models import StripeSubscription
+from apps.stripe.overage import units_for_budget
 
 QUOTA = 100_000
 
@@ -101,6 +102,7 @@ class OverageAPITestCase(TestCase):
         self.assertFalse(body["enabled"])
         self.assertTrue(body["eligible"])
         self.assertTrue(body["configured"])
+        self.assertFalse(body["active"])
         self.assertEqual(body["quota"], QUOTA)
 
     def test_status_serves_the_configured_cap_ceiling(self):
@@ -119,6 +121,34 @@ class OverageAPITestCase(TestCase):
         self.assertEqual(body["maxCapCents"], 5_000_000)
         res = self._configure({"enabled": True, "capCents": 2_000_000})
         self.assertNotEqual(res.status_code, 400)
+
+    def test_active_mirrors_the_throttle_predicate(self):
+        """The metered item can vanish while enabled and eligible stay set."""
+        self.org.metered_billing_enabled = True
+        self.org.save(update_fields=["metered_billing_enabled"])
+        self.sub.metered_item_id = "si_1"
+        self.sub.save(update_fields=["metered_item_id"])
+        self.assertTrue(self._status().json()["active"])
+
+        self.sub.metered_item_id = ""
+        self.sub.save(update_fields=["metered_item_id"])
+        body = self._status().json()
+        self.assertTrue(body["enabled"])
+        self.assertTrue(body["eligible"])
+        self.assertFalse(body["active"])
+
+    def test_active_false_when_plan_ineligible(self):
+        self.org.metered_billing_enabled = True
+        self.org.save(update_fields=["metered_billing_enabled"])
+        self.sub.metered_item_id = "si_1"
+        self.sub.save(update_fields=["metered_item_id"])
+        self.price.price = 0
+        self.price.save(update_fields=["price"])
+
+        body = self._status().json()
+        self.assertTrue(body["enabled"])
+        self.assertFalse(body["eligible"])
+        self.assertFalse(body["active"])
 
     def test_archived_overage_product_is_not_configured(self):
         """Archiving the overage product in Stripe turns the feature off — this
@@ -481,6 +511,8 @@ class OverageAPITestCase(TestCase):
         self.org.overage_last_reported_units = 40_000  # billed before the cap drop
         self.org.overage_last_reported_at = now - timedelta(hours=1)
         self.org.save()
+        self.sub.metered_item_id = "si_1"
+        self.sub.save(update_fields=["metered_item_id"])
 
         with patch(
             "apps.stripe.api.get_event_counts",
@@ -527,6 +559,8 @@ class OverageAPITestCase(TestCase):
         self.org.metered_billing_enabled = True
         self.org.overage_spend_cap_cents = 5000
         self.org.save()
+        self.sub.metered_item_id = "si_1"
+        self.sub.save(update_fields=["metered_item_id"])
 
         # 150k usage = 50k over the 100k quota; 50,000 * $0.00015 = $7.50.
         with patch(
@@ -536,3 +570,23 @@ class OverageAPITestCase(TestCase):
             body = self._status().json()
         self.assertEqual(body["overageUnits"], 50_000)
         self.assertEqual(body["overageCostCents"], 750)
+
+    def test_no_projected_cost_when_overage_is_inactive(self):
+        """A vanished metered item leaves `enabled` set, but the task meters
+        nothing — so the card must not project a charge no invoice will carry."""
+        from apps.organizations_ext.models import EventCounts
+
+        self.org.metered_billing_enabled = True
+        self.org.overage_spend_cap_cents = 5000
+        self.org.save()  # no metered_item_id: enabled and eligible, not active
+
+        with patch(
+            "apps.stripe.api.get_event_counts",
+            new=AsyncMock(return_value=EventCounts(issue_event_count=150_000)),
+        ):
+            body = self._status().json()
+        self.assertFalse(body["active"])
+        # The measurement stands; only the money is gated.
+        self.assertEqual(body["overageUnits"], 50_000)
+        self.assertEqual(body["capUnits"], units_for_budget(5000))
+        self.assertEqual(body["overageCostCents"], 0)

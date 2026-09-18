@@ -47,6 +47,7 @@ from .overage import (
     billable_units,
     cost_cents_for_units,
     cycle_quota,
+    overage_active,
     overage_eligible,
     units_for_budget,
 )
@@ -514,6 +515,7 @@ class OverageStatusSchema(CamelSchema):
     enabled: bool
     eligible: bool  # has an active paid subscription an overage item can attach to
     configured: bool  # an overage product/price is provisioned in Stripe
+    active: bool  # what the throttle task actually enforces
     cap_cents: int
     # The ceiling configure_overage enforces; served so the client validates
     # against it rather than a copy that drifts or blocks a raised env var.
@@ -572,6 +574,9 @@ async def get_overage_status(request: AuthHttpRequest, organization_slug: str):
     # POST would reject.
     plan_events = (sub.price.product.events or 0) if sub else 0
     eligible = overage_eligible(sub)
+    # Gate anything describing money on what the task enforces, not on the
+    # sticky opt-in flag.
+    active = overage_active(org)
     # Quota is a separate question from eligibility: an ineligible plan (unpaid,
     # comped, quota-less) still has whatever quota it has, and _check_and_update_
     # throttle enforces exactly this. Deriving it from `eligible` made the card
@@ -589,7 +594,7 @@ async def get_overage_status(request: AuthHttpRequest, organization_slug: str):
         # cap.
         quota = cycle_quota(org, period[0], quota)
     overage_units = max(0, usage - quota)
-    if period and org.metered_billing_enabled:
+    if period and active:
         billed_units = billable_units(
             overage_units,
             cap_units,
@@ -602,6 +607,7 @@ async def get_overage_status(request: AuthHttpRequest, organization_slug: str):
         "enabled": org.metered_billing_enabled,
         "eligible": eligible,
         "configured": await _get_overage_price() is not None,
+        "active": active,
         "cap_cents": org.overage_spend_cap_cents,
         "max_cap_cents": settings.GLITCHTIP_OVERAGE_MAX_CAP_CENTS,
         "cap_units": cap_units,

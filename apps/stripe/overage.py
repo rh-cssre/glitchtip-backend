@@ -6,7 +6,7 @@ functions mirror that schedule locally so we can (a) show an org its projected
 overage cost and (b) convert a dollar spend cap into a hard unit ceiling we stop
 reporting at. "units" are billable events above the plan quota.
 
-:func:`overage_eligible` lives here rather than beside the API views so the
+:func:`overage_active` lives here rather than beside the API views so the
 background throttle task — the only code that actually sends meter events —
 can apply the same predicate the API does without importing a router module.
 """
@@ -180,4 +180,24 @@ def overage_eligible(sub) -> bool:
         and sub.price.price > 0
         and not sub.price.no_throttle
         and (sub.price.product.events or 0) > 0
+    )
+
+
+def overage_active(org) -> bool:
+    """Whether overage billing is actually granting ``org`` headroom.
+
+    The predicate the throttle task enforces. ``metered_billing_enabled`` and
+    ``metered_item_id`` are both sticky state that can outlive what justified
+    them: a downgrade leaves the flag set, and the metered item is cleared to
+    "" when it disappears in Stripe while the flag is cleared only on terminal
+    statuses. Either drift silently throttles an org whose UI reads "overage
+    on". Callers must ``select_related``
+    ``stripe_primary_subscription__price__product`` to keep this DB-free.
+    """
+    sub = org.stripe_primary_subscription
+    return bool(
+        org.metered_billing_enabled
+        and sub
+        and sub.metered_item_id
+        and overage_eligible(sub)
     )
