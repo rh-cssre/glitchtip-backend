@@ -310,91 +310,116 @@ if settings.GLITCHTIP_ENABLE_MCP:
 
 # Serve /static/ here, above Django.
 #
-# ServeStatic is an ASGI app, not middleware: it answers from an index built
-# at startup and delegates everything else inward, so a static hit never
-# builds a Django request or walks MIDDLEWARE. Measured on this app, the same
-# library installed as Django middleware served 305 req/s; here it serves
-# 1764 -- Django's request pipeline, not the file serving, was the cost.
+# ServeStatic is an ASGI app, not middleware: it answers from an index built at
+# startup and delegates everything else inward, so a static hit never builds a
+# Django request or walks MIDDLEWARE. It negotiates the .br/.gz copies
+# collectstatic writes beside each file (see STORAGES["staticfiles"]), which
+# granian's --static-path-mount cannot do -- granian has no compression support
+# at all -- and it applies cache headers per file rather than one expiry for the
+# whole tree.
 #
-# It also negotiates the .br/.gz copies collectstatic writes beside each file
-# (see STORAGES["staticfiles"]), which granian's --static-path-mount cannot do
-# -- granian has no compression support at all -- and it applies cache headers
-# per file rather than one expiry for the whole tree.
+# Configured here in code rather than through servestatic's SERVESTATIC_*
+# settings: those are read by its Django middleware, which this deliberately
+# does not use. Only the ones the storage backend reads apply.
 from servestatic import ServeStaticASGI
+
+# Frozen at import, which is the only point it is well defined: django.setup()
+# has already installed FORCE_SCRIPT_NAME as the script prefix, so this carries
+# any BASE_PATH the app is mounted under and matches the path the ASGI scope
+# carries. Re-reading settings.STATIC_URL per request would read a value that
+# depends on when it was first read.
+_STATIC_PREFIX = settings.STATIC_URL
 
 # Everything that is not content-addressed is refetched this often, so an
 # upgrade cannot leave a client pinned to a stale copy for longer than this.
 _STATIC_MAX_AGE = 3600
 
 # The frontend build emits content-hashed bundles at the root of the collected
-# tree (main-KVU4SSHB.js, chunk-B0tvkw2C2.js, and the .map beside each). Their
-# names change whenever their contents do, so they are safe to cache forever.
+# tree (main-<hash>.js, chunk-<hash>.js, and the .map beside each). Their names
+# change whenever their contents do, so they are safe to cache forever.
 #
-# Hash length is NOT fixed: the current build ships 48 files with 8-character
-# hashes and 22 with 9. An {8} pattern silently downgraded those 22 to the
-# short TTL, so they were refetched hourly despite being immutable. The range
-# is deliberately wider than any observed value.
-_HASHED_BUNDLE = re.compile(r"-[A-Za-z0-9_-]{8,10}\.(?:js|css)(?:\.map)?$")
+# Hash width is not fixed -- the build mixes 8- and 9-character hashes -- so
+# this must not assume one width. The lookahead demands an upper-case letter or
+# a digit somewhere in the segment: every hash the build emits has one and
+# ordinary words do not, so a hand-added `main-override.css` or
+# `vendor-analytics.js` keeps the short TTL instead of matching the shape.
+# `immutable` is the one header a later deploy cannot take back, so where the
+# rule is unsure it has to be wrong in the harmless direction.
+_HASHED_BUNDLE = re.compile(
+    r"-(?=[A-Za-z0-9_-]*[A-Z0-9])[A-Za-z0-9_-]{8,10}\.(?:js|css)(?:\.map)?$"
+)
 
 
 def _is_hashed_asset(path: str, url: str) -> bool:
     """True only for the build's own hashed bundles at the tree root.
 
-    Everything in a subdirectory -- assets/ (i18n, fonts, images, 139 of 140
-    stable-named), admin/, allauth's -- keeps the short TTL, so a release
+    Everything in a subdirectory -- assets/ (i18n, fonts, images, none of them
+    content-hashed), admin/, allauth's -- keeps the short TTL, so a release
     cannot leave a client pinned to a stale copy.
     """
-    rel = url.removeprefix(settings.STATIC_URL)
+    rel = url.removeprefix(_STATIC_PREFIX)
     if "/" in rel:
         return False
     return bool(_HASHED_BUNDLE.search(rel))
 
 
-class FindersServeStatic(ServeStaticASGI):
-    """Resolve /static/ through the staticfiles finders instead of an index.
+def _add_security_headers(headers, path: str, url: str) -> None:
+    """Set the security headers MIDDLEWARE would have set.
 
-    Only used under DEBUG. A development checkout has no collected tree --
-    ``docker compose up`` runs the repo as-is and never calls collectstatic --
-    so indexing STATIC_ROOT at startup would find nothing and every asset the
-    admin, allauth and the SPA ask for would 404. Deferring to the finders is
-    what Django's own runserver does; it also picks up a rebuilt frontend
-    without restarting the server.
-
-    Requires ``autorefresh=True``: that is what makes ServeStatic consult
-    ``candidate_paths_for_url`` per request rather than a dict built at
-    startup.
+    Nothing below this layer runs for a file ServeStatic answers, so none of
+    SecurityMiddleware's or XFrameOptionsMiddleware's headers reach a static
+    response. ``nosniff`` belongs on the whole tree. The framing headers matter
+    because collectstatic copies the single-page app's index.html in with
+    everything else, and that copy boots the real, session-authenticated app
+    from the app's own origin -- without them it is a frameable, CSP-free second
+    front door to the same session.
     """
-
-    def candidate_paths_for_url(self, url):
-        if url.startswith(settings.STATIC_URL):
-            # url_is_canonical() has already rejected any traversal, and
-            # finders.find() only ever returns paths inside a configured
-            # static directory.
-            path = finders.find(url.removeprefix(settings.STATIC_URL))
-            if path:
-                yield path
-        yield from super().candidate_paths_for_url(url)
+    headers["X-Content-Type-Options"] = "nosniff"
+    if headers.get("Content-Type", "").startswith("text/html"):
+        headers["X-Frame-Options"] = "DENY"
+        headers["Content-Security-Policy"] = "frame-ancestors 'none'"
 
 
 def serve_static(app):
     """Wrap ``app`` so requests under STATIC_URL are answered before Django."""
-    if settings.DEBUG:
-        return FindersServeStatic(
+    if not settings.DEBUG:
+        return ServeStaticASGI(
             app,
-            autorefresh=True,
-            # An asset rebuilt under its own name has to show up on the next
-            # reload, so the only thing cached in dev is a content-hashed
-            # bundle -- whose name changes with its content anyway.
-            max_age=0,
+            root=settings.STATIC_ROOT,
+            prefix=_STATIC_PREFIX,
+            max_age=_STATIC_MAX_AGE,
             immutable_file_test=_is_hashed_asset,
+            add_headers_function=_add_security_headers,
         )
-    return ServeStaticASGI(
+
+    # Development has no collected tree: `docker compose up` runs the repo as it
+    # stands and never calls collectstatic, so indexing STATIC_ROOT would find
+    # nothing and every asset the admin, allauth and the SPA ask for would 404.
+    # Register the directories the staticfiles finders search instead and
+    # resolve against them per request -- which is what WhiteNoise did under
+    # DEBUG, and what runserver does.
+    #
+    # Registering directories rather than calling finders.find() keeps
+    # ServeStatic's own containment check, which compares resolved paths and so
+    # refuses a symlink inside a static directory that points out of it.
+    #
+    # Nothing is cached, including the hashed bundles: a dev build can be
+    # configured not to hash at all, and an asset rebuilt under its own name has
+    # to show up on the next reload.
+    static_app = ServeStaticASGI(
         app,
-        root=settings.STATIC_ROOT,
-        prefix=settings.STATIC_URL,
-        max_age=_STATIC_MAX_AGE,
-        immutable_file_test=_is_hashed_asset,
+        autorefresh=True,
+        max_age=0,
+        add_headers_function=_add_security_headers,
     )
+    for finder in finders.get_finders():
+        # Both finders Django enables by default expose their directories this
+        # way. A third-party finder that does not would simply not be served in
+        # development.
+        for storage in getattr(finder, "storages", {}).values():
+            prefix = _STATIC_PREFIX + (getattr(storage, "prefix", None) or "")
+            static_app.add_files(storage.location, prefix=prefix)
+    return static_app
 
 
 application = serve_static(application)

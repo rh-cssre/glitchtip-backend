@@ -1,9 +1,12 @@
 import gzip
+import os
 import tempfile
 from pathlib import Path
 
 import brotli
+from django.http import HttpResponse
 from django.test import SimpleTestCase, override_settings
+from django.urls import path
 
 from glitchtip.asgi import _is_hashed_asset, serve_static
 
@@ -83,13 +86,19 @@ class HashedAssetTestCase(SimpleTestCase):
             # No hash at all.
             "/static/index.html",
             "/static/favicon.ico",
+            # Word-shaped names of the same length as a hash. `immutable` is
+            # the one header a deploy cannot take back, so a file an operator
+            # dropped into the tree by hand must not match on shape alone.
+            "/static/main-override.css",
+            "/static/vendor-analytics.js",
+            "/static/runtime-polyfill.js",
         ):
             with self.subTest(url=url):
                 self.assertFalse(_is_hashed_asset("", url))
 
-    def test_nine_character_hashes_are_immutable(self):
-        """The build mixes hash lengths; an exact-width pattern missed 22 of
-        the 70 bundles and quietly gave them the short TTL instead."""
+    def test_a_wider_hash_is_still_immutable(self):
+        """The build mixes hash widths within a single release. An exact-width
+        pattern quietly gave the odd ones out the short TTL instead."""
         self.assertTrue(_is_hashed_asset("", "/static/chunk-B5PKTg242.js"))
 
 
@@ -104,6 +113,7 @@ class StaticRootTestCase(SimpleTestCase):
         (root / "main-ABCDEFGH.js").write_bytes(self.bundle)
         (root / "main-ABCDEFGH.js.br").write_bytes(brotli.compress(self.bundle))
         (root / "main-ABCDEFGH.js.gz").write_bytes(gzip.compress(self.bundle))
+        (root / "index.html").write_bytes(b"<!doctype html><html></html>")
         (root / "assets").mkdir()
         (root / "assets" / "messages.json").write_bytes(b'{"hello": "world"}')
         self.inner = MockASGIApp()
@@ -149,6 +159,20 @@ class StaticRootTestCase(SimpleTestCase):
         await request(self.app, "/api/0/organizations/", "gzip")
         self.assertTrue(self.inner.called)
 
+    async def test_every_static_response_carries_nosniff(self):
+        """MIDDLEWARE never runs for a file served here, so the headers it
+        would have set have to be set at this layer instead."""
+        _, headers, _ = await request(self.app, "/static/main-ABCDEFGH.js", "br")
+        self.assertEqual(headers["x-content-type-options"], "nosniff")
+
+    async def test_html_in_the_static_tree_cannot_be_framed(self):
+        """collectstatic copies the SPA's index.html into the tree. That copy
+        boots the real, session-authenticated app from the app's own origin, so
+        without these headers it is a frameable, CSP-free second front door."""
+        _, headers, _ = await request(self.app, "/static/index.html", "gzip")
+        self.assertEqual(headers["x-frame-options"], "DENY")
+        self.assertEqual(headers["content-security-policy"], "frame-ancestors 'none'")
+
 
 class DebugFindersTestCase(SimpleTestCase):
     """Dev has no collected tree: `docker compose up` never runs collectstatic,
@@ -158,12 +182,7 @@ class DebugFindersTestCase(SimpleTestCase):
         with tempfile.TemporaryDirectory() as source:
             (Path(source) / "logo.svg").write_bytes(b"<svg/>")
             inner = MockASGIApp()
-            with override_settings(
-                DEBUG=True,
-                STATICFILES_DIRS=[source],
-                # A stale collected tree must not shadow the live sources.
-                STATIC_ROOT=tempfile.gettempdir(),
-            ):
+            with override_settings(DEBUG=True, STATICFILES_DIRS=[source]):
                 app = serve_static(inner)
                 status, headers, body = await request(app, "/static/logo.svg", "gzip")
         self.assertEqual(status, 200)
@@ -182,10 +201,63 @@ class DebugFindersTestCase(SimpleTestCase):
         self.assertEqual(status, 200)
         self.assertEqual(body, b"body{}")
 
-    async def test_traversal_outside_the_static_dirs_is_refused(self):
-        with tempfile.TemporaryDirectory() as source:
+    async def test_a_symlink_out_of_a_static_dir_is_refused(self):
+        """Registering the finders' directories, rather than delegating to
+        finders.find(), is what keeps ServeStatic's containment check -- and
+        that check is the only thing that resolves symlinks. A link inside a
+        static directory pointing outside it must not be served."""
+        with (
+            tempfile.TemporaryDirectory() as source,
+            tempfile.TemporaryDirectory() as outside,
+        ):
+            secret = Path(outside) / "secret.txt"
+            secret.write_bytes(b"not static")
+            os.symlink(secret, Path(source) / "link.txt")
             inner = MockASGIApp()
             with override_settings(DEBUG=True, STATICFILES_DIRS=[source]):
                 app = serve_static(inner)
-                await request(app, "/static/../../glitchtip/settings.py", "gzip")
+                status, _, body = await request(app, "/static/link.txt", "gzip")
+        self.assertIsNone(status)
+        self.assertNotIn(b"not static", body)
         self.assertTrue(inner.called)
+
+    async def test_nothing_in_development_is_cached(self):
+        """Including the hashed bundles: a dev build can be configured not to
+        hash, and a rebuild under the same name has to show up on reload."""
+        with tempfile.TemporaryDirectory() as source:
+            (Path(source) / "main-ABCDEFGH.js").write_bytes(b"x")
+            with override_settings(DEBUG=True, STATICFILES_DIRS=[source]):
+                app = serve_static(MockASGIApp())
+                _, headers, _ = await request(app, "/static/main-ABCDEFGH.js", "gzip")
+        self.assertEqual(headers["cache-control"], "max-age=0, public")
+
+
+async def gzip_probe_view(request):
+    """A body comfortably over the 200-byte floor Django's GZipMiddleware
+    refuses to compress below."""
+    return HttpResponse("compress me " * 500, content_type="text/plain")
+
+
+urlpatterns = [path("gzip-probe/", gzip_probe_view)]
+
+
+@override_settings(ROOT_URLCONF=__name__)
+class GZipMiddlewareTestCase(SimpleTestCase):
+    """ServeStatic covers /static/; GZipMiddleware covers everything Django
+    renders itself. Between them every response GlitchTip sends is compressed
+    with nothing to configure, which is the point of the pair -- so assert the
+    half that runs inside Django, through the project's real MIDDLEWARE."""
+
+    async def test_a_django_response_is_gzipped(self):
+        response = await self.async_client.get(
+            "/gzip-probe/", headers={"accept-encoding": "gzip"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Content-Encoding"], "gzip")
+        self.assertIn("Accept-Encoding", response.headers["Vary"])
+        self.assertLess(len(response.content), 6000)
+
+    async def test_a_client_that_does_not_accept_gzip_gets_the_original(self):
+        response = await self.async_client.get("/gzip-probe/")
+        self.assertNotIn("Content-Encoding", response.headers)
+        self.assertEqual(response.content, b"compress me " * 500)
