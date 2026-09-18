@@ -50,6 +50,7 @@ class IngestDispatcher:
     Skipped for ingest (saves ~8 middleware calls per request):
     - SessionMiddleware
     - CSP / XFrameOptions / Clickjacking
+    - GZipMiddleware (ingest replies are a few bytes; nothing to compress)
     - CommonMiddleware
     - CsrfViewMiddleware
     - AuthenticationMiddleware

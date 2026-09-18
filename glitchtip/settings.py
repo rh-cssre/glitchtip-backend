@@ -504,9 +504,10 @@ if SENTRY_DSN:
 
         return event
 
-    # Ignore static file routes. Granian serves them from its own mount
-    # before the request reaches Django, so these only appear when Django
-    # serves static itself (DEBUG). The path comes off the ASGI
+    # Ignore static file routes. ServeStatic answers the ones that exist
+    # above Django (glitchtip/asgi.py), so what reaches this sampler is a
+    # request for a static file that is missing -- still not worth a
+    # transaction. The path comes off the ASGI
     # scope; STATIC_URL is stored without a leading slash, so it is compared
     # against the request path in the rooted form the scope carries, including
     # any BASE_PATH the app is mounted under. A prefix of "/" would match every
@@ -675,10 +676,10 @@ PROMETHEUS_EXPORT_MIGRATIONS = False
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     # Compresses what Django itself serves: the SPA's index.html and every API
-    # response. Static files never reach here -- granian serves /static/ from
-    # its own mount, and it cannot compress, so this is the only compression
-    # GlitchTip has out of the box. Put a CDN or a compressing proxy in front
-    # to cover /static/ too.
+    # response. Static files never reach here -- ServeStatic answers /static/
+    # above Django and hands out the .br/.gz copies collectstatic already
+    # wrote, so between the two every response GlitchTip sends is compressed
+    # out of the box, with no proxy or CDN to configure first.
     #
     # Listed early (outermost) so the body is compressed after every other
     # middleware has finished writing it. The ingest hot path is unaffected:
