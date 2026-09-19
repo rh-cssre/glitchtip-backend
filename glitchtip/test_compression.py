@@ -6,11 +6,7 @@ from django.http import HttpResponse, StreamingHttpResponse
 from django.test import SimpleTestCase, override_settings
 from django.urls import path
 
-from glitchtip.compression import (
-    MIN_COMPRESSIBLE_LENGTH,
-    accepted_encodings,
-    compress_response,
-)
+from glitchtip.compression import MIN_COMPRESSIBLE_LENGTH, accepted_encodings
 
 BODY = "compress me " * 500
 
@@ -31,6 +27,12 @@ async def streaming_view(request):
     return StreamingHttpResponse(streaming_body(), content_type="text/plain")
 
 
+async def incompressible_view(request):
+    return HttpResponse(
+        secrets.token_bytes(4096), content_type="application/octet-stream"
+    )
+
+
 async def already_encoded_view(request):
     response = HttpResponse(BODY, content_type="text/plain")
     response["Content-Encoding"] = "br"
@@ -42,30 +44,29 @@ urlpatterns = [
     path("tiny/", tiny_view),
     path("streaming/", streaming_view),
     path("already-encoded/", already_encoded_view),
+    path("incompressible/", incompressible_view),
 ]
 
 
 class AcceptedEncodingsTestCase(SimpleTestCase):
-    def test_plain_list(self):
-        self.assertEqual(
-            accepted_encodings("gzip, deflate, br"), {"gzip", "deflate", "br"}
-        )
+    def test_header_shapes(self):
+        cases = {
+            "gzip, deflate, br": {"gzip", "deflate", "br"},
+            "gzip;q=0.5, br;q=1.0": {"gzip", "br"},
+            "": set(),
+            # A bare `*` is deliberately not expanded into a concrete encoding.
+            "*": {"*"},
+        }
+        for header, expected in cases.items():
+            with self.subTest(header=header):
+                self.assertEqual(accepted_encodings(header), expected)
 
-    def test_quality_zero_is_a_refusal_not_an_offer(self):
-        """`gzip;q=0` means the client does not want gzip. Reading it as an
-        offer would send a body it asked us not to send."""
+    def test_zero_weight_is_a_refusal_not_an_offer(self):
+        """Django matches `gzip` as a substring, so it reads `gzip;q=0` -- a
+        client explicitly refusing gzip -- as an offer. Anything weighted zero,
+        or unparseable, is not on offer."""
         self.assertEqual(accepted_encodings("br, gzip;q=0"), {"br"})
-
-    def test_weights_other_than_zero_are_accepted(self):
-        self.assertEqual(accepted_encodings("gzip;q=0.5, br;q=1.0"), {"gzip", "br"})
-
-    def test_junk_is_not_an_offer(self):
         self.assertEqual(accepted_encodings("gzip;q=banana"), set())
-
-    def test_empty_and_wildcard(self):
-        self.assertEqual(accepted_encodings(""), set())
-        # A bare `*` is deliberately not expanded into a concrete encoding.
-        self.assertEqual(accepted_encodings("*"), {"*"})
 
 
 @override_settings(ROOT_URLCONF=__name__)
@@ -143,14 +144,9 @@ class CompressionMiddlewareTestCase(SimpleTestCase):
         self.assertNotIn("Content-Encoding", response.headers)
         self.assertEqual(b"".join([chunk async for chunk in response]).decode(), BODY)
 
-
-class IncompressibleContentTestCase(SimpleTestCase):
-    """A body that grows under compression is sent as it was."""
-
-    def test_random_bytes_are_left_uncompressed(self):
-        incompressible = secrets.token_bytes(4096)
-        response = HttpResponse(incompressible, content_type="application/octet-stream")
-        request = type("R", (), {"META": {"HTTP_ACCEPT_ENCODING": "br, gzip"}})()
-        compress_response(request, response)
+    async def test_a_body_that_would_grow_is_left_alone(self):
+        response = await self.async_client.get(
+            "/incompressible/", headers={"accept-encoding": "br, gzip"}
+        )
         self.assertNotIn("Content-Encoding", response.headers)
-        self.assertEqual(response.content, incompressible)
+        self.assertEqual(len(response.content), 4096)

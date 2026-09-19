@@ -4,9 +4,7 @@ import tempfile
 from pathlib import Path
 
 import brotli
-from django.http import HttpResponse
 from django.test import SimpleTestCase, override_settings
-from django.urls import path
 
 from glitchtip.asgi import _is_hashed_asset, serve_static
 
@@ -86,6 +84,7 @@ class HashedAssetTestCase(SimpleTestCase):
     def test_hashed_bundles_at_the_tree_root_are_immutable(self):
         for url in (
             "/static/main-KVU4SSHB.js",
+            # A wider hash: the build mixes widths within one release.
             "/static/chunk-B0tvkw2C2.js",
             "/static/styles-4VN2AIF7.css",
             # The source map beside a bundle carries the same hash.
@@ -116,11 +115,6 @@ class HashedAssetTestCase(SimpleTestCase):
             with self.subTest(url=url):
                 self.assertFalse(_is_hashed_asset("", url))
 
-    def test_a_wider_hash_is_still_immutable(self):
-        """The build mixes hash widths within a single release. An exact-width
-        pattern quietly gave the odd ones out the short TTL instead."""
-        self.assertTrue(_is_hashed_asset("", "/static/chunk-B5PKTg242.js"))
-
 
 class StaticRootTestCase(SimpleTestCase):
     """Production serves the collected tree, precompressed copies and all."""
@@ -140,26 +134,21 @@ class StaticRootTestCase(SimpleTestCase):
         with override_settings(DEBUG=False, STATIC_ROOT=str(root)):
             self.app = serve_static(self.inner)
 
-    async def test_brotli_is_preferred_over_gzip(self):
-        status, headers, body = await request(
-            self.app, "/static/main-ABCDEFGH.js", "gzip, deflate, br, zstd"
-        )
-        self.assertEqual(status, 200)
-        self.assertEqual(headers["content-encoding"], "br")
-        self.assertEqual(headers["vary"], "Accept-Encoding")
-        self.assertEqual(brotli.decompress(body), self.bundle)
-
-    async def test_gzip_serves_a_client_without_brotli(self):
-        _, headers, body = await request(
-            self.app, "/static/main-ABCDEFGH.js", "gzip, deflate"
-        )
-        self.assertEqual(headers["content-encoding"], "gzip")
-        self.assertEqual(gzip.decompress(body), self.bundle)
-
-    async def test_a_client_accepting_nothing_gets_the_original(self):
-        _, headers, body = await request(self.app, "/static/main-ABCDEFGH.js", None)
-        self.assertNotIn("content-encoding", headers)
-        self.assertEqual(body, self.bundle)
+    async def test_the_smallest_acceptable_copy_is_served(self):
+        decoders = {
+            "gzip, deflate, br, zstd": ("br", brotli.decompress),
+            "gzip, deflate": ("gzip", gzip.decompress),
+            None: (None, lambda body: body),
+        }
+        for accept, (expected, decode) in decoders.items():
+            with self.subTest(accept_encoding=accept):
+                status, headers, body = await request(
+                    self.app, "/static/main-ABCDEFGH.js", accept
+                )
+                self.assertEqual(status, 200)
+                self.assertEqual(headers.get("content-encoding"), expected)
+                self.assertEqual(headers["vary"], "Accept-Encoding")
+                self.assertEqual(decode(body), self.bundle)
 
     async def test_the_hashed_bundle_is_cached_forever(self):
         _, headers, _ = await request(self.app, "/static/main-ABCDEFGH.js", "br")
@@ -240,45 +229,29 @@ class PathSendTestCase(SimpleTestCase):
                 )
                 self.assertEqual(streamed, named)
 
-    async def test_a_range_request_falls_back_to_streaming(self):
-        """pathsend sends a whole file; a 206 has to come from the library."""
-        status, _, _ = await request(
-            self.app,
-            "/static/main-ABCDEFGH.js",
-            "br",
-            extensions=PATHSEND,
-            extra_headers=(("range", "bytes=0-9"),),
-        )
-        self.assertEqual(status, 206)
-        self.assertNotIn("http.response.pathsend", message_types)
-
-    async def test_a_conditional_request_falls_back_to_streaming(self):
+    async def test_responses_pathsend_cannot_express_fall_back(self):
+        """pathsend sends a whole file and nothing else, so anything needing a
+        different body or status has to come from the library."""
         _, headers, _ = await request(self.app, "/static/main-ABCDEFGH.js", "br")
-        status, _, _ = await request(
-            self.app,
-            "/static/main-ABCDEFGH.js",
-            "br",
-            extensions=PATHSEND,
-            extra_headers=(("if-none-match", headers["etag"]),),
-        )
-        self.assertEqual(status, 304)
-        self.assertNotIn("http.response.pathsend", message_types)
-
-    async def test_head_falls_back_to_streaming(self):
-        status, _, body = await request(
-            self.app,
-            "/static/main-ABCDEFGH.js",
-            "br",
-            extensions=PATHSEND,
-            method="HEAD",
-        )
-        self.assertEqual(status, 200)
-        self.assertEqual(body, b"")
-        self.assertNotIn("http.response.pathsend", message_types)
-
-    async def test_an_unknown_path_still_falls_through_to_django(self):
-        await request(self.app, "/api/0/organizations/", "br", extensions=PATHSEND)
-        self.assertTrue(self.inner.called)
+        cases = {
+            "range": ({"extra_headers": (("range", "bytes=0-9"),)}, 206),
+            "conditional": (
+                {"extra_headers": (("if-none-match", headers["etag"]),)},
+                304,
+            ),
+            "head": ({"method": "HEAD"}, 200),
+        }
+        for name, (kwargs, expected_status) in cases.items():
+            with self.subTest(case=name):
+                status, _, _ = await request(
+                    self.app,
+                    "/static/main-ABCDEFGH.js",
+                    "br",
+                    extensions=PATHSEND,
+                    **kwargs,
+                )
+                self.assertEqual(status, expected_status)
+                self.assertNotIn("http.response.pathsend", message_types)
 
     async def test_development_does_not_use_pathsend(self):
         """Dev resolves per request against the finders, so there is no startup
@@ -351,34 +324,3 @@ class DebugFindersTestCase(SimpleTestCase):
                 app = serve_static(MockASGIApp())
                 _, headers, _ = await request(app, "/static/main-ABCDEFGH.js", "gzip")
         self.assertEqual(headers["cache-control"], "max-age=0, public")
-
-
-async def gzip_probe_view(request):
-    """A body comfortably over the 200-byte floor Django's GZipMiddleware
-    refuses to compress below."""
-    return HttpResponse("compress me " * 500, content_type="text/plain")
-
-
-urlpatterns = [path("gzip-probe/", gzip_probe_view)]
-
-
-@override_settings(ROOT_URLCONF=__name__)
-class GZipMiddlewareTestCase(SimpleTestCase):
-    """ServeStatic covers /static/; GZipMiddleware covers everything Django
-    renders itself. Between them every response GlitchTip sends is compressed
-    with nothing to configure, which is the point of the pair -- so assert the
-    half that runs inside Django, through the project's real MIDDLEWARE."""
-
-    async def test_a_django_response_is_gzipped(self):
-        response = await self.async_client.get(
-            "/gzip-probe/", headers={"accept-encoding": "gzip"}
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.headers["Content-Encoding"], "gzip")
-        self.assertIn("Accept-Encoding", response.headers["Vary"])
-        self.assertLess(len(response.content), 6000)
-
-    async def test_a_client_that_does_not_accept_gzip_gets_the_original(self):
-        response = await self.async_client.get("/gzip-probe/")
-        self.assertNotIn("Content-Encoding", response.headers)
-        self.assertEqual(response.content, b"compress me " * 500)

@@ -310,43 +310,36 @@ if settings.GLITCHTIP_ENABLE_MCP:
 
 # Serve /static/ here, above Django.
 #
-# ServeStatic is an ASGI app, not middleware: it answers from an index built at
-# startup and delegates everything else inward, so a static hit never builds a
-# Django request or walks MIDDLEWARE. It negotiates the .br/.gz copies
-# collectstatic writes beside each file (see STORAGES["staticfiles"]), which
-# granian's --static-path-mount cannot do -- granian has no compression support
-# at all -- and it applies cache headers per file rather than one expiry for the
-# whole tree.
+# ServeStatic is an ASGI app, not middleware, so a static hit answers from an
+# index built at startup without building a Django request or walking
+# MIDDLEWARE. It serves the .br/.gz copies collectstatic writes beside each file
+# and sets cache headers per file; granian's --static-path-mount can do neither.
 #
-# Configured here in code rather than through servestatic's SERVESTATIC_*
-# settings: those are read by its Django middleware, which this deliberately
-# does not use. Only the ones the storage backend reads apply.
+# The SERVESTATIC_* settings do not apply: those are read by servestatic's
+# Django middleware, which this does not use.
 from servestatic import ServeStaticASGI
 from servestatic.responders import StaticFile
 from servestatic.utils import decode_path_info
 
-# Frozen at import, which is the only point it is well defined: django.setup()
-# has already installed FORCE_SCRIPT_NAME as the script prefix, so this carries
-# any BASE_PATH the app is mounted under and matches the path the ASGI scope
-# carries. Re-reading settings.STATIC_URL per request would read a value that
-# depends on when it was first read.
+# django.setup() has already installed FORCE_SCRIPT_NAME as the script prefix, so
+# this carries any BASE_PATH and matches the path the ASGI scope carries. Read
+# once: settings.STATIC_URL resolves against whatever prefix is current, so its
+# value depends on when it is first read.
 _STATIC_PREFIX = settings.STATIC_URL
 
 # Everything that is not content-addressed is refetched this often, so an
 # upgrade cannot leave a client pinned to a stale copy for longer than this.
 _STATIC_MAX_AGE = 3600
 
-# The frontend build emits content-hashed bundles at the root of the collected
-# tree (main-<hash>.js, chunk-<hash>.js, and the .map beside each). Their names
-# change whenever their contents do, so they are safe to cache forever.
+# Content-hashed bundles at the root of the collected tree -- main-<hash>.js and
+# the .map beside it -- change name whenever their contents do, so they are safe
+# to cache forever.
 #
-# Hash width is not fixed -- the build mixes 8- and 9-character hashes -- so
-# this must not assume one width. The lookahead demands an upper-case letter or
-# a digit somewhere in the segment: every hash the build emits has one and
-# ordinary words do not, so a hand-added `main-override.css` or
-# `vendor-analytics.js` keeps the short TTL instead of matching the shape.
-# `immutable` is the one header a later deploy cannot take back, so where the
-# rule is unsure it has to be wrong in the harmless direction.
+# The build mixes hash widths, so this cannot assume one. The lookahead demands
+# an upper-case letter or a digit in the segment, which every hash has and
+# ordinary words do not: without it `main-override.css` matches the shape and
+# gets pinned. `immutable` is the one header a later deploy cannot take back, so
+# an unsure match has to fall the harmless way.
 _HASHED_BUNDLE = re.compile(
     r"-(?=[A-Za-z0-9_-]*[A-Z0-9])[A-Za-z0-9_-]{8,10}\.(?:js|css)(?:\.map)?$"
 )
@@ -355,9 +348,8 @@ _HASHED_BUNDLE = re.compile(
 def _is_hashed_asset(path: str, url: str) -> bool:
     """True only for the build's own hashed bundles at the tree root.
 
-    Everything in a subdirectory -- assets/ (i18n, fonts, images, none of them
-    content-hashed), admin/, allauth's -- keeps the short TTL, so a release
-    cannot leave a client pinned to a stale copy.
+    Anything in a subdirectory -- assets/, admin/, allauth's -- keeps its name
+    across a release, so it keeps the short TTL.
     """
     rel = url.removeprefix(_STATIC_PREFIX)
     if "/" in rel:
@@ -368,13 +360,12 @@ def _is_hashed_asset(path: str, url: str) -> bool:
 def _add_security_headers(headers, path: str, url: str) -> None:
     """Set the security headers MIDDLEWARE would have set.
 
-    Nothing below this layer runs for a file ServeStatic answers, so none of
-    SecurityMiddleware's or XFrameOptionsMiddleware's headers reach a static
-    response. ``nosniff`` belongs on the whole tree. The framing headers matter
-    because collectstatic copies the single-page app's index.html in with
-    everything else, and that copy boots the real, session-authenticated app
-    from the app's own origin -- without them it is a frameable, CSP-free second
-    front door to the same session.
+    Nothing below this layer runs for a file answered here, so none of
+    SecurityMiddleware's or XFrameOptionsMiddleware's headers reach it.
+    The framing headers are the point: collectstatic copies the SPA's
+    index.html into the tree, and that copy boots the session-authenticated app
+    from the app's own origin. Unprotected it is a frameable, CSP-free second
+    front door.
     """
     headers["X-Content-Type-Options"] = "nosniff"
     if headers.get("Content-Type", "").startswith("text/html"):
@@ -383,23 +374,20 @@ def _add_security_headers(headers, path: str, url: str) -> None:
 
 
 class PathSendServeStatic(ServeStaticASGI):
-    """ServeStatic that hands the file to the server instead of reading it.
+    """ServeStatic that names the file for the server instead of reading it.
 
-    Reading a static file from Python costs a thread, because asyncio has no
-    file I/O to offer: epoll refuses regular files, so every "async file" in the
-    ecosystem is a thread pool underneath. servestatic builds one
-    ``ThreadPoolExecutor`` per response and reads in 8 KiB blocks, and the bytes
-    cross into Python only to be handed straight back for the socket write.
+    Reading a file from Python costs a thread: asyncio has no file I/O, because
+    epoll refuses regular files, so every "async file" library is a thread pool
+    underneath. servestatic builds a ``ThreadPoolExecutor`` per response and
+    reads in 8 KiB blocks, and the bytes enter Python only to be handed back for
+    the socket write.
 
-    The ``http.response.pathsend`` ASGI extension removes that round trip: we
-    send the headers this layer computed, then name the file, and the server
-    transfers it from its own runtime. Python never opens it -- a static hit
-    makes no filesystem call at all.
+    ``http.response.pathsend`` removes that round trip: send the headers
+    computed here, then name the file, and the server transfers it itself.
+    Python never opens it.
 
-    Servers that do not implement the extension leave it out of
-    ``scope["extensions"]`` and get the streaming path unchanged, so this stays
-    a pure optimisation rather than a requirement. GlitchTip ships granian,
-    which implements it.
+    Servers without the extension leave it out of ``scope["extensions"]`` and
+    keep the streaming path, so this is an optimisation, not a requirement.
     """
 
     async def __call__(self, scope, receive, send) -> None:
@@ -428,9 +416,8 @@ class PathSendServeStatic(ServeStaticASGI):
         if "http.response.pathsend" not in (scope.get("extensions") or {}):
             return None
         if self.autorefresh:
-            # Development resolves per request against the finders rather than
-            # a startup index, and has no precompressed copies to choose
-            # between; it gains nothing here.
+            # Development resolves against the finders per request, so there is
+            # no startup index to name a file from.
             return None
         static_file = self.files.get(decode_path_info(scope["path"]))
         if not isinstance(static_file, StaticFile):
@@ -441,8 +428,7 @@ class PathSendServeStatic(ServeStaticASGI):
             )
             for key, value in scope["headers"]
         }
-        # Conditional and range requests have responses of their own, and the
-        # library already builds those correctly.
+        # Conditional and range requests need responses of their own.
         if "HTTP_RANGE" in request_headers or static_file.is_not_modified(
             request_headers
         ):
@@ -462,20 +448,15 @@ def serve_static(app):
             add_headers_function=_add_security_headers,
         )
 
-    # Development has no collected tree: `docker compose up` runs the repo as it
-    # stands and never calls collectstatic, so indexing STATIC_ROOT would find
-    # nothing and every asset the admin, allauth and the SPA ask for would 404.
-    # Register the directories the staticfiles finders search instead and
-    # resolve against them per request -- which is what WhiteNoise did under
-    # DEBUG, and what runserver does.
+    # Development never runs collectstatic, so there is no tree to index and
+    # everything would 404. Resolve against the directories the staticfiles
+    # finders search instead, as WhiteNoise did under DEBUG and runserver does.
     #
     # Registering directories rather than calling finders.find() keeps
-    # ServeStatic's own containment check, which compares resolved paths and so
-    # refuses a symlink inside a static directory that points out of it.
+    # ServeStatic's containment check, which compares resolved paths and so
+    # refuses a symlink pointing out of a static directory.
     #
-    # Nothing is cached, including the hashed bundles: a dev build can be
-    # configured not to hash at all, and an asset rebuilt under its own name has
-    # to show up on the next reload.
+    # Nothing is cached: a dev build can be configured not to hash at all.
     static_app = PathSendServeStatic(
         app,
         autorefresh=True,
@@ -483,9 +464,7 @@ def serve_static(app):
         add_headers_function=_add_security_headers,
     )
     for finder in finders.get_finders():
-        # Both finders Django enables by default expose their directories this
-        # way. A third-party finder that does not would simply not be served in
-        # development.
+        # Both finders Django enables by default expose their directories here.
         for storage in getattr(finder, "storages", {}).values():
             prefix = _STATIC_PREFIX + (getattr(storage, "prefix", None) or "")
             static_app.add_files(storage.location, prefix=prefix)

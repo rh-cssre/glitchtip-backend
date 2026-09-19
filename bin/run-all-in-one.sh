@@ -28,16 +28,9 @@ PORT=${GRANIAN_PORT:-${PORT:-8000}}
 
 G_LOG_LEVEL=${GRANIAN_LOG_LEVEL:-INFO}
 
-# Static files are served by ServeStatic inside the ASGI app (glitchtip/asgi.py),
-# which negotiates the precompressed .br/.gz copies collectstatic writes and sets
-# cache headers per file. Granian's own mount can do neither: it has no
-# compression support and applies one expiry to the whole tree.
-#
-# Nothing to set here -- granian only mounts static when GRANIAN_STATIC_PATH_MOUNT
-# is set, and an operator who would rather have granian serve them can still set
-# it in the environment. Granian then answers those requests in Rust before the
-# ASGI app sees them, trading compression and per-file caching for raw
-# throughput.
+# Static files are served by ServeStatic inside the ASGI app (glitchtip/asgi.py).
+# Setting GRANIAN_STATIC_PATH_MOUNT hands /static/ back to granian instead, which
+# is faster but cannot compress.
 
 if [ "${ENABLE_OBSERVABILITY_API}" = "True" ] || [ "${ENABLE_OBSERVABILITY_API}" = "true" ] || [ "${ENABLE_OBSERVABILITY_API}" = "1" ]; then
     if [ "$WORKERS" -gt 1 ]; then

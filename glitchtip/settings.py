@@ -712,25 +712,13 @@ ASYNC_BACKEND_DISABLE_REQUEST_SIGNALS = True
 # system checks if this goes missing.
 MIDDLEWARE.insert(0, "glitchtip.async_db.recycle_async_connections_middleware")
 
-# Compresses what Django itself serves: the SPA's index.html and every API
-# response. Static files never reach here -- ServeStatic answers /static/ above
-# Django and hands out the .br/.gz copies collectstatic already wrote, so
-# between the two every response GlitchTip sends is compressed out of the box,
-# with no proxy or CDN to configure first. See glitchtip/compression.py for why
-# this is not Django's GZipMiddleware.
+# Compresses the SPA's index.html and every API response. Static files are
+# already compressed on disk and never reach here. Nothing to configure, and a
+# CDN or compressing proxy in front still works. See glitchtip/compression.py.
 #
-# Inserted last, which makes it the outermost middleware: the response phase
-# runs in reverse, so compression happens after every other middleware has
-# finished with the response -- including close_async_connections, which means
-# the pooled database connection is back before the body is compressed rather
-# than held for the length of it. The ingest hot path is unaffected: it runs its
-# own minimal middleware list (glitchtip/ingest_asgi.py) and its responses are a
-# few bytes anyway.
-#
-# BREACH applies to any compression of authenticated responses, whether done
-# here or at a proxy. Every compressed response is padded with a random number
-# of bytes, which is the mitigation doing the work; per-request CSRF token
-# masking covers the classic token-extraction variant on top of that.
+# Inserted last so it is outermost: the response phase runs in reverse, so the
+# body is compressed after every other middleware is done with it -- including
+# close_async_connections, so the pooled database connection is back first.
 MIDDLEWARE.insert(0, "glitchtip.compression.compression_middleware")
 
 ROOT_URLCONF = "glitchtip.urls"
@@ -1143,18 +1131,15 @@ USE_I18N = True
 
 USE_TZ = True
 
-# Underscored: Django removed its own STATICFILES_STORAGE setting, and a
-# module-level upper-case name here is a Django setting. The environment
-# variable keeps the familiar name.
+# Underscored because Django removed its own STATICFILES_STORAGE setting and an
+# upper-case name here would look like one. The env var keeps the familiar name.
 _staticfiles_storage = env.str(
     "STATICFILES_STORAGE", "servestatic.storage.CompressedStaticFilesStorage"
 )
 if _staticfiles_storage.startswith("whitenoise.storage."):
-    # GlitchTip served static through WhiteNoise until it moved to ServeStatic,
-    # a fork of it that keeps the same backend class names. WhiteNoise is no
-    # longer installed, so an operator who pinned one of its backends would get
-    # an ImportError at boot. Translate and warn instead of refusing to start;
-    # remove this on the next major release.
+    # WhiteNoise is no longer installed, so a pinned WhiteNoise backend would
+    # fail at boot. ServeStatic is a fork of it and keeps the same class names,
+    # so translate and warn rather than refuse to start. Removed next major.
     _servestatic_backend = _staticfiles_storage.replace(
         "whitenoise.storage.", "servestatic.storage.", 1
     )
@@ -1210,24 +1195,19 @@ MEDIA_ROOT = env.str("MEDIA_ROOT", "")
 STATICFILES_DIRS = [
     "assets",
     # The frontend build, source maps included. Publishing them is deliberate:
-    # GlitchTip is open source, and a stack trace an operator can read back to
-    # real source is worth more than the bytes. They are not dead weight in the
-    # image either -- they compress to a fifth of their size and a browser only
-    # fetches one when devtools is open. Do not strip them to save space.
+    # GlitchTip is open source, and a readable stack trace is worth more than
+    # the bytes -- which are few, since they compress well and are only fetched
+    # with devtools open. Do not strip them to save space.
     "dist",
 ]
 STATIC_ROOT = path("static/")
 
-# collectstatic writes a compressed copy beside every compressible file and
-# ServeStatic hands out the smallest one the client accepts. Cost is paid once
-# per image build, never at request time.
+# collectstatic writes a compressed copy beside every compressible file, once
+# per image build. ServeStatic then serves the smallest one the client accepts.
 #
-# Zstandard is off. Measured over the collected tree, brotli produced the
-# smaller file for 493 of the 494 compressible files even against zstd at its
-# highest level (4.70 MB of .br against 4.96 MB of .zstd), and every browser
-# that sends `zstd` in Accept-Encoding also sends `br` -- so the .zstd copies
-# would never be the smallest acceptable option and never be served. Leaving
-# them on would add ~5 MB to the image for nothing.
+# Zstandard is off: brotli was smaller for all but one file in the tree even
+# against zstd at its highest level, and every browser sending `zstd` also sends
+# `br`, so the .zstd copies would never be chosen.
 SERVESTATIC_USE_ZSTD = False
 
 EMAIL_BACKEND = env.str(
@@ -1421,10 +1401,9 @@ if TESTING:
     }
     SESSION_ENGINE = "django.contrib.sessions.backends.cache"
     STORAGES = global_settings.STORAGES
-    # Tests import glitchtip.asgi, which indexes STATIC_ROOT. A test run has
-    # not collected static and does not serve it either. ServeStatic warns with
-    # a stacklevel that attributes the warning to its caller, hence the module
-    # here is ours rather than the library's.
+    # Tests import glitchtip.asgi, which indexes STATIC_ROOT; a test run has not
+    # collected static and does not serve it. The module is ours because
+    # ServeStatic warns with a stacklevel that attributes it to the caller.
     warnings.filterwarnings(
         "ignore", message="No directory at", module="glitchtip.asgi"
     )
