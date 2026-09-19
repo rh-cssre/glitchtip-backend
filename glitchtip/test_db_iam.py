@@ -109,15 +109,6 @@ class ConfigureOptionsTestCase(SimpleTestCase):
             )
         assert options["sslmode"] == "require"
 
-    def test_a_negative_token_ttl_is_refused(self):
-        # Truthy, so it would otherwise reach the driver and raise at the
-        # first connection instead of at settings load like every other knob.
-        with self.assertRaises(ImproperlyConfigured) as ctx:
-            db_iam.configure_options(
-                {}, iam_auth=True, token_ttl=-1, sslrootcert="/certs/rds.pem"
-            )
-        assert "DATABASE_IAM_TOKEN_TTL" in str(ctx.exception)
-
     def test_unencrypted_modes_are_refused(self):
         # The driver rejects these too, but only at connect time and as an
         # OperationalError. Failing at settings load names the bad setting.
@@ -167,17 +158,12 @@ class ConfigureOptionsTestCase(SimpleTestCase):
             db_iam.configure_options(options, iam_auth=True)
         assert options == {"sslmode": "prefer"}
 
-    def test_token_ttl_is_only_a_fallback(self):
-        # The RDS provider states the token's own expiry, which the driver
-        # prefers, so this is absent unless explicitly configured.
+    def test_no_renewal_interval_is_configured(self):
+        # The provider reports the token's own expiry and the driver renews
+        # against that, so setting an interval would have had no observable
+        # effect. Asserted so it is not reintroduced as dead configuration.
         assert "credential_ttl" not in db_iam.configure_options(
             {}, iam_auth=True, sslrootcert="/certs/rds.pem"
-        )
-        assert (
-            db_iam.configure_options(
-                {}, iam_auth=True, token_ttl=300, sslrootcert="/certs/rds.pem"
-            )["credential_ttl"]
-            == 300
         )
 
 

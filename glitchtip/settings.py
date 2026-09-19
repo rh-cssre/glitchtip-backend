@@ -885,10 +885,6 @@ DATABASE_IAM_AUTH_ALIASES = [
     for alias in env.str("DATABASE_IAM_AUTH_ALIASES", "default").split(",")
     if alias.strip()
 ]
-# Seconds a minted credential is reused. Only a fallback: the RDS provider
-# reports the token's own expiry, which the driver prefers, so this has no
-# effect with it. Unset means the driver's own default.
-DATABASE_IAM_TOKEN_TTL = env.int("DATABASE_IAM_TOKEN_TTL", 0)
 # Accept a database server whose identity is not verified. Only meaningful
 # with IAM auth, where it means a live token may be handed to anything that
 # answers on the hostname. Exists so the insecure choice has to be made
@@ -1081,7 +1077,6 @@ for _db_alias, db_config in DATABASES.items():
     _db_iam.configure_options(
         options,
         iam_auth=DATABASE_IAM_AUTH and _db_alias in DATABASE_IAM_AUTH_ALIASES,
-        token_ttl=DATABASE_IAM_TOKEN_TTL,
         sslmode=DATABASE_SSLMODE,
         sslrootcert=DATABASE_SSLROOTCERT,
         allow_unverified_tls=DATABASE_IAM_ALLOW_UNVERIFIED_TLS,

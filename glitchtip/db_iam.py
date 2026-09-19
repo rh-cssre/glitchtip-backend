@@ -34,6 +34,17 @@ and user, so it has to be minted for the endpoint actually being connected
 to — which happens automatically, because the driver hands the provider the
 connection it is opening rather than a configured hostname.
 
+The token is signed with whatever boto3's default credential chain resolves,
+in which ``AWS_ACCESS_KEY_ID``/``AWS_SECRET_ACCESS_KEY`` in the environment
+outrank the workload's own role. GlitchTip documents those same variables for
+S3-compatible file storage, so a deployment holding a Garage or MinIO key
+there would sign RDS tokens with it and get ``password authentication failed``
+— which reads as a broken IAM policy rather than a credential collision.
+Supply storage credentials as ``AWS_ACCESS_KEY_ID_FILE`` and
+``AWS_SECRET_ACCESS_KEY_FILE`` instead: django-environ reads the files and
+django-storages passes the key to its own session explicitly, so the variable
+never enters the environment and the chain falls through to the pod's role.
+
 Outside GlitchTip, RDS IAM auth also requires:
 
 * an IAM policy granting ``rds-db:connect`` on
@@ -84,7 +95,6 @@ def configure_options(
     options: dict,
     *,
     iam_auth: bool,
-    token_ttl: int | None = None,
     sslmode: str | None = None,
     sslrootcert: str | None = None,
     allow_unverified_tls: bool = False,
@@ -158,16 +168,9 @@ def configure_options(
         # host, port and user of the connection being opened, and an RDS token
         # signs exactly those, so each alias gets a token for its own endpoint.
         resolved["credential_provider"] = RDS_IAM_PROVIDER
-        if token_ttl:
-            if token_ttl < 0:
-                raise ImproperlyConfigured(
-                    f"DATABASE_IAM_TOKEN_TTL={token_ttl} is negative. Use a "
-                    "positive number of seconds, or leave it unset for the "
-                    "driver's own default."
-                )
-            # Only a fallback: the RDS provider states the token's own expiry,
-            # which the driver renews against in preference to this.
-            resolved["credential_ttl"] = token_ttl
+        # No renewal interval is configured. The provider reports the token's
+        # own expiry and the driver renews against that in preference to any
+        # interval, so a knob here would have had no effect to observe.
 
     options.update(resolved)
     return options
