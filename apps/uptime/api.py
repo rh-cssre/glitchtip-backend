@@ -6,13 +6,14 @@ from asgiref.sync import sync_to_async
 from django.db import connection
 from django.db.models import (
     Case,
+    F,
     Prefetch,
     QuerySet,
-    SmallIntegerField,
+    TextField,
     Value,
     When,
 )
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Cast, Coalesce, Concat, LPad
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Status
@@ -111,14 +112,34 @@ monitor_sort_options = Literal[
     "-status",
 ]
 
+
+def unique_sort_key(expression):
+    """End a sort key with the zero padded id, so no two monitors share one.
+
+    The paginator steps over a run of equal keys with an offset it caps at 100
+    rows; past that the cursor stops advancing and the page repeats.
+    """
+    return Concat(
+        expression,
+        Value("|"),
+        LPad(Cast("id", TextField()), 19, Value("0")),
+        output_field=TextField(),
+    )
+
+
+# Annotated so the key is unique (above) and non-NULL -- "> position" never
+# matches a NULL, which would drop the row from every page but the first.
 MONITOR_SORT_ANNOTATIONS = {
-    "project": Coalesce("project__name", Value("")),
+    "name": unique_sort_key(F("name")),
+    "project": unique_sort_key(Coalesce("project__name", Value(""))),
     # puts failures at the top.
-    "status": Case(
-        When(cached_is_up=False, then=Value(0)),
-        When(cached_is_up=True, then=Value(2)),
-        default=Value(1),
-        output_field=SmallIntegerField(),
+    "status": unique_sort_key(
+        Case(
+            When(cached_is_up=False, then=Value("0")),
+            When(cached_is_up=True, then=Value("2")),
+            default=Value("1"),
+            output_field=TextField(),
+        )
     ),
 }
 

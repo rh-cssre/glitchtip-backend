@@ -746,3 +746,34 @@ class MonitorSortAPITestCase(GlitchTestCase):
                         break
                     url = next_link.group(1)
                 self.assertEqual(sorted(names), ["alpha", "bravo", "charlie"])
+
+    async def test_paging_a_long_run_of_one_status(self):
+        """Every monitor is reachable even when 100+ of them sort the same.
+
+        Status has three values, so a big organization is one long run of equal
+        keys, and the paginator's offset over such a run caps at 100 rows.
+        """
+        await Monitor.objects.abulk_create(
+            [
+                Monitor(
+                    organization=self.organization,
+                    name=f"run-{index:03d}",
+                    url="http://example.com",
+                    cached_is_up=True,
+                )
+                for index in range(120)
+            ]
+        )
+        ids = []
+        url = self.list_url + "?limit=10&sort=status"
+        for _ in range(20):
+            res = await self.async_client.get(url)
+            self.assertEqual(res.status_code, 200, res.content)
+            ids += [monitor["id"] for monitor in res.json()]
+            next_link = re.search(r'<([^>]+)>; rel="next"; results="true"', res["Link"])
+            if not next_link:
+                break
+            url = next_link.group(1)
+        # The three monitors from setUpTestData, plus the run of 120.
+        self.assertEqual(len(set(ids)), 123)
+        self.assertEqual(len(ids), 123, "a page repeated")
