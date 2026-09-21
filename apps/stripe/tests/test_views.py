@@ -1,0 +1,1046 @@
+import hmac
+import json
+import time
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from django.core.cache import cache
+from django.test import RequestFactory, TestCase, override_settings
+from django.urls import reverse
+from django.utils import timezone
+
+from apps.organizations_ext.models import Organization
+from apps.stripe.constants import SubscriptionStatus
+from apps.stripe.exceptions import StripeError
+from apps.stripe.models import StripePrice, StripeProduct, StripeSubscription
+from apps.stripe.schema import (
+    EventData,
+    Price,
+    StripeEvent,
+    StripeEventRequest,
+    Subscription,
+    SubscriptionItem,
+    SubscriptionItems,
+    ThinEvent,
+)
+from apps.stripe.utils import unix_to_datetime
+from apps.stripe.views import stripe_webhook_view
+
+
+class TestStripeWebhookView(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.factory = RequestFactory()
+        self.url = reverse("stripe_webhook")
+        self.webhook_secret = "test_webhook_secret"  # Use a test secret
+
+    def generate_stripe_request(self, payload):
+        payload_bytes = json.dumps(payload).encode("utf-8")
+        timestamp = int(time.time())
+        signed_payload = f"{timestamp}.{payload_bytes.decode('utf-8')}"
+        signature = hmac.new(
+            self.webhook_secret.encode("utf-8"),
+            signed_payload.encode("utf-8"),
+            digestmod="sha256",
+        ).hexdigest()
+
+        headers = {"HTTP_STRIPE_SIGNATURE": f"t={timestamp},v1={signature}"}
+        return self.factory.post(
+            self.url, data=payload_bytes, content_type="application/json", **headers
+        )
+
+    def generate_subscription_event_data(
+        self,
+        type,
+        event_id,
+        subscription_id,
+        current_period_start,
+        current_period_end,
+        price_id,
+        product_id,
+        status=SubscriptionStatus.ACTIVE,
+        event_created_timestamp=None,
+        metered_item_id=None,
+        metered_period=None,
+    ):
+        # A metered overage item, when the caller wants the subscription to look
+        # like one that opted into overage billing. Its period is the plan's
+        # unless the caller says otherwise: in Stripe each item has its own.
+        metered_period = metered_period or (current_period_start, current_period_end)
+        metered_items = (
+            [
+                SubscriptionItem(
+                    id=metered_item_id,
+                    object="subscription_item",
+                    created=current_period_start,
+                    current_period_end=metered_period[1],
+                    current_period_start=metered_period[0],
+                    metadata={},
+                    price=Price(
+                        object="price",
+                        active=True,
+                        billing_scheme="tiered",
+                        created=0,
+                        currency="usd",
+                        livemode=False,
+                        lookup_key=None,
+                        nickname=None,
+                        recurring={"usage_type": "metered", "meter": "mtr_1"},
+                        tax_behavior=None,
+                        tiers_mode="graduated",
+                        type="",
+                        unit_amount_decimal=None,
+                        metadata={},
+                        id="price_overage",
+                        product="prod_overage",
+                        unit_amount=None,
+                    ),
+                    quantity=1,
+                    subscription=subscription_id,
+                    tax_rates=[],
+                )
+            ]
+            if metered_item_id
+            else []
+        )
+        data = StripeEvent(
+            type=type,
+            id=event_id,
+            data=EventData(
+                object=Subscription(
+                    object="subscription",
+                    id=subscription_id,
+                    customer="cus_test",
+                    items=SubscriptionItems(
+                        object="list",
+                        data=[
+                            SubscriptionItem(
+                                id="test_subscription_item",
+                                object="subscription_item",
+                                created=current_period_start,
+                                current_period_end=current_period_end,
+                                current_period_start=current_period_start,
+                                metadata={},
+                                price=Price(
+                                    object="price",
+                                    active=True,
+                                    billing_scheme=None,
+                                    created=0,
+                                    currency="",
+                                    livemode=False,
+                                    lookup_key=None,
+                                    nickname=None,
+                                    recurring=None,
+                                    tax_behavior=None,
+                                    tiers_mode=None,
+                                    type="",
+                                    unit_amount_decimal="1",
+                                    metadata={},
+                                    id=price_id,
+                                    product=product_id,
+                                    unit_amount=1,
+                                ),
+                                quantity=1,
+                                subscription=subscription_id,
+                                tax_rates=[],
+                            )
+                        ]
+                        + metered_items,
+                    ),
+                    created=current_period_start,
+                    status=status,
+                    livemode=False,
+                    metadata={},
+                    cancel_at_period_end=False,
+                    start_date=current_period_start,
+                    collection_method="charge_automatically",
+                )
+            ),
+            api_version="",
+            created=event_created_timestamp or current_period_start,
+            livemode=False,
+            pending_webhooks=1,
+            request=StripeEventRequest(id="req_test", idempotency_key="test_key"),
+        )
+        return data.model_dump()
+
+    @override_settings(STRIPE_WEBHOOK_SECRET=None)
+    async def test_webhook_no_secret(self):
+        """Test with a missing Stripe secret."""
+        payload = b"{}"  # Empty payload
+        headers = {"HTTP_STRIPE_SIGNATURE": "t=123,v1=some_signature"}
+        request = self.factory.post(
+            self.url, data=payload, content_type="application/json", **headers
+        )
+        response = await stripe_webhook_view(request)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.content, b"Invalid signature")
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_incorrect_secret(self):
+        """Test with an incorrect Stripe secret."""
+        payload = b'{"type": "test_event"}'
+        # Create a signature with an INCORRECT secret
+        timestamp = int(time.time())
+        signed_payload = f"{timestamp}.{payload.decode('utf-8')}"
+        incorrect_signature = hmac.new(
+            b"wrong_secret", signed_payload.encode("utf-8"), digestmod="sha256"
+        ).hexdigest()
+
+        headers = {"HTTP_STRIPE_SIGNATURE": f"t={timestamp},v1={incorrect_signature}"}
+        request = self.factory.post(
+            self.url, data=payload, content_type="application/json", **headers
+        )
+
+        response = await stripe_webhook_view(request)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.content, b"Invalid signature")
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_unsupported_event_type(self):
+        """Test a valid signature, but with an unsupported event type."""
+
+        # Create a valid payload with an unsupported event type
+        payload = {"type": "some.unsupported.event", "data": {"object": {}}}
+        request = self.generate_stripe_request(payload)
+        with patch("apps.stripe.views.logger") as mock_logger:
+            response = await stripe_webhook_view(request)
+            self.assertEqual(response.status_code, 200)
+            mock_logger.warning.assert_called_once()
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_product_created(self):
+        """Test the 'product.created' webhook."""
+
+        payload = {
+            "type": "product.created",
+            "id": "evt_test",
+            "data": {
+                "object": {
+                    "object": "product",
+                    "id": "prod_test",
+                    "active": True,
+                    "attributes": [],
+                    "created": 1678886400,
+                    "default_price": None,
+                    "description": "Test Description",
+                    "images": [],
+                    "livemode": False,
+                    "marketing_features": [],
+                    "metadata": {
+                        "events": "1",
+                        "is_public": "true",
+                        "product_type": "hosted",
+                        "sso": "true",
+                    },
+                    "name": "Test Product",
+                    "statement_descriptor": None,
+                    "tax_code": None,
+                    "type": "service",
+                    "unit_label": None,
+                    "updated": 1678886400,
+                    "url": None,
+                }
+            },
+            "api_version": "",
+            "created": 1678886401,
+            "livemode": False,
+            "pending_webhooks": 1,
+            "request": {"id": "req_test", "idemoptency_key": "test_key"},
+        }
+        request = self.generate_stripe_request(payload)
+
+        response = await stripe_webhook_view(request)
+        self.assertEqual(response.status_code, 200)
+
+        product = await StripeProduct.objects.aget(stripe_id="prod_test")
+        self.assertEqual(product.name, "Test Product")
+        self.assertEqual(product.description, "Test Description")
+        self.assertEqual(product.events, 1)
+        self.assertTrue(product.active)
+        self.assertTrue(product.allow_sso)
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_product_archived(self):
+        """Archiving a product in Stripe arrives as product.updated with
+        active=False and must deactivate the row immediately, rather than
+        leaving it live until the nightly sync."""
+        await StripeProduct.objects.acreate(
+            stripe_id="prod_archive_me",
+            name="Retiring Plan",
+            description="",
+            events=1000,
+            is_public=True,
+        )
+
+        payload = {
+            "type": "product.updated",
+            "id": "evt_archive",
+            "data": {
+                "object": {
+                    "object": "product",
+                    "id": "prod_archive_me",
+                    "active": False,
+                    "attributes": [],
+                    "created": 1678886400,
+                    "default_price": None,
+                    "description": "",
+                    "images": [],
+                    "livemode": False,
+                    "marketing_features": [],
+                    "metadata": {
+                        "events": "1000",
+                        "is_public": "true",
+                        "product_type": "hosted",
+                    },
+                    "name": "Retiring Plan",
+                    "statement_descriptor": None,
+                    "tax_code": None,
+                    "type": "service",
+                    "unit_label": None,
+                    "updated": 1678886400,
+                    "url": None,
+                }
+            },
+            "api_version": "",
+            "created": 1678886401,
+            "livemode": False,
+            "pending_webhooks": 1,
+            "request": {"id": "req_test", "idemoptency_key": "test_key"},
+        }
+        response = await stripe_webhook_view(self.generate_stripe_request(payload))
+        self.assertEqual(response.status_code, 200)
+
+        product = await StripeProduct.objects.aget(stripe_id="prod_archive_me")
+        self.assertFalse(product.active)
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_price_created(self):
+        """Test the 'price.created' webhook."""
+
+        # Create a product first.  This is REQUIRED for the price webhook to work.
+        product = await StripeProduct.objects.acreate(
+            stripe_id="prod_test_price",
+            name="Test Product for Price",
+            description="Test Description",
+            events=1,
+            is_public=True,
+        )
+
+        payload = {
+            "type": "price.created",
+            "id": "evt_test_price",
+            "data": {
+                "object": {
+                    "object": "price",
+                    "id": "price_test",
+                    "active": True,
+                    "billing_scheme": "per_unit",
+                    "created": 1678886400,
+                    "currency": "usd",
+                    "livemode": False,
+                    "lookup_key": None,
+                    "nickname": "Test Price",
+                    "product": product.stripe_id,
+                    "recurring": {"interval": "year"},
+                    "tax_behavior": "unspecified",
+                    "tiers_mode": None,
+                    "type": "one_time",
+                    "unit_amount": 2000,  # $20.00
+                    "unit_amount_decimal": "2000",
+                    "metadata": {"no_throttle": "true", "is_public": "true"},
+                }
+            },
+            "api_version": "",
+            "created": 1678886401,
+            "livemode": False,
+            "pending_webhooks": 1,
+            "request": {"id": "req_test", "idemoptency_key": "test_key"},
+        }
+
+        request = self.generate_stripe_request(payload)
+
+        response = await stripe_webhook_view(request)
+        self.assertEqual(response.status_code, 200)
+
+        # Check that the Price object was created and associated with the Product
+        price = await StripePrice.objects.aget(stripe_id="price_test")
+        self.assertEqual(price.price, 20.00)  # Check decimal conversion
+        self.assertEqual(price.nickname, "Test Price")
+        self.assertEqual(price.interval, "year")
+        self.assertTrue(price.no_throttle)
+        self.assertTrue(price.is_public)
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_subscription_created(self):
+        """Test the 'customer.subscription.created' webhook."""
+
+        # 1. Create a related Organization.
+        organization = await Organization.objects.acreate(
+            name="Test Org",
+            id=12345,  # Use a known ID for the test
+        )
+
+        # 2. Create a related Product
+        product = await StripeProduct.objects.acreate(
+            stripe_id="prod_test_sub",
+            name="Test Product for Subscription",
+            description="Test Description",
+            events=1,
+            is_public=True,
+        )
+        # 3. Create a related price
+        price = await StripePrice.objects.acreate(
+            stripe_id="price_test", product=product, price=10.00, nickname="Test Price"
+        )
+
+        now = timezone.now()
+        now_timestamp = int(now.timestamp())
+        subscription_id = "sub_test"
+
+        payload = self.generate_subscription_event_data(
+            type="customer.subscription.created",
+            event_id="evt_created_test",
+            subscription_id=subscription_id,
+            current_period_start=now_timestamp,
+            current_period_end=now_timestamp + 2592000,
+            price_id=price.stripe_id,
+            product_id=product.stripe_id,
+        )
+
+        # Mock Customer data for stripe_get.
+        mock_customer_data = {
+            "object": "customer",
+            "id": "cus_test",
+            "email": "test@example.com",
+            "metadata": {"organization_id": str(organization.id)},
+            "name": None,
+        }
+
+        request = self.generate_stripe_request(payload)
+
+        # Use AsyncMock for the asynchronous stripe_get function.
+        with patch(
+            "apps.stripe.views.stripe_get", new_callable=AsyncMock
+        ) as mock_stripe_get:
+            mock_stripe_get.return_value = json.dumps(
+                mock_customer_data
+            )  # Return JSON string
+            response = await stripe_webhook_view(request)
+            self.assertEqual(response.status_code, 200)
+
+            # Assert stripe_get was called correctly.
+            mock_stripe_get.assert_awaited_once_with("customers/cus_test")
+
+        # 5. Verify the StripeSubscription was created.
+        subscription = await StripeSubscription.objects.aget(stripe_id=subscription_id)
+        self.assertEqual(subscription.status, SubscriptionStatus.ACTIVE)
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_clears_primary_subscription_when_canceled(self):
+        """A subscription leaving active status must clear the org's primary pointer."""
+        organization = await Organization.objects.acreate(name="Cancel Org", id=54321)
+        product = await StripeProduct.objects.acreate(
+            stripe_id="prod_cancel", name="P", description="", events=1, is_public=True
+        )
+        price = await StripePrice.objects.acreate(
+            stripe_id="price_cancel", product=product, price=10.00, nickname="P"
+        )
+        now = timezone.now()
+        now_timestamp = int(now.timestamp())
+        subscription_id = "sub_primary_cancel"
+        sub = await StripeSubscription.objects.acreate(
+            stripe_id=subscription_id,
+            organization=organization,
+            price=price,
+            status=SubscriptionStatus.ACTIVE,
+            created=now,
+            current_period_start=now,
+            current_period_end=now,
+            start_date=now,
+        )
+        organization.stripe_primary_subscription = sub
+        await organization.asave(update_fields=["stripe_primary_subscription"])
+
+        payload = self.generate_subscription_event_data(
+            type="customer.subscription.updated",
+            event_id="evt_cancel_test",
+            subscription_id=subscription_id,
+            current_period_start=now_timestamp,
+            current_period_end=now_timestamp + 2592000,
+            price_id=price.stripe_id,
+            product_id=product.stripe_id,
+            status=SubscriptionStatus.CANCELED,
+        )
+        mock_customer_data = {
+            "object": "customer",
+            "id": "cus_test",
+            "email": "test@example.com",
+            "metadata": {"organization_id": str(organization.id)},
+            "name": None,
+        }
+        request = self.generate_stripe_request(payload)
+        with patch(
+            "apps.stripe.views.stripe_get", new_callable=AsyncMock
+        ) as mock_stripe_get:
+            mock_stripe_get.return_value = json.dumps(mock_customer_data)
+            response = await stripe_webhook_view(request)
+        self.assertEqual(response.status_code, 200)
+
+        # The canceled subscription must no longer be the org's primary.
+        await organization.arefresh_from_db()
+        self.assertIsNone(organization.stripe_primary_subscription_id)
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_clears_metered_billing_when_canceled(self):
+        """Cancelling must also clear the org's overage flag.
+
+        The metered item dies with the subscription, so a flag left set
+        advertises headroom the org no longer has: a later resubscribe starts
+        with no metered item and the throttle path needs both, so events would
+        be silently dropped while the UI showed overage enabled.
+        """
+        organization = await Organization.objects.acreate(
+            name="Metered Cancel Org",
+            id=54322,
+            metered_billing_enabled=True,
+            overage_spend_cap_cents=5000,
+        )
+        product = await StripeProduct.objects.acreate(
+            stripe_id="prod_mcancel", name="P", description="", events=1, is_public=True
+        )
+        price = await StripePrice.objects.acreate(
+            stripe_id="price_mcancel", product=product, price=10.00, nickname="P"
+        )
+        now = timezone.now()
+        now_timestamp = int(now.timestamp())
+        subscription_id = "sub_metered_cancel"
+        sub = await StripeSubscription.objects.acreate(
+            stripe_id=subscription_id,
+            organization=organization,
+            price=price,
+            status=SubscriptionStatus.ACTIVE,
+            created=now,
+            current_period_start=now,
+            current_period_end=now,
+            start_date=now,
+            metered_item_id="si_1",
+        )
+        organization.stripe_primary_subscription = sub
+        await organization.asave(update_fields=["stripe_primary_subscription"])
+
+        payload = self.generate_subscription_event_data(
+            type="customer.subscription.updated",
+            event_id="evt_metered_cancel_test",
+            subscription_id=subscription_id,
+            current_period_start=now_timestamp,
+            current_period_end=now_timestamp + 2592000,
+            price_id=price.stripe_id,
+            product_id=product.stripe_id,
+            status=SubscriptionStatus.CANCELED,
+            metered_item_id="si_1",
+        )
+        mock_customer_data = {
+            "object": "customer",
+            "id": "cus_test",
+            "email": "test@example.com",
+            "metadata": {"organization_id": str(organization.id)},
+            "name": None,
+        }
+        request = self.generate_stripe_request(payload)
+        with (
+            patch(
+                "apps.stripe.views.stripe_get", new_callable=AsyncMock
+            ) as mock_stripe_get,
+            patch(
+                "apps.stripe.views.check_organization_throttle",
+                new=MagicMock(aenqueue=AsyncMock()),
+            ) as mock_throttle,
+        ):
+            mock_stripe_get.return_value = json.dumps(mock_customer_data)
+            response = await stripe_webhook_view(request)
+        self.assertEqual(response.status_code, 200)
+
+        await organization.arefresh_from_db()
+        await sub.arefresh_from_db()
+        self.assertIsNone(organization.stripe_primary_subscription_id)
+        self.assertFalse(organization.metered_billing_enabled)
+        # The dead item id must go too, or a later enable skips the attach and
+        # reuses it.
+        self.assertEqual(sub.metered_item_id, "")
+        self.assertIsNone(sub.metered_period_start)
+        # Quota just dropped to the free tier; don't wait for the next sweep.
+        mock_throttle.aenqueue.assert_awaited_once_with(
+            organization.id, bypass_cache=True
+        )
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_records_the_metered_items_own_period(self):
+        """The metered item's period is the organization's usage window, and
+        it need not coincide with the plan's: an item added mid-cycle, or a
+        monthly item on an annual plan. The webhook stores what Stripe holds
+        for it, and clears it when the item is gone."""
+        organization = await Organization.objects.acreate(
+            name="Metered Period Org", id=54324, metered_billing_enabled=True
+        )
+        product = await StripeProduct.objects.acreate(
+            stripe_id="prod_mperiod", name="P", description="", events=1, is_public=True
+        )
+        price = await StripePrice.objects.acreate(
+            stripe_id="price_mperiod", product=product, price=10.00, nickname="P"
+        )
+        now_timestamp = int(timezone.now().timestamp())
+        item_period = (now_timestamp - 86400 * 3, now_timestamp + 86400 * 27)
+        mock_customer_data = json.dumps(
+            {
+                "object": "customer",
+                "id": "cus_test",
+                "email": "test@example.com",
+                "metadata": {"organization_id": str(organization.id)},
+                "name": None,
+            }
+        )
+
+        payload = self.generate_subscription_event_data(
+            type="customer.subscription.updated",
+            event_id="evt_mperiod_1",
+            subscription_id="sub_mperiod",
+            current_period_start=now_timestamp - 86400 * 10,
+            current_period_end=now_timestamp + 86400 * 20,
+            price_id=price.stripe_id,
+            product_id=product.stripe_id,
+            metered_item_id="si_1",
+            metered_period=item_period,
+        )
+        with patch(
+            "apps.stripe.views.stripe_get",
+            new=AsyncMock(return_value=mock_customer_data),
+        ):
+            response = await stripe_webhook_view(self.generate_stripe_request(payload))
+        self.assertEqual(response.status_code, 200)
+        sub = await StripeSubscription.objects.aget(stripe_id="sub_mperiod")
+        self.assertEqual(sub.metered_period_start, unix_to_datetime(item_period[0]))
+        self.assertEqual(sub.metered_period_end, unix_to_datetime(item_period[1]))
+
+        # Item removed (in the dashboard, say): the period goes with it.
+        payload = self.generate_subscription_event_data(
+            type="customer.subscription.updated",
+            event_id="evt_mperiod_2",
+            subscription_id="sub_mperiod",
+            current_period_start=now_timestamp - 86400 * 10,
+            current_period_end=now_timestamp + 86400 * 20,
+            price_id=price.stripe_id,
+            product_id=product.stripe_id,
+            event_created_timestamp=now_timestamp + 1,
+        )
+        with patch(
+            "apps.stripe.views.stripe_get",
+            new=AsyncMock(return_value=mock_customer_data),
+        ):
+            response = await stripe_webhook_view(self.generate_stripe_request(payload))
+        self.assertEqual(response.status_code, 200)
+        await sub.arefresh_from_db()
+        self.assertEqual(sub.metered_item_id, "")
+        self.assertIsNone(sub.metered_period_start)
+        self.assertIsNone(sub.metered_period_end)
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_keeps_metered_billing_when_recoverable(self):
+        """unpaid is not terminal: the customer can pay the open invoice and the
+        same subscription returns to active with its metered item intact.
+        Dropping the opt-in there would silently throttle a paying customer."""
+        organization = await Organization.objects.acreate(
+            name="Unpaid Org", id=54323, metered_billing_enabled=True
+        )
+        product = await StripeProduct.objects.acreate(
+            stripe_id="prod_unpaid", name="P", description="", events=1, is_public=True
+        )
+        price = await StripePrice.objects.acreate(
+            stripe_id="price_unpaid", product=product, price=10.00, nickname="P"
+        )
+        now = timezone.now()
+        now_timestamp = int(now.timestamp())
+        sub = await StripeSubscription.objects.acreate(
+            stripe_id="sub_unpaid",
+            organization=organization,
+            price=price,
+            status=SubscriptionStatus.ACTIVE,
+            created=now,
+            current_period_start=now,
+            current_period_end=now,
+            start_date=now,
+            metered_item_id="si_1",
+        )
+        organization.stripe_primary_subscription = sub
+        await organization.asave(update_fields=["stripe_primary_subscription"])
+
+        payload = self.generate_subscription_event_data(
+            type="customer.subscription.updated",
+            event_id="evt_unpaid_test",
+            subscription_id=sub.stripe_id,
+            current_period_start=now_timestamp,
+            current_period_end=now_timestamp + 2592000,
+            price_id=price.stripe_id,
+            product_id=product.stripe_id,
+            status=SubscriptionStatus.UNPAID,
+            metered_item_id="si_1",
+        )
+        mock_customer_data = {
+            "object": "customer",
+            "id": "cus_test",
+            "email": "test@example.com",
+            "metadata": {"organization_id": str(organization.id)},
+            "name": None,
+        }
+        request = self.generate_stripe_request(payload)
+        with patch(
+            "apps.stripe.views.stripe_get", new_callable=AsyncMock
+        ) as mock_stripe_get:
+            mock_stripe_get.return_value = json.dumps(mock_customer_data)
+            response = await stripe_webhook_view(request)
+        self.assertEqual(response.status_code, 200)
+
+        await organization.arefresh_from_db()
+        await sub.arefresh_from_db()
+        # Pointer detached (it is not an active subscription) but the opt-in and
+        # the item survive for the recovery.
+        self.assertIsNone(organization.stripe_primary_subscription_id)
+        self.assertTrue(organization.metered_billing_enabled)
+        self.assertEqual(sub.metered_item_id, "si_1")
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_ordering_and_deduplication(self):
+        """Ensure mistimed and duplicated events are ignored."""
+
+        # 1. Create a related Organization.
+        organization = await Organization.objects.acreate(
+            name="Test Org",
+            id=12345,  # Use a known ID for the test
+        )
+
+        # 2. Create a related Product
+        product = await StripeProduct.objects.acreate(
+            stripe_id="prod_test_sub",
+            name="Test Product for Subscription",
+            description="Test Description",
+            events=1,
+            is_public=True,
+        )
+        # 3. Create a related price
+        price = await StripePrice.objects.acreate(
+            stripe_id="price_test", product=product, price=10.00, nickname="Test Price"
+        )
+
+        # Mock Customer data for stripe_get.
+        mock_customer_data = {
+            "object": "customer",
+            "id": "cus_test",
+            "email": "test@example.com",
+            "metadata": {"organization_id": str(organization.id)},
+            "name": None,
+        }
+
+        now = timezone.now()
+        now_timestamp = int(now.timestamp())
+        subscription_id = "sub_webhook_ordering_test"
+
+        # 4. Create test requests
+        payload = self.generate_subscription_event_data(
+            type="customer.subscription.created",
+            event_id="evt_ordering_test",
+            subscription_id=subscription_id,
+            current_period_start=now_timestamp,
+            current_period_end=now_timestamp + +2592000,
+            price_id=price.stripe_id,
+            product_id=price.product_id,
+            status=SubscriptionStatus.INCOMPLETE,
+            event_created_timestamp=now_timestamp + 1,
+        )
+
+        create_request = self.generate_stripe_request(payload)
+
+        # Duplicate event ID should be ignored
+        payload["data"]["object"]["status"] = "incomplete_expired"
+        duplicate_create_request = self.generate_stripe_request(payload)
+
+        payload["id"] = "evt_test_subscription_update"
+        payload["type"] = "customer.subscription.updated"
+        payload["created"] = now_timestamp + 2
+        payload["data"]["object"]["status"] = "active"
+        update_request = self.generate_stripe_request(payload)
+
+        # Separate event created prior to last received event for same Stripe object, should be ignored
+        payload["id"] = "evt_test_subscription_update2"
+        payload["created"] = now_timestamp
+        payload["data"]["object"]["status"] = "incomplete"
+        mistimed_update_request = self.generate_stripe_request(payload)
+
+        # Use AsyncMock for the asynchronous stripe_get function.
+        with patch(
+            "apps.stripe.views.stripe_get", new_callable=AsyncMock
+        ) as mock_stripe_get:
+            mock_stripe_get.return_value = json.dumps(
+                mock_customer_data
+            )  # Return JSON string
+
+            # 5. Verify no changes to status for events that should be ignored
+            response = await stripe_webhook_view(create_request)
+            self.assertEqual(response.status_code, 200)
+            subscription = await StripeSubscription.objects.aget(
+                stripe_id=subscription_id
+            )
+            self.assertEqual(subscription.status, SubscriptionStatus.INCOMPLETE)
+
+            response = await stripe_webhook_view(duplicate_create_request)
+            self.assertEqual(response.status_code, 200)
+            subscription = await StripeSubscription.objects.aget(
+                stripe_id=subscription_id
+            )
+            self.assertEqual(subscription.status, SubscriptionStatus.INCOMPLETE)
+
+            response = await stripe_webhook_view(update_request)
+            self.assertEqual(response.status_code, 200)
+            subscription = await StripeSubscription.objects.aget(
+                stripe_id=subscription_id
+            )
+            self.assertEqual(subscription.status, SubscriptionStatus.ACTIVE)
+
+            response = await stripe_webhook_view(mistimed_update_request)
+            self.assertEqual(response.status_code, 200)
+            subscription = await StripeSubscription.objects.aget(
+                stripe_id=subscription_id
+            )
+            self.assertEqual(subscription.status, SubscriptionStatus.ACTIVE)
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_retries_after_processing_failure(self):
+        """A failed delivery must release the dedup key so Stripe's retry can reprocess."""
+
+        organization = await Organization.objects.acreate(name="Test Org", id=12345)
+        product = await StripeProduct.objects.acreate(
+            stripe_id="prod_test_sub",
+            name="Test Product",
+            description="Test Description",
+            events=1,
+            is_public=True,
+        )
+        price = await StripePrice.objects.acreate(
+            stripe_id="price_test",
+            product=product,
+            price=10.00,
+            nickname="Test Price",
+        )
+
+        mock_customer_data = {
+            "object": "customer",
+            "id": "cus_test",
+            "email": "test@example.com",
+            "metadata": {"organization_id": str(organization.id)},
+            "name": None,
+        }
+
+        now_timestamp = int(timezone.now().timestamp())
+        subscription_id = "sub_retry_after_failure"
+        payload = self.generate_subscription_event_data(
+            type="customer.subscription.created",
+            event_id="evt_retry_after_failure",
+            subscription_id=subscription_id,
+            current_period_start=now_timestamp,
+            current_period_end=now_timestamp + 2592000,
+            price_id=price.stripe_id,
+            product_id=product.stripe_id,
+        )
+
+        first_request = self.generate_stripe_request(payload)
+        retry_request = self.generate_stripe_request(payload)
+
+        with patch(
+            "apps.stripe.views.stripe_get", new_callable=AsyncMock
+        ) as mock_stripe_get:
+            mock_stripe_get.side_effect = Exception(
+                "Stripe API Error: 429 - lock_timeout"
+            )
+            with self.assertRaisesRegex(Exception, "lock_timeout"):
+                await stripe_webhook_view(first_request)
+
+        # The retry of the same event must not be silently deduped.
+        with patch(
+            "apps.stripe.views.stripe_get", new_callable=AsyncMock
+        ) as mock_stripe_get:
+            mock_stripe_get.return_value = json.dumps(mock_customer_data)
+            response = await stripe_webhook_view(retry_request)
+            self.assertEqual(response.status_code, 200)
+            mock_stripe_get.assert_awaited_once_with("customers/cus_test")
+
+        subscription = await StripeSubscription.objects.aget(stripe_id=subscription_id)
+        self.assertEqual(subscription.status, SubscriptionStatus.ACTIVE)
+
+
+METER_ERROR_EVENT = {
+    "id": "evt_meter_1",
+    "object": "v2.core.event",
+    "type": "v1.billing.meter.error_report_triggered",
+    "data": {
+        "developer_message_summary": "There is 1 invalid event",
+        "reason": {
+            "error_count": 1,
+            "error_types": [
+                {
+                    "code": "meter_event_customer_not_found",
+                    "error_count": 1,
+                    "sample_errors": [
+                        {"error_message": "Customer cus_x does not exist."}
+                    ],
+                }
+            ],
+        },
+    },
+    "related_object": {
+        "id": "mtr_1",
+        "type": "billing.meter",
+        "url": "/v1/billing/meters/mtr_1",
+    },
+}
+
+
+@override_settings(STRIPE_WEBHOOK_SECRET_METER="meter_secret")
+class TestStripeMeterWebhookView(TestCase):
+    """Meter error reports arrive on a v2 event destination with its own secret."""
+
+    def setUp(self):
+        cache.clear()
+        self.factory = RequestFactory()
+        self.url = reverse("stripe_webhook_with_type", args=["meter"])
+
+    def _request(self, payload, secret="meter_secret"):
+        payload_bytes = json.dumps(payload).encode("utf-8")
+        timestamp = int(time.time())
+        signed_payload = f"{timestamp}.{payload_bytes.decode('utf-8')}"
+        signature = hmac.new(
+            secret.encode("utf-8"), signed_payload.encode("utf-8"), digestmod="sha256"
+        ).hexdigest()
+        headers = {"HTTP_STRIPE_SIGNATURE": f"t={timestamp},v1={signature}"}
+        return self.factory.post(
+            self.url, data=payload_bytes, content_type="application/json", **headers
+        )
+
+    async def test_error_report_is_logged(self):
+        request = self._request(METER_ERROR_EVENT)
+        with self.assertLogs("apps.stripe.views", level="ERROR") as logs:
+            response = await stripe_webhook_view(request, event_type="meter")
+        self.assertEqual(response.status_code, 200)
+        output = "\n".join(logs.output)
+        self.assertIn("mtr_1", output)
+        self.assertIn("meter_event_customer_not_found", output)
+        self.assertIn("cus_x does not exist", output)
+
+    async def test_thin_payload_fetches_details(self):
+        thin = {k: v for k, v in METER_ERROR_EVENT.items() if k != "data"}
+        full = ThinEvent.model_validate(METER_ERROR_EVENT)
+        with (
+            patch(
+                "apps.stripe.views.fetch_v2_event", new=AsyncMock(return_value=full)
+            ) as mock_fetch,
+            self.assertLogs("apps.stripe.views", level="ERROR") as logs,
+        ):
+            response = await stripe_webhook_view(
+                self._request(thin), event_type="meter"
+            )
+        self.assertEqual(response.status_code, 200)
+        mock_fetch.assert_awaited_once_with("evt_meter_1")
+        self.assertIn("meter_event_customer_not_found", "\n".join(logs.output))
+
+    async def test_duplicate_event_processed_once(self):
+        with self.assertLogs("apps.stripe.views", level="ERROR"):
+            await stripe_webhook_view(
+                self._request(METER_ERROR_EVENT), event_type="meter"
+            )
+        with self.assertNoLogs("apps.stripe.views", level="ERROR"):
+            response = await stripe_webhook_view(
+                self._request(METER_ERROR_EVENT), event_type="meter"
+            )
+        self.assertEqual(response.status_code, 200)
+
+    async def test_wrong_secret_rejected(self):
+        request = self._request(METER_ERROR_EVENT, secret="wrong")
+        response = await stripe_webhook_view(request, event_type="meter")
+        self.assertEqual(response.status_code, 403)
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET_METER=None, STRIPE_WEBHOOK_SECRET="classic"
+    )
+    async def test_unset_meter_secret_does_not_fall_back(self):
+        # Event destinations carry their own signing secrets; the classic
+        # secret can never verify these deliveries, so no fallback.
+        request = self._request(METER_ERROR_EVENT, secret="classic")
+        response = await stripe_webhook_view(request, event_type="meter")
+        self.assertEqual(response.status_code, 403)
+
+    async def test_fetch_failure_releases_dedup_for_retry(self):
+        thin = {k: v for k, v in METER_ERROR_EVENT.items() if k != "data"}
+        with (
+            patch(
+                "apps.stripe.views.fetch_v2_event",
+                new=AsyncMock(side_effect=StripeError("boom", status=503)),
+            ),
+            self.assertRaises(StripeError),
+        ):
+            await stripe_webhook_view(self._request(thin), event_type="meter")
+
+        # The dedup key was released, so Stripe's retry processes the event.
+        full = ThinEvent.model_validate(METER_ERROR_EVENT)
+        with (
+            patch("apps.stripe.views.fetch_v2_event", new=AsyncMock(return_value=full)),
+            self.assertLogs("apps.stripe.views", level="ERROR"),
+        ):
+            response = await stripe_webhook_view(
+                self._request(thin), event_type="meter"
+            )
+        self.assertEqual(response.status_code, 200)
