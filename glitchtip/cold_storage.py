@@ -481,6 +481,16 @@ def _create_duckdb_connection(storage=None):
             val = secret_key.replace("'", "''")
             conn.execute(f"SET s3_secret_access_key = '{val}';")
 
+        # DuckDB's SigV4 signer needs an explicit region. Left unset it can
+        # sign with an empty credential scope ("<date>//s3/aws4_request");
+        # permissive servers accept that, stricter ones reject the request as
+        # AuthorizationHeaderMalformed. Mirror whatever region boto3 is using,
+        # falling back to DuckDB's own default.
+        region = (getattr(storage, "region_name", None) or "us-east-1").replace(
+            "'", "''"
+        )
+        conn.execute(f"SET s3_region = '{region}';")
+
         if endpoint_url:
             # Strip protocol prefix for DuckDB
             endpoint = endpoint_url.replace("http://", "").replace("https://", "")

@@ -12,6 +12,50 @@
   - CI's `lint` job also runs `vulture` (dead-code detection): `vulture apps/ glitchtip/ vulture_whitelist.py --min-confidence 100`. Run it too before pushing — it flags unused code `ruff` won't (e.g. an unused signal-handler parameter); whitelist false positives in `vulture_whitelist.py`.
 - Disclose usage of AI when making a merge request. Human review is REQUIRED for contributions.
 
+## Writing for the reviewer
+
+Two habits show up again and again in agent-written merge requests: tests that
+cannot fail, and comments that narrate the work instead of explaining the code.
+Both come from the same place. You have just spent an hour on one problem, it
+feels like the most important thing in the repository, and a human saying so at
+length would be slowed down by their own hands. You are not, so apply that brake
+deliberately.
+
+This is not about disguising that an agent wrote the code — disclosure is
+required and welcome. It is about the diff being cheap for a human to read.
+Before opening a merge request, read your own diff as the reviewer and cut what
+was scaffolding for you and is noise for them.
+
+### Tests
+
+- **Every test must be able to fail.** Name the change that would break it. If
+  you cannot, delete it. A test that passes against the unfixed code is worse
+  than no test, because it looks like coverage.
+- **One test per behaviour, not per input.** Several inputs exercising one rule
+  belong in one test with a table and `subTest`, not in five methods.
+- **Don't test the framework or a dependency.** Assert what this repository
+  decides, not that Django or Postgres work.
+- **Don't assert the same thing at two layers.** If an end-to-end test covers
+  it, the unit test beneath it has to earn its place separately.
+- Prefer a few tests that pin real decisions — a bug someone hit, a rule that is
+  easy to get wrong — over broad coverage of the obvious.
+
+### Comments
+
+- **Comment what is surprising, not what the code says.** Length should track how
+  much the reader could not have guessed, never how long the work took.
+- **Don't narrate the investigation.** What you tried, what you ruled out and
+  what you measured belong in the merge request description, not in the source.
+- **Numbers rot and usually cannot be reproduced.** "Measured smaller and
+  cheaper than the alternative" survives; a benchmark table in a docstring does
+  not. Keep the decision, drop the digits. File counts and sizes taken from a
+  build are the same trap.
+- **Write for whoever reads that file.** `settings.py` and the `bin/` scripts are
+  read by operators, so be brief and practical there. Module internals are read
+  by programmers, where the *why* is worth real depth.
+- **One place, not three.** When the same reasoning fits in several files, put it
+  where the code lives and point at it from the others.
+
 ## Version Control
 - **Commits:** Use conventional commits (e.g., `fix:`, `feat:`, `refactor:`).
 - **Merge requests:** GlitchTip is open source. Write MR titles and descriptions for an outside contributor reading them cold — describe the problem in terms anyone can verify from the code, not from private infra. Don't paste internal issue IDs, staging/prod URLs, API tokens, or snapshots from a personal install; if a bug was found via an error tracker, describe the symptom and reproduction, not the dashboard link.

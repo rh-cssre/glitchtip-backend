@@ -22,6 +22,7 @@ from apps.stripe.schema import (
     SubscriptionItems,
     ThinEvent,
 )
+from apps.stripe.utils import unix_to_datetime
 from apps.stripe.views import stripe_webhook_view
 
 
@@ -59,17 +60,20 @@ class TestStripeWebhookView(TestCase):
         status=SubscriptionStatus.ACTIVE,
         event_created_timestamp=None,
         metered_item_id=None,
+        metered_period=None,
     ):
         # A metered overage item, when the caller wants the subscription to look
-        # like one that opted into overage billing.
+        # like one that opted into overage billing. Its period is the plan's
+        # unless the caller says otherwise: in Stripe each item has its own.
+        metered_period = metered_period or (current_period_start, current_period_end)
         metered_items = (
             [
                 SubscriptionItem(
                     id=metered_item_id,
                     object="subscription_item",
                     created=current_period_start,
-                    current_period_end=current_period_end,
-                    current_period_start=current_period_start,
+                    current_period_end=metered_period[1],
+                    current_period_start=metered_period[0],
                     metadata={},
                     price=Price(
                         object="price",
@@ -595,10 +599,85 @@ class TestStripeWebhookView(TestCase):
         # The dead item id must go too, or a later enable skips the attach and
         # reuses it.
         self.assertEqual(sub.metered_item_id, "")
+        self.assertIsNone(sub.metered_period_start)
         # Quota just dropped to the free tier; don't wait for the next sweep.
         mock_throttle.aenqueue.assert_awaited_once_with(
             organization.id, bypass_cache=True
         )
+
+    @override_settings(
+        STRIPE_WEBHOOK_SECRET="test_webhook_secret",
+        STRIPE_WEBHOOK_TOLERANCE=300,
+        STRIPE_REGION="",
+    )
+    async def test_webhook_records_the_metered_items_own_period(self):
+        """The metered item's period is the organization's usage window, and
+        it need not coincide with the plan's: an item added mid-cycle, or a
+        monthly item on an annual plan. The webhook stores what Stripe holds
+        for it, and clears it when the item is gone."""
+        organization = await Organization.objects.acreate(
+            name="Metered Period Org", id=54324, metered_billing_enabled=True
+        )
+        product = await StripeProduct.objects.acreate(
+            stripe_id="prod_mperiod", name="P", description="", events=1, is_public=True
+        )
+        price = await StripePrice.objects.acreate(
+            stripe_id="price_mperiod", product=product, price=10.00, nickname="P"
+        )
+        now_timestamp = int(timezone.now().timestamp())
+        item_period = (now_timestamp - 86400 * 3, now_timestamp + 86400 * 27)
+        mock_customer_data = json.dumps(
+            {
+                "object": "customer",
+                "id": "cus_test",
+                "email": "test@example.com",
+                "metadata": {"organization_id": str(organization.id)},
+                "name": None,
+            }
+        )
+
+        payload = self.generate_subscription_event_data(
+            type="customer.subscription.updated",
+            event_id="evt_mperiod_1",
+            subscription_id="sub_mperiod",
+            current_period_start=now_timestamp - 86400 * 10,
+            current_period_end=now_timestamp + 86400 * 20,
+            price_id=price.stripe_id,
+            product_id=product.stripe_id,
+            metered_item_id="si_1",
+            metered_period=item_period,
+        )
+        with patch(
+            "apps.stripe.views.stripe_get",
+            new=AsyncMock(return_value=mock_customer_data),
+        ):
+            response = await stripe_webhook_view(self.generate_stripe_request(payload))
+        self.assertEqual(response.status_code, 200)
+        sub = await StripeSubscription.objects.aget(stripe_id="sub_mperiod")
+        self.assertEqual(sub.metered_period_start, unix_to_datetime(item_period[0]))
+        self.assertEqual(sub.metered_period_end, unix_to_datetime(item_period[1]))
+
+        # Item removed (in the dashboard, say): the period goes with it.
+        payload = self.generate_subscription_event_data(
+            type="customer.subscription.updated",
+            event_id="evt_mperiod_2",
+            subscription_id="sub_mperiod",
+            current_period_start=now_timestamp - 86400 * 10,
+            current_period_end=now_timestamp + 86400 * 20,
+            price_id=price.stripe_id,
+            product_id=product.stripe_id,
+            event_created_timestamp=now_timestamp + 1,
+        )
+        with patch(
+            "apps.stripe.views.stripe_get",
+            new=AsyncMock(return_value=mock_customer_data),
+        ):
+            response = await stripe_webhook_view(self.generate_stripe_request(payload))
+        self.assertEqual(response.status_code, 200)
+        await sub.arefresh_from_db()
+        self.assertEqual(sub.metered_item_id, "")
+        self.assertIsNone(sub.metered_period_start)
+        self.assertIsNone(sub.metered_period_end)
 
     @override_settings(
         STRIPE_WEBHOOK_SECRET="test_webhook_secret",

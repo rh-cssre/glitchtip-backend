@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import importlib
 import json
 import time
 import uuid
@@ -8,10 +9,10 @@ from asgiref.sync import async_to_sync
 from django.db.utils import IntegrityError
 from django.test import TransactionTestCase
 from django.utils import timezone
-from django_async_backend.db import async_connections
 from model_bakery import baker
 
 from apps.organizations_ext.constants import OrganizationUserRole
+from glitchtip.async_db import recycle_async_connections
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
 from ..process_event import process_issue_events
@@ -166,6 +167,25 @@ async def pop_rust_ingest_messages() -> list[bytes]:
     return messages
 
 
+async def run_task_messages(messages: list[dict]) -> None:
+    """Run deserialized vtasks messages through the real task functions the
+    way a worker would, then recycle this task's async connections.
+
+    Ingest tasks are batched consumers, so each call takes a list of
+    task-message dicts. The recycle is what a worker does between tasks
+    (see ``glitchtip.task_signals``), and it is needed here because every
+    call above shares the caller's asyncio task: the wrapper those tasks
+    claim is otherwise inherited by — and refused to — whatever crosses an
+    ``async_to_sync`` boundary next, such as the immediate task backend's
+    ``flush_batches``.
+    """
+    for message in messages:
+        module, name = message["func"].rsplit(".", 1)
+        vtask = getattr(importlib.import_module(module), name)
+        await vtask.func([message])
+    await recycle_async_connections()
+
+
 def generate_event(
     event_type="error",
     level="error",
@@ -262,23 +282,23 @@ def generate_event(
 
 
 def run_async_closing(coro_func, *args, **kwargs):
-    """``async_to_sync`` for tests that opens a fresh task and closes the
+    """``async_to_sync`` for tests that opens a fresh task and recycles the
     task's async-backend connections before the task ends.
 
     Each ``async_to_sync`` invocation runs in a new task, which gets its
-    own task-local async-DB wrapper. ``psycopg.AsyncConnection`` can't
-    close synchronously from ``__del__``, so the socket leaks until
-    process exit. Closing inside the task — same context that opened it —
-    avoids exhausting Postgres' ``max_connections`` over a full suite.
+    own task-local async-DB wrapper. The connection can't close
+    synchronously from ``__del__``, so the socket leaks until process
+    exit. Closing inside the task — same context that opened it — avoids
+    exhausting Postgres' ``max_connections`` over a full suite. The
+    wrapper also has to be unclaimed, or the next task to reach for the
+    alias is refused it; ``recycle_async_connections`` does both.
     """
 
     async def _wrapper():
         try:
             return await coro_func(*args, **kwargs)
         finally:
-            for alias in async_connections.settings:
-                if hasattr(async_connections._connections, alias):
-                    await async_connections[alias].close()
+            await recycle_async_connections()
 
     return async_to_sync(_wrapper)()
 

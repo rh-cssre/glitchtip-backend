@@ -32,7 +32,6 @@ hand so behavior changes stay explicit.
 """
 
 import gzip
-import importlib
 import json
 import os
 import time
@@ -57,7 +56,12 @@ from apps.issue_events.models import IssueEvent
 from apps.logs.models import LogEvent
 from apps.performance.models import TransactionGroup
 
-from .utils import AsgiIngestTestMixin, EventIngestTestCase, list_to_envelope
+from .utils import (
+    AsgiIngestTestMixin,
+    EventIngestTestCase,
+    list_to_envelope,
+    run_task_messages,
+)
 
 FIXTURES = Path(__file__).parent / "parity_fixtures"
 GOLDENS_PATH = FIXTURES / "goldens.json"
@@ -164,12 +168,7 @@ class IngestParityTestCase(AsgiIngestTestMixin, EventIngestTestCase):
             if raw is None:
                 break
             raw_messages.append(deserialize(bytes(raw)))
-        for message in raw_messages:
-            module, name = message["func"].rsplit(".", 1)
-            vtask = getattr(importlib.import_module(module), name)
-            # Ingest tasks are batched consumers: each call takes a list
-            # of task-message dicts.
-            await vtask.func([message])
+        await run_task_messages(raw_messages)
         backend = task_backends["default"]
         raw_messages += list(backend.pending_batches.get("ingest", []))
         # The immediate backend's flush runs async task functions through

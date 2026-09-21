@@ -5,7 +5,10 @@ class GlitchtipConfig(AppConfig):
     name = "glitchtip"
 
     def ready(self):
-        from . import checks, task_signals  # noqa: F401
+        # Imported for their import-time registrations: task_signals
+        # connects the vtasks receivers, async_db registers the system
+        # check that its recycling middleware is still wired up.
+        from . import async_db, task_signals  # noqa: F401
 
         self._skip_hstore_oid_lookup()
 

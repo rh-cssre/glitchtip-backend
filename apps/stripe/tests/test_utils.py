@@ -2,6 +2,7 @@ import os
 import time
 import unittest
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from dateutil.relativedelta import relativedelta
@@ -10,6 +11,7 @@ from django.utils.timezone import make_aware
 
 from apps.stripe.utils import (
     _MAX_CYCLE_MONTHS,
+    billing_window,
     compute_cycle,
     compute_cycle_n_ago,
     unix_to_datetime,
@@ -155,6 +157,54 @@ class ComputeCycleTests(SimpleTestCase):
             start + relativedelta(months=_MAX_CYCLE_MONTHS),
         )
         mock_logger.warning.assert_called_once()
+
+
+class BillingWindowTests(SimpleTestCase):
+    """Which period an organization's usage is counted, throttled and billed in."""
+
+    def _sub(self, **kwargs):
+        fields = {
+            "current_period_start": dt(2026, 1, 15),
+            "current_period_end": dt(2027, 1, 15),
+            "subscription_cycle_start": dt(2026, 3, 15),
+            "subscription_cycle_end": dt(2026, 4, 15),
+            "metered_item_id": "",
+            "metered_period_start": None,
+            "metered_period_end": None,
+        }
+        fields.update(kwargs)
+        return SimpleNamespace(**fields)
+
+    def test_metered_items_period_wins(self):
+        # However it lines up with the plan's period or the virtual month: it
+        # is where Stripe files the meter events.
+        sub = self._sub(
+            metered_item_id="si_1",
+            metered_period_start=dt(2026, 3, 3),
+            metered_period_end=dt(2026, 4, 3),
+        )
+        self.assertEqual(billing_window(sub), (dt(2026, 3, 3), dt(2026, 4, 3)))
+
+    def test_virtual_month_without_an_item(self):
+        sub = self._sub()
+        self.assertEqual(billing_window(sub), (dt(2026, 3, 15), dt(2026, 4, 15)))
+
+    def test_plan_period_without_a_virtual_month(self):
+        sub = self._sub(subscription_cycle_start=None, subscription_cycle_end=None)
+        self.assertEqual(billing_window(sub), (dt(2026, 1, 15), dt(2027, 1, 15)))
+
+    def test_item_without_a_recorded_period_falls_back(self):
+        # Attached but not yet reported by Stripe: the plan's window until then.
+        sub = self._sub(metered_item_id="si_1")
+        self.assertEqual(billing_window(sub), (dt(2026, 3, 15), dt(2026, 4, 15)))
+
+    def test_cleared_item_leaves_its_period_behind(self):
+        # A terminal subscription clears the item id; a stale period must not
+        # keep steering the window.
+        sub = self._sub(
+            metered_period_start=dt(2026, 3, 3), metered_period_end=dt(2026, 4, 3)
+        )
+        self.assertEqual(billing_window(sub), (dt(2026, 3, 15), dt(2026, 4, 15)))
 
 
 class ComputeCycleNAgoTests(SimpleTestCase):

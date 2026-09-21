@@ -127,6 +127,53 @@ def unix_to_datetime(timestamp: int) -> datetime:
     return datetime.fromtimestamp(timestamp, tz=UTC)
 
 
+def metered_item_period(metered_item) -> tuple[datetime | None, datetime | None]:
+    """The metered item's current Stripe billing period; (None, None) without one."""
+    if metered_item is None:
+        return None, None
+    return (
+        unix_to_datetime(metered_item.current_period_start),
+        unix_to_datetime(metered_item.current_period_end),
+    )
+
+
+def has_metered_window(sub) -> bool:
+    """Whether ``sub`` carries a metered item whose Stripe period is recorded."""
+    return bool(
+        sub.metered_item_id and sub.metered_period_start and sub.metered_period_end
+    )
+
+
+def billing_window(sub) -> tuple[datetime, datetime]:
+    """The window ``sub``'s usage is counted, throttled and billed in.
+
+    Stripe files a meter event under the billing period of the metered item
+    that contains the event's timestamp (its documented behaviour for
+    item-level periods; the `last` pick by timestamp within a period was
+    verified in test mode), so while an item is attached its own period is
+    the window -- whatever Stripe holds for it, whether or not that lines up
+    with the base plan's period or the virtual month. Counting over
+    any other window would bill twice where the two diverge: a cycle-to-date
+    total counted over a window that outlives the item's period lands in the
+    next one as if it were that period's own. The item's period applies
+    whether or not overage is currently switched on, so toggling it never
+    moves the window (and so never hands out a fresh quota). Without an item,
+    or before its period has been recorded, the base plan's Stripe period is
+    the window, subdivided into virtual months for annual plans.
+
+    In Stripe test mode an item attached part-way through a month to an
+    annual subscription was given the anchor-aligned month as its first
+    period, so the two windows were observed to coincide; nothing here depends
+    on that.
+    """
+    if has_metered_window(sub):
+        return sub.metered_period_start, sub.metered_period_end
+    return (
+        sub.subscription_cycle_start or sub.current_period_start,
+        sub.subscription_cycle_end or sub.current_period_end,
+    )
+
+
 def compute_cycle(period_start: datetime, period_end: datetime, is_annual: bool):
     """Return (cycle_start, cycle_end) for a subscription period.
 

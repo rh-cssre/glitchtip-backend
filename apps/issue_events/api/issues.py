@@ -37,7 +37,7 @@ from ..services import (
     is_uuid7,
     sort_options,
 )
-from ..tasks import delete_issue_task, update_issues_task
+from ..tasks import CHUNK_SIZE, delete_issue_task, update_issues_task
 from . import router
 
 EventStatusEnum = StrEnum("EventStatusEnum", EventStatus.labels)
@@ -415,8 +415,22 @@ async def update_issues(
     qs = await get_queryset(user_id, organization_slug=organization_slug)
     qs = filter_issue_list(qs, filters)
 
+    merge_issue = None
+    if payload.merge:
+        qs = qs.filter(is_deleted=False)
+        merge_issue = await qs.order_by("-id").afirst()
+        if (
+            merge_issue
+            and await qs.exclude(project_id=merge_issue.project_id).aexists()
+        ):
+            raise HttpError(400, "Cannot merge issues from different projects")
+
     # Freeze the set of issues to update to avoid race conditions with new issues
-    max_id = await qs.order_by("-id").values_list("id", flat=True).afirst()
+    max_id = (
+        merge_issue.id
+        if merge_issue
+        else await qs.order_by("-id").values_list("id", flat=True).afirst()
+    )
     if not max_id:
         return payload
 
@@ -430,11 +444,13 @@ async def update_issues(
     task_kwargs = {
         "organization_slug": organization_slug,
         "user_id": user_id,
-        "filter_params": filters.dict(),
+        "filter_params": filters.model_dump(by_alias=True, mode="json"),
         "exclude_ids": updated_ids,
         "max_id": max_id,
-        "update_params": payload.dict(),
+        "update_params": payload.model_dump(mode="json"),
     }
+    if merge_issue:
+        task_kwargs["update_params"]["merge"] = merge_issue.id
 
     organization_id = (
         await Organization.objects.filter(slug=organization_slug)
@@ -468,31 +484,34 @@ async def update_issues(
             task_kwargs["update_params"]["assigned_to_team_id"] = assignee_team_id
             await update_issues_task.aenqueue(**task_kwargs)
 
-    if payload.merge:
-        # Identify the target issue (most recent one)
-        # Note: logic requires that the target issue is in the initial queryset
-        issue = await qs.order_by("-id").afirst()
-        if not issue:
-            return payload
+    if merge_issue:
+        remove_qs = Issue.objects.filter(
+            id__in=updated_ids, project_id=merge_issue.project_id
+        ).exclude(id=merge_issue.id)
+        await IssueHash.objects.filter(issue__in=remove_qs).aupdate(issue=merge_issue)
 
-        remove_qs = Issue.objects.filter(id__in=updated_ids).exclude(id=issue.id)
-        await remove_qs.aupdate(is_deleted=True)
-        await IssueHash.objects.filter(issue__in=remove_qs).aupdate(issue=issue)
+        event_ids = [
+            event_id
+            async for event_id in IssueEvent.objects.filter(
+                issue__in=remove_qs,
+                organization_id=organization_id,
+            ).values_list("id", flat=True)[:CHUNK_SIZE]
+        ]
+        moved_event_count = await IssueEvent.objects.filter(
+            id__in=event_ids,
+            issue__in=remove_qs,
+            organization_id=organization_id,
+        ).aupdate(issue=merge_issue)
+        if moved_event_count:
+            await IssueIndex.objects.filter(
+                issue_id=merge_issue.id,
+                organization_id=merge_issue.project.organization_id,
+            ).aupdate(count=F("count") + moved_event_count)
 
-        event_ids = []
-        async for event_id in IssueEvent.objects.filter(
-            issue__in=remove_qs
-        ).values_list("id", flat=True)[:1000]:
-            event_ids.append(event_id)
-        await IssueEvent.objects.filter(id__in=event_ids).aupdate(issue=issue)
-        # count lives on the IssueIndex leaf; include the partition key.
-        await IssueIndex.objects.filter(
-            issue_id=issue.id, organization_id=issue.project.organization_id
-        ).aupdate(count=F("count") + len(event_ids))
-
-        if should_enqueue:
-            # Pass the target merge issue ID to the task
-            task_kwargs["update_params"]["merge"] = issue.id
+        needs_drain = len(event_ids) == CHUNK_SIZE
+        if not needs_drain:
+            await remove_qs.aupdate(is_deleted=True)
+        if should_enqueue or needs_drain:
             await update_issues_task.aenqueue(**task_kwargs)
 
     return payload

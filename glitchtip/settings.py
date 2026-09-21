@@ -256,7 +256,10 @@ GLITCHTIP_FREE_TIER_EVENTS = env.int("GLITCHTIP_FREE_TIER_EVENTS", 1000)
 # routes each event to the right customer by stripe_customer_id, not by which
 # instance sent it.) Re-provisioning a fresh meter is the only reason this would
 # ever change, and Stripe meter event_names are immutable once created.
-GLITCHTIP_OVERAGE_METER_EVENT_NAME = "glitchtip_overage_events"
+# The meter this names must aggregate by ``last``: each report is the cycle-to-date
+# total, not an increment. The ``_total`` suffix keeps reports off any older
+# ``sum`` meter, where the same figures would compound on every sweep.
+GLITCHTIP_OVERAGE_METER_EVENT_NAME = "glitchtip_overage_events_total"
 # Upper bound on a per-org overage spend cap, in cents. Guards against a
 # fat-fingered or malicious cap; also keeps the value within PositiveIntegerField
 # range. Default $10,000/cycle — a cap this high is effectively a "contact us"
@@ -501,7 +504,10 @@ if SENTRY_DSN:
 
         return event
 
-    # Ignore whitenoise served static routes. The path comes off the ASGI
+    # Ignore static file routes. ServeStatic answers the ones that exist
+    # above Django (glitchtip/asgi.py), so what reaches this sampler is a
+    # request for a static file that is missing -- still not worth a
+    # transaction. The path comes off the ASGI
     # scope; STATIC_URL is stored without a leading slash, so it is compared
     # against the request path in the rooted form the scope carries, including
     # any BASE_PATH the app is mounted under. A prefix of "/" would match every
@@ -608,6 +614,7 @@ INSTALLED_APPS = [
     "django.contrib.humanize",
     "django.contrib.postgres",
     "django_prometheus",
+    "django_async_backend",
     "allauth",
     "allauth.account",
     "allauth.headless",
@@ -672,7 +679,6 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.csp.ContentSecurityPolicyMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
 ]
 if DEBUG_TOOLBAR:
     MIDDLEWARE.append("debug_toolbar.middleware.DebugToolbarMiddleware")
@@ -686,19 +692,34 @@ MIDDLEWARE += [
     "allauth_async.account.middleware.AsyncAccountMiddleware",
 ]
 
-if "GRANIAN_STATIC_PATH_MOUNT" in os.environ:
-    MIDDLEWARE.remove("whitenoise.middleware.WhiteNoiseMiddleware")
-
 if ENABLE_OBSERVABILITY_API:
     MIDDLEWARE.insert(0, "django_prometheus.middleware.PrometheusBeforeMiddleware")
     MIDDLEWARE.append("django_prometheus.middleware.PrometheusAfterMiddleware")
+
+# django-async-backend 6.1 connects close_old_async_connections to
+# request_started / request_finished. That closes each request's async
+# connections but leaves the wrapper stamped with the task that claimed it,
+# so the next task to use the alias is refused — and an async receiver makes
+# every response pay a Signal.send -> async_to_sync hop. Switch them off and
+# use our own middleware, which closes *and* unclaims; see glitchtip.async_db.
+ASYNC_BACKEND_DISABLE_REQUEST_SIGNALS = True
 
 # Async DB cursors live in django-async-backend's ``async_connections``
 # store (served by the gt_rust engine; see the ENGINE assignment in the
 # DATABASES loop below). Inserted at the head of the chain so async cursors
 # are returned to the pool before any other middleware finalises the
-# response.
-MIDDLEWARE.insert(0, "django_async_backend.middleware.close_async_connections")
+# response. glitchtip.async_db.check_async_connection_recycling fails the
+# system checks if this goes missing.
+MIDDLEWARE.insert(0, "glitchtip.async_db.recycle_async_connections_middleware")
+
+# Compresses the SPA's index.html and every API response. Static files are
+# already compressed on disk and never reach here. Nothing to configure, and a
+# CDN or compressing proxy in front still works. See glitchtip/compression.py.
+#
+# Inserted last so it is outermost: the response phase runs in reverse, so the
+# body is compressed after every other middleware is done with it -- including
+# close_async_connections, so the pooled database connection is back first.
+MIDDLEWARE.insert(0, "glitchtip.compression.compression_middleware")
 
 ROOT_URLCONF = "glitchtip.urls"
 
@@ -1110,15 +1131,41 @@ USE_I18N = True
 
 USE_TZ = True
 
+# Underscored because Django removed its own STATICFILES_STORAGE setting and an
+# upper-case name here would look like one. The env var keeps the familiar name.
+_staticfiles_storage = env.str(
+    "STATICFILES_STORAGE", "servestatic.storage.CompressedStaticFilesStorage"
+)
+if _staticfiles_storage.startswith("whitenoise.storage."):
+    # WhiteNoise is no longer installed, so a pinned WhiteNoise backend would
+    # fail at boot. ServeStatic is a fork of it and keeps the same class names,
+    # so translate and warn rather than refuse to start. Removed next major.
+    _servestatic_backend = _staticfiles_storage.replace(
+        "whitenoise.storage.", "servestatic.storage.", 1
+    )
+    warnings.warn(
+        f"STATICFILES_STORAGE={_staticfiles_storage} names a WhiteNoise backend, "
+        f"which GlitchTip no longer ships. Falling back to "
+        f"{_servestatic_backend}. Update the setting: this fallback is removed "
+        f"in the next major release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    _staticfiles_storage = _servestatic_backend
+
 STORAGES = {
     "default": {
         "BACKEND": env("DEFAULT_FILE_STORAGE"),
     },
     "staticfiles": {
-        "BACKEND": env.str(
-            "STATICFILES_STORAGE",
-            "whitenoise.storage.CompressedManifestStaticFilesStorage",
-        )
+        # Compressed, not Manifest*: the frontend build already content-hashes
+        # its own filenames, which is what the browser requests. Manifest
+        # hashing added a second, unused copy of every file plus a public
+        # staticfiles.json, and made a single missing reference a hard
+        # collectstatic failure mid-deploy. Operators who serve Django's own
+        # {% static %} assets from a long-lived cache can opt back in via the
+        # STATICFILES_STORAGE env var.
+        "BACKEND": _staticfiles_storage
     },
 }
 
@@ -1147,9 +1194,21 @@ MEDIA_ROOT = env.str("MEDIA_ROOT", "")
 
 STATICFILES_DIRS = [
     "assets",
+    # The frontend build, source maps included. Publishing them is deliberate:
+    # GlitchTip is open source, and a readable stack trace is worth more than
+    # the bytes -- which are few, since they compress well and are only fetched
+    # with devtools open. Do not strip them to save space.
     "dist",
 ]
 STATIC_ROOT = path("static/")
+
+# collectstatic writes a compressed copy beside every compressible file, once
+# per image build. ServeStatic then serves the smallest one the client accepts.
+#
+# Zstandard is off: brotli was smaller for all but one file in the tree even
+# against zstd at its highest level, and every browser sending `zstd` also sends
+# `br`, so the .zstd copies would never be chosen.
+SERVESTATIC_USE_ZSTD = False
 
 EMAIL_BACKEND = env.str(
     "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
@@ -1342,9 +1401,11 @@ if TESTING:
     }
     SESSION_ENGINE = "django.contrib.sessions.backends.cache"
     STORAGES = global_settings.STORAGES
-    # https://github.com/evansd/whitenoise/issues/215
+    # Tests import glitchtip.asgi, which indexes STATIC_ROOT; a test run has not
+    # collected static and does not serve it. The module is ours because
+    # ServeStatic warns with a stacklevel that attributes it to the caller.
     warnings.filterwarnings(
-        "ignore", message="No directory at", module="whitenoise.base"
+        "ignore", message="No directory at", module="glitchtip.asgi"
     )
 if TESTING:
     CACHES = {
@@ -1353,7 +1414,3 @@ if TESTING:
         }
     }
 CACHE_IS_VALKEY = "valkey" in CACHES["default"]["BACKEND"].lower()
-
-warnings.filterwarnings(
-    "ignore", message="No directory at", module="django.core.handlers.base"
-)

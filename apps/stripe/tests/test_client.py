@@ -6,6 +6,7 @@ from django.test import TestCase
 from apps.stripe.client import (
     STRIPE_URL,
     STRIPE_V2_URL,
+    create_meter,
     create_session,
     create_subscription,
     fetch_v2_event,
@@ -127,6 +128,54 @@ class StripeV2EventFetchTests(TestCase):
         # The id lands in the URL path; a crafted one must not reach Stripe.
         with self.assertRaises(ValueError):
             await fetch_v2_event("evt_1/../../v1/customers")
+
+
+class StripeContentTypeTests(TestCase):
+    async def test_v2_request_pins_no_content_type(self):
+        """A pinned Content-Type reaches v2, which answers 415.
+
+        aiohttp derives the header from the body -- form encoding for our v1
+        POSTs, none at all for a bodyless request, which is what v2 wants. The
+        header this asserts against is shared by every Stripe call, so pinning
+        it here covers v1 too.
+        """
+        with mock_aiohttp() as mocked:
+            mocked.get(
+                f"{STRIPE_V2_URL}/core/events/evt_1",
+                status=200,
+                payload={
+                    "id": "evt_1",
+                    "object": "v2.core.event",
+                    "type": "v1.billing.meter.error_report_triggered",
+                },
+            )
+            await fetch_v2_event("evt_1")
+            request = mocked.requests[0]
+        self.assertNotIn("Content-Type", request.kwargs["headers"])
+
+
+class StripeMeterTests(TestCase):
+    async def test_create_meter_aggregates_by_last(self):
+        """Reports are cycle-to-date totals; only a last-value meter bills them once."""
+        with mock_aiohttp() as mocked:
+            mocked.post(
+                f"{STRIPE_URL}/billing/meters",
+                status=200,
+                payload={
+                    "id": "mtr_1",
+                    "object": "billing.meter",
+                    "display_name": "GlitchTip Overage Events",
+                    "event_name": "glitchtip_overage_events_total",
+                    "status": "active",
+                    "default_aggregation": {"formula": "last"},
+                },
+            )
+            meter = await create_meter(
+                "GlitchTip Overage Events", "glitchtip_overage_events_total"
+            )
+            request = mocked.requests[0]
+        self.assertEqual(request.kwargs["data"]["default_aggregation[formula]"], "last")
+        self.assertEqual(meter.default_aggregation.formula, "last")
 
 
 def _session_response() -> str:
