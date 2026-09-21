@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -6,10 +7,11 @@ import subprocess
 import sys
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import UUID
 
 from django.conf import settings
+from django.core import signals
 from django.db import connection
 from django.test import (
     SimpleTestCase,
@@ -18,9 +20,18 @@ from django.test import (
     override_settings,
 )
 from django.urls import reverse
+from django_async_backend.db import async_connections, close_old_async_connections
+from django_vtasks.signals import task_failure, task_finished
 from model_bakery import baker
 
 from apps.stripe.models import SupportLicense
+from glitchtip.async_db import (
+    MIDDLEWARE_PATH,
+    check_async_connection_recycling,
+    recycle_async_connections,
+    recycle_async_connections_middleware,
+)
+from glitchtip.ingest_asgi import INGEST_MIDDLEWARE
 from glitchtip.internal_transport import InternalTransport, _processing_internal
 from glitchtip.partition_manager import PartitionManager, UUID7Helper
 from glitchtip.settings import _is_self_referencing_dsn
@@ -1277,6 +1288,11 @@ json.dump({
     "prepare_threshold": settings.DATABASES["default"]["OPTIONS"].get(
         "prepare_threshold", "absent"
     ),
+    "iam_provider": settings.DATABASES["default"]["OPTIONS"].get(
+        "credential_provider", "absent"
+    ),
+    "sslmode": settings.DATABASES["default"]["OPTIONS"].get("sslmode", "absent"),
+    "password": settings.DATABASES["default"].get("PASSWORD", "absent"),
 }, __import__("sys").stdout)
 """
 
@@ -1507,6 +1523,119 @@ class PrepareThresholdConfigTestCase(TestCase):
         self.assertIn("DATABASE_PREPARE_THRESHOLD", result.stderr)
 
 
+class DatabaseIamAuthConfigTestCase(TestCase):
+    """DATABASE_IAM_AUTH* -> DATABASES[...]["OPTIONS"], at settings-import time.
+
+    glitchtip.test_db_iam covers the policy function in isolation; this covers
+    the plumbing that decides whether the policy runs at all. That plumbing is
+    where a misconfiguration turns the feature into a silent no-op, so it has
+    to be exercised the way it actually resolves: in a fresh interpreter.
+    """
+
+    BASE_ENV = CacheConfigTestCase.BASE_ENV
+    CA_BUNDLE = "/certs/rds-global-bundle.pem"
+    PROVIDER = "django_vpg.contrib.aws.rds_iam_token"
+
+    def _probe(self, extra_env: dict) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, "-c", _SETTINGS_PROBE],
+            capture_output=True,
+            text=True,
+            env={**self.BASE_ENV, **extra_env},
+            timeout=30,
+            check=False,
+        )
+
+    def _info(self, extra_env: dict) -> dict:
+        result = self._probe(extra_env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout.strip().splitlines()[-1])
+
+    def test_off_by_default_changes_nothing(self):
+        # The shipped compose/Helm config must keep working untouched, with no
+        # TLS keys appearing that the operator never asked for.
+        info = self._info({})
+        self.assertEqual(info["iam_provider"], "absent")
+        self.assertEqual(info["sslmode"], "absent")
+
+    def test_enabled_wires_the_provider(self):
+        info = self._info(
+            {"DATABASE_IAM_AUTH": "true", "DATABASE_SSLROOTCERT": self.CA_BUNDLE}
+        )
+        self.assertEqual(info["iam_provider"], self.PROVIDER)
+        self.assertEqual(info["sslmode"], "verify-full")
+
+    def test_an_empty_alias_list_aborts_rather_than_doing_nothing(self):
+        # An env var set but empty reads as "" rather than falling back to the
+        # default, which is the normal rendering of an unset Helm value. That
+        # left every alias on password auth with a clean boot, so this is the
+        # regression test for the whole feature being silently inert.
+        for value in ("", " ", ",,"):
+            with self.subTest(value=value):
+                result = self._probe(
+                    {
+                        "DATABASE_IAM_AUTH": "true",
+                        "DATABASE_IAM_AUTH_ALIASES": value,
+                        "DATABASE_SSLROOTCERT": self.CA_BUNDLE,
+                    }
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("DATABASE_IAM_AUTH_ALIASES", result.stderr)
+
+    def test_an_unknown_alias_aborts(self):
+        result = self._probe(
+            {
+                "DATABASE_IAM_AUTH": "true",
+                "DATABASE_IAM_AUTH_ALIASES": "default,typo",
+                "DATABASE_SSLROOTCERT": self.CA_BUNDLE,
+            }
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("typo", result.stderr)
+
+    def test_an_alias_outside_the_list_keeps_its_password(self):
+        # Naming only another alias must not relax the password requirement
+        # here: an empty password against a trust-configured server connects
+        # unauthenticated.
+        result = self._probe(
+            {
+                "DATABASE_IAM_AUTH": "true",
+                "DATABASE_IAM_AUTH_ALIASES": "default",
+                "DATABASE_SSLROOTCERT": self.CA_BUNDLE,
+                "DATABASE_URL": "",
+                "DATABASE_HOST": "db.abc123.us-east-2.rds.amazonaws.com",
+                "DATABASE_USER": "app_iam",
+            }
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        info = json.loads(result.stdout.strip().splitlines()[-1])
+        self.assertEqual(info["password"], "")
+
+        result = self._probe(
+            {
+                "DATABASE_IAM_AUTH": "true",
+                "DATABASE_IAM_AUTH_ALIASES": "read_only",
+                "DATABASE_SSLROOTCERT": self.CA_BUNDLE,
+                "DATABASE_URL": "",
+                "DATABASE_HOST": "db.abc123.us-east-2.rds.amazonaws.com",
+                "DATABASE_USER": "app_iam",
+            }
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("DATABASE_PASSWORD", result.stderr)
+
+    def test_the_configured_sslmode_reaches_the_policy(self):
+        # Not a second copy of the TLS guards — glitchtip.test_db_iam owns
+        # those. This is the only check that DATABASE_SSLMODE is threaded into
+        # configure_options at all; the other cases here never set it, and a
+        # broken wiring would leave them passing on the verify-full default.
+        result = self._probe(
+            {"DATABASE_IAM_AUTH": "true", "DATABASE_SSLMODE": "require"}
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("DATABASE_IAM_ALLOW_UNVERIFIED_TLS", result.stderr)
+
+
 # ----------------------------------------------------------------------------
 # Settings-import-time behaviour (cookie derivation, production warnings).
 #
@@ -1645,27 +1774,173 @@ class ProductionWarningTests(SimpleTestCase):
         self.assertNotIn("ALLOWED_HOSTS is the wildcard default", r.stderr)
 
 
+class AsyncConnectionRecyclingTestCase(SimpleTestCase):
+    """``recycle_async_connections`` has to close the connection *and*
+    put a fresh wrapper in the store: django-async-backend stamps a
+    wrapper with the task that first used it and never clears the stamp,
+    so a closed-but-kept wrapper is refused to every later task."""
+
+    def _claimed_wrapper(self):
+        """A wrapper in the state a request leaves behind: stamped by some
+        task, with a close that does not need a database."""
+        conn = async_connections["default"]
+        conn._task = asyncio.current_task()
+        conn.close = AsyncMock()
+        return conn
+
+    async def test_recycles_a_claimed_alias(self):
+        original = self._claimed_wrapper()
+
+        await recycle_async_connections()
+
+        original.close.assert_awaited_once()
+        self.assertIsNot(async_connections["default"], original)
+        # Unstamped, so the next task may claim it.
+        self.assertIsNone(async_connections["default"]._task)
+
+    async def test_leaves_an_untouched_alias_alone(self):
+        """A wrapper nobody claimed and nobody opened has nothing to
+        reclaim; replacing it would churn an object per request."""
+        untouched = async_connections["default"]
+        untouched.close = AsyncMock()
+
+        await recycle_async_connections()
+
+        untouched.close.assert_not_awaited()
+        self.assertIs(async_connections["default"], untouched)
+
+    async def test_recycles_despite_a_failing_close(self):
+        """A connection that can't be returned (a failover mid-request)
+        must still be dropped, or the alias stays stamped for good."""
+        original = self._claimed_wrapper()
+        original.close = AsyncMock(side_effect=OSError("connection reset"))
+
+        with self.assertLogs("glitchtip.async_db", level="ERROR"):
+            await recycle_async_connections()
+
+        self.assertIsNot(async_connections["default"], original)
+
+    async def test_skips_an_alias_inside_a_transaction(self):
+        """Swapping the store entry mid-transaction would let the atomic
+        block commit a wrapper that never saw the writes."""
+        original = self._claimed_wrapper()
+        original.in_atomic_block = True
+        # TESTING calls logging.disable(WARNING); lift it so the skip's
+        # own warning is observable here.
+        logging.disable(logging.NOTSET)
+        self.addCleanup(logging.disable, logging.WARNING)
+
+        with self.assertLogs("glitchtip.async_db", level="WARNING"):
+            await recycle_async_connections()
+
+        original.close.assert_not_awaited()
+        self.assertIs(async_connections["default"], original)
+
+    async def test_cancellation_still_unclaims_and_closes(self):
+        """A client that disconnects mid-response cancels the recycle. The
+        alias must come back unclaimed anyway, and the close must finish:
+        a stamped wrapper breaks every later task on that alias."""
+        original = self._claimed_wrapper()
+        closing = asyncio.Event()
+        release = asyncio.Event()
+        closed = asyncio.Event()
+        entry = {}
+
+        async def slow_close():
+            closing.set()
+            await release.wait()
+            closed.set()
+
+        original.close = slow_close
+
+        async def recycle():
+            try:
+                await recycle_async_connections()
+            finally:
+                # Read from inside the child task: its context is a copy,
+                # so the swap is only visible here.
+                entry["after"] = async_connections["default"]
+
+        task = asyncio.create_task(recycle())
+        # Bounded: an implementation that never closes would otherwise
+        # hang the suite here rather than failing it.
+        await asyncio.wait_for(closing.wait(), timeout=5)
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+
+        # The store write happens before the first await, so the swap
+        # survived the cancellation...
+        self.assertIsNot(entry["after"], original)
+        # ...and the shielded close kept running rather than being dropped.
+        release.set()
+        await asyncio.wait_for(closed.wait(), timeout=5)
+
+
+class RequestRecyclingTestCase(SimpleTestCase):
+    """django-async-backend's own request receivers close without
+    unstamping — and make every response pay a Signal.send hop — so they
+    are switched off and a middleware takes their place."""
+
+    def test_async_backend_request_receivers_are_not_connected(self):
+        for signal in (signals.request_started, signals.request_finished):
+            # weak=False upstream, so the entry holds the function itself.
+            receivers = [entry[1] for entry in signal.receivers]
+            self.assertNotIn(close_old_async_connections, receivers)
+
+    def test_middleware_is_in_both_chains(self):
+        self.assertIn(MIDDLEWARE_PATH, settings.MIDDLEWARE)
+        self.assertIn(MIDDLEWARE_PATH, INGEST_MIDDLEWARE)
+
+    def test_system_check_reports_a_missing_middleware(self):
+        """The check is the guard that the wiring above still exists; it
+        has to actually fail when the wiring is gone."""
+        self.assertEqual(check_async_connection_recycling(), [])
+        with self.settings(MIDDLEWARE=[]):
+            errors = check_async_connection_recycling()
+        self.assertEqual([error.id for error in errors], ["glitchtip.E001"])
+
+    async def test_middleware_recycles_around_the_response(self):
+        original = async_connections["default"]
+        original._task = asyncio.current_task()
+        original.close = AsyncMock()
+        seen = {}
+
+        async def get_response(request):
+            seen["during"] = async_connections["default"]
+            return "response"
+
+        middleware = recycle_async_connections_middleware(get_response)
+        self.assertEqual(await middleware(None), "response")
+
+        # Recycled on the way in, so the view never inherits a claimed
+        # wrapper, and again on the way out.
+        self.assertIsNot(seen["during"], original)
+        self.assertIsNot(async_connections["default"], original)
+        original.close.assert_awaited_once()
+
+
 class TaskSignalsTestCase(SimpleTestCase):
-    """The worker has no HTTP middleware, so async DB connections opened
-    by an async task would leak. ``glitchtip.task_signals`` connects a
-    receiver to vtasks' ``task_finished`` / ``task_failure`` signals that
-    closes ``async_connections`` the same way the request middleware does."""
+    """The worker has no HTTP request cycle, so async DB connections
+    opened by an async task would leak — and stay stamped with that
+    task. ``glitchtip.task_signals`` connects a receiver to vtasks'
+    ``task_finished`` / ``task_failure`` signals that recycles
+    ``async_connections`` the way the request middleware does."""
 
-    async def _assert_signal_closes_async_connections(self, signal, **payload):
-        from unittest.mock import AsyncMock
+    async def _assert_signal_recycles_async_connections(self, signal, **payload):
+        original = async_connections["default"]
+        original._task = asyncio.current_task()
+        original.close = AsyncMock()
 
-        from django_async_backend.db import async_connections
+        await signal.asend(sender=type(self), **payload)
 
-        with patch.object(
-            async_connections, "close_all", new_callable=AsyncMock
-        ) as close_all:
-            await signal.asend(sender=type(self), **payload)
-            close_all.assert_awaited_once()
+        original.close.assert_awaited_once()
+        # asend dispatches the receiver in a child task; this also proves
+        # its context changes are restored into ours.
+        self.assertIsNot(async_connections["default"], original)
 
-    async def test_task_finished_closes_async_connections(self):
-        from django_vtasks.signals import task_finished
-
-        await self._assert_signal_closes_async_connections(
+    async def test_task_finished_recycles_async_connections(self):
+        await self._assert_signal_recycles_async_connections(
             task_finished,
             task_id="x",
             task_ids=None,
@@ -1673,10 +1948,8 @@ class TaskSignalsTestCase(SimpleTestCase):
             duration=0.0,
         )
 
-    async def test_task_failure_closes_async_connections(self):
-        from django_vtasks.signals import task_failure
-
-        await self._assert_signal_closes_async_connections(
+    async def test_task_failure_recycles_async_connections(self):
+        await self._assert_signal_recycles_async_connections(
             task_failure,
             task_id="x",
             task_ids=None,

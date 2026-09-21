@@ -28,12 +28,9 @@ PORT=${GRANIAN_PORT:-${PORT:-8000}}
 
 G_LOG_LEVEL=${GRANIAN_LOG_LEVEL:-INFO}
 
-# Serve static files by default if the directory exists
-if [ -n "$GRANIAN_STATIC_PATH_MOUNT" ]; then
-    export GRANIAN_STATIC_PATH_MOUNT
-elif [ -d "static" ]; then
-    export GRANIAN_STATIC_PATH_MOUNT="static"
-fi
+# Static files are served by ServeStatic inside the ASGI app (glitchtip/asgi.py).
+# Setting GRANIAN_STATIC_PATH_MOUNT hands /static/ back to granian instead, which
+# is faster but cannot compress.
 
 if [ "${ENABLE_OBSERVABILITY_API}" = "True" ] || [ "${ENABLE_OBSERVABILITY_API}" = "true" ] || [ "${ENABLE_OBSERVABILITY_API}" = "1" ]; then
     if [ "$WORKERS" -gt 1 ]; then

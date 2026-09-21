@@ -20,7 +20,10 @@ from corsheaders.defaults import default_headers
 from django.conf import global_settings
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.csp import CSP
+from django.utils.module_loading import import_string
 from django_vtasks.scheduler import crontab
+
+from glitchtip import db_iam as _db_iam
 
 env = environ.FileAwareEnv(
     ALLOWED_HOSTS=(list, ["*"]),
@@ -504,7 +507,10 @@ if SENTRY_DSN:
 
         return event
 
-    # Ignore whitenoise served static routes. The path comes off the ASGI
+    # Ignore static file routes. ServeStatic answers the ones that exist
+    # above Django (glitchtip/asgi.py), so what reaches this sampler is a
+    # request for a static file that is missing -- still not worth a
+    # transaction. The path comes off the ASGI
     # scope; STATIC_URL is stored without a leading slash, so it is compared
     # against the request path in the rooted form the scope carries, including
     # any BASE_PATH the app is mounted under. A prefix of "/" would match every
@@ -611,6 +617,7 @@ INSTALLED_APPS = [
     "django.contrib.humanize",
     "django.contrib.postgres",
     "django_prometheus",
+    "django_async_backend",
     "allauth",
     "allauth.account",
     "allauth.headless",
@@ -675,7 +682,6 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.csp.ContentSecurityPolicyMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
 ]
 if DEBUG_TOOLBAR:
     MIDDLEWARE.append("debug_toolbar.middleware.DebugToolbarMiddleware")
@@ -689,19 +695,34 @@ MIDDLEWARE += [
     "allauth_async.account.middleware.AsyncAccountMiddleware",
 ]
 
-if "GRANIAN_STATIC_PATH_MOUNT" in os.environ:
-    MIDDLEWARE.remove("whitenoise.middleware.WhiteNoiseMiddleware")
-
 if ENABLE_OBSERVABILITY_API:
     MIDDLEWARE.insert(0, "django_prometheus.middleware.PrometheusBeforeMiddleware")
     MIDDLEWARE.append("django_prometheus.middleware.PrometheusAfterMiddleware")
+
+# django-async-backend 6.1 connects close_old_async_connections to
+# request_started / request_finished. That closes each request's async
+# connections but leaves the wrapper stamped with the task that claimed it,
+# so the next task to use the alias is refused — and an async receiver makes
+# every response pay a Signal.send -> async_to_sync hop. Switch them off and
+# use our own middleware, which closes *and* unclaims; see glitchtip.async_db.
+ASYNC_BACKEND_DISABLE_REQUEST_SIGNALS = True
 
 # Async DB cursors live in django-async-backend's ``async_connections``
 # store (served by the gt_rust engine; see the ENGINE assignment in the
 # DATABASES loop below). Inserted at the head of the chain so async cursors
 # are returned to the pool before any other middleware finalises the
-# response.
-MIDDLEWARE.insert(0, "django_async_backend.middleware.close_async_connections")
+# response. glitchtip.async_db.check_async_connection_recycling fails the
+# system checks if this goes missing.
+MIDDLEWARE.insert(0, "glitchtip.async_db.recycle_async_connections_middleware")
+
+# Compresses the SPA's index.html and every API response. Static files are
+# already compressed on disk and never reach here. Nothing to configure, and a
+# CDN or compressing proxy in front still works. See glitchtip/compression.py.
+#
+# Inserted last so it is outermost: the response phase runs in reverse, so the
+# body is compressed after every other middleware is done with it -- including
+# close_async_connections, so the pooled database connection is back first.
+MIDDLEWARE.insert(0, "glitchtip.compression.compression_middleware")
 
 ROOT_URLCONF = "glitchtip.urls"
 
@@ -853,6 +874,31 @@ ANYMAIL = {
 
 ACCOUNT_EMAIL_SUBJECT_PREFIX = env.str("ACCOUNT_EMAIL_SUBJECT_PREFIX", "")
 
+# AWS RDS IAM database authentication. When enabled there is no database
+# password for the aliases it covers: the driver calls
+# django_vpg.contrib.aws.rds_iam_token for the connections it opens and
+# authenticates with a short-lived IAM token, so any PASSWORD in DATABASE_URL
+# is ignored by the driver. See glitchtip/db_iam.py for the AWS prerequisites.
+DATABASE_IAM_AUTH = env.bool("DATABASE_IAM_AUTH", False)
+# Which DATABASES aliases authenticate with IAM. Defaults to "default" only,
+# because not every endpoint can validate a token; glitchtip/db_iam.py says
+# which can. Widen it for any alias that reaches an IAM-aware endpoint, and
+# remember an alias left off this list must not use a role holding rds_iam,
+# which no longer has a password to fall back on.
+DATABASE_IAM_AUTH_ALIASES = [
+    alias.strip()
+    for alias in env.str("DATABASE_IAM_AUTH_ALIASES", "default").split(",")
+    if alias.strip()
+]
+# Accept a database server whose identity is not verified. Only meaningful
+# with IAM auth, where it means a live token may be handed to anything that
+# answers on the hostname. Exists so the insecure choice has to be made
+# deliberately rather than by following an error message.
+DATABASE_IAM_ALLOW_UNVERIFIED_TLS = env.bool("DATABASE_IAM_ALLOW_UNVERIFIED_TLS", False)
+# TLS to the database. Independent of IAM auth, but required by it.
+DATABASE_SSLMODE = env.str("DATABASE_SSLMODE", None)
+DATABASE_SSLROOTCERT = env.str("DATABASE_SSLROOTCERT", None)
+
 # Database
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
 # Use either DATABASE_URL or individual components
@@ -874,7 +920,18 @@ if env.str("DATABASE_HOST", None):
         {
             "NAME": env.str("DATABASE_NAME", "postgres"),
             "USER": env.str("DATABASE_USER", "postgres"),
-            "PASSWORD": env.str("DATABASE_PASSWORD"),
+            # Not required when IAM auth covers THIS alias, where there is
+            # no password to supply. Gated on alias membership, not on
+            # DATABASE_IAM_AUTH alone: enabling IAM for some other alias must
+            # not quietly turn a mandatory password into an empty one here,
+            # which against a trust/peer-configured server would connect
+            # unauthenticated.
+            "PASSWORD": env.str(
+                "DATABASE_PASSWORD",
+                ""
+                if (DATABASE_IAM_AUTH and "default" in DATABASE_IAM_AUTH_ALIASES)
+                else environ.Env.NOTSET,
+            ),
             "HOST": env.str("DATABASE_HOST"),
             "PORT": env.str("DATABASE_PORT", "5432"),
         }
@@ -886,6 +943,7 @@ if env.str("DATABASE_HOST", None):
 # and the import Django's stock postgresql backend — which this engine
 # extends — performs at load), but no database I/O flows through it.
 DATABASE_ENGINE = "gt_rust.django_backend"
+
 # Valkey/Redis connection. VALKEY_URL is the source of truth — supports any scheme
 # that django-vcache understands: redis://, rediss://, valkey://, valkeys://, sentinel://
 # Component env vars (VALKEY_HOST, etc.) are a convenience for simple single-node setups.
@@ -903,8 +961,62 @@ if VALKEY_HOST:
 else:
     VALKEY_URL = env.str("VALKEY_URL", env.str("REDIS_URL", "redis://redis:6379/0"))
 
+if DATABASE_IAM_AUTH:
+    if not DATABASE_IAM_AUTH_ALIASES:
+        # An env var that is set but empty reads as "" rather than falling
+        # back to the default, and an empty value is the normal rendering of
+        # an unset Helm/compose variable. Without this the list is empty, no
+        # alias is covered, and every connection quietly keeps using the
+        # password that enabling IAM auth was meant to remove.
+        raise ImproperlyConfigured(
+            "DATABASE_IAM_AUTH is enabled but DATABASE_IAM_AUTH_ALIASES is "
+            "empty, so no alias would use IAM and every connection would "
+            "authenticate with its static password. Name at least one alias, "
+            "or leave DATABASE_IAM_AUTH_ALIASES unset to cover 'default'."
+        )
+    _unknown = set(DATABASE_IAM_AUTH_ALIASES) - set(DATABASES)
+    if _unknown:
+        raise ImproperlyConfigured(
+            f"DATABASE_IAM_AUTH_ALIASES names unknown aliases: {sorted(_unknown)}. "
+            f"Configured aliases are {sorted(DATABASES)}. A typo here silently "
+            "leaves an alias on password authentication."
+        )
+    # Fail closed if the installed driver cannot honour credential_provider.
+    # Without this the backend warns about an unsupported OPTIONS key, drops
+    # it, and connects with the static PASSWORD instead — so turning on a
+    # security feature would silently do nothing.
+    #
+    # Import the configured engine first and inspect the extension it
+    # installs, not django_vpg directly: gt_rust substitutes its own compiled
+    # module for django_vpg._vpg_driver and refuses if django_vpg was imported
+    # ahead of it, and that substituted module is the one whose capability
+    # actually decides this.
+    import importlib
+    import inspect
+
+    importlib.import_module(f"{DATABASE_ENGINE}.base")
+    from django_vpg._vpg_driver import RustPgDriver as _vpg_driver_cls
+
+    try:
+        _vpg_params = inspect.signature(_vpg_driver_cls.connect).parameters
+    except (TypeError, ValueError):  # pragma: no cover - builtin without one
+        _vpg_params = {}
+    if "credential_provider" not in _vpg_params:
+        raise ImproperlyConfigured(
+            "DATABASE_IAM_AUTH requires a database driver with "
+            "rotating-credential support, but the loaded "
+            f"{_vpg_driver_cls.__module__} extension does not accept "
+            "credential_provider and would fall back to password "
+            "authentication. Upgrade glitchtip-rust, which supplies it."
+        )
+    # The provider is a dotted path the driver resolves at connect time, so an
+    # absent django_vpg.contrib.aws (or a slim image without boto3) would sail
+    # past a guard whose whole purpose is to fail closed at startup, and show
+    # up as an InterfaceError on the first query instead.
+    import_string(_db_iam.RDS_IAM_PROVIDER)
+
 # Settings applied to every DATABASES entry, however it was configured above.
-for db_config in DATABASES.values():
+for _db_alias, db_config in DATABASES.items():
     # gt_rust.django_backend extends Django's stock postgresql backend and
     # adds the AsyncDatabaseWrapper that django-async-backend's
     # ``async_connections`` discovers via load_backend, so sync paths (ORM,
@@ -964,6 +1076,16 @@ for db_config in DATABASES.values():
                 "statement after N uses, 0 = on first use) or 'off' to "
                 f"disable prepared statements; got {_prepare_threshold!r}"
             )
+
+    # TLS and, when enabled, RDS IAM authentication. An OPTIONS entry set
+    # explicitly in a DATABASES override still wins over the environment.
+    _db_iam.configure_options(
+        options,
+        iam_auth=DATABASE_IAM_AUTH and _db_alias in DATABASE_IAM_AUTH_ALIASES,
+        sslmode=DATABASE_SSLMODE,
+        sslrootcert=DATABASE_SSLROOTCERT,
+        allow_unverified_tls=DATABASE_IAM_ALLOW_UNVERIFIED_TLS,
+    )
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -1113,15 +1235,41 @@ USE_I18N = True
 
 USE_TZ = True
 
+# Underscored because Django removed its own STATICFILES_STORAGE setting and an
+# upper-case name here would look like one. The env var keeps the familiar name.
+_staticfiles_storage = env.str(
+    "STATICFILES_STORAGE", "servestatic.storage.CompressedStaticFilesStorage"
+)
+if _staticfiles_storage.startswith("whitenoise.storage."):
+    # WhiteNoise is no longer installed, so a pinned WhiteNoise backend would
+    # fail at boot. ServeStatic is a fork of it and keeps the same class names,
+    # so translate and warn rather than refuse to start. Removed next major.
+    _servestatic_backend = _staticfiles_storage.replace(
+        "whitenoise.storage.", "servestatic.storage.", 1
+    )
+    warnings.warn(
+        f"STATICFILES_STORAGE={_staticfiles_storage} names a WhiteNoise backend, "
+        f"which GlitchTip no longer ships. Falling back to "
+        f"{_servestatic_backend}. Update the setting: this fallback is removed "
+        f"in the next major release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    _staticfiles_storage = _servestatic_backend
+
 STORAGES = {
     "default": {
         "BACKEND": env("DEFAULT_FILE_STORAGE"),
     },
     "staticfiles": {
-        "BACKEND": env.str(
-            "STATICFILES_STORAGE",
-            "whitenoise.storage.CompressedManifestStaticFilesStorage",
-        )
+        # Compressed, not Manifest*: the frontend build already content-hashes
+        # its own filenames, which is what the browser requests. Manifest
+        # hashing added a second, unused copy of every file plus a public
+        # staticfiles.json, and made a single missing reference a hard
+        # collectstatic failure mid-deploy. Operators who serve Django's own
+        # {% static %} assets from a long-lived cache can opt back in via the
+        # STATICFILES_STORAGE env var.
+        "BACKEND": _staticfiles_storage
     },
 }
 
@@ -1150,9 +1298,21 @@ MEDIA_ROOT = env.str("MEDIA_ROOT", "")
 
 STATICFILES_DIRS = [
     "assets",
+    # The frontend build, source maps included. Publishing them is deliberate:
+    # GlitchTip is open source, and a readable stack trace is worth more than
+    # the bytes -- which are few, since they compress well and are only fetched
+    # with devtools open. Do not strip them to save space.
     "dist",
 ]
 STATIC_ROOT = path("static/")
+
+# collectstatic writes a compressed copy beside every compressible file, once
+# per image build. ServeStatic then serves the smallest one the client accepts.
+#
+# Zstandard is off: brotli was smaller for all but one file in the tree even
+# against zstd at its highest level, and every browser sending `zstd` also sends
+# `br`, so the .zstd copies would never be chosen.
+SERVESTATIC_USE_ZSTD = False
 
 EMAIL_BACKEND = env.str(
     "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
@@ -1345,9 +1505,11 @@ if TESTING:
     }
     SESSION_ENGINE = "django.contrib.sessions.backends.cache"
     STORAGES = global_settings.STORAGES
-    # https://github.com/evansd/whitenoise/issues/215
+    # Tests import glitchtip.asgi, which indexes STATIC_ROOT; a test run has not
+    # collected static and does not serve it. The module is ours because
+    # ServeStatic warns with a stacklevel that attributes it to the caller.
     warnings.filterwarnings(
-        "ignore", message="No directory at", module="whitenoise.base"
+        "ignore", message="No directory at", module="glitchtip.asgi"
     )
 if TESTING:
     CACHES = {
@@ -1356,7 +1518,3 @@ if TESTING:
         }
     }
 CACHE_IS_VALKEY = "valkey" in CACHES["default"]["BACKEND"].lower()
-
-warnings.filterwarnings(
-    "ignore", message="No directory at", module="django.core.handlers.base"
-)

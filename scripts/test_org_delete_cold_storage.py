@@ -7,9 +7,9 @@ for both projects, archives them to cold storage, then:
    while project_2's data remains intact.
 2. Deletes the org and verifies all cold storage files are removed.
 
-Run with minio + postgres up:
-  docker compose -f compose.yml -f compose.minio.yml up -d
-  docker compose -f compose.yml -f compose.minio.yml run --rm \
+Run with S3 (Garage) + postgres up:
+  docker compose -f compose.yml -f compose.s3.yml up -d
+  docker compose -f compose.yml -f compose.s3.yml run --rm \
     -e GLITCHTIP_ENABLE_DUCKDB=true \
     -e GLITCHTIP_EVENT_HOT_DAYS=0 \
     web python manage.py shell < scripts/test_org_delete_cold_storage.py

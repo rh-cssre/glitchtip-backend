@@ -47,10 +47,17 @@ from .overage import (
     billable_units,
     cost_cents_for_units,
     cycle_quota,
+    overage_active,
     overage_eligible,
     units_for_budget,
 )
-from .utils import compute_cycle, select_subscription_items, unix_to_datetime
+from .utils import (
+    billing_window,
+    compute_cycle,
+    metered_item_period,
+    select_subscription_items,
+    unix_to_datetime,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -136,13 +143,15 @@ class StripeSubscriptionSchema(StripeIDSchema, ModelSchema):
     def resolve_product(obj: StripeSubscription):
         return obj.price.product
 
+    # The window usage is counted and billed in, which the metered item's own
+    # period decides once one is attached (see billing_window).
     @staticmethod
     def resolve_subscription_cycle_start(obj: StripeSubscription):
-        return obj.subscription_cycle_start or obj.current_period_start
+        return billing_window(obj)[0]
 
     @staticmethod
     def resolve_subscription_cycle_end(obj: StripeSubscription):
-        return obj.subscription_cycle_end or obj.current_period_end
+        return billing_window(obj)[1]
 
 
 class PriceIDSchema(CamelSchema):
@@ -506,7 +515,11 @@ class OverageStatusSchema(CamelSchema):
     enabled: bool
     eligible: bool  # has an active paid subscription an overage item can attach to
     configured: bool  # an overage product/price is provisioned in Stripe
+    active: bool  # what the throttle task actually enforces
     cap_cents: int
+    # The ceiling configure_overage enforces; served so the client validates
+    # against it rather than a copy that drifts or blocks a raised env var.
+    max_cap_cents: int
     cap_units: int
     quota: int
     usage: int
@@ -561,6 +574,9 @@ async def get_overage_status(request: AuthHttpRequest, organization_slug: str):
     # POST would reject.
     plan_events = (sub.price.product.events or 0) if sub else 0
     eligible = overage_eligible(sub)
+    # Gate anything describing money on what the task enforces, not on the
+    # sticky opt-in flag.
+    active = overage_active(org)
     # Quota is a separate question from eligibility: an ineligible plan (unpaid,
     # comped, quota-less) still has whatever quota it has, and _check_and_update_
     # throttle enforces exactly this. Deriving it from `eligible` made the card
@@ -578,7 +594,7 @@ async def get_overage_status(request: AuthHttpRequest, organization_slug: str):
         # cap.
         quota = cycle_quota(org, period[0], quota)
     overage_units = max(0, usage - quota)
-    if period and org.metered_billing_enabled:
+    if period and active:
         billed_units = billable_units(
             overage_units,
             cap_units,
@@ -591,7 +607,9 @@ async def get_overage_status(request: AuthHttpRequest, organization_slug: str):
         "enabled": org.metered_billing_enabled,
         "eligible": eligible,
         "configured": await _get_overage_price() is not None,
+        "active": active,
         "cap_cents": org.overage_spend_cap_cents,
+        "max_cap_cents": settings.GLITCHTIP_OVERAGE_MAX_CAP_CENTS,
         "cap_units": cap_units,
         "quota": quota,
         "usage": usage,
@@ -611,11 +629,13 @@ async def configure_overage(
 ):
     """Enable/disable metered overage billing and set the spend cap (owner-only).
 
-    Enabling attaches the metered overage price as a second subscription item.
-    Disabling only clears the flag: the item stays attached (dormant, billing
-    zero) so a re-enable within the same cycle can't re-bill reported usage.
-    Either way a throttle re-check is enqueued so the new headroom (or block)
-    takes effect promptly.
+    Enabling attaches the metered overage price as a second subscription item,
+    whose own Stripe billing period becomes the organization's usage window
+    from then on (see ``billing_window``). Disabling only clears the flag: the
+    item stays attached (dormant, billing zero), so a re-enable within the
+    same cycle can't re-bill reported usage and toggling never moves the
+    window. Either way a throttle re-check is enqueued so the new headroom (or
+    block) takes effect promptly.
     """
     org = await aget_object_or_404(
         Organization.objects.select_related(
@@ -702,15 +722,25 @@ async def configure_overage(
                 # item and saving its id here leaves an orphan that Stripe would
                 # reject as a duplicate on retry, so reuse it instead of re-adding.
                 fetched = await fetch_subscription(sub.stripe_id)
-                _, existing = select_subscription_items(fetched.items)
-                if existing:
-                    sub.metered_item_id = existing.id
-                else:
+                _, item = select_subscription_items(fetched.items)
+                if item is None:
                     item = await add_subscription_item(
                         sub.stripe_id, overage_price.stripe_id
                     )
-                    sub.metered_item_id = item.id
-                await sub.asave(update_fields=["metered_item_id"])
+                sub.metered_item_id = item.id
+                # Stripe owns the item's period. Record it now rather than wait
+                # for the webhook: the throttle re-check enqueued below bills
+                # against it.
+                sub.metered_period_start, sub.metered_period_end = metered_item_period(
+                    item
+                )
+                await sub.asave(
+                    update_fields=[
+                        "metered_item_id",
+                        "metered_period_start",
+                        "metered_period_end",
+                    ]
+                )
         except StripeError as e:
             # Card declines are safe to show the owner; other Stripe errors
             # may leak internals, so log those and return a generic message.

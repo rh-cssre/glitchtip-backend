@@ -39,6 +39,7 @@ from .utils import (
     compute_cycle,
     is_metered_price,
     is_syncable_product,
+    metered_item_period,
     price_kwargs,
     product_kwargs,
     select_subscription_items,
@@ -198,6 +199,7 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
     cycle_start, cycle_end = compute_cycle(
         current_period_start, current_period_end, is_annual
     )
+    metered_period_start, metered_period_end = metered_item_period(metered_item)
 
     stripe_subscription, _created = await StripeSubscription.objects.aupdate_or_create(
         stripe_id=subscription.id,
@@ -213,6 +215,8 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
             "subscription_cycle_start": cycle_start,
             "subscription_cycle_end": cycle_end,
             "metered_item_id": metered_item.id if metered_item else "",
+            "metered_period_start": metered_period_start,
+            "metered_period_end": metered_period_end,
         },
     )
     if stripe_subscription.status in ACTIVE_SUBSCRIPTION_STATUSES:
@@ -251,7 +255,15 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
             # keeping it would make a later enable skip the attach and reuse a
             # dead Stripe item.
             stripe_subscription.metered_item_id = ""
-            await stripe_subscription.asave(update_fields=["metered_item_id"])
+            stripe_subscription.metered_period_start = None
+            stripe_subscription.metered_period_end = None
+            await stripe_subscription.asave(
+                update_fields=[
+                    "metered_item_id",
+                    "metered_period_start",
+                    "metered_period_end",
+                ]
+            )
         await organization.asave(update_fields=update_fields)
         # Quota just dropped to the free tier; don't wait for the next sweep.
         await check_organization_throttle.aenqueue(organization.id, bypass_cache=True)

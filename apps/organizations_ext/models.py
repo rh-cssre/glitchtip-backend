@@ -7,7 +7,7 @@ from dateutil.relativedelta import relativedelta
 from django.conf import settings
 from django.core.validators import MaxValueValidator
 from django.db import models
-from django.db.models import Q, Sum
+from django.db.models import Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.utils.text import slugify
@@ -30,7 +30,7 @@ from apps.projects.models import (
     TransactionEventProjectHourlyStatistic,
 )
 from apps.sourcecode.models import DebugSymbolBundle
-from apps.stripe.utils import compute_cycle_n_ago
+from apps.stripe.utils import billing_window, compute_cycle_n_ago, has_metered_window
 from apps.uptime.models import UptimeCheckHourlyStatistic
 
 from .constants import OrganizationUserRole
@@ -184,42 +184,69 @@ async def get_current_period_dates(
     the number a user sees matches the window we actually enforce:
 
     - Self-hosted (BILLING_ENABLED=False): a rolling 30-day window.
-    - SaaS with an active subscription: the Stripe cycle dates — Stripe is the
-      source of truth (handles annual plans with virtual monthly cycles).
+    - SaaS with an active subscription: the Stripe dates — Stripe is the source
+      of truth. The metered overage item's own period once one is attached,
+      otherwise the base plan's (subdivided into virtual months for annual
+      plans); see ``apps.stripe.utils.billing_window``.
     - SaaS without an active subscription: a monthly cycle anchored to the org's
       creation date, mirroring how the free tier is throttled.
 
-    Returns None only when periods_ago points to a cycle before an annual
-    subscription began (matching compute_cycle_n_ago).
+    Returns None only when periods_ago points to a virtual month before an
+    annual subscription began (matching compute_cycle_n_ago); with a metered
+    item the earlier windows step back from its period without that check.
     """
     if not settings.BILLING_ENABLED:
         return rolling_period(periods_ago)
 
-    sub = await (
-        type(org)
-        .objects.filter(pk=org.pk)
-        .values_list(
-            "stripe_primary_subscription__subscription_cycle_start",
-            "stripe_primary_subscription__subscription_cycle_end",
-            "stripe_primary_subscription__current_period_start",
-            "stripe_primary_subscription__current_period_end",
+    # Deferred: apps.stripe.models imports this module.
+    from apps.stripe.models import StripeSubscription
+
+    # Through the organization's row rather than the instance's pointer, so a
+    # copy loaded before the primary subscription changed still gets the
+    # current one. NULL matches nothing and falls through to the free tier.
+    sub = (
+        await StripeSubscription.objects.filter(
+            pk=Subquery(
+                type(org)
+                .objects.filter(pk=org.pk)
+                .values("stripe_primary_subscription_id")[:1]
+            )
+        )
+        # Must list every field billing_window reads: a deferred one would be
+        # fetched synchronously here, in async code.
+        .only(
+            "current_period_start",
+            "current_period_end",
+            "subscription_cycle_start",
+            "subscription_cycle_end",
+            "metered_item_id",
+            "metered_period_start",
+            "metered_period_end",
         )
         .afirst()
     )
-    cycle_start, cycle_end, period_start, period_end = (
-        sub if sub else (None, None, None, None)
-    )
 
-    if period_start and period_end:
-        # Active subscription: Stripe is the source of truth.
-        if periods_ago == 0:
-            return cycle_start or period_start, cycle_end or period_end
-        return compute_cycle_n_ago(
-            period_start, period_end, cycle_start, cycle_end, periods_ago
+    if sub is None:
+        # No active subscription: mimic the free tier with our own anchor.
+        return get_free_tier_cycle(org.created, periods_ago)
+    if periods_ago == 0:
+        return billing_window(sub)
+    if has_metered_window(sub):
+        # The overage price bills monthly (provision_overage_billing creates
+        # and verifies it so), so earlier windows step back a month at a time
+        # from the item's current period.
+        start = sub.metered_period_start
+        return (
+            start - relativedelta(months=periods_ago),
+            start - relativedelta(months=periods_ago - 1),
         )
-
-    # No active subscription: mimic the free tier with our own anchor.
-    return get_free_tier_cycle(org.created, periods_ago)
+    return compute_cycle_n_ago(
+        sub.current_period_start,
+        sub.current_period_end,
+        sub.subscription_cycle_start,
+        sub.subscription_cycle_end,
+        periods_ago,
+    )
 
 
 class Organization(SharedBaseModel, OrganizationBase):

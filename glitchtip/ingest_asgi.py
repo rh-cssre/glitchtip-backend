@@ -24,6 +24,16 @@ _INGEST_PATH_RE = re.compile(
     r")"
 )
 
+# The ingest handler's whole middleware chain. Kept module level so
+# glitchtip.async_db's system check can see it without building a handler.
+INGEST_MIDDLEWARE = [
+    # Returns async DB connections and unclaims their aliases; without it
+    # the second task to use an alias is refused. See glitchtip.async_db.
+    "glitchtip.async_db.recycle_async_connections_middleware",
+    "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+]
+
 
 class IngestDispatcher:
     """
@@ -40,7 +50,7 @@ class IngestDispatcher:
     Skipped for ingest (saves ~8 middleware calls per request):
     - SessionMiddleware
     - CSP / XFrameOptions / Clickjacking
-    - WhiteNoise
+    - GZipMiddleware (ingest replies are a few bytes; nothing to compress)
     - CommonMiddleware
     - CsrfViewMiddleware
     - AuthenticationMiddleware
@@ -71,14 +81,7 @@ class IngestDispatcher:
 
                 @classmethod
                 def _get_middleware_setting(cls):
-                    return [
-                        # async-backend needs explicit per-request cleanup to
-                        # return pool connections; without it the pool
-                        # saturates after max_size requests.
-                        "django_async_backend.middleware.close_async_connections",
-                        "django.middleware.security.SecurityMiddleware",
-                        "corsheaders.middleware.CorsMiddleware",
-                    ]
+                    return INGEST_MIDDLEWARE
 
                 def load_middleware(self, is_async=True):
                     # Override to use our minimal middleware list

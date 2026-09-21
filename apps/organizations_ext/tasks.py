@@ -25,9 +25,10 @@ from apps.stripe.overage import (
     METER_FORMULA,
     billable_units,
     cycle_quota,
-    overage_eligible,
+    overage_active,
     units_for_budget,
 )
+from apps.stripe.utils import billing_window, has_metered_window
 from apps.uptime.models import MonitorCheck, UptimeCheckHourlyStatistic
 
 from .email import InvitationEmail, ThrottleNoticeEmail
@@ -100,6 +101,40 @@ def _progressive_throttle(usage: int, start: int, width: int) -> int:
 METER_FORMULA_CACHE_TTL = 3600
 METER_FORMULA_RETRY_TTL = 300
 METER_FORMULA_UNKNOWN_TTL = 60
+METERED_PERIOD_REFRESH_TTL = 600
+
+
+async def _refresh_metered_period(sub, measured_at) -> None:
+    """Re-read the subscription from Stripe once its metered item's period is
+    up, or was never recorded.
+
+    Stripe owns that period (see ``billing_window``) and normally announces
+    the next one by webhook. Until it lands the local window is stale, and a
+    stale window drops every report and freezes the count the throttle is set
+    by -- for an organization under quota, no throttle at all. Rather than
+    advance the period by local arithmetic, which is a guess at Stripe's
+    answer, ask Stripe: at most once every ten minutes per subscription, so a
+    Stripe outage costs one call per sweep rather than one per check. A failed
+    refresh (or an unreachable cache) leaves the window as it was: stale or
+    unknown, either of which reports nothing until the period is known.
+    """
+    if not sub.metered_item_id:
+        return
+    if sub.metered_period_end and measured_at < sub.metered_period_end:
+        return
+    try:
+        if not await cache.aadd(
+            f"sub-period-refresh-{sub.stripe_id}", "1", METERED_PERIOD_REFRESH_TTL
+        ):
+            return
+        await sub.refresh_from_stripe()
+    except Exception:
+        logger.warning(
+            "Could not refresh subscription %s from Stripe; its metered period "
+            "stays stale",
+            sub.stripe_id,
+            exc_info=True,
+        )
 
 
 async def _meter_reports_last() -> bool:
@@ -358,8 +393,8 @@ async def _check_and_update_throttle(org: Organization):
             # (as the shared period helper does) could see it cleared between
             # the two reads and hand back the signup-anchored free-tier window
             # for a subscription this check still treats as billing.
-            start = sub.subscription_cycle_start or sub.current_period_start
-            end = sub.subscription_cycle_end or sub.current_period_end
+            await _refresh_metered_period(sub, measured_at)
+            start, end = billing_window(sub)
             counts = await get_event_counts(org.id, start, end)
             total_event_count = counts.total_event_count
 
@@ -371,17 +406,18 @@ async def _check_and_update_throttle(org: Organization):
             if _in_window(measured_at, start, end):
                 quota = await _cycle_quota(org, start, plan_events)
 
-            # Both flags are sticky DB state that outlives the plan that
-            # justified them: a downgrade to a free plan keeps the subscription
-            # active, and the primary-subscription pointer is only cleared
-            # asynchronously. Without the eligibility test here the API refuses
-            # to *enable* overage on such an org while this path keeps invoicing
-            # it. `select_related` on both callers keeps this DB-free.
-            if (
-                org.metered_billing_enabled
-                and sub.metered_item_id
-                and overage_eligible(sub)
-            ):
+            # The predicate the status endpoint reports as `active`, so what the
+            # UI shows cannot drift from what is enforced here. The flags it
+            # tests are sticky DB state that outlives the plan that justified
+            # them: a downgrade to a free plan keeps the subscription active,
+            # and the primary-subscription pointer is only cleared
+            # asynchronously. `select_related` on both callers keeps it DB-free.
+            # Reporting additionally waits for the item's own period to be known
+            # (has_metered_window): a total counted over the plan's window would
+            # be filed under the item's, and where the two differ that bills the
+            # overlap twice. Until the refresh above succeeds the organization is
+            # throttled at quota plus cap but nothing is sent.
+            if overage_active(org) and has_metered_window(sub):
                 # Paid overage: charge for usage above the cycle's quota up to
                 # the spend cap, then resume the progressive ramp (no further
                 # charges).
