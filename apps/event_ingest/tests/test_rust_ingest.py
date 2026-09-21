@@ -8,7 +8,6 @@ wire format, and worker-side re-validation of the payloads.
 """
 
 import gzip
-import importlib
 import json
 import uuid
 
@@ -26,6 +25,7 @@ from .utils import (
     flush_rust_ingest_state,
     list_to_envelope,
     pop_rust_ingest_messages,
+    run_task_messages,
 )
 
 
@@ -48,13 +48,9 @@ class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
         the Rust-written bytes are exactly what a worker would consume."""
         from django_vtasks.serialization import deserialize
 
-        for raw in await pop_rust_ingest_messages():
-            message = deserialize(raw)
-            module, name = message["func"].rsplit(".", 1)
-            vtask = getattr(importlib.import_module(module), name)
-            # Ingest tasks are batched consumers: each call takes a list of
-            # task-message dicts.
-            await vtask.func([message])
+        await run_task_messages(
+            [deserialize(raw) for raw in await pop_rust_ingest_messages()]
+        )
 
     def _envelope(self, replace_id=True) -> tuple[list, str]:
         data = self.get_json_data(

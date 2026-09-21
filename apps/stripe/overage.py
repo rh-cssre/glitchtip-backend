@@ -6,7 +6,7 @@ functions mirror that schedule locally so we can (a) show an org its projected
 overage cost and (b) convert a dollar spend cap into a hard unit ceiling we stop
 reporting at. "units" are billable events above the plan quota.
 
-:func:`overage_eligible` lives here rather than beside the API views so the
+:func:`overage_active` lives here rather than beside the API views so the
 background throttle task — the only code that actually sends meter events —
 can apply the same predicate the API does without importing a router module.
 """
@@ -18,6 +18,11 @@ from django.conf import settings
 from .constants import ACTIVE_SUBSCRIPTION_STATUSES
 
 CENTS = Decimal(1)
+
+# Reports are cycle-to-date totals, so the meter must bill the last value in
+# each period; anything else compounds them. Shared by meter creation, the
+# provisioning checks, and the send path's guard so the three can't drift.
+METER_FORMULA = "last"
 
 
 def _tiers() -> list[tuple[int | None, Decimal]]:
@@ -81,6 +86,42 @@ def units_for_budget(cap_cents: int) -> int:
     return units
 
 
+def cycle_quota(org, cycle_start, plan_events: int) -> int:
+    """The quota overage is measured against in the cycle starting ``cycle_start``.
+
+    The largest quota the plan has held during the cycle, from the record the
+    throttle sweep keeps on the organization, or the plan's own when the record
+    is on another cycle. Measured against the current quota alone, a mid-cycle
+    downgrade would turn usage that was within quota when it happened into
+    billable overage; the smaller quota applies from the next cycle instead.
+    """
+    if org.overage_cycle_start == cycle_start:
+        return max(org.overage_cycle_quota, plan_events)
+    return plan_events
+
+
+def billable_units(
+    overage_units: int,
+    cap_units: int,
+    last_units: int,
+    last_at,
+    cycle_start,
+    cycle_end,
+) -> int:
+    """Units to bill: usage above quota, bounded by the spend cap.
+
+    Within a cycle the cap is floored at what has already been billed, so
+    lowering it stops growth from that point but doesn't retract billed usage
+    (or dropping the cap to a dollar on the last day would forgive the month).
+    The floor is on the cap, not on the figure, so a lower true total still
+    comes through. Shared by the sweep that reports to the meter and the status
+    view, so what the owner sees is what is invoiced.
+    """
+    if last_at is not None and cycle_start <= last_at < cycle_end:
+        cap_units = max(cap_units, last_units)
+    return min(overage_units, cap_units)
+
+
 def tier_problems(raw_price: dict) -> list[str]:
     """Differences between a Stripe price and the settings tier schedule.
 
@@ -139,4 +180,24 @@ def overage_eligible(sub) -> bool:
         and sub.price.price > 0
         and not sub.price.no_throttle
         and (sub.price.product.events or 0) > 0
+    )
+
+
+def overage_active(org) -> bool:
+    """Whether overage billing is actually granting ``org`` headroom.
+
+    The predicate the throttle task enforces. ``metered_billing_enabled`` and
+    ``metered_item_id`` are both sticky state that can outlive what justified
+    them: a downgrade leaves the flag set, and the metered item is cleared to
+    "" when it disappears in Stripe while the flag is cleared only on terminal
+    statuses. Either drift silently throttles an org whose UI reads "overage
+    on". Callers must ``select_related``
+    ``stripe_primary_subscription__price__product`` to keep this DB-free.
+    """
+    sub = org.stripe_primary_subscription
+    return bool(
+        org.metered_billing_enabled
+        and sub
+        and sub.metered_item_id
+        and overage_eligible(sub)
     )

@@ -4,7 +4,8 @@ Idempotent and **test-mode only**: it refuses to run unless STRIPE_SECRET_KEY
 is an ``sk_test`` key, so it can never mutate a live Stripe account. It creates
 (or reuses):
 
-1. a Billing Meter for ``GLITCHTIP_OVERAGE_METER_EVENT_NAME``;
+1. a Billing Meter for ``GLITCHTIP_OVERAGE_METER_EVENT_NAME`` aggregating by
+   ``last`` (reports are cycle-to-date totals, so a ``sum`` meter is refused);
 2. an overage product (metadata ``product_type=overage``) with a graduated,
    metered price built from ``GLITCHTIP_OVERAGE_TIERS``;
 3. a base "Small" hosted plan, if no hosted plan exists yet, so there's
@@ -13,9 +14,10 @@ is an ``sk_test`` key, so it can never mutate a live Stripe account. It creates
 Then it syncs everything into the local DB via ``sync_stripe_models``.
 
 ``--verify`` instead runs read-only checks and is allowed with a live key: it
-confirms the meter, overage product, and metered price exist, that the live
-tier schedule matches ``GLITCHTIP_OVERAGE_TIERS``, and that an event
-destination delivers meter error reports. Live provisioning is done by hand
+confirms the meter exists and aggregates by ``last``, that the overage product
+and metered price exist, that the live tier schedule matches
+``GLITCHTIP_OVERAGE_TIERS``, and that an event destination delivers meter error
+reports. Live provisioning is done by hand
 (this command won't mutate a live account), and the local cap math trusts the
 settings schedule — drift between the two can bill an org past its advertised
 spend cap, so verify after any manual change.
@@ -40,7 +42,7 @@ from apps.stripe.client import (
 )
 from apps.stripe.exceptions import StripeError
 from apps.stripe.maintenance import sync_stripe_models
-from apps.stripe.overage import tier_problems
+from apps.stripe.overage import METER_FORMULA, tier_problems
 
 
 async def _find_product_by_type(product_type: str):
@@ -78,6 +80,23 @@ async def _list_event_destinations() -> list[dict]:
     return destinations
 
 
+def _require_last_aggregation(meter) -> None:
+    """The throttle task sends cycle-to-date totals; only ``last`` bills those once.
+
+    A meter's formula can't be changed after creation, and the task refuses to
+    report to anything else, so the fix is a new meter: deactivate this one in
+    the Dashboard (Billing > Meters) or point GLITCHTIP_OVERAGE_METER_EVENT_NAME
+    at a fresh event name, then re-run.
+    """
+    formula = meter.default_aggregation.formula
+    if formula != METER_FORMULA:
+        raise CommandError(
+            f"Meter {meter.id} ({meter.event_name}) aggregates by {formula!r}; "
+            "overage reports are cycle-to-date totals and need 'last'. Deactivate "
+            "it or change GLITCHTIP_OVERAGE_METER_EVENT_NAME, then re-run."
+        )
+
+
 async def _verify(stdout) -> None:
     """Read-only checks that the Stripe account matches settings (live-safe)."""
     event_name = settings.GLITCHTIP_OVERAGE_METER_EVENT_NAME
@@ -85,6 +104,7 @@ async def _verify(stdout) -> None:
     meter = await find_meter(event_name)
     if meter is None:
         raise CommandError(f"No active Billing Meter with event_name {event_name!r}.")
+    _require_last_aggregation(meter)
     stdout(f"Meter {meter.id} ({event_name})")
 
     product = await _find_product_by_type("overage")
@@ -179,6 +199,7 @@ async def _provision(stdout) -> None:
         meter = await create_meter("GlitchTip Overage Events", event_name)
         stdout(f"Created meter {meter.id} ({event_name})")
     else:
+        _require_last_aggregation(meter)
         stdout(f"Reusing meter {meter.id} ({event_name})")
 
     # 2. Overage product + graduated metered price

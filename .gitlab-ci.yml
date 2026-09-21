@@ -91,7 +91,7 @@ test-postgres-only:
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 
-# Latest stack: Python 3.14, PostgreSQL 18, Valkey, S3 cold storage
+# Latest stack: Python 3.14, PostgreSQL 18, Valkey, S3 cold storage (Garage)
 test-latest:
   image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.14-$BASE_LAYER
   variables:
@@ -101,21 +101,31 @@ test-latest:
     ENABLE_ORGANIZATION_CREATION: "true"
     VALKEY_URL: "redis://redis:6379"
     GLITCHTIP_ENABLE_DUCKDB: "true"
-    GLITCHTIP_COLD_STORAGE_BUCKET: glitchtip-cold
-    AWS_ACCESS_KEY_ID: minioadmin
-    AWS_SECRET_ACCESS_KEY: minioadmin
-    AWS_S3_ENDPOINT_URL: "http://minio:9000"
+    # One bucket for both file uploads and cold storage; they live under
+    # disjoint prefixes (uploads/ and cold_storage/). Garage creates it on
+    # first boot from GARAGE_DEFAULT_BUCKET below.
+    AWS_STORAGE_BUCKET_NAME: glitchtip
+    GLITCHTIP_COLD_STORAGE_BUCKET: glitchtip
+    AWS_ACCESS_KEY_ID: GK00000000000000000000dev
+    AWS_SECRET_ACCESS_KEY: "0000000000000000000000000000000000000000000000000000000000000001"
+    AWS_S3_ENDPOINT_URL: "http://garage:3900"
   services:
     - name: postgres:18
       alias: postgres
     - name: valkey/valkey:9
       alias: redis
-    - name: minio/minio:latest
-      alias: minio
-      command: ["server", "/data"]
+    # Garage with the dev config baked in (see garage/Dockerfile -- CI
+    # services cannot mount files and the upstream image has no shell).
+    # --single-node --default-bucket provisions the cluster layout, access
+    # key and bucket at startup, so there is nothing to bootstrap here.
+    - name: registry.gitlab.com/glitchtip/glitchtip-backend/garage:v2.4.1
+      alias: garage
+      command: ["/garage", "server", "--single-node", "--default-bucket"]
       variables:
-        MINIO_ROOT_USER: minioadmin
-        MINIO_ROOT_PASSWORD: minioadmin
+        GARAGE_ALLOW_WORLD_READABLE_SECRETS: "true"
+        GARAGE_DEFAULT_ACCESS_KEY: GK00000000000000000000dev
+        GARAGE_DEFAULT_SECRET_KEY: "0000000000000000000000000000000000000000000000000000000000000001"
+        GARAGE_DEFAULT_BUCKET: glitchtip
   cache:
     - key:
         files:
@@ -123,12 +133,6 @@ test-latest:
       paths:
         - $UV_CACHE_DIR
   script:
-    # Create MinIO bucket for cold storage tests
-    - apt-get update && apt-get install -y curl
-    - curl -sSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
-    - chmod +x /usr/local/bin/mc
-    - mc alias set myminio http://minio:9000 minioadmin minioadmin
-    - mc mb --ignore-existing myminio/glitchtip-cold || true
     - uv sync --frozen --no-install-project
     # Pre-install DuckDB extensions (mirrors Dockerfile build step)
     - python -c "import duckdb; c=duckdb.connect(); c.install_extension('httpfs'); c.install_extension('aws'); c.close()"

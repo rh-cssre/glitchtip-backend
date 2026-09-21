@@ -6,15 +6,14 @@ authors = ["David Burke"]
 license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
-    "django>=6.0,<6.1",
-    "django-vtasks[valkey]~=3.1.0",
+    "django>=6.1,<6.2",
+    "django-vtasks[valkey]~=3.2.0",
     "django-allauth-async[mfa,socialaccount]==65.19.1.1",
     "django-cors-headers~=4.0",
     "django-environ~=0.11",
     "django-extensions~=4.0",
     "django-organizations~=2.7",
     "django-storages[boto3,azure,google]~=1.12",
-    "whitenoise~=6.0",
     "sentry-sdk~=2.20",
     "django-anymail~=15.0",
     "user-agents~=2.1",
@@ -22,6 +21,9 @@ dependencies = [
     "anonymizeip~=1.0",
     "aiohttp~=3.14",
     "google-cloud-logging~=3.0",
+    # Resolves to 2.4.0, not the newer 2.5.0: that release caps Django below
+    # 6.1. 2.4.0 declares no Django constraint at all, so it will not fail
+    # loudly on a future Django bump — re-check it whenever Django moves.
     "django-prometheus~=2.2",
     "django-import-export~=4.1",
     # Library-only: psycopg.sql composition and Jsonb/Json parameter
@@ -36,8 +38,9 @@ dependencies = [
     "django-postgres-partition>=0.1.4",
     "pyyaml>=6.0.2", # allauth openapi spec
     "granian[reload,uvloop]>=2.6.0",
-    "django-vcache>=3.0.0",
-    "glitchtip-rust>=0.9.0",
+    "servestatic[brotli]>=4.3",
+    "django-vcache>=3.2.0",
+    "glitchtip-rust>=0.10.0",
     "uuid6>=2024.1.12",
     # Bounded below 3: the SDK moves its server API across majors (v2 renamed
     # FastMCP to MCPServer), so a major bump is a code change, not a relock.
@@ -47,7 +50,7 @@ dependencies = [
     "arro3-core~=0.8",
     "arro3-io~=0.8",
     # Matches Django major/minor
-    "django-async-backend>=6.0,<6.1",
+    "django-async-backend>=6.1,<6.2",
     "opentelemetry-proto~=1.0",
 ]
 
@@ -66,7 +69,7 @@ dev = [
     {include-group = "lint"},
     "freezegun~=1.1",
     "model-bakery-async~=1.23",
-    "django-debug-toolbar~=7.0",
+    "django-debug-toolbar~=8.0",
     "django-stubs[compatible-mypy]~=6.0",
     "django-sslserver~=0.22",
     # The benchmark harness's HTTP client. Declared rather than relied on

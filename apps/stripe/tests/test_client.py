@@ -6,6 +6,7 @@ from django.test import TestCase
 from apps.stripe.client import (
     STRIPE_URL,
     STRIPE_V2_URL,
+    create_meter,
     create_session,
     create_subscription,
     fetch_v2_event,
@@ -151,6 +152,30 @@ class StripeContentTypeTests(TestCase):
             await fetch_v2_event("evt_1")
             request = mocked.requests[0]
         self.assertNotIn("Content-Type", request.kwargs["headers"])
+
+
+class StripeMeterTests(TestCase):
+    async def test_create_meter_aggregates_by_last(self):
+        """Reports are cycle-to-date totals; only a last-value meter bills them once."""
+        with mock_aiohttp() as mocked:
+            mocked.post(
+                f"{STRIPE_URL}/billing/meters",
+                status=200,
+                payload={
+                    "id": "mtr_1",
+                    "object": "billing.meter",
+                    "display_name": "GlitchTip Overage Events",
+                    "event_name": "glitchtip_overage_events_total",
+                    "status": "active",
+                    "default_aggregation": {"formula": "last"},
+                },
+            )
+            meter = await create_meter(
+                "GlitchTip Overage Events", "glitchtip_overage_events_total"
+            )
+            request = mocked.requests[0]
+        self.assertEqual(request.kwargs["data"]["default_aggregation[formula]"], "last")
+        self.assertEqual(meter.default_aggregation.formula, "last")
 
 
 def _session_response() -> str:

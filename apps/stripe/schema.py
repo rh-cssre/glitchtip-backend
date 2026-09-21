@@ -69,12 +69,17 @@ class ProductExpandedPrice(Product):
 ProductExpandedPriceListResponse = StripeListResponse[ProductExpandedPrice]
 
 
+class MeterAggregation(BaseModel):
+    formula: str
+
+
 class Meter(BaseModel):
     id: str
     object: Literal["billing.meter"]
     display_name: str
     event_name: str
     status: str
+    default_aggregation: MeterAggregation
 
 
 MeterListResponse = StripeListResponse[Meter]
@@ -161,6 +166,35 @@ class SubscriptionBase(BaseModel):
 
 class Subscription(SubscriptionBase):
     customer: str
+
+
+class SubscriptionItemSummaryPrice(BaseModel):
+    recurring: dict | None = None
+
+
+class SubscriptionItemSummary(BaseModel):
+    id: str
+    price: SubscriptionItemSummaryPrice
+
+
+class SubscriptionItemsSummary(BaseModel):
+    data: list[SubscriptionItemSummary]
+
+
+class SubscriptionSummary(BaseModel):
+    """Just enough of a subscription to tell whether it carries a metered item.
+
+    Listing a customer's subscriptions can return ones this code never created
+    (a dashboard-made one, a different product); validating those against the
+    full schema would fail on fields the check doesn't need.
+    """
+
+    id: str
+    status: str
+    items: SubscriptionItemsSummary
+
+
+SubscriptionSummaryListResponse = StripeListResponse[SubscriptionSummary]
 
 
 class SubscriptionExpandCustomer(SubscriptionBase):

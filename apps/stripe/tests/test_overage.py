@@ -3,9 +3,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
+from model_bakery import baker
 
-from apps.stripe.overage import cost_cents_for_units, tier_problems, units_for_budget
+from apps.organizations_ext.models import Organization
+from apps.stripe.constants import SubscriptionStatus
+from apps.stripe.overage import (
+    cost_cents_for_units,
+    overage_active,
+    tier_problems,
+    units_for_budget,
+)
 
 # A small, easy-to-reason-about graduated schedule: $0.10/unit for the first
 # 100 units, then $0.05/unit beyond.
@@ -165,9 +173,15 @@ class VerifyCommandTestCase(SimpleTestCase):
         return price
 
     def _verify(
-        self, prices, raw_tiers=None, destinations=None, destination_pages=None
+        self,
+        prices,
+        raw_tiers=None,
+        destinations=None,
+        destination_pages=None,
+        formula="last",
     ):
-        meter = MagicMock(id="mtr_1")
+        meter = MagicMock(id="mtr_1", event_name="glitchtip_overage_events_total")
+        meter.default_aggregation.formula = formula
         product = MagicMock(id="prod_1")
         product.metadata = {"product_type": "overage"}
         raw = {
@@ -213,6 +227,27 @@ class VerifyCommandTestCase(SimpleTestCase):
     def test_provision_refuses_live_key(self):
         with self.assertRaises(CommandError):
             call_command("provision_overage_billing")
+
+    def test_verify_fails_on_sum_meter(self):
+        # Reports are cycle-to-date totals; a sum meter would compound them on
+        # every sweep. The task refuses to send to one, so verify must fail too.
+        with self.assertRaisesRegex(CommandError, "aggregates by 'sum'"):
+            self._verify([self._price()], formula="sum")
+
+    @override_settings(STRIPE_SECRET_KEY="sk_test_x")
+    def test_provision_refuses_to_reuse_sum_meter(self):
+        meter = MagicMock(id="mtr_old", event_name="glitchtip_overage_events_total")
+        meter.default_aggregation.formula = "sum"
+        create = AsyncMock()
+        with (
+            patch(f"{COMMAND}.find_meter", new=AsyncMock(return_value=meter)),
+            patch(f"{COMMAND}.create_meter", new=create),
+            patch(f"{COMMAND}._find_product_by_type", new=AsyncMock()) as products,
+            self.assertRaisesRegex(CommandError, "aggregates by 'sum'"),
+        ):
+            call_command("provision_overage_billing")
+        create.assert_not_awaited()
+        products.assert_not_awaited()
 
     def test_verify_fails_on_tier_drift(self):
         with self.assertRaises(CommandError) as ctx:
@@ -279,3 +314,44 @@ class VerifyCommandTestCase(SimpleTestCase):
         with self.assertRaises(CommandError) as ctx:
             self._verify([self._price()])
         self.assertIn("STRIPE_WEBHOOK_SECRET_METER", str(ctx.exception))
+
+
+class OverageActiveTestCase(TestCase):
+    """Truth table for the predicate the throttle task and the API share."""
+
+    def _org(self, *, enabled=True, item="si_1", sub=True, price=15):
+        org = baker.make(
+            "organizations_ext.Organization", metered_billing_enabled=enabled
+        )
+        if sub:
+            product = baker.make("stripe.StripeProduct", events=100_000)
+            sub_obj = baker.make(
+                "stripe.StripeSubscription",
+                price=baker.make("stripe.StripePrice", product=product, price=price),
+                organization=org,
+                status=SubscriptionStatus.ACTIVE,
+                metered_item_id=item,
+            )
+            org.stripe_primary_subscription = sub_obj
+            org.save(update_fields=["stripe_primary_subscription"])
+        return Organization.objects.select_related(
+            "stripe_primary_subscription__price__product"
+        ).get(id=org.id)
+
+    def test_all_conditions_met(self):
+        org = self._org()
+        with self.assertNumQueries(0):
+            self.assertTrue(overage_active(org))
+
+    def test_no_subscription(self):
+        self.assertFalse(overage_active(self._org(sub=False)))
+
+    def test_flag_off(self):
+        self.assertFalse(overage_active(self._org(enabled=False)))
+
+    def test_metered_item_gone(self):
+        self.assertFalse(overage_active(self._org(item="")))
+
+    def test_plan_ineligible(self):
+        # A downgrade to a free plan leaves the flag and the item behind.
+        self.assertFalse(overage_active(self._org(price=0)))

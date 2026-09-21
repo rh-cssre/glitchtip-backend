@@ -34,6 +34,7 @@ from .client import (
     create_session,
     create_subscription,
     fetch_subscription,
+    list_customer_subscriptions,
 )
 from .constants import (
     ACTIVE_SUBSCRIPTION_STATUSES,
@@ -42,8 +43,21 @@ from .constants import (
 )
 from .exceptions import StripeError
 from .models import StripePrice, StripeProduct, StripeSubscription
-from .overage import cost_cents_for_units, overage_eligible, units_for_budget
-from .utils import compute_cycle, select_subscription_items, unix_to_datetime
+from .overage import (
+    billable_units,
+    cost_cents_for_units,
+    cycle_quota,
+    overage_active,
+    overage_eligible,
+    units_for_budget,
+)
+from .utils import (
+    billing_window,
+    compute_cycle,
+    metered_item_period,
+    select_subscription_items,
+    unix_to_datetime,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -129,13 +143,15 @@ class StripeSubscriptionSchema(StripeIDSchema, ModelSchema):
     def resolve_product(obj: StripeSubscription):
         return obj.price.product
 
+    # The window usage is counted and billed in, which the metered item's own
+    # period decides once one is attached (see billing_window).
     @staticmethod
     def resolve_subscription_cycle_start(obj: StripeSubscription):
-        return obj.subscription_cycle_start or obj.current_period_start
+        return billing_window(obj)[0]
 
     @staticmethod
     def resolve_subscription_cycle_end(obj: StripeSubscription):
-        return obj.subscription_cycle_end or obj.current_period_end
+        return billing_window(obj)[1]
 
 
 class PriceIDSchema(CamelSchema):
@@ -499,7 +515,11 @@ class OverageStatusSchema(CamelSchema):
     enabled: bool
     eligible: bool  # has an active paid subscription an overage item can attach to
     configured: bool  # an overage product/price is provisioned in Stripe
+    active: bool  # what the throttle task actually enforces
     cap_cents: int
+    # The ceiling configure_overage enforces; served so the client validates
+    # against it rather than a copy that drifts or blocks a raised env var.
+    max_cap_cents: int
     cap_units: int
     quota: int
     usage: int
@@ -554,6 +574,9 @@ async def get_overage_status(request: AuthHttpRequest, organization_slug: str):
     # POST would reject.
     plan_events = (sub.price.product.events or 0) if sub else 0
     eligible = overage_eligible(sub)
+    # Gate anything describing money on what the task enforces, not on the
+    # sticky opt-in flag.
+    active = overage_active(org)
     # Quota is a separate question from eligibility: an ineligible plan (unpaid,
     # comped, quota-less) still has whatever quota it has, and _check_and_update_
     # throttle enforces exactly this. Deriving it from `eligible` made the card
@@ -561,19 +584,32 @@ async def get_overage_status(request: AuthHttpRequest, organization_slug: str):
     quota = plan_events or settings.GLITCHTIP_FREE_TIER_EVENTS
 
     usage = 0
+    cap_units = units_for_budget(org.overage_spend_cap_cents)
+    billed_units = 0
     period = await get_current_period_dates(org)
     if period:
         usage = (await get_event_counts(org.id, *period)).total_event_count
-
-    cap_units = units_for_budget(org.overage_spend_cap_cents)
+        # The same quota and cap the sweep bills against, so the card can't
+        # show a smaller charge than the invoice after a downgrade or a lowered
+        # cap.
+        quota = cycle_quota(org, period[0], quota)
     overage_units = max(0, usage - quota)
-    billed_units = min(overage_units, cap_units) if org.metered_billing_enabled else 0
+    if period and active:
+        billed_units = billable_units(
+            overage_units,
+            cap_units,
+            org.overage_last_reported_units,
+            org.overage_last_reported_at,
+            *period,
+        )
 
     return {
         "enabled": org.metered_billing_enabled,
         "eligible": eligible,
         "configured": await _get_overage_price() is not None,
+        "active": active,
         "cap_cents": org.overage_spend_cap_cents,
+        "max_cap_cents": settings.GLITCHTIP_OVERAGE_MAX_CAP_CENTS,
         "cap_units": cap_units,
         "quota": quota,
         "usage": usage,
@@ -593,11 +629,13 @@ async def configure_overage(
 ):
     """Enable/disable metered overage billing and set the spend cap (owner-only).
 
-    Enabling attaches the metered overage price as a second subscription item.
-    Disabling only clears the flag: the item stays attached (dormant, billing
-    zero) so a re-enable within the same cycle can't re-bill reported usage.
-    Either way a throttle re-check is enqueued so the new headroom (or block)
-    takes effect promptly.
+    Enabling attaches the metered overage price as a second subscription item,
+    whose own Stripe billing period becomes the organization's usage window
+    from then on (see ``billing_window``). Disabling only clears the flag: the
+    item stays attached (dormant, billing zero), so a re-enable within the
+    same cycle can't re-bill reported usage and toggling never moves the
+    window. Either way a throttle re-check is enqueued so the new headroom (or
+    block) takes effect promptly.
     """
     org = await aget_object_or_404(
         Organization.objects.select_related(
@@ -634,46 +672,100 @@ async def configure_overage(
                 {"detail": "Overage billing is not configured on this server."},
                 status=400,
             )
-        if not sub.metered_item_id:
-            try:
+        if not org.stripe_customer_id:
+            # Nothing to attach to or meter; also keeps the customer-scoped
+            # listing below from ever running unscoped.
+            return JsonResponse(
+                {"detail": "A billing account is required for overage billing."},
+                status=400,
+            )
+        # A cap decrease on an already-enabled org only reduces exposure; it
+        # must never be refused, whatever state the account's subscriptions are
+        # in. Only while the primary subscription already carries the item,
+        # though: with none attached the request below would attach one, and
+        # that is exactly what the check guards.
+        lowering_cap = (
+            org.metered_billing_enabled
+            and bool(sub.metered_item_id)
+            and payload.cap_cents <= org.overage_spend_cap_cents
+        )
+        try:
+            # The meter aggregates per customer, so two subscriptions each
+            # carrying the metered price both bill the same usage. One
+            # subscription per customer is the rule elsewhere; this is the
+            # backstop for when it has already been broken.
+            others = (
+                []
+                if lowering_cap
+                else await list_customer_subscriptions(org.stripe_customer_id)
+            )
+            for other in others:
+                if other.id == sub.stripe_id:
+                    continue
+                if select_subscription_items(other.items)[1] is not None:
+                    logger.warning(
+                        "Refusing overage for org %s: subscription %s also carries "
+                        "the metered price",
+                        org.id,
+                        other.id,
+                    )
+                    return JsonResponse(
+                        {
+                            "detail": "Another subscription on this account already "
+                            "has overage billing. Contact support to consolidate "
+                            "your subscriptions first."
+                        },
+                        status=400,
+                    )
+            if not sub.metered_item_id:
                 # Stripe is the source of truth: a crash between attaching the
                 # item and saving its id here leaves an orphan that Stripe would
                 # reject as a duplicate on retry, so reuse it instead of re-adding.
                 fetched = await fetch_subscription(sub.stripe_id)
-                _, existing = select_subscription_items(fetched.items)
-                if existing:
-                    sub.metered_item_id = existing.id
-                else:
+                _, item = select_subscription_items(fetched.items)
+                if item is None:
                     item = await add_subscription_item(
                         sub.stripe_id, overage_price.stripe_id
                     )
-                    sub.metered_item_id = item.id
-            except StripeError as e:
-                # Card declines are safe to show the owner; other Stripe errors
-                # may leak internals, so log those and return a generic message.
-                if e.type == "card_error":
-                    return JsonResponse({"detail": e.message}, status=402)
-                logger.exception(
-                    "Overage enable failed for org %s (status=%s type=%s code=%s)",
-                    org.id,
-                    e.status,
-                    e.type,
-                    e.code,
+                sub.metered_item_id = item.id
+                # Stripe owns the item's period. Record it now rather than wait
+                # for the webhook: the throttle re-check enqueued below bills
+                # against it.
+                sub.metered_period_start, sub.metered_period_end = metered_item_period(
+                    item
                 )
-                return JsonResponse(
-                    {"detail": "Could not enable overage billing. Please try again."},
-                    status=502,
+                await sub.asave(
+                    update_fields=[
+                        "metered_item_id",
+                        "metered_period_start",
+                        "metered_period_end",
+                    ]
                 )
-            await sub.asave(update_fields=["metered_item_id"])
+        except StripeError as e:
+            # Card declines are safe to show the owner; other Stripe errors
+            # may leak internals, so log those and return a generic message.
+            if e.type == "card_error":
+                return JsonResponse({"detail": e.message}, status=402)
+            logger.exception(
+                "Overage enable failed for org %s (status=%s type=%s code=%s)",
+                org.id,
+                e.status,
+                e.type,
+                e.code,
+            )
+            return JsonResponse(
+                {"detail": "Could not enable overage billing. Please try again."},
+                status=502,
+            )
         org.metered_billing_enabled = True
         org.overage_spend_cap_cents = payload.cap_cents
         await org.asave(
             update_fields=["metered_billing_enabled", "overage_spend_cap_cents"]
         )
     else:
-        # Keep the item attached and counter intact. The meter aggregates per
-        # customer for the whole cycle, so detaching/resetting re-bills usage
-        # already reported. A dormant item bills zero.
+        # Keep the item attached and the last-report record intact: a re-enable
+        # is then a flag flip, and the cap stays floored at what the cycle has
+        # billed so toggling can't retract it. A dormant item bills zero.
         org.metered_billing_enabled = False
         await org.asave(update_fields=["metered_billing_enabled"])
 

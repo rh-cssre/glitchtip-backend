@@ -39,6 +39,7 @@ from .utils import (
     compute_cycle,
     is_metered_price,
     is_syncable_product,
+    metered_item_period,
     price_kwargs,
     product_kwargs,
     select_subscription_items,
@@ -198,6 +199,7 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
     cycle_start, cycle_end = compute_cycle(
         current_period_start, current_period_end, is_annual
     )
+    metered_period_start, metered_period_end = metered_item_period(metered_item)
 
     # Read before the upsert overwrites it: a canceled payload need not still
     # list the metered item, but our row knows what the subscription carried.
@@ -221,6 +223,8 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
             "subscription_cycle_start": cycle_start,
             "subscription_cycle_end": cycle_end,
             "metered_item_id": metered_item.id if metered_item else "",
+            "metered_period_start": metered_period_start,
+            "metered_period_end": metered_period_end,
         },
     )
     # Unconditional: whether this subscription still holds the org's primary

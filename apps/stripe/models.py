@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import IntegrityError, models
+from django.db.models import Q
 from django.db.models.expressions import F, OuterRef, Subquery
 from django.utils import timezone
 
@@ -26,6 +27,7 @@ from .exceptions import StripeResourceNotFound
 from .utils import (
     compute_cycle,
     is_syncable_product,
+    metered_item_period,
     price_kwargs,
     product_kwargs,
     select_subscription_items,
@@ -285,20 +287,80 @@ class StripeSubscription(StripeModel):
         default="",
         help_text="Stripe subscription item id for the metered overage price.",
     )
-    overage_units_reported = models.PositiveBigIntegerField(
-        default=0,
-        help_text="Cumulative billable overage events reported to the meter "
-        "this cycle. Meter events are additive, so we report deltas.",
-    )
-    overage_period_start = models.DateTimeField(
+    # The metered item's own Stripe billing period. While the item is attached
+    # this is the window usage is counted, throttled and billed in (see
+    # utils.billing_window); the base plan's period or virtual month applies
+    # only without one. Stripe owns it: written from what Stripe reports, never
+    # advanced locally.
+    metered_period_start = models.DateTimeField(
         null=True,
         blank=True,
-        help_text="Cycle anchor for overage_units_reported; counter resets when "
-        "the current cycle start moves past this.",
+        help_text="Start of the metered item's current Stripe billing period.",
+    )
+    metered_period_end = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="End of the metered item's current Stripe billing period.",
     )
 
     def __str__(self):
         return f"{self.stripe_id}"
+
+    async def apply_fetched(self, fetched_sub) -> None:
+        """Copy a subscription fetched from Stripe onto this row and save it.
+
+        Saves nothing when the subscription has no base item to take the plan
+        and period from. ``self.price`` must already be loaded: the annual
+        test reads it, and this runs in async code.
+        """
+        base_item, metered_item = select_subscription_items(fetched_sub.items)
+        if base_item is None:
+            logger.warning(
+                "Subscription %s has no base item at Stripe; not updated",
+                self.stripe_id,
+            )
+            return
+        if fetched_sub.status in TERMINAL_SUBSCRIPTION_STATUSES:
+            # As the webhook does: the item dies with the subscription, and
+            # a kept id would make a later enable reuse a dead Stripe item.
+            metered_item = None
+        self.status = fetched_sub.status
+        self.created = unix_to_datetime(fetched_sub.created)
+        self.current_period_start = unix_to_datetime(base_item.current_period_start)
+        self.current_period_end = unix_to_datetime(base_item.current_period_end)
+        self.start_date = unix_to_datetime(fetched_sub.start_date)
+        self.collection_method = fetched_sub.collection_method
+        self.metered_item_id = metered_item.id if metered_item else ""
+        self.metered_period_start, self.metered_period_end = metered_item_period(
+            metered_item
+        )
+
+        is_annual = self.price.interval == "year" or bool(
+            base_item.price.recurring
+            and base_item.price.recurring.get("interval") == "year"
+        )
+        self.subscription_cycle_start, self.subscription_cycle_end = compute_cycle(
+            self.current_period_start, self.current_period_end, is_annual
+        )
+        await self.asave(
+            update_fields=[
+                "status",
+                "created",
+                "current_period_start",
+                "current_period_end",
+                "start_date",
+                "collection_method",
+                "subscription_cycle_start",
+                "subscription_cycle_end",
+                "metered_item_id",
+                "metered_period_start",
+                "metered_period_end",
+            ]
+        )
+
+    async def refresh_from_stripe(self) -> None:
+        """Re-read this subscription from Stripe; see :meth:`apply_fetched`."""
+        await self.apply_fetched(await fetch_subscription(self.stripe_id))
 
     @classmethod
     async def get_primary_subscription(cls, organization: Organization):
@@ -351,10 +413,16 @@ class StripeSubscription(StripeModel):
 
     @classmethod
     async def update_outdated_subscriptions(cls):
-        async for subscription in cls.objects.filter(
-            status__in=ACTIVE_SUBSCRIPTION_STATUSES,
-            current_period_end__lt=(timezone.now() - timedelta(days=2)),
-        ).select_related("price"):
+        """Re-read from Stripe every active subscription whose period ran out
+        days ago, the base plan's or the metered item's: a renewal whose
+        webhook never landed. The throttle sweep refreshes a stale metered
+        period on its own (it bills against it); this is the daily backstop."""
+        cutoff = timezone.now() - timedelta(days=2)
+        async for subscription in (
+            cls.objects.filter(status__in=ACTIVE_SUBSCRIPTION_STATUSES)
+            .filter(Q(current_period_end__lt=cutoff) | Q(metered_period_end__lt=cutoff))
+            .select_related("price")
+        ):
             try:
                 fetched_sub = await fetch_subscription(subscription.stripe_id)
             except StripeResourceNotFound:
@@ -362,49 +430,10 @@ class StripeSubscription(StripeModel):
                     f"Stripe did not return subscription for {subscription.stripe_id}"
                 )
                 continue
-            base_item, metered_item = select_subscription_items(fetched_sub.items)
-            if base_item is None:
-                continue
-            subscription.status = fetched_sub.status
-            subscription.created = unix_to_datetime(fetched_sub.created)
-            subscription.current_period_start = unix_to_datetime(
-                base_item.current_period_start
-            )
-            subscription.current_period_end = unix_to_datetime(
-                base_item.current_period_end
-            )
-            subscription.start_date = unix_to_datetime(fetched_sub.start_date)
-            subscription.collection_method = fetched_sub.collection_method
-            # Canceling and blanking the item happen in one save below, so keep
-            # the old id: it is the only evidence the sub carried overage.
+            # apply_fetched blanks the item for a terminal status, so read the
+            # id first: it is the only evidence the sub carried overage.
             prior_item_id = subscription.metered_item_id
-            subscription.metered_item_id = metered_item.id if metered_item else ""
-
-            is_annual = subscription.price.interval == "year" or bool(
-                base_item.price.recurring
-                and base_item.price.recurring.get("interval") == "year"
-            )
-            (
-                subscription.subscription_cycle_start,
-                subscription.subscription_cycle_end,
-            ) = compute_cycle(
-                subscription.current_period_start,
-                subscription.current_period_end,
-                is_annual,
-            )
-            await subscription.asave(
-                update_fields=[
-                    "status",
-                    "created",
-                    "current_period_start",
-                    "current_period_end",
-                    "start_date",
-                    "collection_method",
-                    "subscription_cycle_start",
-                    "subscription_cycle_end",
-                    "metered_item_id",
-                ]
-            )
+            await subscription.apply_fetched(fetched_sub)
             await cls.retire_overage_for_terminal(
                 subscription, prior_item_id=prior_item_id
             )
@@ -429,11 +458,24 @@ class StripeSubscription(StripeModel):
         if not (subscription.metered_item_id or prior_item_id):
             return False
 
-        if subscription.metered_item_id:
-            # Points into a subscription that can never come back; a later
-            # enable would otherwise skip the attach and reuse a dead item.
+        if (
+            subscription.metered_item_id
+            or subscription.metered_period_start
+            or subscription.metered_period_end
+        ):
+            # The id points into a subscription that can never come back; a
+            # later enable would otherwise skip the attach and reuse a dead
+            # item. The period is that item's, so it goes with it.
             subscription.metered_item_id = ""
-            await subscription.asave(update_fields=["metered_item_id"])
+            subscription.metered_period_start = None
+            subscription.metered_period_end = None
+            await subscription.asave(
+                update_fields=[
+                    "metered_item_id",
+                    "metered_period_start",
+                    "metered_period_end",
+                ]
+            )
 
         if subscription.organization_id is None:
             return False
@@ -560,6 +602,9 @@ class StripeSubscription(StripeModel):
                     cycle_start, cycle_end = compute_cycle(
                         period_start, period_end, is_annual
                     )
+                    metered_period_start, metered_period_end = metered_item_period(
+                        metered_item
+                    )
 
                     subscription_objects.append(
                         StripeSubscription(
@@ -575,6 +620,8 @@ class StripeSubscription(StripeModel):
                             subscription_cycle_start=cycle_start,
                             subscription_cycle_end=cycle_end,
                             metered_item_id=metered_item_id,
+                            metered_period_start=metered_period_start,
+                            metered_period_end=metered_period_end,
                         )
                     )
 
@@ -593,6 +640,8 @@ class StripeSubscription(StripeModel):
                     "subscription_cycle_start",
                     "subscription_cycle_end",
                     "metered_item_id",
+                    "metered_period_start",
+                    "metered_period_end",
                 ],
                 unique_fields=["stripe_id"],
             )

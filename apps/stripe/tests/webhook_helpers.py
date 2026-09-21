@@ -55,17 +55,20 @@ class StripeWebhookMixin:
         status=SubscriptionStatus.ACTIVE,
         event_created_timestamp=None,
         metered_item_id=None,
+        metered_period=None,
     ):
         # A metered overage item, when the caller wants the subscription to look
-        # like one that opted into overage billing.
+        # like one that opted into overage billing. Its period is the plan's
+        # unless the caller says otherwise: in Stripe each item has its own.
+        metered_period = metered_period or (current_period_start, current_period_end)
         metered_items = (
             [
                 SubscriptionItem(
                     id=metered_item_id,
                     object="subscription_item",
                     created=current_period_start,
-                    current_period_end=current_period_end,
-                    current_period_start=current_period_start,
+                    current_period_end=metered_period[1],
+                    current_period_start=metered_period[0],
                     metadata={},
                     price=Price(
                         object="price",
