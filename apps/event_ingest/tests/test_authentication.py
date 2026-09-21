@@ -1,9 +1,12 @@
+from unittest import mock
+
 from django.test import RequestFactory, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.urls.exceptions import NoReverseMatch
 from model_bakery import baker
 from ninja.errors import AuthenticationError
 
+from apps.event_ingest import authentication
 from apps.event_ingest.authentication import auth_from_request
 
 
@@ -32,18 +35,45 @@ class AuthenticationTestCase(TransactionTestCase):
             + f"?sentry_key={self.project_key.public_key}"
         )
 
-    async def test_org_throttle(self):
-        res = await self.async_client.post(
+    async def post_event(self):
+        return await self.async_client.post(
             self.url, [{}], content_type="application/json"
         )
+
+    async def assert_blocked_from_cache(self):
+        """The second request must be rejected from cache, with no DB lookup."""
+        real = authentication.get_project_auth_info_row
+        with mock.patch.object(
+            authentication, "get_project_auth_info_row", side_effect=real
+        ) as lookup:
+            res = await self.post_event()
+        self.assertEqual(res.status_code, 429)
+        lookup.assert_not_called()
+
+    async def test_org_throttle(self):
+        res = await self.post_event()
         self.assertEqual(res.status_code, 200)
         self.organization.event_throttle_rate = 100
         await self.organization.asave()
-        res = await self.async_client.post(
-            self.url, [{}], content_type="application/json"
-        )
+        res = await self.post_event()
         self.assertEqual(res.headers.get("Retry-After"), "600")
         self.assertEqual(res.status_code, 429)
+        # A 100% throttle is absolute, so the block cache must absorb the
+        # follow-up flood rather than repeating the lookup for every event.
+        await self.assert_blocked_from_cache()
+
+    async def test_org_not_accepting_events(self):
+        """is_accepting_events=False is the manual, durable org kill switch.
+
+        Unlike event_throttle_rate it is never rewritten by the quota check,
+        so it is what an operator sets to stop an org's traffic outright.
+        """
+        self.organization.is_accepting_events = False
+        await self.organization.asave()
+        res = await self.post_event()
+        self.assertEqual(res.status_code, 429)
+        self.assertEqual(res.headers.get("Retry-After"), "600")
+        await self.assert_blocked_from_cache()
 
     def test_invalid_project_id(self):
         with self.assertRaises(NoReverseMatch):

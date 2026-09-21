@@ -82,9 +82,8 @@ def auth_from_request(request: HttpRequest):
 
 
 # One letter codes to save cache memory and map to various event rejection type exceptions
-REJECTION_MAP: dict[Literal["v", "t"], Exception] = {
+REJECTION_MAP: dict[Literal["v"], Exception] = {
     "v": AuthenticationError(message="Invalid DSN"),
-    "t": ThrottleException(),
 }
 REJECTION_WAIT = 30
 
@@ -99,8 +98,6 @@ def serialize_throttle(org_throttle: int, project_throttle: int) -> str:
 
 def deserialize_throttle(input: str) -> None | tuple[int, int]:
     """Return (org_throttle, project_throttle) as integer %"""
-    if input == "t":
-        return 0, 0
     if input.startswith("t:"):
         parts = input.split(":", 2)
         if len(parts) == 3:
@@ -209,7 +206,10 @@ async def get_project(request: HttpRequest) -> ProjectAuthInfo | None:
         or project.organization.event_throttle_rate == 100
         or project.event_throttle_rate == 100
     ):
-        await cache.aset(block_cache_key, "t", REJECTION_WAIT)
+        # Cache as a 100% throttle so the next request re-blocks from Valkey
+        # instead of repeating the lookup. Anything else here reads back as a
+        # rate the dice roll can pass, which is no block at all.
+        await cache.aset(block_cache_key, serialize_throttle(100, 100), REJECTION_WAIT)
         raise ThrottleException(600)
     if project.organization.event_throttle_rate or project.event_throttle_rate:
         await cache.aset(
