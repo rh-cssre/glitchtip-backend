@@ -260,12 +260,23 @@ class Organization(SharedBaseModel, OrganizationBase):
         help_text=_("The name in all lowercase, suitable for URL identification"),
     )
     is_accepting_events = models.BooleanField(
-        default=True, help_text="Used for throttling at org level"
+        default=True,
+        help_text=(
+            "Uncheck to reject every incoming event for this organization "
+            "with a 429. Set by hand only: quota enforcement uses the event "
+            "throttle rate below, so this stays off until someone turns it "
+            "back on."
+        ),
     )
     event_throttle_rate = models.PositiveSmallIntegerField(
         default=0,
         validators=[MaxValueValidator(100)],
-        help_text="Probability (in percent) on how many events are throttled. Used for throttling at project level",
+        help_text=(
+            "Percentage of this organization's incoming events to drop. Set "
+            "automatically by the quota check, which overwrites anything "
+            "entered here; 100 rejects everything, as unchecking the box "
+            "above does."
+        ),
     )
     open_membership = models.BooleanField(
         default=True, help_text="Allow any organization member to join any team"
