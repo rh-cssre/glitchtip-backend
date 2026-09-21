@@ -1,56 +1,44 @@
 """AWS RDS IAM database authentication.
 
 RDS can authenticate a PostgreSQL connection with a short-lived IAM auth
-token instead of a stored password, which removes the database password
-from the deployment entirely. The token is a SigV4-presigned string that
-**expires 15 minutes** after it is minted, so it cannot be read once into
-``DATABASES`` at startup: PostgreSQL only checks the password during the
-startup handshake, so connections already open survive expiry, but the
-driver's pool opens new ones on its own schedule — warmup, growth toward
-``max_size``, ``max_lifetime`` recycling — and those fail to authenticate
-once the token is stale.
+token instead of a stored password, which removes the database password from
+the deployment entirely. The token expires 15 minutes after it is minted, so
+it cannot be read once into ``DATABASES`` at startup: PostgreSQL checks the
+password only during the startup handshake, so connections already open
+survive expiry, but every new one the pool opens — warmup, growth toward
+``max_size``, ``max_lifetime`` recycling — would fail once it went stale.
 
-Minting is not on the request path. The driver calls the provider once when
-it builds a pool, then refreshes ahead of the credential's own expiry on a
-background task it owns.
-
-django-vpg exists for exactly this: it keeps a credential current for the
-pool and mints through ``OPTIONS["credential_provider"]``. The minting itself
-is the driver's ``django_vpg.contrib.aws`` provider; what lives here is the
-*policy* — which aliases use IAM, and what TLS we insist on before letting a
-live credential onto the wire.
+django-vpg exists for exactly this. It keeps the credential current for the
+pool and mints through ``OPTIONS["credential_provider"]``, off the request
+path, refreshing ahead of the credential's own expiry. The minting itself is
+the driver's ``django_vpg.contrib.aws.rds_iam_token``, whose docstring
+documents the AWS prerequisites; what lives here is the *policy* — which
+aliases use IAM, and what TLS we insist on before letting a live credential
+onto the wire.
 
 Enable with ``DATABASE_IAM_AUTH=true``; see ``glitchtip/settings.py``.
 
 Not every alias can use it. GlitchTip's ``read_only`` alias points at a
 read-only PgBouncer over the same database, and PgBouncer authenticates its
 own clients while holding separate credentials upstream — it cannot validate
-an IAM token. Use ``DATABASE_IAM_AUTH_ALIASES`` to limit IAM auth to the
-aliases that reach an IAM-aware endpoint.
+an IAM token. (A PgBouncer limitation, not a pooler one: RDS Proxy accepts
+IAM auth from clients.) Use ``DATABASE_IAM_AUTH_ALIASES`` to limit IAM auth
+to the aliases that reach an IAM-aware endpoint.
 
-This is a PgBouncer limitation, not a pooler one: *RDS Proxy* accepts IAM
-auth from clients and works fine. A token is signed for a specific host, port
-and user, so it has to be minted for the endpoint actually being connected
-to — which happens automatically, because the driver hands the provider the
-connection it is opening rather than a configured hostname.
+``GRANT rds_iam`` is one-way for a role, and it applies through role
+*membership* too. Granting an IAM role to the master user — say, so it can
+``CREATE DATABASE ... OWNER`` that role — makes the master inherit
+``rds_iam`` and lose password authentication immediately, and resetting the
+master password does not undo it; only revoking the membership does. Grant
+nothing that carries ``rds_iam`` to a role that still needs a password.
 
-The token is signed with whatever boto3's default credential chain resolves,
-in which ``AWS_ACCESS_KEY_ID``/``AWS_SECRET_ACCESS_KEY`` in the environment
-outrank the workload's own role. GlitchTip documents those same variables for
-S3-compatible file storage, so a deployment holding a Garage or MinIO key
-there would sign RDS tokens with it and get ``password authentication failed``
-— which reads as a broken IAM policy rather than a credential collision.
-Supply storage credentials as ``AWS_ACCESS_KEY_ID_FILE`` and
-``AWS_SECRET_ACCESS_KEY_FILE`` instead: django-environ reads the files and
-django-storages passes the key to its own session explicitly, so the variable
-never enters the environment and the chain falls through to the pod's role.
-
-Outside GlitchTip, RDS IAM auth also requires:
-
-* an IAM policy granting ``rds-db:connect`` on
-  ``arn:aws:rds-db:<region>:<account>:dbuser:<resource-id>/<db-user>``;
-* the database role created with ``GRANT rds_iam TO <db-user>``;
-* TLS, which the driver enforces — a token travels as a cleartext password.
+boto3's default credential chain signs the token, and
+``AWS_ACCESS_KEY_ID``/``AWS_SECRET_ACCESS_KEY`` in the environment outrank
+the workload's own role. GlitchTip documents those same variables for
+S3-compatible file storage, so supply storage credentials as
+``AWS_ACCESS_KEY_ID_FILE``/``AWS_SECRET_ACCESS_KEY_FILE`` instead:
+django-storages passes those to its own session explicitly, leaving the
+chain free to resolve the pod's role.
 """
 
 import warnings
@@ -68,10 +56,11 @@ RDS_CA_BUNDLE_URL = "https://truststore.pki.rds.amazonaws.com/global/global-bund
 
 #: sslmode values that authenticate the *server*, not merely encrypt.
 #:
-#: verify-ca is deliberately NOT here. It validates the certificate chain but
-#: skips the hostname check, and the trust anchor RDS deployments use is the
-#: **global** bundle — the anchor for every RDS instance in every AWS account.
-#: So verify-ca + that bundle trusts any RDS instance anywhere: anyone who can
+#: verify-ca is deliberately NOT here, and this is the reason the rest of the
+#: module refers back to. It validates the certificate chain but skips the
+#: hostname check, and the trust anchor RDS deployments use is the **global**
+#: bundle — the anchor for every RDS instance in every AWS account. So
+#: verify-ca + that bundle trusts any RDS instance anywhere: anyone who can
 #: answer on the database hostname (split-horizon DNS, a reclaimed CNAME, a
 #: compromised sidecar) can point it at an instance in their own account,
 #: complete the handshake, and be handed a live IAM token as a cleartext
@@ -83,11 +72,9 @@ VERIFIED_SSLMODES = ("verify-full",)
 #: DATABASE_IAM_ALLOW_UNVERIFIED_TLS, never by following an error message.
 UNVERIFIED_SSLMODES = ("require", "verify-ca")
 
-#: Modes that validate a certificate chain, and so need a trust anchor. When
-#: none is configured the driver falls back to the system roots, which for
-#: verify-ca — no hostname check — means any publicly trusted certificate for
-#: any name completes the handshake. So the bundle is required for these even
-#: when DATABASE_IAM_ALLOW_UNVERIFIED_TLS has waived hostname verification.
+#: Modes that validate a certificate chain, and so need a trust anchor.
+#: Without one the driver falls back to the system roots — which, for the
+#: verify-ca case described above, trusts the whole public WebPKI.
 CHAIN_VERIFIED_SSLMODES = ("verify-ca", "verify-full")
 
 
@@ -123,13 +110,19 @@ def configure_options(
         mode = resolved["sslmode"]
         if mode in UNVERIFIED_SSLMODES:
             if not allow_unverified_tls:
+                why_not_verify_ca = (
+                    "verify-ca validates the chain but not the hostname, and "
+                    "the RDS global bundle trusts every RDS instance in every "
+                    "AWS account. "
+                    if mode == "verify-ca"
+                    else ""
+                )
                 raise ImproperlyConfigured(
                     f"DATABASE_SSLMODE={mode!r} authenticates nothing about the "
                     "server, so a live IAM token would be handed to whatever "
                     "answers on the database hostname and could be replayed "
-                    "against the real database for 15 minutes. "
-                    f"{'verify-ca validates the chain but not the hostname, and the RDS global bundle trusts every RDS instance in every AWS account. ' if mode == 'verify-ca' else ''}"
-                    f"Use 'verify-full' with DATABASE_SSLROOTCERT set to the RDS "
+                    f"against the real database for 15 minutes. {why_not_verify_ca}"
+                    "Use 'verify-full' with DATABASE_SSLROOTCERT set to the RDS "
                     f"CA bundle ({RDS_CA_BUNDLE_URL}). If you genuinely accept "
                     "an unauthenticated server, set "
                     "DATABASE_IAM_ALLOW_UNVERIFIED_TLS=true."
@@ -143,9 +136,7 @@ def configure_options(
                 f"declines). Use {', '.join(VERIFIED_SSLMODES)}."
             )
         # Deliberately not an ``elif``: a mode reached through the opt-out
-        # above still needs the anchor. Without one the driver falls back to
-        # the system roots, and verify-ca does not check the hostname, so any
-        # publicly trusted certificate for any name would be handed the token.
+        # above still needs the anchor.
         if mode in CHAIN_VERIFIED_SSLMODES and not resolved.get("sslrootcert"):
             # RDS certificates do not chain to a CA in the system trust store,
             # so this would otherwise surface as an opaque TLS error.
@@ -168,9 +159,6 @@ def configure_options(
         # host, port and user of the connection being opened, and an RDS token
         # signs exactly those, so each alias gets a token for its own endpoint.
         resolved["credential_provider"] = RDS_IAM_PROVIDER
-        # No renewal interval is configured. The provider reports the token's
-        # own expiry and the driver renews against that in preference to any
-        # interval, so a knob here would have had no effect to observe.
 
     options.update(resolved)
     return options

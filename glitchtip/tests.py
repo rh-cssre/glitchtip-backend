@@ -1624,17 +1624,16 @@ class DatabaseIamAuthConfigTestCase(TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("DATABASE_PASSWORD", result.stderr)
 
-    def test_an_unverified_sslmode_aborts_without_the_opt_out(self):
+    def test_the_configured_sslmode_reaches_the_policy(self):
+        # Not a second copy of the TLS guards — glitchtip.test_db_iam owns
+        # those. This is the only check that DATABASE_SSLMODE is threaded into
+        # configure_options at all; the other cases here never set it, and a
+        # broken wiring would leave them passing on the verify-full default.
         result = self._probe(
             {"DATABASE_IAM_AUTH": "true", "DATABASE_SSLMODE": "require"}
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("DATABASE_IAM_ALLOW_UNVERIFIED_TLS", result.stderr)
-
-    def test_a_missing_ca_bundle_aborts(self):
-        result = self._probe({"DATABASE_IAM_AUTH": "true"})
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("DATABASE_SSLROOTCERT", result.stderr)
 
 
 # ----------------------------------------------------------------------------

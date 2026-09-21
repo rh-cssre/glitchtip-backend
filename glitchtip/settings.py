@@ -873,13 +873,10 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX = env.str("ACCOUNT_EMAIL_SUBJECT_PREFIX", "")
 # is ignored by the driver. See glitchtip/db_iam.py for the AWS prerequisites.
 DATABASE_IAM_AUTH = env.bool("DATABASE_IAM_AUTH", False)
 # Which DATABASES aliases authenticate with IAM. Defaults to "default" only,
-# and deliberately not to every alias: the read_only alias may point at a
-# PgBouncer, which authenticates its own clients and cannot validate an IAM
-# token — it would simply receive a live, replayable AWS credential in the
-# clear. Widen this for any alias whose endpoint is IAM-aware; RDS Proxy is,
-# PgBouncer is not. A maintenance alias sharing the database is also excluded
-# by default: GRANT rds_iam disables password auth for a role, so an alias
-# left off this list must not use a role that has it.
+# because not every endpoint can validate a token; glitchtip/db_iam.py says
+# which can. Widen it for any alias that reaches an IAM-aware endpoint, and
+# remember an alias left off this list must not use a role holding rds_iam,
+# which no longer has a password to fall back on.
 DATABASE_IAM_AUTH_ALIASES = [
     alias.strip()
     for alias in env.str("DATABASE_IAM_AUTH_ALIASES", "default").split(",")

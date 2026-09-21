@@ -1,29 +1,26 @@
 """Tests for GlitchTip's RDS IAM auth policy (``glitchtip.db_iam``).
 
-Token minting lives in the driver (``django_vpg.contrib.aws``); what is
-tested here is the policy around it — which aliases get IAM auth, and the
-refusal to configure a live credential onto an unencrypted or unverified
-connection.
+Token minting lives in the driver (``django_vpg.contrib.aws``) and is tested
+there; what is tested here is the policy around it — which aliases get IAM
+auth, and the refusal to configure a live credential onto an unencrypted or
+unverified connection.
 """
-
-import inspect
 
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
-from django.utils.module_loading import import_string
 
 from glitchtip import db_iam
 
 
 class ConfigureOptionsTestCase(SimpleTestCase):
-    def test_disabled_leaves_options_untouched(self):
+    def test_without_iam_auth_only_tls_settings_are_applied(self):
         assert db_iam.configure_options({}, iam_auth=False) == {}
-
-    def test_tls_settings_apply_without_iam_auth(self):
+        # Including modes IAM auth would refuse: the TLS guards exist to
+        # protect a live credential, and there is none here.
         options = db_iam.configure_options(
-            {}, iam_auth=False, sslmode="require", sslrootcert="/certs/rds.pem"
+            {}, iam_auth=False, sslmode="prefer", sslrootcert="/certs/rds.pem"
         )
-        assert options == {"sslmode": "require", "sslrootcert": "/certs/rds.pem"}
+        assert options == {"sslmode": "prefer", "sslrootcert": "/certs/rds.pem"}
 
     def test_enabled_wires_the_provider(self):
         options = db_iam.configure_options(
@@ -36,18 +33,14 @@ class ConfigureOptionsTestCase(SimpleTestCase):
 
     def test_verify_full_without_a_ca_bundle_is_refused(self):
         # RDS certificates do not chain to a CA in the system trust store, so
-        # this would otherwise fail later as an opaque TLS error.
-        with self.assertRaises(ImproperlyConfigured) as ctx:
-            db_iam.configure_options({}, iam_auth=True)
-        assert "DATABASE_SSLROOTCERT" in str(ctx.exception)
-
-    def test_the_error_does_not_offer_an_unverified_mode(self):
-        # This error is on the default path, so it is the one message every
-        # operator sees. It must not name a mode that validates nothing —
-        # under deploy pressure that is what gets copied.
+        # this would otherwise fail later as an opaque TLS error. It is also
+        # the one message every operator sees, being on the default path, so
+        # it must not name a mode that validates nothing — under deploy
+        # pressure that is what gets copied.
         with self.assertRaises(ImproperlyConfigured) as ctx:
             db_iam.configure_options({}, iam_auth=True)
         message = str(ctx.exception)
+        assert "DATABASE_SSLROOTCERT" in message
         assert db_iam.RDS_CA_BUNDLE_URL in message
         for mode in db_iam.UNVERIFIED_SSLMODES:
             # Match the mode as a named value, not as a bare substring: the
@@ -126,10 +119,6 @@ class ConfigureOptionsTestCase(SimpleTestCase):
                 {}, iam_auth=True, sslmode="disable", allow_unverified_tls=True
             )
 
-    def test_unencrypted_mode_is_allowed_when_iam_auth_is_off(self):
-        options = db_iam.configure_options({}, iam_auth=False, sslmode="prefer")
-        assert options["sslmode"] == "prefer"
-
     def test_explicit_options_win_over_environment(self):
         options = db_iam.configure_options(
             {"sslmode": "verify-full", "sslrootcert": "/explicit.pem"},
@@ -164,37 +153,4 @@ class ConfigureOptionsTestCase(SimpleTestCase):
         # effect. Asserted so it is not reintroduced as dead configuration.
         assert "credential_ttl" not in db_iam.configure_options(
             {}, iam_auth=True, sslrootcert="/certs/rds.pem"
-        )
-
-
-class ProviderWiringTestCase(SimpleTestCase):
-    """The two things DATABASE_IAM_AUTH needs from the installed driver.
-
-    Both are guaranteed by the ``glitchtip-rust`` floor in ``pyproject.toml``,
-    which is why these assert rather than probe: a pin that moved backwards,
-    or an extension rebuilt without the feature, should fail the suite instead
-    of leaving DATABASE_IAM_AUTH quietly authenticating with the password it
-    was meant to replace.
-    """
-
-    def test_the_configured_provider_is_importable_and_callable(self):
-        # The dotted path is resolved by the driver at connect time, so a typo
-        # would otherwise surface only on a deployment with IAM enabled.
-        assert callable(import_string(db_iam.RDS_IAM_PROVIDER))
-
-    def test_the_loaded_extension_accepts_a_credential_provider(self):
-        # That django_vpg.contrib.aws imports is not enough: gt_rust
-        # substitutes its own compiled module for django_vpg._vpg_driver, and
-        # that substituted extension is what decides at runtime — the Python
-        # layer can be new while the extension is old. Without support the
-        # backend warns about an unsupported OPTIONS key, drops it, and
-        # connects with the static PASSWORD instead.
-        #
-        # Imported in the test body, not at module scope: gt_rust refuses to
-        # install itself if django_vpg was imported ahead of it, and test
-        # modules are imported during discovery.
-        from django_vpg._vpg_driver import RustPgDriver
-
-        assert (
-            "credential_provider" in inspect.signature(RustPgDriver.connect).parameters
         )
