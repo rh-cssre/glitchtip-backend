@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
             name="is_accepting_events",
             field=models.BooleanField(
                 default=True,
-                help_text="Uncheck to reject every incoming event for this organization with a 429. Set by hand only: quota enforcement uses the event throttle rate below, so this stays off until someone turns it back on.",
+                help_text="When false, every incoming event for this organization is rejected with a 429. Set by hand only: quota enforcement uses event_throttle_rate instead, so this stays off until someone turns it back on.",
             ),
         ),
         migrations.AlterField(
@@ -21,7 +21,7 @@ class Migration(migrations.Migration):
             name="event_throttle_rate",
             field=models.PositiveSmallIntegerField(
                 default=0,
-                help_text="Percentage of this organization's incoming events to drop. Set automatically by the quota check, which overwrites anything entered here; 100 rejects everything, as unchecking the box above does.",
+                help_text="Percentage of this organization's incoming events to drop. Set automatically by the quota check, which overwrites anything entered here; 100 rejects everything, as clearing is_accepting_events does.",
                 validators=[django.core.validators.MaxValueValidator(100)],
             ),
         ),
