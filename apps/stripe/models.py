@@ -363,14 +363,16 @@ class StripeSubscription(StripeModel):
         await self.apply_fetched(await fetch_subscription(self.stripe_id))
 
     @classmethod
+    def active_by_primacy(cls, organization_id: int):
+        """Active subscriptions, the one that would be primary first: biggest
+        plan, newest on a tie. The ordering primacy means, in one place."""
+        return cls.objects.filter(
+            organization_id=organization_id, status__in=ACTIVE_SUBSCRIPTION_STATUSES
+        ).order_by(F("price__product__events").desc(nulls_last=True), "-created")
+
+    @classmethod
     async def get_primary_subscription(cls, organization: Organization):
-        return (
-            await cls.objects.filter(
-                organization=organization, status__in=ACTIVE_SUBSCRIPTION_STATUSES
-            )
-            .order_by(F("price__product__events").desc(nulls_last=True), "-created")
-            .afirst()
-        )
+        return await cls.active_by_primacy(organization.id).afirst()
 
     @classmethod
     async def cancel_for_organization(cls, organization: Organization):
@@ -390,13 +392,9 @@ class StripeSubscription(StripeModel):
         cls, organization_ids: set[int]
     ):
         # This subquery finds the primary subscription ID for each organization.
-        primary_subscription_subquery = (
-            cls.objects.filter(
-                organization_id=OuterRef("pk"), status__in=ACTIVE_SUBSCRIPTION_STATUSES
-            )
-            .order_by(F("price__product__events").desc(nulls_last=True), "-created")
-            .values("pk")[:1]
-        )
+        primary_subscription_subquery = cls.active_by_primacy(OuterRef("pk")).values(
+            "pk"
+        )[:1]
 
         org_updates = []
         async for org in Organization.objects.filter(id__in=organization_ids).annotate(
@@ -479,16 +477,11 @@ class StripeSubscription(StripeModel):
 
         if subscription.organization_id is None:
             return False
-        # A live subscription already carrying an item means the customer
-        # re-enabled overage on the replacement; that opt-in stands.
-        if (
-            await cls.objects.filter(
-                organization_id=subscription.organization_id,
-                status__in=ACTIVE_SUBSCRIPTION_STATUSES,
-            )
-            .exclude(metered_item_id="")
-            .aexists()
-        ):
+        # Overage rides on the primary subscription alone, so only an item there
+        # keeps the opt-in; one on a stray active sub grants nothing. Derived,
+        # not read off stripe_primary_subscription, which is stale right here.
+        primary = await cls.active_by_primacy(subscription.organization_id).afirst()
+        if primary and primary.metered_item_id:
             return False
         return bool(
             await Organization.objects.filter(

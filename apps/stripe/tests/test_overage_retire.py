@@ -210,3 +210,59 @@ class RetireOverageTestCase(StripeWebhookMixin, TestCase):
         self.assertEqual(org.stripe_primary_subscription_id, "sub_new")
         self.assertFalse(org.metered_billing_enabled)
         self.assertEqual(await self._item_id("sub_old"), "")
+
+    async def test_item_on_a_non_primary_subscription_does_not_keep_the_opt_in(self):
+        """A duplicate active subscription carries the item, the plan the org is
+        actually on does not. Overage only ever rides on the primary, so that
+        stray item grants nothing: honoring it as evidence of a live opt-in left
+        the org enabled and throttled at bare plan quota."""
+        now = timezone.now()
+        big_product = await StripeProduct.objects.acreate(
+            stripe_id="prod_big", name="Big", events=100000, is_public=True
+        )
+        big_price = await StripePrice.objects.acreate(
+            stripe_id="price_big",
+            product=big_product,
+            price=100,
+            nickname="Monthly",
+            interval="month",
+        )
+        # Biggest plan, so primacy hands it the pointer; no metered item on it.
+        await StripeSubscription.objects.acreate(
+            stripe_id="sub_primary",
+            created=now,
+            current_period_start=now,
+            current_period_end=now + relativedelta(months=1),
+            subscription_cycle_start=now,
+            subscription_cycle_end=now + relativedelta(months=1),
+            price=big_price,
+            organization_id=self.org.id,
+            status=SubscriptionStatus.ACTIVE,
+            start_date=now,
+        )
+        # An active duplicate on the small plan that does carry one.
+        await StripeSubscription.objects.acreate(
+            stripe_id="sub_stray",
+            created=now,
+            current_period_start=now,
+            current_period_end=now + relativedelta(months=1),
+            subscription_cycle_start=now,
+            subscription_cycle_end=now + relativedelta(months=1),
+            price_id=self.price.stripe_id,
+            organization_id=self.org.id,
+            status=SubscriptionStatus.ACTIVE,
+            start_date=now,
+            metered_item_id="si_sub_stray_over",
+        )
+        await StripeSubscription.set_primary_subscriptions_for_organizations(
+            {self.org.id}
+        )
+
+        await self._deliver("sub_old", "canceled", overage_item=True)
+
+        org = await self._org()
+        self.assertEqual(org.stripe_primary_subscription_id, "sub_primary")
+        self.assertFalse(org.metered_billing_enabled)
+        self.assertEqual(await self._item_id("sub_old"), "")
+        # Untouched: only the terminal subscription's own item is retired.
+        self.assertEqual(await self._item_id("sub_stray"), "si_sub_stray_over")
