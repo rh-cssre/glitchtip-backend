@@ -3,7 +3,6 @@ import math
 import random
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
 from uuid import UUID
 
 from django.conf import settings
@@ -81,12 +80,13 @@ def auth_from_request(request: HttpRequest):
     raise AuthenticationError(message="Unable to find authentication information")
 
 
-# One letter codes to save cache memory and map to various event rejection type exceptions
-REJECTION_MAP: dict[Literal["v", "t"], Exception] = {
-    "v": AuthenticationError(message="Invalid DSN"),
-    "t": ThrottleException(),
-}
+# Block-cache values are one letter to save cache memory: "v" for an invalid
+# DSN, "t:<org>:<project>" for a throttle.
 REJECTION_WAIT = 30
+# Retry-After for a project that is blocked outright rather than sampled. The
+# throttle curve is only meaningful below 100%, and a blocked project must
+# quote one interval however the rejection was reached.
+HARD_THROTTLE_RETRY_AFTER = 600
 
 
 def serialize_throttle(org_throttle: int, project_throttle: int) -> str:
@@ -98,13 +98,20 @@ def serialize_throttle(org_throttle: int, project_throttle: int) -> str:
 
 
 def deserialize_throttle(input: str) -> None | tuple[int, int]:
-    """Return (org_throttle, project_throttle) as integer %"""
-    if input == "t":
-        return 0, 0
+    """Return (org_throttle, project_throttle) as integer %
+
+    A value that isn't a throttle marker reads as no throttle rather than
+    raising: the cache is shared with the Rust ingest path, and a corrupt
+    entry must cost a database lookup, not a 500 for every request to that
+    project until the entry expires.
+    """
     if input.startswith("t:"):
         parts = input.split(":", 2)
         if len(parts) == 3:
-            return int(parts[1]), int(parts[2])
+            try:
+                return int(parts[1]), int(parts[2])
+            except ValueError:
+                return None
     return None
 
 
@@ -112,11 +119,18 @@ def is_accepting_events(throttle_rate: int) -> bool:
     """Consider throttle to determine if event are being accepted"""
     if throttle_rate == 0:
         return True
+    if throttle_rate >= 100:
+        # Stated rather than left to the sampling bound, which happens to
+        # never exceed 100 and is one character away from leaking events
+        # through a total block.
+        return False
     return random.randint(0, 100) > throttle_rate
 
 
 def calculate_retry_after(throttle: int):
     """Calculates Retry-After using a power function."""
+    if throttle >= 100:
+        return HARD_THROTTLE_RETRY_AFTER
     return math.ceil(0.02 * throttle**2.3)
 
 
@@ -146,12 +160,25 @@ async def get_project(request: HttpRequest) -> ProjectAuthInfo | None:
     """
     if not request.resolver_match:
         raise ValidationError([{"message": "Invalid project ID"}])
-    # str on the re_path routes (store/security), int on <int:> ones.
-    project_id = request.resolver_match.captured_kwargs.get("project_id")
-    if project_id is not None and int(project_id) > 0x7FFF_FFFF_FFFF_FFFF:
-        # Past BIGINT range no project can exist, and the driver refuses to
-        # bind the value (DataError) — reject before touching the database.
-        raise ValidationError([{"message": "Invalid project ID"}])
+    # Captured as a string on the ninja routes (store/security) and as an int
+    # on the <int:> ones, so normalize before the value is used for anything.
+    # It keys the block cache, and "7", "007" and " 7 " all name one project:
+    # left as written they are three cache entries, and a flood could walk
+    # past a block one spelling at a time, each costing a fresh lookup.
+    raw_project_id = request.resolver_match.captured_kwargs.get("project_id")
+    project_id: int | None = None
+    if raw_project_id is not None:
+        try:
+            project_id = int(raw_project_id)
+        except ValueError as err:
+            # int() also rejects a digit string long enough to trip CPython's
+            # conversion limit, which would otherwise surface as a 500 on an
+            # unauthenticated request.
+            raise ValidationError([{"message": "Invalid project ID"}]) from err
+        if not 0 < project_id <= 0x7FFF_FFFF_FFFF_FFFF:
+            # Outside BIGINT no project can exist, and the driver refuses to
+            # bind the value (DataError) — reject before touching the database.
+            raise ValidationError([{"message": "Invalid project ID"}])
     try:
         sentry_key = UUID(auth_from_request(request))
     except (ValueError, TypeError) as err:
@@ -170,10 +197,8 @@ async def get_project(request: HttpRequest) -> ProjectAuthInfo | None:
     block_cache_key = EVENT_BLOCK_CACHE_KEY + str(project_id)
     dsn_block_cache_key = f"{block_cache_key}:{sentry_key}"
     cached = await cache.aget_many([block_cache_key, dsn_block_cache_key])
-    if (
-        (block_value := cached.get(block_cache_key))
-        and block_value.startswith("t")
-        and (throttle := deserialize_throttle(block_value))
+    if (block_value := cached.get(block_cache_key)) and (
+        throttle := deserialize_throttle(block_value)
     ):
         org_throttle, project_throttle = throttle
         if not is_accepting_events(org_throttle) or not is_accepting_events(
@@ -181,13 +206,13 @@ async def get_project(request: HttpRequest) -> ProjectAuthInfo | None:
         ):
             raise ThrottleException(calculate_retry_after(max(throttle)))
     if cached.get(dsn_block_cache_key) == "v":
-        raise REJECTION_MAP["v"]
+        raise AuthenticationError(message="Invalid DSN")
 
     row = await get_project_auth_info_row(project_id, sentry_key)
 
     if not row:
         await cache.aset(dsn_block_cache_key, "v", REJECTION_WAIT)
-        raise REJECTION_MAP["v"]
+        raise AuthenticationError(message="Invalid DSN")
 
     project = ProjectAuthInfo(
         id=row[0],
@@ -209,8 +234,11 @@ async def get_project(request: HttpRequest) -> ProjectAuthInfo | None:
         or project.organization.event_throttle_rate == 100
         or project.event_throttle_rate == 100
     ):
-        await cache.aset(block_cache_key, "t", REJECTION_WAIT)
-        raise ThrottleException(600)
+        # Cache as a 100% throttle so the next request re-blocks from Valkey
+        # instead of repeating the lookup. Anything else here reads back as a
+        # rate the dice roll can pass, which is no block at all.
+        await cache.aset(block_cache_key, serialize_throttle(100, 100), REJECTION_WAIT)
+        raise ThrottleException(HARD_THROTTLE_RETRY_AFTER)
     if project.organization.event_throttle_rate or project.event_throttle_rate:
         await cache.aset(
             block_cache_key,
@@ -276,7 +304,7 @@ async def get_project_by_key(request: HttpRequest) -> ProjectAuthInfo:
     block_cache_key = f"{EVENT_BLOCK_CACHE_KEY}otlp:{sentry_key}"
     cached = await cache.aget(block_cache_key)
     if cached == "v":
-        raise REJECTION_MAP["v"]
+        raise AuthenticationError(message="Invalid DSN")
     if cached and (throttle := deserialize_throttle(cached)):
         org_throttle, project_throttle = throttle
         if not is_accepting_events(org_throttle) or not is_accepting_events(
@@ -290,7 +318,7 @@ async def get_project_by_key(request: HttpRequest) -> ProjectAuthInfo:
         )
     except ProjectKey.DoesNotExist as err:
         await cache.aset(block_cache_key, "v", REJECTION_WAIT)
-        raise REJECTION_MAP["v"] from err
+        raise AuthenticationError(message="Invalid DSN") from err
 
     project = key.project
     organization = project.organization
@@ -318,7 +346,7 @@ async def get_project_by_key(request: HttpRequest) -> ProjectAuthInfo:
         # Cache as a 100% throttle so the next flood request re-blocks from
         # Valkey instead of repeating the lookup.
         await cache.aset(block_cache_key, serialize_throttle(100, 100), REJECTION_WAIT)
-        raise ThrottleException(600)
+        raise ThrottleException(HARD_THROTTLE_RETRY_AFTER)
     # Honor partial throttle rates the same way the envelope hot path does, so
     # a throttled org/project doesn't get a free pass on OTLP ingest.
     if org_throttle or project_throttle:
