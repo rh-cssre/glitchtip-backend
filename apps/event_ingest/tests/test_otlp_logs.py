@@ -369,7 +369,7 @@ class OTLPLogsIngestTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         """A partial rate is sampled once here too, not once per cache state.
 
         This path caches and re-reads the same rates the envelope path does,
-        so it had the same doubled sampling.
+        so the same pair would otherwise be sampled twice.
         """
         self.organization.event_throttle_rate = 50
         self.organization.save()

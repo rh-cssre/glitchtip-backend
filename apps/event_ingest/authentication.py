@@ -257,10 +257,19 @@ async def get_project(request: HttpRequest) -> ProjectAuthInfo | None:
         await cache.aset(block_cache_key, serialize_throttle(*rates), REJECTION_WAIT)
         # Sample only if the cached rates this request was already sampled
         # against are not the ones the database reports. Where they agree the
-        # decision has been taken; where they differ the cache was stale and
-        # the database's rates are the ones that apply.
+        # decision has been taken. Where they differ the entry predates a
+        # change of rate, and the database's rates apply as well: that costs
+        # the one request which observes the change a second sampling, and
+        # the write above means the request after it reads the new rates and
+        # is sampled once.
         if rates != rolled and is_throttled(*rates):
             raise ThrottleException(calculate_retry_after(max(rates)))
+    elif rolled is not None:
+        # Every rate has been cleared. Drop the entry rather than let it go on
+        # sampling the next REJECTION_WAIT seconds of requests against a rate
+        # that no longer exists; only the request that observes the clearing
+        # pays for the round-trip.
+        await cache.adelete(block_cache_key)
 
     # Check throttle needs every 1 out of X requests
     if (
@@ -353,9 +362,11 @@ async def get_project_by_key(request: HttpRequest) -> ProjectAuthInfo:
     rates = (org_throttle, project_throttle)
     if any(rates):
         await cache.aset(block_cache_key, serialize_throttle(*rates), REJECTION_WAIT)
-        # See get_project: one sampling per request.
+        # See get_project: one sampling per request, and the cleared case.
         if rates != rolled and is_throttled(*rates):
             raise ThrottleException(calculate_retry_after(max(rates)))
+    elif rolled is not None:
+        await cache.adelete(block_cache_key)
 
     # Recompute the org's quota throttle out of band, like the envelope path,
     # so an over-quota OTLP-only org gets its throttle set promptly (and then
