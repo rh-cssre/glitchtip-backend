@@ -127,6 +127,18 @@ def is_accepting_events(throttle_rate: int) -> bool:
     return random.randint(0, 100) > throttle_rate
 
 
+def is_throttled(org_throttle: int, project_throttle: int) -> bool:
+    """Whether this event is dropped by the organization's or project's rate.
+
+    The two rates are independent limits, so an event has to get past both.
+    Call this once per request: sampling the same pair twice squares the pass
+    rate's complement, and a rate set to drop half would drop three quarters.
+    """
+    return not is_accepting_events(org_throttle) or not is_accepting_events(
+        project_throttle
+    )
+
+
 def calculate_retry_after(throttle: int):
     """Calculates Retry-After using a power function."""
     if throttle >= 100:
@@ -197,14 +209,15 @@ async def get_project(request: HttpRequest) -> ProjectAuthInfo | None:
     block_cache_key = EVENT_BLOCK_CACHE_KEY + str(project_id)
     dsn_block_cache_key = f"{block_cache_key}:{sentry_key}"
     cached = await cache.aget_many([block_cache_key, dsn_block_cache_key])
+    # The rates this request has already been sampled against, so the same
+    # decision is not taken twice on the way to the database.
+    rolled: tuple[int, int] | None = None
     if (block_value := cached.get(block_cache_key)) and (
         throttle := deserialize_throttle(block_value)
     ):
-        org_throttle, project_throttle = throttle
-        if not is_accepting_events(org_throttle) or not is_accepting_events(
-            project_throttle
-        ):
+        if is_throttled(*throttle):
             raise ThrottleException(calculate_retry_after(max(throttle)))
+        rolled = throttle
     if cached.get(dsn_block_cache_key) == "v":
         raise AuthenticationError(message="Invalid DSN")
 
@@ -239,26 +252,15 @@ async def get_project(request: HttpRequest) -> ProjectAuthInfo | None:
         # rate the dice roll can pass, which is no block at all.
         await cache.aset(block_cache_key, serialize_throttle(100, 100), REJECTION_WAIT)
         raise ThrottleException(HARD_THROTTLE_RETRY_AFTER)
-    if project.organization.event_throttle_rate or project.event_throttle_rate:
-        await cache.aset(
-            block_cache_key,
-            serialize_throttle(
-                project.organization.event_throttle_rate,
-                project.event_throttle_rate,
-            ),
-            REJECTION_WAIT,
-        )
-        if not is_accepting_events(
-            project.organization.event_throttle_rate
-        ) or not is_accepting_events(project.event_throttle_rate):
-            raise ThrottleException(
-                calculate_retry_after(
-                    max(
-                        project.organization.event_throttle_rate,
-                        project.event_throttle_rate,
-                    )
-                )
-            )
+    rates = (project.organization.event_throttle_rate, project.event_throttle_rate)
+    if any(rates):
+        await cache.aset(block_cache_key, serialize_throttle(*rates), REJECTION_WAIT)
+        # Sample only if the cached rates this request was already sampled
+        # against are not the ones the database reports. Where they agree the
+        # decision has been taken; where they differ the cache was stale and
+        # the database's rates are the ones that apply.
+        if rates != rolled and is_throttled(*rates):
+            raise ThrottleException(calculate_retry_after(max(rates)))
 
     # Check throttle needs every 1 out of X requests
     if (
@@ -305,12 +307,11 @@ async def get_project_by_key(request: HttpRequest) -> ProjectAuthInfo:
     cached = await cache.aget(block_cache_key)
     if cached == "v":
         raise AuthenticationError(message="Invalid DSN")
+    rolled: tuple[int, int] | None = None
     if cached and (throttle := deserialize_throttle(cached)):
-        org_throttle, project_throttle = throttle
-        if not is_accepting_events(org_throttle) or not is_accepting_events(
-            project_throttle
-        ):
+        if is_throttled(*throttle):
             raise ThrottleException(calculate_retry_after(max(throttle)))
+        rolled = throttle
 
     try:
         key = await ProjectKey.objects.select_related("project__organization").aget(
@@ -349,18 +350,12 @@ async def get_project_by_key(request: HttpRequest) -> ProjectAuthInfo:
         raise ThrottleException(HARD_THROTTLE_RETRY_AFTER)
     # Honor partial throttle rates the same way the envelope hot path does, so
     # a throttled org/project doesn't get a free pass on OTLP ingest.
-    if org_throttle or project_throttle:
-        await cache.aset(
-            block_cache_key,
-            serialize_throttle(org_throttle, project_throttle),
-            REJECTION_WAIT,
-        )
-        if not is_accepting_events(org_throttle) or not is_accepting_events(
-            project_throttle
-        ):
-            raise ThrottleException(
-                calculate_retry_after(max(org_throttle, project_throttle))
-            )
+    rates = (org_throttle, project_throttle)
+    if any(rates):
+        await cache.aset(block_cache_key, serialize_throttle(*rates), REJECTION_WAIT)
+        # See get_project: one sampling per request.
+        if rates != rolled and is_throttled(*rates):
+            raise ThrottleException(calculate_retry_after(max(rates)))
 
     # Recompute the org's quota throttle out of band, like the envelope path,
     # so an over-quota OTLP-only org gets its throttle set promptly (and then
