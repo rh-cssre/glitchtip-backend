@@ -127,6 +127,100 @@ class AuthenticationTestCase(TransactionTestCase):
             res = await self.post_event(self.store_url(spelling))
             self.assertLess(res.status_code, 500, spelling)
 
+    async def test_partial_throttle_samples_once_per_request(self):
+        """A partial rate is sampled once, not once per cache state.
+
+        The cached rates and the ones the database reports are the same
+        rates. Sampling both squares the pass rate's complement, so an
+        organization set to drop half its events would drop three quarters.
+        """
+        self.organization.event_throttle_rate = 50
+        await self.organization.asave()
+        # Accept every rate, so the request reaches the second sampling site
+        # that a warm cache would otherwise take it through.
+        with mock.patch.object(
+            authentication, "is_accepting_events", return_value=True
+        ):
+            res = await self.post_event()
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(
+                cache.get(EVENT_BLOCK_CACHE_KEY + str(self.project.id)), "t:50:0"
+            )
+            real = authentication.is_throttled
+            with mock.patch.object(
+                authentication, "is_throttled", wraps=real
+            ) as sampled:
+                res = await self.post_event()
+            self.assertEqual(res.status_code, 200)
+        sampled.assert_called_once_with(50, 0)
+
+    async def test_partial_throttle_rejects_from_cache(self):
+        """A partial rate rejects from the cache, before the project lookup.
+
+        The skip is only sound because the cached sampling is the one that
+        survives; if the surviving sampling were the post-lookup one, every
+        throttled request would still cost the lookup the cache exists to
+        avoid.
+        """
+        self.organization.event_throttle_rate = 50
+        await self.organization.asave()
+        with mock.patch.object(
+            authentication, "is_accepting_events", return_value=True
+        ):
+            self.assertEqual((await self.post_event()).status_code, 200)
+        real = authentication.get_project_auth_info_row
+        with (
+            mock.patch.object(
+                authentication, "is_accepting_events", return_value=False
+            ),
+            mock.patch.object(
+                authentication, "get_project_auth_info_row", wraps=real
+            ) as lookup,
+        ):
+            res = await self.post_event()
+        self.assertEqual(res.status_code, 429)
+        lookup.assert_not_called()
+
+    async def test_cleared_throttle_drops_the_cached_rate(self):
+        """Clearing a rate must not leave the old one behind to sample against.
+
+        The entry is only reachable by a request the cached rate lets past,
+        so a cleared rate goes on dropping events until one gets through.
+        Leaving the entry to expire stretches that across its whole TTL.
+        """
+        self.organization.event_throttle_rate = 50
+        await self.organization.asave()
+        block_key = EVENT_BLOCK_CACHE_KEY + str(self.project.id)
+        with mock.patch.object(
+            authentication, "is_accepting_events", return_value=True
+        ):
+            self.assertEqual((await self.post_event()).status_code, 200)
+            self.assertEqual(cache.get(block_key), "t:50:0")
+
+            self.organization.event_throttle_rate = 0
+            await self.organization.asave()
+            self.assertEqual((await self.post_event()).status_code, 200)
+        self.assertIsNone(cache.get(block_key))
+
+    async def test_stale_cached_rates_are_resampled(self):
+        """Rates that disagree with the database are a different decision.
+
+        Skipping the second sampling is only sound where the cache and the
+        database name the same rates; where they differ the cached entry is
+        stale and the database's rates are the ones that apply.
+        """
+        self.organization.event_throttle_rate = 90
+        await self.organization.asave()
+        # A cache entry from before the rate was raised.
+        cache.set(EVENT_BLOCK_CACHE_KEY + str(self.project.id), "t:10:0")
+        with mock.patch.object(
+            authentication,
+            "is_accepting_events",
+            side_effect=lambda rate: rate < 50,
+        ):
+            res = await self.post_event()
+        self.assertEqual(res.status_code, 429)
+
     async def test_project_throttle(self):
         """A 100% project throttle blocks without the organization being over."""
         self.project.event_throttle_rate = 100

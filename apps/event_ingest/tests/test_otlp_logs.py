@@ -9,6 +9,7 @@ Collector emits.
 
 import gzip
 import time
+from unittest import mock
 from uuid import UUID
 
 import orjson
@@ -22,6 +23,7 @@ from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import (
 from opentelemetry.proto.common.v1.common_pb2 import AnyValue, KeyValue
 from opentelemetry.proto.logs.v1.logs_pb2 import LogRecord, ResourceLogs, ScopeLogs
 
+from apps.event_ingest import authentication
 from apps.event_ingest.constants import EVENT_BLOCK_CACHE_KEY
 from apps.event_ingest.otlp import decode_otlp_logs
 from apps.logs.constants import LogLevel
@@ -362,6 +364,44 @@ class OTLPLogsIngestTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
         self.assertEqual(res.status_code, 429)
         self._flush()
         self.assertEqual(LogEvent.objects.count(), 0)
+
+    def test_partial_throttle_samples_once_per_request(self):
+        """A partial rate is sampled once here too, not once per cache state.
+
+        This path caches and re-reads the same rates the envelope path does,
+        so the same pair would otherwise be sampled twice.
+        """
+        self.organization.event_throttle_rate = 50
+        self.organization.save()
+        block_key = f"{EVENT_BLOCK_CACHE_KEY}otlp:{self.projectkey.public_key}"
+        # Both requests below are accepted, so drain what they queue and drop
+        # the block entry however this test ends: the task backend and the
+        # cache are process-global and outlive the truncation between tests.
+        self.addCleanup(cache.delete, block_key)
+        self.addCleanup(self._flush)
+        with mock.patch.object(
+            authentication, "is_accepting_events", return_value=True
+        ):
+            res = self.client.post(
+                self.url,
+                _build_protobuf_request(),
+                content_type="application/x-protobuf",
+                HTTP_AUTHORIZATION=self.auth,
+            )
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(cache.get(block_key), "t:50:0")
+            real = authentication.is_throttled
+            with mock.patch.object(
+                authentication, "is_throttled", wraps=real
+            ) as sampled:
+                res = self.client.post(
+                    self.url,
+                    _build_protobuf_request(),
+                    content_type="application/x-protobuf",
+                    HTTP_AUTHORIZATION=self.auth,
+                )
+            self.assertEqual(res.status_code, 200)
+        sampled.assert_called_once_with(50, 0)
 
     def test_observed_time_used_when_no_timestamp(self):
         """A record carrying only observed time (no original timestamp) must
