@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from functools import wraps
 
 from django.core.exceptions import ImproperlyConfigured
-from django.db.models import Exists, OuterRef, QuerySet, Subquery
+from django.db.models import Exists, QuerySet
 from django.http import Http404
 from ninja.errors import HttpError
 
@@ -13,16 +13,46 @@ from glitchtip.base_models import OrgScopedModel
 
 from .authentication import AuthHttpRequest
 
+# Organization.id is an int4 AutoField. A larger id can't exist, and would
+# reach Postgres as an out-of-range error rather than a miss.
+MAX_ORG_ID = 2**31 - 1
+
+ORG_NOT_FOUND = "Organization not found."
+
+
+async def resolve_org_id(segment: str) -> int:
+    """The org id a path segment names: all digits is an id, anything else a slug.
+
+    Unambiguous because slugs can't be all digits (``organization_slug_not_all_digits``).
+    An id is trusted as-is; the gate proves it exists. A slug costs one lookup,
+    and is resolved here rather than as a subquery so the data query filters on
+    a literal and Postgres can prune partitions when planning.
+    """
+    # isdigit() alone accepts non-ASCII digits such as "²", which int() rejects.
+    if segment.isascii() and segment.isdigit():
+        org_id = int(segment)
+        if org_id <= MAX_ORG_ID:
+            return org_id
+    else:
+        org_id = await (
+            Organization.objects.filter(slug=segment, is_deleted=False)
+            .values_list("id", flat=True)
+            .afirst()
+        )
+        if org_id is not None:
+            return org_id
+    raise HttpError(404, ORG_NOT_FOUND)
+
 
 @dataclass(frozen=True)
 class OrgScope:
     user_id: int
-    org_slug: str
+    org_id: int
     required: frozenset[Scopes]
     roles: tuple[int, ...]  # role values holding any required scope
 
     @classmethod
-    def from_request(cls, request, required, roles, kwargs) -> "OrgScope":
+    async def from_request(cls, request, required, roles, kwargs) -> "OrgScope":
         """Token ceiling, then the scope the view will be gated by.
 
         Publishes itself on the request: ``OrgScopedHttpRequest`` promises
@@ -39,27 +69,20 @@ class OrgScope:
                 )
             roles = tuple(i for i, r in enumerate(ROLES) if effective & r["scopes"])
 
-        scope = cls(request.auth.user_id, kwargs["organization_slug"], required, roles)
+        org_id = await resolve_org_id(kwargs["organization_slug"])
+        scope = cls(request.auth.user_id, org_id, required, roles)
         request.org_scope = scope  # set before the view runs
         return scope
 
-    @property
-    def org_id_expr(self) -> Subquery:
-        # An UNCORRELATED scalar subquery, never a join to organization from
-        # the data model.
-        return Subquery(
-            Organization.objects.filter(slug=self.org_slug, is_deleted=False).values(
-                "id"
-            )[:1]
-        )
-
-    def gate(self, org_id: Subquery) -> Exists:
+    def gate(self) -> Exists:
         # No OuterRef. Deliberately UNCORRELATED, so Postgres evaluates
         # this once as an InitPlan instead of once per row. Adding an
         # OuterRef here looks more correct and silently makes it per-row.
         qs = OrganizationUser.objects.filter(
             user_id=self.user_id,
-            organization_id=org_id,
+            organization_id=self.org_id,
+            # An id from the path is unchecked, so a deleted org is caught here.
+            organization__is_deleted=False,
         )
         if len(self.roles) < len(ROLES):
             # A no-op on routes every role qualifies for.
@@ -74,29 +97,25 @@ class OrgScope:
                 "an OrgScopedModel, so the gate cannot isolate it. Declare "
                 "org_field on it via OrgScopedModel."
             )
-        org_id = self.org_id_expr
-        return qs.filter(self.gate(org_id), **{model.org_field: org_id})
+        return qs.filter(self.gate(), **{model.org_field: self.org_id})
 
     async def explain_miss(self) -> HttpError | None:
-        row = await (
-            Organization.objects.filter(slug=self.org_slug, is_deleted=False)
-            .annotate(
-                membership_role=Subquery(
-                    OrganizationUser.objects.filter(
-                        organization_id=OuterRef("pk"), user_id=self.user_id
-                    ).values("role")[:1]
-                )
+        membership_role = await (
+            OrganizationUser.objects.filter(
+                user_id=self.user_id,
+                organization_id=self.org_id,
+                organization__is_deleted=False,
             )
-            .values("membership_role")
+            .values_list("role", flat=True)
             .afirst()
         )
-        if row is None or row["membership_role"] is None:
-            return HttpError(404, "Organization not found.")
+        if membership_role is None:
+            return HttpError(404, ORG_NOT_FOUND)
 
-        if row["membership_role"] in self.roles:
+        if membership_role in self.roles:
             return None
 
-        role = ROLES[row["membership_role"]]
+        role = ROLES[membership_role]
         if self.required & role["scopes"]:
             # The role holds a required scope but was still excluded, so the
             # token's scopes are the blocker.
@@ -109,7 +128,7 @@ class OrgScope:
         return HttpError(
             403,
             f"Permission denied. This endpoint requires one of "
-            f"{sorted(self.required)}; your role in {self.org_slug} "
+            f"{sorted(self.required)}; your role in this organization "
             f"({role['name']}) holds none of them.",
         )
 
@@ -162,7 +181,7 @@ def org_scoped(scopes: list[Scopes], model: type[OrgScopedModel]):
 
         @wraps(view)  # ninja reads the signature for path params
         async def gated(request, **kwargs):
-            scope = OrgScope.from_request(request, required, roles, kwargs)
+            scope = await OrgScope.from_request(request, required, roles, kwargs)
             qs = scope.apply(model._default_manager.all())
             try:
                 return await view(request, qs=qs, **kwargs)

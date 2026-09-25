@@ -408,7 +408,10 @@ class OrgScopedGateTestCase(TestCase):
         )
         _, roles = _resolve_roles(["project:admin"])
         scope = OrgScope(
-            self.user.id, "orga", frozenset({"project:read", "project:admin"}), roles
+            self.user.id,
+            self.org.id,
+            frozenset({"project:read", "project:admin"}),
+            roles,
         )
         error = await scope.explain_miss()
         self.assertEqual(error.status_code, 403)
@@ -422,11 +425,11 @@ class OrgScopedGateTestCase(TestCase):
         baker.make("alerts.ProjectAlert", project=self.project, _quantity=4)
         headers = self.bearer()
         self.token.add_permission("project:read")
-        # Token lookup, the page, the alertrecipient prefetch. The gate adds
-        # none of its own: the org id and the membership check are subqueries
-        # inside the page query, which is the whole point of folding them in.
+        # Token lookup, the page, the alertrecipient prefetch. By id, the gate
+        # adds none of its own: the membership check is a subquery inside the
+        # page query, which is the whole point of folding it in.
         with self.assertNumQueries(3):
-            res = self.client.get(self.list_url(), headers=headers)
+            res = self.client.get(self.list_url(org_slug=self.org.id), headers=headers)
         self.assertEqual(len(res.json()), 5)
 
     def test_an_empty_list_is_not_explained(self):
