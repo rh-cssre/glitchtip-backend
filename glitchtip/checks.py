@@ -39,9 +39,9 @@ def registered_models(app_configs) -> Iterator[type[Model]]:
 def check_org_field(model: type[Model]) -> Error | None:
     """Resolve ``model.org_field`` and confirm it lands on the organization FK.
 
-    ``OrgScope.apply`` filters this path against a subquery returning an
-    organization id. A path that stops anywhere else either fails to compile
-    or -- worse -- compiles into a filter that isolates nothing.
+    ``OrgScope.apply`` filters this path against an organization id. A path
+    that stops anywhere else either fails to compile or -- worse -- compiles
+    into a filter that isolates nothing.
     """
     try:
         _, final_field, _, _ = Query(model).names_to_path(

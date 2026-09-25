@@ -149,6 +149,9 @@ def org_scoped(scopes: list[Scopes], model: type[OrgScopedModel]):
     """Hand the view ``qs``: the rows of ``model`` the caller may reach.
 
     Only ``qs`` is gated; ``Model.objects`` in the view is not.
+
+    ``organization_slug`` may carry the org's id or its slug (see
+    ``resolve_org_id``); the name predates ids.
     """
     required, roles = _resolve_roles(scopes)
     if not (isinstance(model, type) and issubclass(model, OrgScopedModel)):
@@ -209,9 +212,9 @@ class OrgScopedHttpRequest(AuthHttpRequest):
     """A request under a folded gate, so ``org_scope`` is set.
 
     The folded gate doesn't resolve an ``OrganizationUser`` row, so there is
-    no role here. While paths name the organization by slug, the org id is
-    ``org_scope.org_id_expr``, a subquery usable only inside a filter; once a
-    path can carry the id itself, it can be a literal int instead.
+    no role here. ``org_scope.org_id`` is the path's org id, but nothing has
+    checked it yet: membership is only proven inside ``qs``, so filter with
+    ``org_scope.apply``, never with the bare id.
     """
 
     org_scope: OrgScope
