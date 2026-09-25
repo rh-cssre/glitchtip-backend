@@ -1,3 +1,11 @@
+"""Reserve all-digit organization slugs for organization ids.
+
+Adding the constraint takes a brief ACCESS EXCLUSIVE lock on the organization
+table. ``lock_timeout`` bounds the wait, so a long-running reader (a
+``pg_dump``, say) makes the migration fail fast instead of queueing every
+organization lookup behind it. A timeout rolls back the renames too; rerun it.
+"""
+
 import django.core.validators
 from django.db import migrations, models
 
@@ -33,7 +41,7 @@ def rename_all_digit_slugs(apps, schema_editor):
 
     if renamed:
         print(
-            f"\n  Renamed {len(renamed)} organization slug(s) that were only "
+            f"\n  Renaming {len(renamed)} organization slug(s) that are only "
             "digits, which are now reserved for organization ids:"
         )
         for org_id, old, new in renamed:
@@ -46,6 +54,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunSQL("SET LOCAL lock_timeout = '5s';", migrations.RunSQL.noop),
         migrations.RunPython(rename_all_digit_slugs, migrations.RunPython.noop),
         migrations.AlterField(
             model_name="organization",

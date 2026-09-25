@@ -399,9 +399,13 @@ class Organization(SharedBaseModel, OrganizationBase):
             # would shadow the /login/finalize social-auth callback route.
             "finalize",
         ]
-        slug = slugify(content)
+        # Truncate and strip here, as the field would afterwards, so the check
+        # below sees the final slug: cutting "1…1-x" at max_length can leave
+        # only digits, and cutting "1…1-1" can drop the suffix.
+        max_length = self._meta.get_field("slug").max_length
+        slug = slugify(content)[:max_length].strip("-")
         if slug in reserved_words or re.fullmatch(ALL_DIGITS_SLUG, slug):
-            return slug + "-1"
+            return slug[: max_length - 2] + "-1"
         return slug
 
     def add_user(self, user, role=OrganizationUserRole.MEMBER):

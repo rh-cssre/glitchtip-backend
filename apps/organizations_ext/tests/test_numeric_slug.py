@@ -30,8 +30,19 @@ class NumericSlugGuardTestCase(TestCase):
     async def test_a_second_all_digit_name_still_avoids_digits(self):
         await baker.amake("organizations_ext.Organization", name="1")
         organization = await baker.amake("organizations_ext.Organization", name="1")
-        self.assertTrue(organization.slug.startswith("1-"))
-        self.assertNotRegex(organization.slug, r"^[0-9]+$")
+        # "1-1" is taken, so the collision suffix is added after it.
+        self.assertRegex(organization.slug, r"^1-1-[a-z0-9]+$")
+
+    async def test_names_that_truncate_to_digits_still_get_a_suffix(self):
+        # The field cuts slugs to 200 characters, and a suffix added before
+        # that cut must survive it. "½" slugifies to "12", so the last name
+        # grows past the limit and is cut back to only digits.
+        for name in ("7" * 199, "7" * 200, "7" * 199 + "½"):
+            organization = await baker.amake(
+                "organizations_ext.Organization", name=name
+            )
+            self.assertEqual(organization.slug, "7" * 198 + "-1")
+            await Organization.objects.filter(id=organization.id).adelete()
 
     async def test_names_that_merely_contain_digits_are_unchanged(self):
         for name, slug in [("12-34", "12-34"), ("007 agents", "007-agents")]:
@@ -56,11 +67,18 @@ class NumericSlugGuardTestCase(TestCase):
         organization.slug = "123"
         with self.assertRaises(ValidationError) as ctx:
             organization.full_clean()
-        self.assertIn("slug", ctx.exception.message_dict)
+        self.assertEqual(
+            ctx.exception.message_dict["slug"], ["A slug cannot be only digits."]
+        )
 
     def test_database_rejects_an_all_digit_slug(self):
         organization = baker.make("organizations_ext.Organization", name="acme")
-        with self.assertRaises(IntegrityError), transaction.atomic():
+        with (
+            self.assertRaisesMessage(
+                IntegrityError, "organization_slug_not_all_digits"
+            ),
+            transaction.atomic(),
+        ):
             Organization.objects.filter(id=organization.id).update(slug="123")
 
 
