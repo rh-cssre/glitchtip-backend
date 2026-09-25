@@ -119,7 +119,8 @@ def _resolve_roles(scopes: list[Scopes]) -> tuple[frozenset[Scopes], tuple[int, 
     """Import time: which role ints hold at least one required scope."""
     required = frozenset(scopes)
     # 'i' below is the same int used in OrganizationUserRole (0-member, 1-admin, etc.)
-    # Also, this is not role >= X, but at least on scope derived from role are in scopes
+    # Also, this is not role >= X: a role qualifies if at least one of its
+    # scopes is in scopes.
     roles = tuple(i for i, r in enumerate(ROLES) if required & r["scopes"])
     if not roles:
         raise ImproperlyConfigured(f"no role holds any of {sorted(required)}")
@@ -250,9 +251,10 @@ def org_scoped_qs(scopes: list[Scopes], model: type[OrgScopedModel]):
 class OrgScopedHttpRequest(AuthHttpRequest):
     """A request under a folded gate, so ``org_scope`` is set.
 
-    The folded gate never resolves an ``OrganizationUser`` row, so there is no
-    role and no org id as an int -- only ``org_scope``, whose ``org_id_expr``
-    is usable in a filter and nowhere else.
+    The folded gate doesn't resolve an ``OrganizationUser`` row, so there is
+    no role here. While paths name the organization by slug, the org id is
+    ``org_scope.org_id_expr``, a subquery usable only inside a filter; once a
+    path can carry the id itself, it can be a literal int instead.
     """
 
     org_scope: OrgScope

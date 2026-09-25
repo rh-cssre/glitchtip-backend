@@ -18,9 +18,14 @@ from model_bakery import baker
 
 from apps.alerts.models import AlertRecipient, ProjectAlert
 from apps.organizations_ext.constants import OrganizationUserRole
-from apps.organizations_ext.models import Organization
+from apps.organizations_ext.models import Organization, OrganizationUser
 from apps.projects.models import Project
-from glitchtip.api.permissions import org_scoped_list, org_scoped_qs
+from glitchtip.api.permissions import (
+    OrgScope,
+    _resolve_roles,
+    org_scoped_list,
+    org_scoped_qs,
+)
 from glitchtip.base_models import ORG_SCOPED_MODELS, OrgScopedModel
 from glitchtip.checks import (
     check_org_field,
@@ -409,6 +414,23 @@ class OrgScopedGateTestCase(TestCase):
         self.assertEqual(res.status_code, 403)
         self.assertIn("Member", res.json()["detail"])
         self.assertTrue(ProjectAlert.objects.filter(id=self.alert.id).exists())
+
+    async def test_a_role_that_qualifies_is_told_the_token_is_the_blocker(self):
+        # No route yet requires two scopes through an explaining gate, so the
+        # scope is built as from_request would for a token holding only
+        # project:admin on a route accepting project:read or project:admin.
+        # Member holds project:read, so the role qualifies and the token
+        # doesn't.
+        await OrganizationUser.objects.filter(pk=self.org_user.pk).aupdate(
+            role=OrganizationUserRole.MEMBER
+        )
+        _, roles = _resolve_roles(["project:admin"])
+        scope = OrgScope(
+            self.user.id, "orga", frozenset({"project:read", "project:admin"}), roles
+        )
+        error = await scope.explain_miss()
+        self.assertEqual(error.status_code, 403)
+        self.assertIn("the API token you used does not", error.message)
 
     # Cost
 
