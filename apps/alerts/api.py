@@ -2,6 +2,7 @@ from django.db.models import Q, QuerySet
 from django.http import Http404, HttpResponse
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Status
+from ninja.pagination import paginate
 
 from apps.organizations_ext.constants import OrganizationUserRole
 from apps.projects.models import Project
@@ -9,8 +10,7 @@ from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.permissions import (
     OrgScopedHttpRequest,
     has_permission,
-    org_scoped_list,
-    org_scoped_qs,
+    org_scoped,
 )
 
 from .constants import RecipientType
@@ -50,17 +50,17 @@ def get_project_alert_queryset(user_id: int, organization_slug: str, project_slu
     response=list[ProjectAlertSchema],
     by_alias=True,
 )
-@org_scoped_list(["project:read", "project:write", "project:admin"])
+@paginate
+@org_scoped(["project:read", "project:write", "project:admin"], ProjectAlert)
 async def list_project_alerts(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[ProjectAlert],
     response: HttpResponse,
     organization_slug: str,
     project_slug: str,
 ):
-    # The slug alone is not unique across orgs; the gate adds the org.
-    return ProjectAlert.objects.filter(project__slug=project_slug).prefetch_related(
-        "alertrecipient_set"
-    )
+    # The slug alone is not unique across orgs; qs is already this org's.
+    return qs.filter(project__slug=project_slug).prefetch_related("alertrecipient_set")
 
 
 @router.post(
@@ -154,7 +154,7 @@ async def update_project_alert(
     "projects/{slug:organization_slug}/{slug:project_slug}/alerts/{alert_id}/",
     response={204: None},
 )
-@org_scoped_qs(["project:admin"], ProjectAlert)
+@org_scoped(["project:admin"], ProjectAlert)
 async def delete_project_alert(
     request: OrgScopedHttpRequest,
     qs: QuerySet[ProjectAlert],

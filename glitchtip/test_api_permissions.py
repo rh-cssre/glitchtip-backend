@@ -1,12 +1,11 @@
 """The folded gate, exercised through the two routes that use it.
 
 ``apps/alerts`` is the only consumer so far -- ``list_project_alerts`` is
-``@org_scoped_list`` and ``delete_project_alert`` is ``@org_scoped_qs``. What
-is under test is ``glitchtip.api.permissions``, not alerts, so these move if
-the decorators grow a second consumer worth testing them through.
+``@paginate`` over ``@org_scoped`` and ``delete_project_alert`` is
+``@org_scoped`` alone. What is under test is ``glitchtip.api.permissions``,
+not alerts, so these move if the decorator grows a second consumer worth
+testing it through.
 """
-
-import inspect
 
 from django.apps import apps
 from django.core.exceptions import ImproperlyConfigured
@@ -15,6 +14,7 @@ from django.test import SimpleTestCase, TestCase
 from django.test.utils import isolate_apps
 from django.urls import reverse
 from model_bakery import baker
+from ninja.pagination import paginate
 
 from apps.alerts.models import AlertRecipient, ProjectAlert
 from apps.organizations_ext.constants import OrganizationUserRole
@@ -23,8 +23,7 @@ from apps.projects.models import Project
 from glitchtip.api.permissions import (
     OrgScope,
     _resolve_roles,
-    org_scoped_list,
-    org_scoped_qs,
+    org_scoped,
 )
 from glitchtip.base_models import ORG_SCOPED_MODELS, OrgScopedModel
 from glitchtip.checks import (
@@ -199,22 +198,22 @@ class OrgScopedModelRegistryTestCase(SimpleTestCase):
         )
 
 
-class OrgScopedQsDeclarationTestCase(SimpleTestCase):
-    """``@org_scoped_qs`` fails at import, not on the first request."""
+class OrgScopedDeclarationTestCase(SimpleTestCase):
+    """``@org_scoped`` fails at import, not on the first request."""
 
     def test_model_that_is_not_org_scoped_is_rejected(self):
         with self.assertRaises(ImproperlyConfigured) as ctx:
-            org_scoped_qs(["project:admin"], AlertRecipient)
+            org_scoped(["project:admin"], AlertRecipient)
         self.assertIn("OrgScopedModel", str(ctx.exception))
 
     def test_scope_no_role_holds_is_rejected(self):
         with self.assertRaises(ImproperlyConfigured):
-            org_scoped_qs(["project:nonexistent"], ProjectAlert)
+            org_scoped(["project:nonexistent"], ProjectAlert)
 
     def test_view_without_a_qs_parameter_is_rejected(self):
         with self.assertRaises(ImproperlyConfigured) as ctx:
 
-            @org_scoped_qs(["project:admin"], ProjectAlert)
+            @org_scoped(["project:admin"], ProjectAlert)
             async def view(request, organization_slug: str):
                 pass
 
@@ -225,63 +224,46 @@ class OrgScopedQsDeclarationTestCase(SimpleTestCase):
         # one is a KeyError 500 rather than a refusal.
         with self.assertRaises(ImproperlyConfigured) as ctx:
 
-            @org_scoped_qs(["project:admin"], ProjectAlert)
+            @org_scoped(["project:admin"], ProjectAlert)
             async def view(request, qs, project_slug: str):
                 pass
 
         self.assertIn("organization_slug", str(ctx.exception))
 
-    def test_qs_is_hidden_from_the_signature_ninja_reads(self):
-        @org_scoped_qs(["project:admin"], ProjectAlert)
-        async def view(request, qs, organization_slug: str):
-            pass
+    def test_paginate_under_the_gate_is_rejected(self):
+        with self.assertRaises(ImproperlyConfigured) as ctx:
 
-        params = inspect.signature(view).parameters
-        self.assertNotIn("qs", params)
-        self.assertIn("organization_slug", params)
+            @org_scoped(["project:read"], ProjectAlert)
+            @paginate
+            async def view(request, qs, organization_slug: str):
+                return qs
 
-    def test_qs_is_not_a_parameter_on_the_real_route(self):
+        self.assertIn("@paginate above", str(ctx.exception))
+
+    def test_qs_is_not_a_parameter_on_the_real_routes(self):
         """The signature edit is only worth anything if ninja honours it.
 
         An un-annotated param ninja can see becomes a required ``str`` query
         param, so a leak here is a 422 on every call, not a cosmetic one.
+        Checked on the paginated route too, since ``@paginate`` wraps it again.
         """
         from glitchtip.api.api import api
 
-        operations = [
-            operation
-            for path, item in api.get_openapi_schema()["paths"].items()
-            for method, operation in item.items()
-            if path.endswith("/alerts/{alert_id}/") and method == "delete"
-        ]
-        self.assertEqual(len(operations), 1)
-        names = [param["name"] for param in operations[0].get("parameters", [])]
-        self.assertNotIn("qs", names)
-        self.assertIn("alert_id", names)
-
-
-class OrgScopedListDeclarationTestCase(SimpleTestCase):
-    """``@org_scoped_list`` fails at import, not on the first request."""
-
-    def test_scope_no_role_holds_is_rejected(self):
-        with self.assertRaises(ImproperlyConfigured):
-            org_scoped_list(["project:nonexistent"])
-
-    def test_view_without_an_organization_slug_is_rejected(self):
-        with self.assertRaises(ImproperlyConfigured) as ctx:
-
-            @org_scoped_list(["project:read"])
-            async def view(request, project_slug: str):
-                pass
-
-        self.assertIn("organization_slug", str(ctx.exception))
-
-    def test_a_view_with_one_is_accepted(self):
-        @org_scoped_list(["project:read"])
-        async def view(request, organization_slug: str):
-            pass
-
-        self.assertIn("organization_slug", inspect.signature(view).parameters)
+        paths = api.get_openapi_schema()["paths"]
+        for suffix, method, path_param in [
+            ("/{project_slug}/alerts/", "get", "project_slug"),
+            ("/alerts/{alert_id}/", "delete", "alert_id"),
+        ]:
+            with self.subTest(method):
+                operations = [
+                    item[method]
+                    for path, item in paths.items()
+                    if path.endswith(suffix) and method in item
+                ]
+                self.assertEqual(len(operations), 1)
+                names = [p["name"] for p in operations[0].get("parameters", [])]
+                self.assertNotIn("qs", names)
+                self.assertIn(path_param, names)
 
 
 def _set_slug(obj, slug: str):
@@ -447,9 +429,9 @@ class OrgScopedGateTestCase(TestCase):
             res = self.client.get(self.list_url(), headers=headers)
         self.assertEqual(len(res.json()), 5)
 
-    def test_an_empty_list_is_not_explained_by_default(self):
-        # ``explain_empty`` is off for this route, so a non-member sees the
-        # same empty page an entitled caller with no alerts would.
+    def test_an_empty_list_is_not_explained(self):
+        # A non-member sees the same empty page an entitled caller with no
+        # alerts would.
         self.client.force_login(self.outsider)
         res = self.client.get(self.list_url())
         self.assertEqual(res.status_code, 200)
