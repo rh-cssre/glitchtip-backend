@@ -14,6 +14,7 @@ from django.test import SimpleTestCase, TestCase
 from django.test.utils import isolate_apps
 from django.urls import reverse
 from model_bakery import baker
+from ninja.errors import HttpError
 from ninja.pagination import paginate
 
 from apps.alerts.models import AlertRecipient, ProjectAlert
@@ -24,6 +25,7 @@ from glitchtip.api.permissions import (
     OrgScope,
     _resolve_roles,
     org_scoped,
+    resolve_org_id,
 )
 from glitchtip.base_models import ORG_SCOPED_MODELS, OrgScopedModel
 from glitchtip.checks import (
@@ -327,9 +329,11 @@ class OrgScopedGateTestCase(TestCase):
 
     def test_member_cannot_delete_and_is_told_their_role(self):
         self.set_role(OrganizationUserRole.MEMBER)
-        res = self.client.delete(self.delete_url())
-        self.assertEqual(res.status_code, 403)
-        self.assertIn("Member", res.json()["detail"])
+        for segment in ("orga", self.org.id):
+            with self.subTest(segment=segment):
+                res = self.client.delete(self.delete_url(org_slug=segment))
+                self.assertEqual(res.status_code, 403)
+                self.assertIn("Member", res.json()["detail"])
         self.assertTrue(ProjectAlert.objects.filter(id=self.alert.id).exists())
 
     def test_admin_can_delete(self):
@@ -365,17 +369,66 @@ class OrgScopedGateTestCase(TestCase):
 
     def test_delete_cannot_reach_another_orgs_alert_through_a_shared_slug(self):
         self.set_role(OrganizationUserRole.ADMIN)
-        res = self.client.delete(self.delete_url(alert_id=self.other_alert.id))
-        self.assertEqual(res.status_code, 404)
+        for segment in ("orga", self.org.id):
+            with self.subTest(segment=segment):
+                res = self.client.delete(
+                    self.delete_url(org_slug=segment, alert_id=self.other_alert.id)
+                )
+                self.assertEqual(res.status_code, 404)
         self.assertTrue(ProjectAlert.objects.filter(id=self.other_alert.id).exists())
 
     def test_list_is_scoped_to_the_org_in_the_path(self):
-        res = self.client.get(self.list_url())
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual([row["id"] for row in res.json()], [self.alert.id])
+        cases = [
+            (self.org.slug, self.alert),
+            (self.org.id, self.alert),
+            (self.other_org.slug, self.other_alert),
+            (self.other_org.id, self.other_alert),
+        ]
+        for segment, alert in cases:
+            with self.subTest(segment=segment):
+                res = self.client.get(self.list_url(org_slug=segment))
+                self.assertEqual(res.status_code, 200)
+                self.assertEqual([row["id"] for row in res.json()], [alert.id])
 
-        res = self.client.get(self.list_url(org_slug="orgb"))
-        self.assertEqual([row["id"] for row in res.json()], [self.other_alert.id])
+    # Path segments naming no reachable org
+
+    def test_a_segment_naming_no_org_is_the_membership_404(self):
+        # The user owns the deleted org and it holds a matching alert, so only
+        # the deleted check stands between them: by id, that check is the
+        # gate's, since an id from the path skips the slug lookup.
+        deleted = _set_slug(baker.make("organizations_ext.Organization"), "gone")
+        deleted.add_user(self.user, OrganizationUserRole.OWNER)
+        project = _set_slug(
+            baker.make("projects.Project", organization=deleted), "shared"
+        )
+        alert = baker.make("alerts.ProjectAlert", project=project)
+        Organization.objects.filter(pk=deleted.pk).update(is_deleted=True)
+
+        cases = [
+            ("deleted org by id", deleted.id),
+            ("deleted org by slug", "gone"),
+            ("unused id", deleted.id + 1000),
+            ("unknown slug", "no-such-org"),
+            # Organization.id is int4; past it, the driver raises rather than
+            # matching nothing.
+            ("id past int4", str(2**31)),
+        ]
+        for label, segment in cases:
+            with self.subTest(label):
+                res = self.client.delete(
+                    self.delete_url(org_slug=segment, alert_id=alert.id)
+                )
+                self.assertEqual(res.status_code, 404)
+                self.assertEqual(res.json()["detail"], "Organization not found.")
+        self.assertTrue(ProjectAlert.objects.filter(id=alert.id).exists())
+
+    async def test_non_ascii_digits_are_a_slug_not_an_id(self):
+        # The route's slug converter already refuses "²", so this pins the
+        # guard for callers that don't come through a route: str.isdigit()
+        # accepts it and int() then raises.
+        with self.assertRaises(HttpError) as ctx:
+            await resolve_org_id("²")
+        self.assertEqual(ctx.exception.status_code, 404)
 
     # Token scopes
 
@@ -427,10 +480,17 @@ class OrgScopedGateTestCase(TestCase):
         self.token.add_permission("project:read")
         # Token lookup, the page, the alertrecipient prefetch. By id, the gate
         # adds none of its own: the membership check is a subquery inside the
-        # page query, which is the whole point of folding it in.
-        with self.assertNumQueries(3):
-            res = self.client.get(self.list_url(org_slug=self.org.id), headers=headers)
-        self.assertEqual(len(res.json()), 5)
+        # page query, which is the whole point of folding it in. A slug costs
+        # one lookup ahead of the page, and one naming no org stops there.
+        cases = [
+            (self.org.id, 3, 200),
+            ("orga", 4, 200),
+            ("no-such-org", 2, 404),
+        ]
+        for segment, queries, status in cases:
+            with self.subTest(segment=segment), self.assertNumQueries(queries):
+                res = self.client.get(self.list_url(org_slug=segment), headers=headers)
+            self.assertEqual(res.status_code, status)
 
     def test_an_empty_list_is_not_explained(self):
         # A non-member sees the same empty page an entitled caller with no
