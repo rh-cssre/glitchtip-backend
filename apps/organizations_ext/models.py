@@ -1,11 +1,12 @@
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from allauth.socialaccount.models import SocialApp
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
-from django.core.validators import MaxValueValidator
+from django.core.validators import MaxValueValidator, RegexValidator
 from django.db import models
 from django.db.models import Q, Subquery, Sum
 from django.db.models.functions import Coalesce
@@ -249,6 +250,11 @@ async def get_current_period_dates(
     )
 
 
+# An all-digit path segment is reserved for an organization id, so a slug may
+# never be one; otherwise ``/organizations/42/`` could name two organizations.
+ALL_DIGITS_SLUG = r"^[0-9]+$"
+
+
 class Organization(SharedBaseModel, OrganizationBase):
     id = models.AutoField(primary_key=True)  # BIGINT is unnecessary
     slug = OrganizationSlugField(
@@ -257,6 +263,13 @@ class Organization(SharedBaseModel, OrganizationBase):
         editable=True,
         populate_from="name",
         unique=True,
+        validators=[
+            RegexValidator(
+                ALL_DIGITS_SLUG,
+                inverse_match=True,
+                message=_("A slug cannot be only digits."),
+            )
+        ],
         help_text=_("The name in all lowercase, suitable for URL identification"),
     )
     is_accepting_events = models.BooleanField(
@@ -335,6 +348,14 @@ class Organization(SharedBaseModel, OrganizationBase):
 
     objects = OrganizationManager()
 
+    class Meta(SharedBaseModel.Meta):
+        constraints = [
+            models.CheckConstraint(
+                condition=~Q(slug__regex=ALL_DIGITS_SLUG),
+                name="organization_slug_not_all_digits",
+            ),
+        ]
+
     def save(self, *args, **kwargs):
         new = False
         if not self.pk:
@@ -379,7 +400,7 @@ class Organization(SharedBaseModel, OrganizationBase):
             "finalize",
         ]
         slug = slugify(content)
-        if slug in reserved_words:
+        if slug in reserved_words or re.fullmatch(ALL_DIGITS_SLUG, slug):
             return slug + "-1"
         return slug
 
