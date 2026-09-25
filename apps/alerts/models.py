@@ -5,17 +5,19 @@ from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
 from apps.issue_events.constants import MAX_TAG_LENGTH
-from glitchtip.base_models import CreatedModel
+from glitchtip.base_models import CreatedModel, OrgScopedModel
 
 from .constants import ENVIRONMENTS_HELP_TEXT, MAX_ALERT_ENVIRONMENTS, RecipientType
 from .email import send_email_notification
 from .webhooks import send_webhook_notification
 
 
-class ProjectAlert(CreatedModel):
+class ProjectAlert(OrgScopedModel, CreatedModel):
     """
     Example: Send notification when project has 15 events in 5 minutes.
     """
+
+    org_field = "project__organization_id"
 
     name = models.CharField(max_length=255, blank=True)
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)

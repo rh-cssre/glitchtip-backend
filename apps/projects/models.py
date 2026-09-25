@@ -13,6 +13,7 @@ from apps.observability.utils import clear_metrics_cache
 from glitchtip.base_models import (
     AggregationModel,
     CreatedModel,
+    OrgScopedModel,
     SoftDeleteManager,
     SoftDeleteModel,
 )
@@ -23,11 +24,13 @@ class ProjectSoftDeleteManager(SoftDeleteManager):
         return super().get_queryset().filter(organization__is_deleted=False)
 
 
-class Project(CreatedModel, SoftDeleteModel):
+class Project(OrgScopedModel, CreatedModel, SoftDeleteModel):
     """
     Projects are permission based namespaces which generally
     are the top level entry point for all data.
     """
+
+    org_field = "organization_id"
 
     slug = AutoSlugField(populate_from=["name", "organization_id"], max_length=50)
     name = models.CharField(max_length=64)

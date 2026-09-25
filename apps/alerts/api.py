@@ -1,13 +1,17 @@
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.http import Http404, HttpResponse
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Status
-from ninja.pagination import paginate
 
 from apps.organizations_ext.constants import OrganizationUserRole
 from apps.projects.models import Project
 from glitchtip.api.authentication import AuthHttpRequest
-from glitchtip.api.permissions import has_permission
+from glitchtip.api.permissions import (
+    OrgScopedHttpRequest,
+    has_permission,
+    org_scoped_list,
+    org_scoped_qs,
+)
 
 from .constants import RecipientType
 from .models import AlertRecipient, ProjectAlert
@@ -46,16 +50,16 @@ def get_project_alert_queryset(user_id: int, organization_slug: str, project_slu
     response=list[ProjectAlertSchema],
     by_alias=True,
 )
-@has_permission(["project:read", "project:write", "project:admin"])
-@paginate
+@org_scoped_list(["project:read", "project:write", "project:admin"])
 async def list_project_alerts(
     request: AuthHttpRequest,
     response: HttpResponse,
     organization_slug: str,
     project_slug: str,
 ):
-    return get_project_alert_queryset(
-        request.auth.user_id, organization_slug, project_slug
+    # The slug alone is not unique across orgs; the gate adds the org.
+    return ProjectAlert.objects.filter(project__slug=project_slug).prefetch_related(
+        "alertrecipient_set"
     )
 
 
@@ -150,20 +154,15 @@ async def update_project_alert(
     "projects/{slug:organization_slug}/{slug:project_slug}/alerts/{alert_id}/",
     response={204: None},
 )
-@has_permission(["project:admin"])
+@org_scoped_qs(["project:admin"], ProjectAlert)
 async def delete_project_alert(
-    request: AuthHttpRequest, organization_slug: str, project_slug: str, alert_id: int
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[ProjectAlert],
+    organization_slug: str,
+    project_slug: str,
+    alert_id: int,
 ):
-    user_id = request.auth.user_id
-    result, _ = (
-        await get_project_alert_queryset(user_id, organization_slug, project_slug)
-        .filter(id=alert_id)
-        .filter(
-            project__organization__users=user_id,
-            project__organization__organization_users__role__gte=OrganizationUserRole.ADMIN,
-        )
-        .adelete()
-    )
+    result, _ = await qs.filter(project__slug=project_slug, id=alert_id).adelete()
     if result:
         return Status(204, None)
     raise Http404
