@@ -1,6 +1,5 @@
 import logging
 import os
-import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
 from operator import itemgetter
@@ -1025,7 +1024,6 @@ async def process_issue_events(
 
     issue_events: list[IssueEvent] = []
     issues_to_reopen = []
-    user_report_backfill: list[tuple[int, uuid.UUID, int]] = []
     # Group events by time and project for event count statistics
     data_stats: defaultdict[datetime, defaultdict[int, dict]] = defaultdict(
         lambda: defaultdict(lambda: {"count": 0, "organization_id": None})
@@ -1103,15 +1101,6 @@ async def process_issue_events(
                 release_id=processing_event.release_id,
             )
         )
-
-        if processing_event.payload.event_id and processing_event.issue_id:
-            user_report_backfill.append(
-                (
-                    project_id,
-                    processing_event.payload.event_id,
-                    processing_event.issue_id,
-                )
-            )
 
     await update_issues(processing_events)
 
@@ -1248,20 +1237,6 @@ async def process_issue_events(
                 ),
                 value_params=value_params,
             )
-
-    if user_report_backfill:
-        await execute_unnest(
-            sql=(
-                "UPDATE issue_events_userreport ur "
-                "SET issue_id = v.issue_id "
-                "FROM unnest(%s::bigint[], %s::uuid[], %s::bigint[]) "
-                "AS v(project_id, event_id, issue_id) "
-                "WHERE ur.project_id = v.project_id "
-                "AND ur.event_id = v.event_id "
-                "AND ur.issue_id IS NULL"
-            ),
-            value_params=user_report_backfill,
-        )
 
     await update_tags(processing_events)
     await update_statistics(

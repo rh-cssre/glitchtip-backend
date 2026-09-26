@@ -1,16 +1,19 @@
 import json
+from datetime import timedelta
 from urllib.parse import urlparse
 
 from django.conf import settings
 from django.db import IntegrityError
 from django.http import HttpRequest, HttpResponse
 from django.template.loader import render_to_string
+from django.utils import timezone
 from django.utils.safestring import mark_safe
 from ninja import Field, Form, Query, Router
 from ninja.errors import AuthenticationError
 
 from apps.issue_events.models import IssueEvent
 from apps.projects.models import Project
+from glitchtip.partition_manager import UUID7Helper
 from glitchtip.schema import CamelSchema
 
 from .forms import UserReportForm
@@ -28,7 +31,7 @@ async def embed_auth(request: HttpRequest):
                 id=project_id, projectkey__public_key=public_key
             )
             .select_related("organization")
-            .only("id", "organization__event_throttle_rate")
+            .only("id", "organization_id", "organization__event_throttle_rate")
             .aget()
         )
     except ValueError:
@@ -149,7 +152,16 @@ async def submit_embed_error_page(
         report = form.save(commit=False)
         report.project_id = request.auth.id
         report.event_id = event_id
-        event = await IssueEvent.objects.filter(event_id=event_id).afirst()
+        recent_lower = UUID7Helper.from_datetime(timezone.now() - timedelta(weeks=1))
+        event = (
+            await IssueEvent.objects.filter(
+                event_id=event_id,
+                organization_id=request.auth.organization_id,
+                id__gte=recent_lower,
+            )
+            .only("issue_id")
+            .afirst()
+        )
         if event:
             report.issue_id = event.issue_id
         try:

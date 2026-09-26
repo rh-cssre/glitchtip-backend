@@ -47,9 +47,16 @@ class ErrorPageEmbedTestCase(EventIngestTestCase):
         self.assertTrue(UserReport.objects.filter(project=self.project).exists())
 
     async def test_submit_report_with_issue(self):
-        issue = await baker.amake("issue_events.Issue", project=self.project)
+        issue = await baker.amake(
+            "issue_events.Issue",
+            project=self.project,
+            organization=self.project.organization,
+        )
         event = await baker.amake(
-            "issue_events.IssueEvent", issue=issue, event_id=uuid.uuid4()
+            "issue_events.IssueEvent",
+            issue=issue,
+            event_id=uuid.uuid4(),
+            organization=self.project.organization,
         )
         params = f"?dsn={self.project_key.get_dsn()}&eventId={event.event_id.hex}"
         data = {"name": "Test Name", "email": "test@example.com", "comments": "hmm"}
