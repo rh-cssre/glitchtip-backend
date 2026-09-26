@@ -20,7 +20,10 @@ from corsheaders.defaults import default_headers
 from django.conf import global_settings
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.csp import CSP
+from django.utils.module_loading import import_string
 from django_vtasks.scheduler import crontab
+
+from glitchtip import db_iam as _db_iam
 
 env = environ.FileAwareEnv(
     ALLOWED_HOSTS=(list, ["*"]),
@@ -871,6 +874,31 @@ ANYMAIL = {
 
 ACCOUNT_EMAIL_SUBJECT_PREFIX = env.str("ACCOUNT_EMAIL_SUBJECT_PREFIX", "")
 
+# AWS RDS IAM database authentication. When enabled there is no database
+# password for the aliases it covers: the driver calls
+# django_vpg.contrib.aws.rds_iam_token for the connections it opens and
+# authenticates with a short-lived IAM token, so any PASSWORD in DATABASE_URL
+# is ignored by the driver. See glitchtip/db_iam.py for the AWS prerequisites.
+DATABASE_IAM_AUTH = env.bool("DATABASE_IAM_AUTH", False)
+# Which DATABASES aliases authenticate with IAM. Defaults to "default" only,
+# because not every endpoint can validate a token; glitchtip/db_iam.py says
+# which can. Widen it for any alias that reaches an IAM-aware endpoint, and
+# remember an alias left off this list must not use a role holding rds_iam,
+# which no longer has a password to fall back on.
+DATABASE_IAM_AUTH_ALIASES = [
+    alias.strip()
+    for alias in env.str("DATABASE_IAM_AUTH_ALIASES", "default").split(",")
+    if alias.strip()
+]
+# Accept a database server whose identity is not verified. Only meaningful
+# with IAM auth, where it means a live token may be handed to anything that
+# answers on the hostname. Exists so the insecure choice has to be made
+# deliberately rather than by following an error message.
+DATABASE_IAM_ALLOW_UNVERIFIED_TLS = env.bool("DATABASE_IAM_ALLOW_UNVERIFIED_TLS", False)
+# TLS to the database. Independent of IAM auth, but required by it.
+DATABASE_SSLMODE = env.str("DATABASE_SSLMODE", None)
+DATABASE_SSLROOTCERT = env.str("DATABASE_SSLROOTCERT", None)
+
 # Database
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases
 # Use either DATABASE_URL or individual components
@@ -892,7 +920,18 @@ if env.str("DATABASE_HOST", None):
         {
             "NAME": env.str("DATABASE_NAME", "postgres"),
             "USER": env.str("DATABASE_USER", "postgres"),
-            "PASSWORD": env.str("DATABASE_PASSWORD"),
+            # Not required when IAM auth covers THIS alias, where there is
+            # no password to supply. Gated on alias membership, not on
+            # DATABASE_IAM_AUTH alone: enabling IAM for some other alias must
+            # not quietly turn a mandatory password into an empty one here,
+            # which against a trust/peer-configured server would connect
+            # unauthenticated.
+            "PASSWORD": env.str(
+                "DATABASE_PASSWORD",
+                ""
+                if (DATABASE_IAM_AUTH and "default" in DATABASE_IAM_AUTH_ALIASES)
+                else environ.Env.NOTSET,
+            ),
             "HOST": env.str("DATABASE_HOST"),
             "PORT": env.str("DATABASE_PORT", "5432"),
         }
@@ -904,6 +943,7 @@ if env.str("DATABASE_HOST", None):
 # and the import Django's stock postgresql backend — which this engine
 # extends — performs at load), but no database I/O flows through it.
 DATABASE_ENGINE = "gt_rust.django_backend"
+
 # Valkey/Redis connection. VALKEY_URL is the source of truth — supports any scheme
 # that django-vcache understands: redis://, rediss://, valkey://, valkeys://, sentinel://
 # Component env vars (VALKEY_HOST, etc.) are a convenience for simple single-node setups.
@@ -921,8 +961,62 @@ if VALKEY_HOST:
 else:
     VALKEY_URL = env.str("VALKEY_URL", env.str("REDIS_URL", "redis://redis:6379/0"))
 
+if DATABASE_IAM_AUTH:
+    if not DATABASE_IAM_AUTH_ALIASES:
+        # An env var that is set but empty reads as "" rather than falling
+        # back to the default, and an empty value is the normal rendering of
+        # an unset Helm/compose variable. Without this the list is empty, no
+        # alias is covered, and every connection quietly keeps using the
+        # password that enabling IAM auth was meant to remove.
+        raise ImproperlyConfigured(
+            "DATABASE_IAM_AUTH is enabled but DATABASE_IAM_AUTH_ALIASES is "
+            "empty, so no alias would use IAM and every connection would "
+            "authenticate with its static password. Name at least one alias, "
+            "or leave DATABASE_IAM_AUTH_ALIASES unset to cover 'default'."
+        )
+    _unknown = set(DATABASE_IAM_AUTH_ALIASES) - set(DATABASES)
+    if _unknown:
+        raise ImproperlyConfigured(
+            f"DATABASE_IAM_AUTH_ALIASES names unknown aliases: {sorted(_unknown)}. "
+            f"Configured aliases are {sorted(DATABASES)}. A typo here silently "
+            "leaves an alias on password authentication."
+        )
+    # Fail closed if the installed driver cannot honour credential_provider.
+    # Without this the backend warns about an unsupported OPTIONS key, drops
+    # it, and connects with the static PASSWORD instead — so turning on a
+    # security feature would silently do nothing.
+    #
+    # Import the configured engine first and inspect the extension it
+    # installs, not django_vpg directly: gt_rust substitutes its own compiled
+    # module for django_vpg._vpg_driver and refuses if django_vpg was imported
+    # ahead of it, and that substituted module is the one whose capability
+    # actually decides this.
+    import importlib
+    import inspect
+
+    importlib.import_module(f"{DATABASE_ENGINE}.base")
+    from django_vpg._vpg_driver import RustPgDriver as _vpg_driver_cls
+
+    try:
+        _vpg_params = inspect.signature(_vpg_driver_cls.connect).parameters
+    except (TypeError, ValueError):  # pragma: no cover - builtin without one
+        _vpg_params = {}
+    if "credential_provider" not in _vpg_params:
+        raise ImproperlyConfigured(
+            "DATABASE_IAM_AUTH requires a database driver with "
+            "rotating-credential support, but the loaded "
+            f"{_vpg_driver_cls.__module__} extension does not accept "
+            "credential_provider and would fall back to password "
+            "authentication. Upgrade glitchtip-rust, which supplies it."
+        )
+    # The provider is a dotted path the driver resolves at connect time, so an
+    # absent django_vpg.contrib.aws (or a slim image without boto3) would sail
+    # past a guard whose whole purpose is to fail closed at startup, and show
+    # up as an InterfaceError on the first query instead.
+    import_string(_db_iam.RDS_IAM_PROVIDER)
+
 # Settings applied to every DATABASES entry, however it was configured above.
-for db_config in DATABASES.values():
+for _db_alias, db_config in DATABASES.items():
     # gt_rust.django_backend extends Django's stock postgresql backend and
     # adds the AsyncDatabaseWrapper that django-async-backend's
     # ``async_connections`` discovers via load_backend, so sync paths (ORM,
@@ -982,6 +1076,16 @@ for db_config in DATABASES.values():
                 "statement after N uses, 0 = on first use) or 'off' to "
                 f"disable prepared statements; got {_prepare_threshold!r}"
             )
+
+    # TLS and, when enabled, RDS IAM authentication. An OPTIONS entry set
+    # explicitly in a DATABASES override still wins over the environment.
+    _db_iam.configure_options(
+        options,
+        iam_auth=DATABASE_IAM_AUTH and _db_alias in DATABASE_IAM_AUTH_ALIASES,
+        sslmode=DATABASE_SSLMODE,
+        sslrootcert=DATABASE_SSLROOTCERT,
+        allow_unverified_tls=DATABASE_IAM_ALLOW_UNVERIFIED_TLS,
+    )
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

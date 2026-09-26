@@ -1,3 +1,4 @@
+import re
 from unittest import mock
 
 from django.test import override_settings
@@ -666,3 +667,113 @@ class UptimeAPITestCase(GlitchTestCase):
         }
         res = await self.async_client.post(url, data)
         self.assertEqual(res.status_code, 400)
+
+
+class MonitorSortAPITestCase(GlitchTestCase):
+    """The monitor list's ``sort`` query param."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.create_user()
+        cls.list_url = reverse("api:list_monitors", args=[cls.organization.slug])
+        apex = baker.make(
+            "projects.Project", organization=cls.organization, name="apex"
+        )
+        zeta = baker.make(
+            "projects.Project", organization=cls.organization, name="zeta"
+        )
+        # Created oldest first and deliberately out of alphabetical order, so a
+        # name sort cannot pass by accidentally matching creation order.
+        monitors = (
+            ("2024-01-01", "charlie", None, None),
+            ("2024-01-02", "alpha", zeta, True),
+            ("2024-01-03", "bravo", apex, False),
+        )
+        with mock.patch("apps.uptime.tasks.perform_checks"):
+            for created, name, project, is_up in monitors:
+                with freeze_time(created):
+                    baker.make(
+                        "uptime.Monitor",
+                        organization=cls.organization,
+                        url="http://example.com",
+                        name=name,
+                        project=project,
+                        cached_is_up=is_up,
+                    )
+
+    def setUp(self):
+        self.async_client.force_login(self.user)
+
+    async def test_sort(self):
+        for query, expected in (
+            # No sort param keeps the previous behaviour: newest first.
+            ("", ["bravo", "alpha", "charlie"]),
+            ("?sort=created", ["charlie", "alpha", "bravo"]),
+            ("?sort=name", ["alpha", "bravo", "charlie"]),
+            ("?sort=-name", ["charlie", "bravo", "alpha"]),
+            # No project sorts as the empty string, ahead of every named one.
+            ("?sort=project", ["charlie", "bravo", "alpha"]),
+            ("?sort=-project", ["alpha", "bravo", "charlie"]),
+            # Ascending status is down, then never checked, then up.
+            ("?sort=status", ["bravo", "charlie", "alpha"]),
+            ("?sort=-status", ["alpha", "charlie", "bravo"]),
+        ):
+            with self.subTest(query=query):
+                res = await self.async_client.get(self.list_url + query)
+                self.assertEqual(res.status_code, 200, res.content)
+                self.assertEqual([m["name"] for m in res.json()], expected)
+
+    async def test_sorted_paging_keeps_monitors_without_a_value(self):
+        """A monitor with no project, or no check yet, must still be listed.
+
+        The cursor paginator pages by filtering ``> position`` on the sort
+        field, and NULL never compares true -- ordering straight on the
+        nullable column would drop that monitor from every page after the
+        first. Both keys sort on a coalesced annotation for this reason.
+        """
+        for sort in ("project", "status"):
+            with self.subTest(sort=sort):
+                names = []
+                url = self.list_url + f"?limit=1&sort={sort}"
+                for _ in range(3):
+                    res = await self.async_client.get(url)
+                    self.assertEqual(res.status_code, 200, res.content)
+                    names += [m["name"] for m in res.json()]
+                    next_link = re.search(
+                        r'<([^>]+)>; rel="next"; results="true"', res["Link"]
+                    )
+                    if not next_link:
+                        break
+                    url = next_link.group(1)
+                self.assertEqual(sorted(names), ["alpha", "bravo", "charlie"])
+
+    async def test_paging_a_long_run_of_one_status(self):
+        """Every monitor is reachable even when 100+ of them sort the same.
+
+        Status has three values, so a big organization is one long run of equal
+        keys, and the paginator's offset over such a run caps at 100 rows.
+        """
+        await Monitor.objects.abulk_create(
+            [
+                Monitor(
+                    organization=self.organization,
+                    name=f"run-{index:03d}",
+                    url="http://example.com",
+                    cached_is_up=True,
+                )
+                for index in range(120)
+            ]
+        )
+        ids = []
+        url = self.list_url + "?limit=10&sort=status"
+        for _ in range(20):
+            res = await self.async_client.get(url)
+            self.assertEqual(res.status_code, 200, res.content)
+            ids += [monitor["id"] for monitor in res.json()]
+            next_link = re.search(r'<([^>]+)>; rel="next"; results="true"', res["Link"])
+            if not next_link:
+                break
+            url = next_link.group(1)
+        # The three monitors from setUpTestData, plus the run of 120.
+        self.assertEqual(len(set(ids)), 123)
+        self.assertEqual(len(ids), 123, "a page repeated")

@@ -47,7 +47,7 @@ class AlertsAPIPermissionTests(APIPermissionTestCase):
         self.set_client_credentials(None)
         self.client.force_login(self.user)
         self.set_user_role(OrganizationUserRole.MEMBER)
-        self.assertDeleteReqStatusCode(self.detail_url, 404)
+        self.assertDeleteReqStatusCode(self.detail_url, 403)
 
         self.set_user_role(OrganizationUserRole.OWNER)
         self.assertDeleteReqStatusCode(self.detail_url, 204)

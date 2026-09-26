@@ -1,9 +1,19 @@
 from collections import defaultdict
+from typing import Literal
 from uuid import UUID
 
 from asgiref.sync import sync_to_async
 from django.db import connection
-from django.db.models import Prefetch
+from django.db.models import (
+    Case,
+    F,
+    Prefetch,
+    QuerySet,
+    TextField,
+    Value,
+    When,
+)
+from django.db.models.functions import Cast, Coalesce, Concat, LPad
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Status
@@ -89,6 +99,59 @@ def get_monitor_queryset(user_id: int, organization_slug: str):
         .filter(organization__users=user_id, organization__slug=organization_slug)
         .select_related("project", "organization")
     )
+
+
+monitor_sort_options = Literal[
+    "created",
+    "-created",
+    "name",
+    "-name",
+    "project",
+    "-project",
+    "status",
+    "-status",
+]
+
+
+def unique_sort_key(expression):
+    """End a sort key with the zero padded id, so no two monitors share one.
+
+    The paginator steps over a run of equal keys with an offset it caps at 100
+    rows; past that the cursor stops advancing and the page repeats.
+    """
+    return Concat(
+        expression,
+        Value("|"),
+        LPad(Cast("id", TextField()), 19, Value("0")),
+        output_field=TextField(),
+    )
+
+
+# Annotated so the key is unique (above) and non-NULL -- "> position" never
+# matches a NULL, which would drop the row from every page but the first.
+MONITOR_SORT_ANNOTATIONS = {
+    "name": unique_sort_key(F("name")),
+    "project": unique_sort_key(Coalesce("project__name", Value(""))),
+    # puts failures at the top.
+    "status": unique_sort_key(
+        Case(
+            When(cached_is_up=False, then=Value("0")),
+            When(cached_is_up=True, then=Value("2")),
+            default=Value("1"),
+            output_field=TextField(),
+        )
+    ),
+}
+
+
+def sort_monitors(queryset: QuerySet[Monitor], sort: str) -> QuerySet[Monitor]:
+    descending = sort.startswith("-")
+    key = sort.lstrip("-")
+    field = key
+    if annotation := MONITOR_SORT_ANNOTATIONS.get(key):
+        field = f"{key}_sort"
+        queryset = queryset.annotate(**{field: annotation})
+    return queryset.order_by(("-" if descending else "") + field, "id")
 
 
 async def fetch_checks_lateral(
@@ -268,9 +331,20 @@ async def heartbeat_check(
 )
 @paginate(MonitorPagination)
 async def list_monitors(
-    request: AuthHttpRequest, response: HttpResponse, organization_slug: str
+    request: AuthHttpRequest,
+    response: HttpResponse,
+    organization_slug: str,
+    sort: monitor_sort_options = "-created",
 ):
-    return get_monitor_queryset(request.auth.user_id, organization_slug)
+    """
+    List an organization's uptime monitors, newest first by default.
+
+    ``sort`` accepts created, name, project and status; prefix with ``-`` to
+    reverse. Ascending status is down first.
+    """
+    return sort_monitors(
+        get_monitor_queryset(request.auth.user_id, organization_slug), sort
+    )
 
 
 @router.get(

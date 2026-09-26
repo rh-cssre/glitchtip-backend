@@ -1288,6 +1288,11 @@ json.dump({
     "prepare_threshold": settings.DATABASES["default"]["OPTIONS"].get(
         "prepare_threshold", "absent"
     ),
+    "iam_provider": settings.DATABASES["default"]["OPTIONS"].get(
+        "credential_provider", "absent"
+    ),
+    "sslmode": settings.DATABASES["default"]["OPTIONS"].get("sslmode", "absent"),
+    "password": settings.DATABASES["default"].get("PASSWORD", "absent"),
 }, __import__("sys").stdout)
 """
 
@@ -1516,6 +1521,119 @@ class PrepareThresholdConfigTestCase(TestCase):
         result = self._probe("sometimes")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("DATABASE_PREPARE_THRESHOLD", result.stderr)
+
+
+class DatabaseIamAuthConfigTestCase(TestCase):
+    """DATABASE_IAM_AUTH* -> DATABASES[...]["OPTIONS"], at settings-import time.
+
+    glitchtip.test_db_iam covers the policy function in isolation; this covers
+    the plumbing that decides whether the policy runs at all. That plumbing is
+    where a misconfiguration turns the feature into a silent no-op, so it has
+    to be exercised the way it actually resolves: in a fresh interpreter.
+    """
+
+    BASE_ENV = CacheConfigTestCase.BASE_ENV
+    CA_BUNDLE = "/certs/rds-global-bundle.pem"
+    PROVIDER = "django_vpg.contrib.aws.rds_iam_token"
+
+    def _probe(self, extra_env: dict) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, "-c", _SETTINGS_PROBE],
+            capture_output=True,
+            text=True,
+            env={**self.BASE_ENV, **extra_env},
+            timeout=30,
+            check=False,
+        )
+
+    def _info(self, extra_env: dict) -> dict:
+        result = self._probe(extra_env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout.strip().splitlines()[-1])
+
+    def test_off_by_default_changes_nothing(self):
+        # The shipped compose/Helm config must keep working untouched, with no
+        # TLS keys appearing that the operator never asked for.
+        info = self._info({})
+        self.assertEqual(info["iam_provider"], "absent")
+        self.assertEqual(info["sslmode"], "absent")
+
+    def test_enabled_wires_the_provider(self):
+        info = self._info(
+            {"DATABASE_IAM_AUTH": "true", "DATABASE_SSLROOTCERT": self.CA_BUNDLE}
+        )
+        self.assertEqual(info["iam_provider"], self.PROVIDER)
+        self.assertEqual(info["sslmode"], "verify-full")
+
+    def test_an_empty_alias_list_aborts_rather_than_doing_nothing(self):
+        # An env var set but empty reads as "" rather than falling back to the
+        # default, which is the normal rendering of an unset Helm value. That
+        # left every alias on password auth with a clean boot, so this is the
+        # regression test for the whole feature being silently inert.
+        for value in ("", " ", ",,"):
+            with self.subTest(value=value):
+                result = self._probe(
+                    {
+                        "DATABASE_IAM_AUTH": "true",
+                        "DATABASE_IAM_AUTH_ALIASES": value,
+                        "DATABASE_SSLROOTCERT": self.CA_BUNDLE,
+                    }
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("DATABASE_IAM_AUTH_ALIASES", result.stderr)
+
+    def test_an_unknown_alias_aborts(self):
+        result = self._probe(
+            {
+                "DATABASE_IAM_AUTH": "true",
+                "DATABASE_IAM_AUTH_ALIASES": "default,typo",
+                "DATABASE_SSLROOTCERT": self.CA_BUNDLE,
+            }
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("typo", result.stderr)
+
+    def test_an_alias_outside_the_list_keeps_its_password(self):
+        # Naming only another alias must not relax the password requirement
+        # here: an empty password against a trust-configured server connects
+        # unauthenticated.
+        result = self._probe(
+            {
+                "DATABASE_IAM_AUTH": "true",
+                "DATABASE_IAM_AUTH_ALIASES": "default",
+                "DATABASE_SSLROOTCERT": self.CA_BUNDLE,
+                "DATABASE_URL": "",
+                "DATABASE_HOST": "db.abc123.us-east-2.rds.amazonaws.com",
+                "DATABASE_USER": "app_iam",
+            }
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        info = json.loads(result.stdout.strip().splitlines()[-1])
+        self.assertEqual(info["password"], "")
+
+        result = self._probe(
+            {
+                "DATABASE_IAM_AUTH": "true",
+                "DATABASE_IAM_AUTH_ALIASES": "read_only",
+                "DATABASE_SSLROOTCERT": self.CA_BUNDLE,
+                "DATABASE_URL": "",
+                "DATABASE_HOST": "db.abc123.us-east-2.rds.amazonaws.com",
+                "DATABASE_USER": "app_iam",
+            }
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("DATABASE_PASSWORD", result.stderr)
+
+    def test_the_configured_sslmode_reaches_the_policy(self):
+        # Not a second copy of the TLS guards — glitchtip.test_db_iam owns
+        # those. This is the only check that DATABASE_SSLMODE is threaded into
+        # configure_options at all; the other cases here never set it, and a
+        # broken wiring would leave them passing on the verify-full default.
+        result = self._probe(
+            {"DATABASE_IAM_AUTH": "true", "DATABASE_SSLMODE": "require"}
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("DATABASE_IAM_ALLOW_UNVERIFIED_TLS", result.stderr)
 
 
 # ----------------------------------------------------------------------------

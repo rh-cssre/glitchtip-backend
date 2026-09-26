@@ -363,14 +363,16 @@ class StripeSubscription(StripeModel):
         await self.apply_fetched(await fetch_subscription(self.stripe_id))
 
     @classmethod
+    def active_by_primacy(cls, organization_id: int):
+        """Active subscriptions, the one that would be primary first: biggest
+        plan, newest on a tie. The ordering primacy means, in one place."""
+        return cls.objects.filter(
+            organization_id=organization_id, status__in=ACTIVE_SUBSCRIPTION_STATUSES
+        ).order_by(F("price__product__events").desc(nulls_last=True), "-created")
+
+    @classmethod
     async def get_primary_subscription(cls, organization: Organization):
-        return (
-            await cls.objects.filter(
-                organization=organization, status__in=ACTIVE_SUBSCRIPTION_STATUSES
-            )
-            .order_by(F("price__product__events").desc(nulls_last=True), "-created")
-            .afirst()
-        )
+        return await cls.active_by_primacy(organization.id).afirst()
 
     @classmethod
     async def cancel_for_organization(cls, organization: Organization):
@@ -390,13 +392,9 @@ class StripeSubscription(StripeModel):
         cls, organization_ids: set[int]
     ):
         # This subquery finds the primary subscription ID for each organization.
-        primary_subscription_subquery = (
-            cls.objects.filter(
-                organization_id=OuterRef("pk"), status__in=ACTIVE_SUBSCRIPTION_STATUSES
-            )
-            .order_by(F("price__product__events").desc(nulls_last=True), "-created")
-            .values("pk")[:1]
-        )
+        primary_subscription_subquery = cls.active_by_primacy(OuterRef("pk")).values(
+            "pk"
+        )[:1]
 
         org_updates = []
         async for org in Organization.objects.filter(id__in=organization_ids).annotate(
@@ -430,20 +428,83 @@ class StripeSubscription(StripeModel):
                     f"Stripe did not return subscription for {subscription.stripe_id}"
                 )
                 continue
+            # apply_fetched blanks the item for a terminal status, so read the
+            # id first: it is the only evidence the sub carried overage.
+            prior_item_id = subscription.metered_item_id
             await subscription.apply_fetched(fetched_sub)
+            await cls.retire_overage_for_terminal(
+                subscription, prior_item_id=prior_item_id
+            )
+
+    @classmethod
+    async def retire_overage_for_terminal(
+        cls, subscription, prior_item_id: str = ""
+    ) -> bool:
+        """Drop the overage state a terminal subscription takes with it.
+
+        Returns whether the org's opt-in was cleared.
+
+        Deliberately not keyed on ``stripe_primary_subscription``: a resubscribe
+        can claim that pointer before the cancel is processed, and keying the
+        cleanup on it left the opt-in set with no item behind it — throttling
+        the org at bare plan quota while its UI read "overage on".
+        """
+        if subscription.status not in TERMINAL_SUBSCRIPTION_STATUSES:
+            return False
+        # An item id is the only evidence this subscription carried overage
+        # rather than being some unrelated dead row; hence the caller's fallback.
+        if not (subscription.metered_item_id or prior_item_id):
+            return False
+
+        if (
+            subscription.metered_item_id
+            or subscription.metered_period_start
+            or subscription.metered_period_end
+        ):
+            # The id points into a subscription that can never come back; a
+            # later enable would otherwise skip the attach and reuse a dead
+            # item. The period is that item's, so it goes with it.
+            subscription.metered_item_id = ""
+            subscription.metered_period_start = None
+            subscription.metered_period_end = None
+            await subscription.asave(
+                update_fields=[
+                    "metered_item_id",
+                    "metered_period_start",
+                    "metered_period_end",
+                ]
+            )
+
+        if subscription.organization_id is None:
+            return False
+        # Overage rides on the primary subscription alone, so only an item there
+        # keeps the opt-in; one on a stray active sub grants nothing. Derived,
+        # not read off stripe_primary_subscription, which is stale right here.
+        primary = await cls.active_by_primacy(subscription.organization_id).afirst()
+        if primary and primary.metered_item_id:
+            return False
+        return bool(
+            await Organization.objects.filter(
+                id=subscription.organization_id, metered_billing_enabled=True
+            ).aupdate(metered_billing_enabled=False)
+        )
+
+    @classmethod
+    async def retire_dead_overage_items(cls):
+        """Backstop for terminal subscriptions no cancel webhook ever reached."""
+        async for subscription in cls.objects.filter(
+            status__in=TERMINAL_SUBSCRIPTION_STATUSES
+        ).exclude(metered_item_id=""):
+            await cls.retire_overage_for_terminal(subscription)
 
     @classmethod
     async def remove_inactive_primary_subscriptions(cls):
         """Detach primary subscriptions that are no longer active.
 
-        Clears ``metered_billing_enabled`` for terminal ones, for the same
-        reason the cancel webhook does: the metered item dies with the
-        subscription, so a flag left set advertises overage headroom the org
-        does not have. Recoverable statuses keep the opt-in — see
-        ``TERMINAL_SUBSCRIPTION_STATUSES``.
-
-        Order matters: clear the flag while the pointer still identifies which
-        subscription is terminal, then detach.
+        Also clears ``metered_billing_enabled`` while the pointer still names
+        the terminal subscription: belt and braces beside the not-pointer-keyed
+        :meth:`retire_overage_for_terminal`. Clear the flag before detaching,
+        while the pointer still says which subscription is terminal.
         """
         inactive = Organization.objects.filter(
             stripe_primary_subscription__isnull=False
@@ -583,6 +644,8 @@ class StripeSubscription(StripeModel):
 
         await cls.set_primary_subscriptions_for_organizations(active_organization_ids)
         await cls.update_outdated_subscriptions()
+        # After update_outdated_subscriptions, which can itself flip rows terminal.
+        await cls.retire_dead_overage_items()
         await cls.remove_inactive_primary_subscriptions()
 
 

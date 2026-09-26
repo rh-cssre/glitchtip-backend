@@ -1,10 +1,15 @@
+from unittest import mock
+
+from django.core.cache import cache
 from django.test import RequestFactory, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.urls.exceptions import NoReverseMatch
 from model_bakery import baker
 from ninja.errors import AuthenticationError
 
+from apps.event_ingest import authentication
 from apps.event_ingest.authentication import auth_from_request
+from apps.event_ingest.constants import EVENT_BLOCK_CACHE_KEY
 
 
 class AuthFromRequestTestCase(TestCase):
@@ -21,6 +26,8 @@ class AuthenticationTestCase(TransactionTestCase):
         # Async ingest path reads project auth via async_connections, which
         # only sees committed data — TransactionTestCase commits per-test
         # fixtures, then truncates between tests.
+        cache.clear()
+        self.addCleanup(cache.clear)
         self.user = baker.make("users.User")
         self.project = baker.make("projects.Project")
         self.project_key = self.project.projectkey_set.first()
@@ -32,18 +39,195 @@ class AuthenticationTestCase(TransactionTestCase):
             + f"?sentry_key={self.project_key.public_key}"
         )
 
-    async def test_org_throttle(self):
-        res = await self.async_client.post(
-            self.url, [{}], content_type="application/json"
+    def store_url(self, project_id):
+        return f"/api/{project_id}/store/?sentry_key={self.project_key.public_key}"
+
+    async def post_event(self, url=None):
+        return await self.async_client.post(
+            url or self.url, [{}], content_type="application/json"
         )
+
+    async def assertBlockedFromCache(self, url=None):
+        """A repeat request is rejected from cache, without a project lookup.
+
+        Also pins the serialized cache value: the Rust ingest path reads the
+        same key out of the same Valkey, so the format is a contract between
+        the two implementations rather than an internal detail.
+        """
+        self.assertEqual(
+            cache.get(EVENT_BLOCK_CACHE_KEY + str(self.project.id)), "t:100:100"
+        )
+        real = authentication.get_project_auth_info_row
+        with mock.patch.object(
+            authentication, "get_project_auth_info_row", wraps=real
+        ) as lookup:
+            res = await self.post_event(url)
+        self.assertEqual(res.status_code, 429)
+        self.assertEqual(
+            res.headers.get("Retry-After"),
+            str(authentication.HARD_THROTTLE_RETRY_AFTER),
+        )
+        lookup.assert_not_called()
+
+    async def test_org_throttle(self):
+        res = await self.post_event()
         self.assertEqual(res.status_code, 200)
         self.organization.event_throttle_rate = 100
         await self.organization.asave()
-        res = await self.async_client.post(
-            self.url, [{}], content_type="application/json"
-        )
+        res = await self.post_event()
         self.assertEqual(res.headers.get("Retry-After"), "600")
         self.assertEqual(res.status_code, 429)
+        # A 100% throttle is absolute, so the block cache must absorb the
+        # follow-up flood rather than repeating the lookup for every event.
+        await self.assertBlockedFromCache()
+
+    async def test_org_not_accepting_events(self):
+        """is_accepting_events=False is the manual, durable org kill switch.
+
+        Unlike event_throttle_rate it is never rewritten by the quota check,
+        so it is what an operator sets to stop an org's traffic outright.
+        """
+        self.organization.is_accepting_events = False
+        await self.organization.asave()
+        # The store endpoint, unlike the envelope one, is served by this auth
+        # path in a deployment with the Rust pipeline in front.
+        store_url = self.store_url(self.project.id)
+        res = await self.post_event(store_url)
+        self.assertEqual(res.status_code, 429)
+        self.assertEqual(res.headers.get("Retry-After"), "600")
+        await self.assertBlockedFromCache(store_url)
+
+    async def test_block_cache_key_ignores_project_id_spelling(self):
+        """A project id's spelling must not open a way around the block.
+
+        The store and security routes capture the id as text, so "7", "007"
+        and " 7 " arrive as written while naming one project. Keyed on the
+        raw text they would be separate cache entries, and a flood could walk
+        past a block indefinitely, paying a project lookup on each new
+        spelling — the exact cost the block cache exists to avoid.
+        """
+        self.organization.is_accepting_events = False
+        await self.organization.asave()
+        pid = self.project.id
+        res = await self.post_event(self.store_url(pid))
+        self.assertEqual(res.status_code, 429)
+
+        real = authentication.get_project_auth_info_row
+        with mock.patch.object(
+            authentication, "get_project_auth_info_row", wraps=real
+        ) as lookup:
+            for spelling in [f"00{pid}", f"000{pid}", f" {pid} ", f"+{pid}"]:
+                res = await self.post_event(self.store_url(spelling))
+                self.assertEqual(res.status_code, 429, spelling)
+        lookup.assert_not_called()
+
+    async def test_unparseable_project_id_is_rejected(self):
+        """A non-numeric id is a bad request, not an unhandled 500."""
+        for spelling in ["abc", "1" * 4400, "-1"]:
+            res = await self.post_event(self.store_url(spelling))
+            self.assertLess(res.status_code, 500, spelling)
+
+    async def test_partial_throttle_samples_once_per_request(self):
+        """A partial rate is sampled once, not once per cache state.
+
+        The cached rates and the ones the database reports are the same
+        rates. Sampling both squares the pass rate's complement, so an
+        organization set to drop half its events would drop three quarters.
+        """
+        self.organization.event_throttle_rate = 50
+        await self.organization.asave()
+        # Accept every rate, so the request reaches the second sampling site
+        # that a warm cache would otherwise take it through.
+        with mock.patch.object(
+            authentication, "is_accepting_events", return_value=True
+        ):
+            res = await self.post_event()
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(
+                cache.get(EVENT_BLOCK_CACHE_KEY + str(self.project.id)), "t:50:0"
+            )
+            real = authentication.is_throttled
+            with mock.patch.object(
+                authentication, "is_throttled", wraps=real
+            ) as sampled:
+                res = await self.post_event()
+            self.assertEqual(res.status_code, 200)
+        sampled.assert_called_once_with(50, 0)
+
+    async def test_partial_throttle_rejects_from_cache(self):
+        """A partial rate rejects from the cache, before the project lookup.
+
+        The skip is only sound because the cached sampling is the one that
+        survives; if the surviving sampling were the post-lookup one, every
+        throttled request would still cost the lookup the cache exists to
+        avoid.
+        """
+        self.organization.event_throttle_rate = 50
+        await self.organization.asave()
+        with mock.patch.object(
+            authentication, "is_accepting_events", return_value=True
+        ):
+            self.assertEqual((await self.post_event()).status_code, 200)
+        real = authentication.get_project_auth_info_row
+        with (
+            mock.patch.object(
+                authentication, "is_accepting_events", return_value=False
+            ),
+            mock.patch.object(
+                authentication, "get_project_auth_info_row", wraps=real
+            ) as lookup,
+        ):
+            res = await self.post_event()
+        self.assertEqual(res.status_code, 429)
+        lookup.assert_not_called()
+
+    async def test_cleared_throttle_drops_the_cached_rate(self):
+        """Clearing a rate must not leave the old one behind to sample against.
+
+        The entry is only reachable by a request the cached rate lets past,
+        so a cleared rate goes on dropping events until one gets through.
+        Leaving the entry to expire stretches that across its whole TTL.
+        """
+        self.organization.event_throttle_rate = 50
+        await self.organization.asave()
+        block_key = EVENT_BLOCK_CACHE_KEY + str(self.project.id)
+        with mock.patch.object(
+            authentication, "is_accepting_events", return_value=True
+        ):
+            self.assertEqual((await self.post_event()).status_code, 200)
+            self.assertEqual(cache.get(block_key), "t:50:0")
+
+            self.organization.event_throttle_rate = 0
+            await self.organization.asave()
+            self.assertEqual((await self.post_event()).status_code, 200)
+        self.assertIsNone(cache.get(block_key))
+
+    async def test_stale_cached_rates_are_resampled(self):
+        """Rates that disagree with the database are a different decision.
+
+        Skipping the second sampling is only sound where the cache and the
+        database name the same rates; where they differ the cached entry is
+        stale and the database's rates are the ones that apply.
+        """
+        self.organization.event_throttle_rate = 90
+        await self.organization.asave()
+        # A cache entry from before the rate was raised.
+        cache.set(EVENT_BLOCK_CACHE_KEY + str(self.project.id), "t:10:0")
+        with mock.patch.object(
+            authentication,
+            "is_accepting_events",
+            side_effect=lambda rate: rate < 50,
+        ):
+            res = await self.post_event()
+        self.assertEqual(res.status_code, 429)
+
+    async def test_project_throttle(self):
+        """A 100% project throttle blocks without the organization being over."""
+        self.project.event_throttle_rate = 100
+        await self.project.asave()
+        res = await self.post_event()
+        self.assertEqual(res.status_code, 429)
+        await self.assertBlockedFromCache()
 
     def test_invalid_project_id(self):
         with self.assertRaises(NoReverseMatch):

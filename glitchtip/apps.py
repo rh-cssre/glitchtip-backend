@@ -7,8 +7,9 @@ class GlitchtipConfig(AppConfig):
     def ready(self):
         # Imported for their import-time registrations: task_signals
         # connects the vtasks receivers, async_db registers the system
-        # check that its recycling middleware is still wired up.
-        from . import async_db, task_signals  # noqa: F401
+        # check that its recycling middleware is still wired up, and checks
+        # registers the org-scoped model check.
+        from . import async_db, checks, task_signals  # noqa: F401
 
         self._skip_hstore_oid_lookup()
 
