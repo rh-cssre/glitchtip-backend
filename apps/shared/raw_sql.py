@@ -95,6 +95,7 @@ async def execute_unnest(
     sql: str,
     value_params: list[tuple],
     db_alias: str = "default",
+    extra_params: Iterable[Any] = (),
 ) -> int:
     """Transpose row-major ``value_params`` to per-column arrays and execute.
 
@@ -103,23 +104,29 @@ async def execute_unnest(
     65535 bind-parameter cap that ``execute_mogrified_values`` hits with
     wide schemas, and gives Postgres a single statement shape for the
     plan cache regardless of batch size.
+
+    ``extra_params`` bind after the column arrays, for placeholders that come
+    after the ``unnest`` -- e.g. ``organization_id = ANY(%s)``, a constant the
+    planner can prune hash partitions with, which a join to the unnested
+    column is not.
     """
     if not value_params:
         return 0
     columns = [list(c) for c in zip(*value_params)]
-    return await execute(sql, columns, db_alias=db_alias)
+    return await execute(sql, [*columns, *extra_params], db_alias=db_alias)
 
 
 async def fetchall_unnest(
     sql: str,
     value_params: list[tuple],
     db_alias: str = "default",
+    extra_params: Iterable[Any] = (),
 ) -> tuple[list[str], list[tuple]]:
     """Like :func:`execute_unnest` but returns ``(columns, rows)``."""
     if not value_params:
         return [], []
     columns = [list(c) for c in zip(*value_params)]
-    return await fetchall(sql, columns, db_alias=db_alias)
+    return await fetchall(sql, [*columns, *extra_params], db_alias=db_alias)
 
 
 async def copy_rows(
