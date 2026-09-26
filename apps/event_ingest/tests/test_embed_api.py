@@ -47,11 +47,7 @@ class ErrorPageEmbedTestCase(EventIngestTestCase):
         self.assertTrue(UserReport.objects.filter(project=self.project).exists())
 
     async def test_submit_report_with_issue(self):
-        issue = await baker.amake(
-            "issue_events.Issue",
-            project=self.project,
-            organization=self.project.organization,
-        )
+        issue = await baker.amake("issue_events.Issue", project=self.project)
         event = await baker.amake(
             "issue_events.IssueEvent",
             issue=issue,
