@@ -20,7 +20,7 @@
             "frames": [
               {
                 "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
-                "colno": 3,
+                "colno": 10,
                 "context_line": "  return divide(total, values.length);",
                 "filename": "../src/math.js",
                 "function": "average",
@@ -74,7 +74,7 @@
             "frames": [
               {
                 "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
-                "colno": 3,
+                "colno": 10,
                 "context_line": "  return divide(total, values.length);",
                 "filename": "../src/math.js",
                 "function": "average",

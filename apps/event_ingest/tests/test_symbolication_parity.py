@@ -111,10 +111,6 @@ def frame_count(event: int, exception: int) -> tuple:
     return (event, "exception", "values", exception, "stacktrace", "frames", len)
 
 
-JS_COLUMN = (
-    "the JS column fix: lookup_token passes colno - 1, and SourceMapCache.lookup "
-    "takes 1-based columns and subtracts 1 itself, so it looks one column left"
-)
 RETURN_ADDRESS = (
     "caller frames report a return address, the instruction after the call; "
     "it is looked up as is instead of minus one, so the line after the call"
@@ -135,22 +131,6 @@ LINENO_KEY = "resolve_proguard_stacktrace writes frame['lineNo'], not 'lineno'"
 # test_known_wrong_entries_match_the_goldens keeps this list honest.
 KNOWN_WRONG: list[KnownWrong] = [
     # JavaScript
-    KnownWrong("js_debug_id_bundles", frame(0, 0, 0, "colno"), 24, 36, JS_COLUMN),
-    KnownWrong("js_debug_id_bundles", frame(0, 0, 1, "lineno"), 3, 4, JS_COLUMN),
-    KnownWrong("js_debug_id_bundles", frame(0, 1, 1, "lineno"), 23, 24, JS_COLUMN),
-    KnownWrong("js_debug_id_bundles", frame(0, 1, 2, "colno"), 15, 20, JS_COLUMN),
-    KnownWrong("js_debug_id_bundles", frame(0, 1, 3, "colno"), 11, 18, JS_COLUMN),
-    KnownWrong("js_debug_id_bundles", frame(0, 1, 4, "colno"), 3, 10, JS_COLUMN),
-    KnownWrong("js_debug_id_bundles", frame(0, 1, 6, "lineno"), 3, 4, JS_COLUMN),
-    KnownWrong("js_debug_id_bundles", frame(0, 1, 7, "lineno"), 2, 3, JS_COLUMN),
-    KnownWrong("js_two_events_one_batch", frame(0, 0, 0, "colno"), 3, 10, JS_COLUMN),
-    KnownWrong(
-        "js_release_and_filename", frame(0, 0, 0, "lineno"), 121, 124, JS_COLUMN
-    ),
-    KnownWrong("js_release_and_filename", frame(0, 0, 1, "lineno"), 5, 9, JS_COLUMN),
-    KnownWrong("js_large_bundle", frame(0, 0, 0, "lineno"), 1, 3, JS_COLUMN),
-    KnownWrong("js_large_bundle", frame(0, 0, 1, "lineno"), 301, 303, JS_COLUMN),
-    KnownWrong("js_large_bundle", frame(0, 0, 2, "lineno"), 595, 597, JS_COLUMN),
     KnownWrong(
         "js_two_events_one_batch",
         frame(1, 0, 0, "filename"),
@@ -184,8 +164,8 @@ KNOWN_WRONG: list[KnownWrong] = [
     KnownWrong(
         "js_release_and_filename",
         frame(0, 0, 0, "context_line"),
-        "            return { value: o && o[i++], done: !o };\r",
-        "            return { value: o && o[i++], done: !o };",
+        '    throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");\r',
+        '    throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");',
         "context lines are only stripped of \\n, so CRLF sources keep a \\r",
     ),
     # Native
@@ -369,8 +349,7 @@ class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
         column, a minified function name, and in_app decided by the URL
         (omitted by the SDK on the app:// frame and the last app frame).
 
-        Pins current bugs: the column lookup is one to the left, an
-        app:///node_modules/ frame comes out in_app, and a dependency frame
+        Pins current bugs: an app:///node_modules/ frame comes out in_app, and a dependency frame
         the SDK marked in_app stays in_app. See KNOWN_WRONG. A webpack://
         frame URL is in test_webpack_frame_url_fails_the_batch.
         """
@@ -564,11 +543,7 @@ class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
 
     def test_large_bundle(self):
         """A generated bundle of a few megabytes, looked up at both ends and
-        the middle.
-
-        Pins a current bug: with the column one to the left, each throw
-        resolves to its function's first line. See KNOWN_WRONG.
-        """
+        the middle."""
         bundle = make_large_bundle()
         upload_artifact_bundle(
             self.organization,

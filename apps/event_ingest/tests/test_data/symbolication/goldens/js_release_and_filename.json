@@ -56,49 +56,46 @@
             "frames": [
               {
                 "abs_path": "http://localhost:8080/dist/bundle.js",
-                "colno": 49,
-                "context_line": "            return { value: o && o[i++], done: !o };\r",
+                "colno": 5,
+                "context_line": "    throw new TypeError(s ? \"Object is not iterable.\" : \"Symbol.iterator is not defined.\");\r",
                 "filename": "webpack://small-js-error-factory/./node_modules/tslib/tslib.es6.js",
-                "function": "<object>.next",
+                "function": "__values",
                 "in_app": true,
-                "lineno": 121,
+                "lineno": 124,
                 "module": "dist/bundle",
                 "post_context": [
-                  "        }\r",
-                  "    };\r",
-                  "    throw new TypeError(s ? \"Object is not iterable.\" : \"Symbol.iterator is not defined.\");\r",
                   "}\r",
-                  "\r"
+                  "\r",
+                  "export function __read(o, n) {\r",
+                  "    var m = typeof Symbol === \"function\" && o[Symbol.iterator];\r",
+                  "    if (!m) return o;\r"
                 ],
                 "pre_context": [
-                  "    var s = typeof Symbol === \"function\" && Symbol.iterator, m = s && o[s], i = 0;\r",
-                  "    if (m) return m.call(o);\r",
-                  "    if (o && typeof o.length === \"number\") return {\r",
                   "        next: function () {\r",
-                  "            if (o && i >= o.length) o = void 0;\r"
+                  "            if (o && i >= o.length) o = void 0;\r",
+                  "            return { value: o && o[i++], done: !o };\r",
+                  "        }\r",
+                  "    };\r"
                 ]
               },
               {
                 "abs_path": "http://localhost:8080/dist/bundle.js",
-                "colno": 14,
-                "context_line": "  \"release\": \"test\"",
+                "colno": 7,
+                "context_line": "throw Error(\"The error\");",
                 "filename": "webpack://small-js-error-factory/./src/index.ts",
                 "function": "<anonymous>",
                 "in_app": true,
-                "lineno": 5,
+                "lineno": 9,
                 "module": "dist/bundle",
                 "post_context": [
-                  "});",
-                  "",
-                  "let foo = \"bar\";",
-                  "throw Error(\"The error\");",
                   "console.log(foo);"
                 ],
                 "pre_context": [
-                  "import * as Sentry from \"@sentry/browser\";",
+                  "  dsn: \"http://c30a07050f594ecc9bd3cb97604f9da1@172.17.0.1:8000/1\",",
+                  "  \"release\": \"test\"",
+                  "});",
                   "",
-                  "Sentry.init({",
-                  "  dsn: \"http://c30a07050f594ecc9bd3cb97604f9da1@172.17.0.1:8000/1\","
+                  "let foo = \"bar\";"
                 ]
               },
               {
