@@ -228,9 +228,10 @@ class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
         column, a minified function name, and in_app decided by the URL
         (omitted by the SDK on the app:// frame and the last app frame).
 
-        Pins current bugs: an app:///node_modules/ frame comes out in_app, and a dependency frame
-        the SDK marked in_app stays in_app. See KNOWN_WRONG. A webpack://
-        frame URL is in test_webpack_frame_url.
+        Pins in_app decisions left as they are: an app:///node_modules/
+        frame comes out in_app, and a dependency frame the SDK marked in_app
+        stays in_app. See KNOWN_WRONG. A webpack:// frame URL is in
+        test_webpack_frame_url.
         """
         self.upload_debug_id_bundles()
         payload = js_event(
