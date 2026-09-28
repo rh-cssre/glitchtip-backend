@@ -1,0 +1,527 @@
+from collections import defaultdict
+from typing import Literal
+from uuid import UUID
+
+from asgiref.sync import sync_to_async
+from django.db import connection
+from django.db.models import (
+    Case,
+    F,
+    Prefetch,
+    QuerySet,
+    TextField,
+    Value,
+    When,
+)
+from django.db.models.functions import Cast, Coalesce, Concat, LPad
+from django.http import Http404, HttpRequest, HttpResponse
+from django.shortcuts import aget_object_or_404
+from ninja import Router, Status
+from ninja.errors import HttpError
+from ninja.pagination import paginate
+
+from apps.environments.models import Environment
+from apps.organizations_ext.models import Organization
+from apps.organizations_ext.utils import get_uptime_monitor_limit
+from apps.projects.models import Project
+from glitchtip.api.authentication import AuthHttpRequest
+from glitchtip.api.pagination import AsyncLinkHeaderPagination
+
+from .models import Monitor, MonitorCheck, StatusPage
+from .schema import (
+    MonitorCheckResponseTimeSchema,
+    MonitorCheckSchema,
+    MonitorDetailSchema,
+    MonitorIn,
+    MonitorSchema,
+    StatusPageIn,
+    StatusPageSchema,
+)
+from .tasks import send_monitor_notification, update_uptime_statistics
+
+router = Router()
+
+
+async def resolve_environment_id(
+    organization_id: int, environment_id: int | None
+) -> int | None:
+    """Environments belong to an organization; drop one that is not this org's."""
+    if not environment_id:
+        return None
+    return (
+        await Environment.objects.filter(
+            organization_id=organization_id, id=environment_id
+        )
+        .values_list("id", flat=True)
+        .afirst()
+    )
+
+
+class MonitorPagination(AsyncLinkHeaderPagination):
+    """Custom pagination that efficiently fetches checks using LATERAL JOIN."""
+
+    async def apaginate_queryset(
+        self, queryset, pagination, request, response, **params
+    ):
+        page = await super().apaginate_queryset(
+            queryset, pagination, request, response, **params
+        )
+        # Fetch checks for just the paginated monitors using efficient LATERAL JOIN
+        await attach_checks_to_monitors(page)
+        return page
+
+
+class StatusPagePagination(AsyncLinkHeaderPagination):
+    """Attach checks to the monitors nested within each paginated status page.
+
+    MonitorSchema reads each monitor's checks (a reverse relation); without
+    this the async serializer would trigger a synchronous ORM query per
+    monitor and raise SynchronousOnlyOperation.
+    """
+
+    async def apaginate_queryset(
+        self, queryset, pagination, request, response, **params
+    ):
+        page = await super().apaginate_queryset(
+            queryset, pagination, request, response, **params
+        )
+        monitors = [
+            monitor for status_page in page for monitor in status_page.monitors.all()
+        ]
+        await attach_checks_to_monitors(monitors)
+        return page
+
+
+def get_monitor_queryset(user_id: int, organization_slug: str):
+    """Get monitors with annotations but WITHOUT checks prefetch."""
+    return (
+        Monitor.objects.with_check_annotations()
+        .filter(organization__users=user_id, organization__slug=organization_slug)
+        .select_related("project", "organization")
+    )
+
+
+monitor_sort_options = Literal[
+    "created",
+    "-created",
+    "name",
+    "-name",
+    "project",
+    "-project",
+    "status",
+    "-status",
+]
+
+
+def unique_sort_key(expression):
+    """End a sort key with the zero padded id, so no two monitors share one.
+
+    The paginator steps over a run of equal keys with an offset it caps at 100
+    rows; past that the cursor stops advancing and the page repeats.
+    """
+    return Concat(
+        expression,
+        Value("|"),
+        LPad(Cast("id", TextField()), 19, Value("0")),
+        output_field=TextField(),
+    )
+
+
+# Annotated so the key is unique (above) and non-NULL -- "> position" never
+# matches a NULL, which would drop the row from every page but the first.
+MONITOR_SORT_ANNOTATIONS = {
+    "name": unique_sort_key(F("name")),
+    "project": unique_sort_key(Coalesce("project__name", Value(""))),
+    # puts failures at the top.
+    "status": unique_sort_key(
+        Case(
+            When(cached_is_up=False, then=Value("0")),
+            When(cached_is_up=True, then=Value("2")),
+            default=Value("1"),
+            output_field=TextField(),
+        )
+    ),
+}
+
+
+def sort_monitors(queryset: QuerySet[Monitor], sort: str) -> QuerySet[Monitor]:
+    descending = sort.startswith("-")
+    key = sort.lstrip("-")
+    field = key
+    if annotation := MONITOR_SORT_ANNOTATIONS.get(key):
+        field = f"{key}_sort"
+        queryset = queryset.annotate(**{field: annotation})
+    return queryset.order_by(("-" if descending else "") + field, "id")
+
+
+async def fetch_checks_lateral(
+    monitor_ids: list[int],
+    organization_id: int,
+    limit: int = 60,
+) -> dict[int, list[MonitorCheck]]:
+    """
+    Efficiently fetch top N checks per monitor using LATERAL JOIN.
+
+    This is much faster than window functions because:
+    - Uses the (monitor_id, id DESC) index efficiently
+    - Stops scanning after `limit` rows per monitor (early termination)
+    - No need to process all historical checks
+    - Filters by organization_id for partition pruning
+
+    Ordering by ``id`` is ordering by the check's start time, because that
+    timestamp is what the UUIDv7 encodes -- and ``id`` is also the RANGE
+    partition key. That is what lets Postgres plan an ordered Append, walking
+    partitions newest-first and stopping once ``limit`` rows are in hand,
+    instead of a Merge Append that has to open an index scan on every partition
+    to find out which holds the newest row.
+
+    ``organization_id`` is a single value rather than one per monitor because
+    every caller is scoped to one organization, and that lets the planner prune
+    the HASH dimension instead of deferring it to execution. Pruning at plan
+    time is what keeps the relation locks down: with the org supplied per row
+    the planner must consider every hash bucket of every partition, which
+    measured 6,602 locks against a 16-bucket install -- more than a stock
+    cluster's entire shared lock table. As a single value it is 118.
+
+    Returns a dict mapping monitor_id -> list of MonitorCheck instances.
+    """
+    if not monitor_ids:
+        return {}
+
+    sql = """
+        SELECT c.id, c.organization_id, c.monitor_id,
+               c.response_time, c.reason, c.is_up, c.is_change, c.data
+        FROM unnest(%(monitor_ids)s::int[]) AS m(id)
+        CROSS JOIN LATERAL (
+            SELECT id, organization_id, monitor_id,
+                   response_time, reason, is_up, is_change, data
+            FROM uptime_monitorcheck
+            WHERE monitor_id = m.id AND organization_id = %(organization_id)s
+            ORDER BY id DESC
+            LIMIT %(limit)s
+        ) c
+        ORDER BY c.monitor_id, c.id DESC
+    """
+
+    def execute_query():
+        with connection.cursor() as cursor:
+            cursor.execute(
+                sql,
+                {
+                    "monitor_ids": monitor_ids,
+                    "organization_id": organization_id,
+                    "limit": limit,
+                },
+            )
+            columns = [col[0] for col in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    rows = await sync_to_async(execute_query)()
+
+    checks_by_monitor: dict[int, list[MonitorCheck]] = defaultdict(list)
+    for row in rows:
+        check = MonitorCheck(
+            id=row["id"],
+            organization_id=row["organization_id"],
+            monitor_id=row["monitor_id"],
+            response_time=row["response_time"],
+            reason=row["reason"],
+            is_up=row["is_up"],
+            is_change=row["is_change"],
+            data=row["data"],
+        )
+        checks_by_monitor[row["monitor_id"]].append(check)
+
+    return dict(checks_by_monitor)
+
+
+async def attach_checks_to_monitors(
+    monitors: list[Monitor], limit: int = 60
+) -> list[Monitor]:
+    """Fetch and attach checks to a list of monitors using LATERAL JOIN."""
+    if not monitors:
+        return monitors
+    # Fetch once per distinct monitor: the same monitor can appear multiple
+    # times (e.g. shared across status pages), and duplicate ids in the
+    # unnest() would run the LATERAL subquery once per copy and double the
+    # returned checks. Attach the result to every instance below.
+    #
+    # Grouped by organization so each query can name a single organization_id,
+    # which the planner needs in order to prune hash partitions (see
+    # fetch_checks_lateral). Every caller is org-scoped, so this is one group.
+    monitor_ids_by_org: dict[int, set[int]] = defaultdict(set)
+    for monitor in monitors:
+        monitor_ids_by_org[monitor.organization_id].add(monitor.id)
+
+    checks_by_monitor: dict[int, list[MonitorCheck]] = {}
+    for organization_id, monitor_ids in monitor_ids_by_org.items():
+        checks_by_monitor.update(
+            await fetch_checks_lateral(sorted(monitor_ids), organization_id, limit)
+        )
+    for monitor in monitors:
+        # Use Django's prefetch cache so serializers see the checks
+        monitor._prefetched_objects_cache = {
+            "checks": checks_by_monitor.get(monitor.id, [])
+        }
+    return monitors
+
+
+@router.post(
+    "organizations/{slug:organization_slug}/heartbeat_check/{uuid:endpoint_id}/",
+    response=MonitorCheckSchema,
+    auth=None,
+)
+async def heartbeat_check(
+    request: HttpRequest, organization_slug: str, endpoint_id: UUID
+):
+    """
+    Heartbeat monitors allow an external service to contact this endpoint
+    when the service is up.
+    """
+    monitor = await aget_object_or_404(
+        Monitor.objects.with_check_annotations().select_related("organization"),
+        organization__slug=organization_slug,
+        endpoint_id=endpoint_id,
+    )
+    is_change = monitor.latest_is_up is not True or monitor.last_change is None
+    monitor_check = await MonitorCheck.objects.acreate(
+        monitor=monitor,
+        organization=monitor.organization,
+        is_up=True,
+        reason=None,
+        is_change=is_change,
+    )
+
+    # Update hourly statistics
+    await update_uptime_statistics(
+        {monitor.organization_id: 1}, monitor_check.start_check
+    )
+
+    # Update cached fields on monitor. A successful check-in always resets the
+    # consecutive-failure counter that drives confirmation_threshold debouncing.
+    monitor.cached_is_up = True
+    monitor.cached_last_change = (
+        monitor_check.start_check if is_change else monitor.cached_last_change
+    )
+    monitor.cached_consecutive_down = 0
+    await monitor.asave(
+        update_fields=[
+            "cached_is_up",
+            "cached_last_change",
+            "cached_consecutive_down",
+        ]
+    )
+
+    if monitor.latest_is_up is False:
+        last_change = monitor.last_change
+        if last_change:
+            last_change = last_change.isoformat()
+        monitor_check_pk = [str(monitor_check.id), monitor.organization.id]
+        await send_monitor_notification.aenqueue(
+            monitor.id, monitor_check_pk, False, last_change
+        )
+
+    return monitor_check
+
+
+@router.get(
+    "organizations/{slug:organization_slug}/monitors/",
+    response=list[MonitorSchema],
+    by_alias=True,
+)
+@paginate(MonitorPagination)
+async def list_monitors(
+    request: AuthHttpRequest,
+    response: HttpResponse,
+    organization_slug: str,
+    sort: monitor_sort_options = "-created",
+):
+    """
+    List an organization's uptime monitors, newest first by default.
+
+    ``sort`` accepts created, name, project and status; prefix with ``-`` to
+    reverse. Ascending status is down first.
+    """
+    return sort_monitors(
+        get_monitor_queryset(request.auth.user_id, organization_slug), sort
+    )
+
+
+@router.get(
+    "organizations/{slug:organization_slug}/monitors/{int:monitor_id}/",
+    response=MonitorDetailSchema,
+    by_alias=True,
+)
+async def get_monitor(
+    request: AuthHttpRequest, organization_slug: str, monitor_id: int
+):
+    monitor = await aget_object_or_404(
+        get_monitor_queryset(request.auth.user_id, organization_slug),
+        id=monitor_id,
+    )
+    await attach_checks_to_monitors([monitor])
+    return monitor
+
+
+@router.post(
+    "organizations/{slug:organization_slug}/monitors/",
+    response={201: MonitorSchema},
+    by_alias=True,
+)
+async def create_monitor(
+    request: AuthHttpRequest, organization_slug: str, payload: MonitorIn
+):
+    user_id = request.auth.user_id
+    organization = await aget_object_or_404(
+        Organization, slug=organization_slug, users=user_id
+    )
+    limit = await get_uptime_monitor_limit(organization)
+    if limit is not None:
+        # Deliberately advisory: two concurrent creates can both see a count
+        # below the limit and both succeed. That is acceptable for a ceiling
+        # whose job is to stop unbounded growth, not to bill exactly.
+        monitor_count = await Monitor.objects.filter(organization=organization).acount()
+        if monitor_count >= limit:
+            raise HttpError(
+                403,
+                f"This organization is limited to {limit} uptime monitors. "
+                "Delete an existing monitor or contact support to raise the limit.",
+            )
+    data = payload.dict(exclude_defaults=True)
+    if project_id := data.pop("project", None):
+        data["project"] = await organization.projects.filter(id=project_id).afirst()
+    data["environment_id"] = await resolve_environment_id(
+        organization.id, data.pop("environment_id", None)
+    )
+    monitor = await Monitor.objects.acreate(organization=organization, **data)
+    monitor = await get_monitor_queryset(user_id, organization_slug).aget(id=monitor.id)
+    await attach_checks_to_monitors([monitor])
+    return Status(201, monitor)
+
+
+@router.put(
+    "organizations/{slug:organization_slug}/monitors/{int:monitor_id}/",
+    response=MonitorSchema,
+    by_alias=True,
+)
+async def update_monitor(
+    request: AuthHttpRequest,
+    organization_slug: str,
+    monitor_id: int,
+    payload: MonitorIn,
+):
+    monitor = await aget_object_or_404(
+        get_monitor_queryset(request.auth.user_id, organization_slug),
+        id=monitor_id,
+    )
+    data = payload.dict()
+    if project_id := data["project"]:
+        result = await Project.objects.filter(
+            organization__slug=organization_slug,
+            organization__users=request.auth.user_id,
+            id=project_id,
+        ).afirst()
+        data["project"] = result
+    data["environment_id"] = await resolve_environment_id(
+        monitor.organization_id, data["environment_id"]
+    )
+    for attr, value in data.items():
+        setattr(monitor, attr, value)
+    await monitor.asave()
+    await attach_checks_to_monitors([monitor])
+    return monitor
+
+
+@router.get(
+    "organizations/{slug:organization_slug}/monitors/{int:monitor_id}/checks/",
+    response=list[MonitorCheckResponseTimeSchema],
+    by_alias=True,
+)
+@paginate
+async def list_monitor_checks(
+    request: AuthHttpRequest,
+    response: HttpResponse,
+    organization_slug: str,
+    monitor_id: int,
+    is_change: bool | None = None,
+):
+    """
+    List checks performed for a monitor
+    Set is_change query param to True to show only changes,
+    This is useful to see only when a service went up and down.
+    """
+    checks = (
+        MonitorCheck.objects.filter(
+            monitor_id=monitor_id,
+            monitor__organization__slug=organization_slug,
+            monitor__organization__users=request.auth.user_id,
+        )
+        .only("is_up", "reason", "response_time")
+        # By the partition key, so paging deeper walks partitions newest-first
+        # instead of re-opening every one per page. See MonitorCheck.Meta.
+        .order_by("-id")
+    )
+    if is_change is not None:
+        checks = checks.filter(is_change=is_change)
+    return checks
+
+
+@router.get(
+    "/organizations/{slug:organization_slug}/status-pages/",
+    response=list[StatusPageSchema],
+    by_alias=True,
+)
+@paginate(StatusPagePagination)
+async def list_status_pages(
+    request: AuthHttpRequest, response: HttpResponse, organization_slug: str
+):
+    """List status pages, used for showing the current status of an uptime monitor"""
+    return StatusPage.objects.filter(
+        organization__users=request.auth.user_id
+    ).prefetch_related(
+        # MonitorSchema reads the check annotations (is_up/last_change) and the
+        # organization (heartbeat URL) and project (project_name); load them
+        # eagerly so async serialization does not fall back to sync queries.
+        Prefetch(
+            "monitors",
+            queryset=Monitor.objects.with_check_annotations().select_related(
+                "organization", "project"
+            ),
+        )
+    )
+
+
+@router.post(
+    "/organizations/{slug:organization_slug}/status-pages/",
+    response={201: StatusPageSchema},
+    by_alias=True,
+)
+async def create_status_page(
+    request: AuthHttpRequest, organization_slug: str, payload: StatusPageIn
+):
+    organization = await aget_object_or_404(
+        Organization, slug=organization_slug, users=request.auth.user_id
+    )
+    data = payload.dict()
+    status_page = await StatusPage.objects.acreate(organization=organization, **data)
+    return Status(
+        201,
+        await StatusPage.objects.prefetch_related("monitors").aget(id=status_page.id),
+    )
+
+
+@router.delete(
+    "organizations/{slug:organization_slug}/monitors/{int:monitor_id}/",
+    response={204: None},
+)
+async def delete_monitor(
+    request: AuthHttpRequest, organization_slug: str, monitor_id: int
+):
+    result, _ = (
+        await get_monitor_queryset(request.auth.user_id, organization_slug)
+        .filter(id=monitor_id)
+        .adelete()
+    )
+    if result:
+        return Status(204, None)
+    raise Http404
