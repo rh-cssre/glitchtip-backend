@@ -34,8 +34,12 @@ lld-link /DEBUG:FULL /PDB:crash.pdb /NODEFAULTLIB /ENTRY:main \
 cp crash.elf "$OUT/native/crash.elf"
 cp crash.macho.dSYM/Contents/Resources/DWARF/crash.macho "$OUT/native/crash.macho.dwarf"
 cp crash.pdb "$OUT/native/crash.pdb"
-cp crash.cpp "$OUT/native/crash.cpp"
-python3 /tools/symbols.py crash.elf crash.macho crash.map > "$OUT/native/symbols.json"
+# The same ELF with its DWARF stripped: same build id, symbols only. A
+# project that uploads both has two debug files for one debug id.
+objcopy --strip-debug crash.elf crash.stripped.elf
+cp crash.stripped.elf "$OUT/native/crash.stripped.elf"
+python3 /tools/symbols.py crash.elf crash.macho crash.macho.dSYM crash.exe crash.map \
+    > "$OUT/native/symbols.json"
 
 # --- JavaScript: esbuild bundles with sourcemaps --------------------------
 ESBUILD=/tools/node_modules/.bin/esbuild
@@ -83,4 +87,5 @@ PY
     clang --version | head -n1
     ld.lld --version | head -n1
     "$ESBUILD" --version | sed 's/^/esbuild /'
+    llvm-objdump --version | grep -m1 -i version
 } > "$OUT/TOOLCHAIN.txt"
