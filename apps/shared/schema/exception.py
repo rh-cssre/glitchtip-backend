@@ -1,0 +1,126 @@
+import json
+from typing import Annotated, Literal
+from urllib.parse import urlparse
+
+from pydantic import WrapValidator, field_validator, model_validator
+
+from ..schema.base import LaxIngestSchema
+from ..schema.utils import invalid_to_none
+
+MAX_VAR_SIZE = 16 * 1024  # 16KB per individual var value
+
+
+def _truncate_var_value(value: str | dict | list) -> str | dict | list:
+    """Truncate a single var value if it exceeds MAX_VAR_SIZE."""
+    if isinstance(value, str):
+        if len(value) > MAX_VAR_SIZE:
+            return f"[Truncated: {len(value)} bytes]"
+        return value
+
+    # For dict/list, serialize to check size
+    try:
+        serialized = json.dumps(value, default=str)
+        if len(serialized) > MAX_VAR_SIZE:
+            return f"[Truncated: {len(serialized)} bytes]"
+    except (TypeError, ValueError):
+        pass
+    return value
+
+
+class ExceptionMechanism(LaxIngestSchema):
+    type: str
+    description: str | None = None
+    help_link: str | None = None
+    handled: bool | None = None
+    synthetic: bool | None = None
+    is_exception_group: bool | None = None
+    parent_id: int | None = None
+    source: str | None = None
+    meta: dict | None = None
+    data: dict | None = None
+
+
+class LockReason(LaxIngestSchema):
+    type: int
+    address: str | None = None
+    package_name: str | None = None
+    class_name: str | None = None
+    thread_id: str | None = None
+
+
+class StackTraceFrame(LaxIngestSchema):
+    filename: str | None = None
+    function: str | None = None
+    raw_function: str | None = None
+    function_id: str | None = None
+    symbol: str | None = None
+    module: str | None = None
+    lineno: int | None = None
+    colno: int | None = None
+    abs_path: str | None = None
+    context_line: str | None = None
+    pre_context: list[str | None] | None = None
+    post_context: list[str | None] | None = None
+    source_link: str | None = None
+    in_app: bool | None = None
+    stack_start: bool | None = None
+    lock: LockReason | None = None
+    vars: dict[str, str | dict | list] | None = None
+    instruction_addr: str | None = None
+    addr_mode: str | None = None
+    symbol_addr: str | None = None
+    image_addr: str | None = None
+    package: str | None = None
+    platform: str | None = None
+
+    def is_url(self, filename: str) -> bool:
+        return filename.startswith(("file:", "http:", "https:", "applewebdata:"))
+
+    @model_validator(mode="after")
+    def normalize_files(self):
+        if not self.abs_path and self.filename:
+            self.abs_path = self.filename
+        if self.filename and self.is_url(self.filename):
+            self.filename = urlparse(self.filename).path
+        return self
+
+    @field_validator("pre_context", "post_context")
+    @classmethod
+    def replace_null(cls, context: list[str | None]) -> list[str | None] | None:
+        if context:
+            return [line if line else "" for line in context]
+        return None
+
+    @field_validator("vars")
+    @classmethod
+    def truncate_large_vars(cls, vars_dict: dict | None) -> dict | None:
+        """Truncate individual var values exceeding MAX_VAR_SIZE to prevent oversized payloads."""
+        if vars_dict is None:
+            return None
+        return {k: _truncate_var_value(v) for k, v in vars_dict.items()}
+
+
+class StackTrace(LaxIngestSchema):
+    frames: list[StackTraceFrame]
+    registers: dict[str, str] | None = None
+
+
+class EventException(LaxIngestSchema):
+    type: str | None = None
+    value: Annotated[str | None, WrapValidator(invalid_to_none)] = None
+    module: str | None = None
+    thread_id: str | None = None
+    mechanism: Annotated[ExceptionMechanism | None, WrapValidator(invalid_to_none)] = (
+        None
+    )
+    stacktrace: Annotated[StackTrace | None, WrapValidator(invalid_to_none)] = None
+    raw_stacktrace: Annotated[StackTrace | None, WrapValidator(invalid_to_none)] = None
+
+
+class ValueEventException(LaxIngestSchema):
+    values: list[EventException]
+
+
+class ExceptionEntry(LaxIngestSchema):
+    type: Literal["exception"]
+    data: dict
