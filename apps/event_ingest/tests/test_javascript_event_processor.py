@@ -1,8 +1,9 @@
-import io
 import json
 from types import SimpleNamespace
 
+from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase
+from gt_rust.symbolic import SourceMapCache
 
 from apps.event_ingest.javascript_event_processor import JavascriptEventProcessor
 
@@ -21,19 +22,19 @@ SOURCEMAP = json.dumps(
 ).encode()
 
 
-def stored_file(file_id: int, content: bytes):
-    return SimpleNamespace(id=file_id, blob=SimpleNamespace(blob=io.BytesIO(content)))
-
-
 class LookupTokenColumnTests(SimpleTestCase):
     """SDK frames carry 1-based ``lineno``/``colno``; the lookup must hit the
     exact generated column the frame names."""
 
     def lookup(self, colno: int):
         processor = JavascriptEventProcessor(release_id=0, data=None, debug_bundles=[])
+        # Seed the event's cache memo, as the cache store would fill it.
+        processor._sourcemap_caches[(1, 2)] = SourceMapCache.load(
+            SourceMapCache.build(MINIFIED, SOURCEMAP)
+        )
         frame = SimpleNamespace(abs_path="app.min.js", lineno=1, colno=colno)
-        return processor.lookup_token(
-            frame, stored_file(2, SOURCEMAP), stored_file(1, MINIFIED)
+        return async_to_sync(processor.lookup_token)(
+            frame, SimpleNamespace(id=2), SimpleNamespace(id=1)
         )
 
     def test_column_resolves_to_its_own_token(self):

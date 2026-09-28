@@ -146,8 +146,8 @@ def extract_proguard_metadata(content: bytes):
     full in-memory class/method index over the entire file just to answer
     yes/no here — for a mapping file in the tens of MBs that index build can
     itself use several hundred MB of RAM, which is wasted work since nothing
-    below actually uses the parsed mapper. Real deobfuscation still goes
-    through ProguardMapper in StacktraceProcessor.resolve_proguard_stacktrace.
+    below actually uses the parsed mapper. Deobfuscation uses a ProguardCache
+    built from the mapping the first time an event needs it (apps.symbolication).
     """
     head = content[:_PROGUARD_SNIFF_BYTES].removeprefix(codecs.BOM_UTF8)
 

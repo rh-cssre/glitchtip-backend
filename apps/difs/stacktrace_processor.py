@@ -1,16 +1,11 @@
-import contextlib
+import asyncio
 import copy
 import logging
-import zipfile
 
-from gt_rust.symbolic import (
-    Archive,
-    ProguardMapper,
-    SymCache,
-    demangle,
-    normalize_debug_id,
-    parse_addr,
-)
+from gt_rust.symbolic import demangle, normalize_debug_id, parse_addr
+
+from apps.difs.models import DebugInformationFile
+from apps.symbolication.sources import read_bundle_members
 
 alternative_arch = {"x86": ["x86", "x86_64"]}
 
@@ -53,27 +48,12 @@ def _normalize_debug_id_or_none(value) -> str | None:
 
 
 class ResolvedStacktrace:
-    def __init__(self, score=0, frames=None):
+    def __init__(self, score=0, frames=None, context_requests=None):
         self.score = score
         self.frames = frames if frames is not None else []
-
-
-def find_arch_object(archive, arch):
-    if arch is None:
-        # No arch in event context — use the first object in the archive.
-        # Each uploaded DIF typically contains a single architecture.
-        for obj in archive.iter_objects():
-            return obj
-        return None
-
-    arch_list = alternative_arch.get(arch, [arch])
-
-    for candidate_arch in arch_list:
-        try:
-            object = archive.get_object(arch=candidate_arch)
-            return object
-        except Exception:
-            pass
+        # (frame index, source path, line) for frames that want source
+        # context from a source bundle; see add_native_source_context.
+        self.context_requests = context_requests or []
 
 
 def digest_symbol(symbol):
@@ -92,48 +72,43 @@ def getLogger():
     return logging.getLogger("glitchtip.difs")
 
 
-def find_source_bundle(project_id, debug_id):
+async def find_source_bundle(project_id, debug_id):
     """
     Find a source bundle matching the given debug_id.
     Matches kind='src' (test data) or kind='sources' (real uploads via symbolic.Archive).
-    Returns the DebugInformationFile object or None.
+    Returns the DebugInformationFile object (with its file blob) or None.
     """
     try:
-        from apps.difs.models import DebugInformationFile
-
-        return DebugInformationFile.objects.filter(
-            project_id=project_id,
-            data__kind__in=["src", "sources"],
-            data__debug_id=normalize_debug_id(debug_id),
-        ).first()
+        return (
+            await DebugInformationFile.objects.filter(
+                project_id=project_id,
+                data__kind__in=["src", "sources"],
+                data__debug_id=normalize_debug_id(debug_id),
+            )
+            .select_related("file__blob")
+            .afirst()
+        )
     except Exception as e:
         getLogger().error(f"find_source_bundle: Error finding source bundle: {e}")
         return None
 
 
-def extract_source_from_bundle(source_bundle, file_path):
+async def read_source_files(source_bundle, file_paths) -> dict[str, list[str]]:
     """
-    Extract source code lines from a source bundle ZIP file.
-    Returns a list of lines or None if extraction fails.
+    Source lines of ``file_paths`` from a source bundle, keyed by path; paths
+    the bundle lacks are left out. Source bundles store files with a
+    'files/' prefix. The zip is read in place, on a worker thread since
+    storage has no async API.
     """
+    members = {f"files{path}": path for path in file_paths}
     try:
-        from apps.difs.tasks import difs_concat_file_blobs_to_disk
-
-        with (
-            difs_concat_file_blobs_to_disk([source_bundle.file.blob]) as temp_file,
-            zipfile.ZipFile(temp_file.name, "r") as zf,
-        ):
-            # Source bundles store files with a 'files/' prefix
-            bundle_path = f"files{file_path}"
-
-            if bundle_path in zf.namelist():
-                content = zf.read(bundle_path).decode("utf-8")
-                return content.splitlines()
-            else:
-                return None
+        lines = await asyncio.to_thread(
+            read_bundle_members, source_bundle.file.blob, list(members)
+        )
     except Exception as e:
-        getLogger().error(f"extract_source_from_bundle: Error extracting source: {e}")
-        return None
+        getLogger().error(f"read_source_files: Error extracting source: {e}")
+        return {}
+    return {members[member]: text for member, text in lines.items()}
 
 
 def jvm_module_to_path(module, filename):
@@ -162,29 +137,6 @@ def jvm_module_to_path(module, filename):
         return f"/_/_/{package_path}/{jvm_filename}"
     # No package (default package)
     return f"/_/_/{jvm_filename}"
-
-
-@contextlib.contextmanager
-def open_source_bundle(source_bundle_dif):
-    """
-    Context manager that opens a source bundle ZIP once and yields a lookup function.
-    Avoids re-opening the ZIP for every frame.
-    """
-    from apps.difs.tasks import difs_concat_file_blobs_to_disk
-
-    with (
-        difs_concat_file_blobs_to_disk([source_bundle_dif.file.blob]) as temp_file,
-        zipfile.ZipFile(temp_file.name, "r") as zf,
-    ):
-        namelist = set(zf.namelist())
-
-        def get_source_lines(file_path):
-            bundle_path = f"files{file_path}"
-            if bundle_path in namelist:
-                return zf.read(bundle_path).decode("utf-8").splitlines()
-            return None
-
-        yield get_source_lines
 
 
 def _estimate_image_base(sym_cache, instruction_addrs):
@@ -238,7 +190,10 @@ class StacktraceProcessor:
         pass
 
     @classmethod
-    def resolve_stacktrace(cls, event, symbol_file, project_id=None, debug_id=None):
+    def resolve_stacktrace(cls, event, cache, debug_id=None):
+        """Resolve the first exception's frames with one loaded cache: a
+        ProguardCache for an Android event without native frames, otherwise
+        a SymCache."""
         # Process event
         try:
             contexts = event.get("contexts")
@@ -263,7 +218,7 @@ class StacktraceProcessor:
         native_frames = cls.has_native_frames(event)
 
         if is_android and not native_frames:
-            return cls.resolve_proguard_stacktrace(stacktrace, symbol_file)
+            return cls.resolve_proguard_stacktrace(stacktrace, cache)
 
         # Use the SDK's image_addr from debug_meta if present; it's more
         # reliable than guessing the base.
@@ -281,21 +236,14 @@ class StacktraceProcessor:
 
         return cls.resolve_native_stacktrace(
             stacktrace,
-            symbol_file,
+            cache,
             arch=arch,
-            project_id=project_id,
             debug_id=debug_id,
             image_addr_from_meta=image_addr_from_meta,
         )
 
     @classmethod
-    def resolve_proguard_stacktrace(cls, stacktrace, symbol_file):
-        try:
-            mapper = ProguardMapper.open(symbol_file)
-        except Exception as e:
-            getLogger().error(f"StacktraceProcessor: Open symbol file failed: {e}")
-            return
-
+    def resolve_proguard_stacktrace(cls, stacktrace, mapper):
         try:
             frames = stacktrace.get("frames")
             score = 0
@@ -330,27 +278,22 @@ class StacktraceProcessor:
     def resolve_native_stacktrace(
         cls,
         stacktrace,
-        symbol_file,
+        sym_cache,
         arch=None,
-        project_id=None,
         debug_id=None,
         image_addr_from_meta=None,
     ):
-        # Open symbol file
-        try:
-            archive = Archive.open(symbol_file)
-            obj = find_arch_object(archive, arch)
-            if obj is None:
-                return
-            sym_cache = SymCache.from_object(obj)
-        except Exception as e:
-            getLogger().error(f"StacktraceProcessor: Open symbol file failed: {e}")
+        # A debug file for another architecture cannot resolve these frames.
+        if arch is not None and sym_cache.arch not in alternative_arch.get(
+            arch, [arch]
+        ):
             return
 
         try:
             frames = stacktrace.get("frames")
             score = 0
             resolved_frames = []
+            context_requests = []
 
             # A frame's own image_addr wins. For frames without one, fall back
             # to the base debug_meta supplies, and only then to estimation.
@@ -409,33 +352,28 @@ class StacktraceProcessor:
                     frame["function"] = demangle(digested_symbol.symbol)
                     score = score + 1
 
-                    # Extract source context from source bundle if available
+                    # Source context comes from a source bundle, if one was
+                    # uploaded; see add_native_source_context.
                     if (
-                        project_id
-                        and debug_id
+                        debug_id
                         and digested_symbol.full_path
                         and digested_symbol.line > 0
                     ):
-                        source_bundle = find_source_bundle(project_id, debug_id)
-                        if source_bundle:
-                            source_lines = extract_source_from_bundle(
-                                source_bundle, digested_symbol.full_path
+                        context_requests.append(
+                            (
+                                len(resolved_frames),
+                                digested_symbol.full_path,
+                                digested_symbol.line,
                             )
-                            if source_lines and digested_symbol.line <= len(
-                                source_lines
-                            ):
-                                line_num = digested_symbol.line - 1  # 0-indexed
-                                frame["context_line"] = source_lines[line_num]
-                                frame["pre_context"] = source_lines[
-                                    max(0, line_num - 5) : line_num
-                                ]
-                                frame["post_context"] = source_lines[
-                                    line_num + 1 : min(len(source_lines), line_num + 6)
-                                ]
+                        )
 
                 resolved_frames.append(frame)
 
-            return ResolvedStacktrace(score=score, frames=resolved_frames)
+            return ResolvedStacktrace(
+                score=score,
+                frames=resolved_frames,
+                context_requests=context_requests,
+            )
         except Exception as e:
             getLogger().error(f"StacktraceProcessor: Unexpected error: {e}")
 
@@ -475,7 +413,29 @@ class StacktraceProcessor:
             return False
 
     @classmethod
-    def resolve_jvm_source_context(cls, event_json, project_id, debug_ids):
+    async def add_native_source_context(cls, resolved, project_id, debug_id):
+        """Fill source context into resolved native frames from the source
+        bundle uploaded for ``debug_id``, if any."""
+        if not resolved.context_requests:
+            return
+        source_bundle = await find_source_bundle(project_id, debug_id)
+        if source_bundle is None:
+            return
+        paths = {path for _, path, _ in resolved.context_requests}
+        sources = await read_source_files(source_bundle, paths)
+        for index, path, line in resolved.context_requests:
+            source_lines = sources.get(path)
+            if source_lines and line <= len(source_lines):
+                frame = resolved.frames[index]
+                line_num = line - 1  # 0-indexed
+                frame["context_line"] = source_lines[line_num]
+                frame["pre_context"] = source_lines[max(0, line_num - 5) : line_num]
+                frame["post_context"] = source_lines[
+                    line_num + 1 : min(len(source_lines), line_num + 6)
+                ]
+
+    @classmethod
+    async def resolve_jvm_source_context(cls, event_json, project_id, debug_ids):
         """
         Resolve source context for JVM stack frames using source bundles.
         Returns True if any frames were enriched.
@@ -491,53 +451,45 @@ class StacktraceProcessor:
         # Find source bundles for all debug_ids
         bundles = []
         for debug_id in debug_ids:
-            bundle = find_source_bundle(project_id, debug_id)
+            bundle = await find_source_bundle(project_id, debug_id)
             if bundle:
                 bundles.append(bundle)
 
         if not bundles:
             return False
 
+        def frames_needing_context():
+            for exc in exceptions:
+                stacktrace = exc.get("stacktrace")
+                if not stacktrace:
+                    continue
+                for frame in stacktrace.get("frames") or []:
+                    if frame.get("context_line"):
+                        continue
+                    lineno = frame.get("lineno")
+                    if not lineno or lineno < 1:
+                        continue
+                    file_path = jvm_module_to_path(
+                        frame.get("module"), frame.get("filename")
+                    )
+                    if file_path:
+                        yield frame, file_path, lineno
+
         enriched = False
         for bundle in bundles:
-            try:
-                with open_source_bundle(bundle) as get_source_lines:
-                    for exc in exceptions:
-                        stacktrace = exc.get("stacktrace")
-                        if not stacktrace:
-                            continue
-                        frames = stacktrace.get("frames")
-                        if not frames:
-                            continue
-
-                        for frame in frames:
-                            if frame.get("context_line"):
-                                continue
-
-                            module = frame.get("module")
-                            filename = frame.get("filename")
-                            lineno = frame.get("lineno")
-                            if not lineno or lineno < 1:
-                                continue
-
-                            file_path = jvm_module_to_path(module, filename)
-                            if not file_path:
-                                continue
-
-                            source_lines = get_source_lines(file_path)
-                            if source_lines and lineno <= len(source_lines):
-                                line_idx = lineno - 1
-                                frame["context_line"] = source_lines[line_idx]
-                                frame["pre_context"] = source_lines[
-                                    max(0, line_idx - 5) : line_idx
-                                ]
-                                frame["post_context"] = source_lines[
-                                    line_idx + 1 : min(len(source_lines), line_idx + 6)
-                                ]
-                                enriched = True
-            except Exception as e:
-                getLogger().error(
-                    f"resolve_jvm_source_context: Error reading bundle: {e}"
-                )
+            wanted = list(frames_needing_context())
+            if not wanted:
+                break
+            sources = await read_source_files(bundle, {path for _, path, _ in wanted})
+            for frame, file_path, lineno in wanted:
+                source_lines = sources.get(file_path)
+                if source_lines and lineno <= len(source_lines):
+                    line_idx = lineno - 1
+                    frame["context_line"] = source_lines[line_idx]
+                    frame["pre_context"] = source_lines[max(0, line_idx - 5) : line_idx]
+                    frame["post_context"] = source_lines[
+                        line_idx + 1 : min(len(source_lines), line_idx + 6)
+                    ]
+                    enriched = True
 
         return enriched

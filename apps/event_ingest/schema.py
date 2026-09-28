@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 from urllib.parse import parse_qs
+from uuid import UUID
 
 from django.conf import settings
 from django.utils.timezone import now
@@ -119,6 +120,16 @@ class EventTemplate(LaxIngestSchema):
     post_context: list[str] | None = None
 
 
+def _uuid_or_none(v):
+    """A malformed uuid is dropped rather than failing the whole event."""
+    if v is None or isinstance(v, uuid.UUID):
+        return v
+    try:
+        return uuid.UUID(str(v))
+    except ValueError:
+        return None
+
+
 def _normalize_native_debug_id(v):
     if v is None or isinstance(v, uuid.UUID):
         return v
@@ -155,25 +166,30 @@ class NativeDebugImage(BaseModel):
 
 
 # Important, for some reason using Schema will cause the DebugImage union not to work
+class ProguardDebugImage(BaseModel):
+    """The ProGuard/R8 mapping an Android build was obfuscated with."""
+
+    type: Literal["proguard"]
+    # Annotated with UUID, not uuid.UUID: the field name shadows the module.
+    uuid: Annotated[UUID | None, BeforeValidator(_uuid_or_none)] = None
+
+
+# Important, for some reason using Schema will cause the DebugImage union not to work
 class OtherDebugImage(BaseModel):
     type: str
 
 
 DebugImage = (
     Annotated[
-        SourceMapImage | JvmDebugImage | NativeDebugImage,
+        SourceMapImage | JvmDebugImage | NativeDebugImage | ProguardDebugImage,
         Field(discriminator="type"),
     ]
     | OtherDebugImage
 )
 
-# Types we intentionally ignore (no processing needed).
-# Anything not in this set AND not handled by a typed model above is unknown.
-KNOWN_IGNORED_IMAGE_TYPES = frozenset(
-    {
-        "proguard",  # Handled via ProguardMapper, not debug images
-    }
-)
+# Types we intentionally ignore (no processing needed). Anything not in this
+# set and not handled by a typed model above is unknown.
+KNOWN_IGNORED_IMAGE_TYPES: frozenset[str] = frozenset()
 
 
 class DebugMeta(LaxIngestSchema):

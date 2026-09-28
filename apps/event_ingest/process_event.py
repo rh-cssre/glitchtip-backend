@@ -19,7 +19,7 @@ from psycopg.types.json import Jsonb
 from user_agents import parse
 
 from apps.alerts.constants import ISSUE_IDS_KEY
-from apps.difs.tasks import event_difs_resolve_stacktrace
+from apps.difs.tasks import resolve_event_stacktraces
 from apps.issue_events.constants import MAX_TAG_LENGTH, EventStatus, LogLevel
 from apps.issue_events.models import IssueEvent, IssueEventType
 from apps.performance.histogram import (
@@ -840,7 +840,7 @@ async def process_issue_events(
             )
             | Q(debug_id__in={image.debug_id for image in sourcemap_images})
         )
-        .select_related("file", "sourcemap_file", "release")
+        .select_related("file__blob", "sourcemap_file__blob", "release")
     )
     # Materialize once — iterated multiple times below
     debug_files = [df async for df in debug_files_qs]
@@ -905,7 +905,7 @@ async def process_issue_events(
                     or debug_file.data.get("code_file")
                 ],
             )
-            await sync_to_async(processor.transform)()
+            await processor.transform()
         elif isinstance(event, ErrorIssueEventSchema) and event.exception:
             # Projects may not appear in projects_with_data (which is built
             # from release/environment joins), so check has_difs from the
@@ -928,9 +928,7 @@ async def process_issue_events(
                 )
                 _has_difs = exists_rows[0][0]
             if _has_difs:
-                await sync_to_async(event_difs_resolve_stacktrace)(
-                    event, ingest_event.project_id
-                )
+                await resolve_event_stacktraces(event, ingest_event.project_id)
 
         event_data = event.model_dump(
             mode="json",

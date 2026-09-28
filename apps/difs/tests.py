@@ -4,8 +4,9 @@ import json
 import tempfile
 import zipfile
 from hashlib import sha1
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+from asgiref.sync import async_to_sync
 from django.core.files import File as DjangoFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
@@ -18,15 +19,19 @@ from apps.difs.stacktrace_processor import (
     StacktraceProcessor,
     _estimate_image_base,
     digest_symbol,
-    extract_source_from_bundle,
     find_source_bundle,
     jvm_module_to_path,
+    read_source_files,
 )
-from apps.difs.tasks import ChecksumMismatched, difs_create_file_from_chunks
-from apps.event_ingest.schema import NativeDebugImage
+from apps.difs.tasks import (
+    ChecksumMismatched,
+    difs_create_file_from_chunks,
+    resolve_event_stacktraces,
+)
+from apps.event_ingest.schema import ErrorIssueEventSchema, NativeDebugImage
 from apps.files.models import File, FileBlob
 from glitchtip.test_utils import generators  # noqa: F401
-from glitchtip.test_utils.test_case import GlitchTestCase
+from glitchtip.test_utils.test_case import GlitchTestCase, GlitchTipTransactionTestCase
 
 
 class DebugInformationFileModelTestCase(GlitchTestCase):
@@ -459,13 +464,9 @@ class DifsTasksTestCase(GlitchTestCase):
         self.assertEqual(FileBlob.objects.filter(checksum=checksum).count(), 1)
 
 
-class IOSSymbolicationTestCase(GlitchTestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.create_user()
-
+class IOSSymbolicationTestCase(GlitchTipTransactionTestCase):
     def setUp(self):
-        self.client.force_login(self.user)
+        self.create_logged_in_user()
 
     def create_source_bundle(
         self, debug_id, source_code, file_path="/Users/test/ContentView.swift"
@@ -532,7 +533,7 @@ class IOSSymbolicationTestCase(GlitchTestCase):
 
         dif = self.create_source_bundle(debug_id, source_code)
 
-        found_bundle = find_source_bundle(self.project.id, debug_id)
+        found_bundle = async_to_sync(find_source_bundle)(self.project.id, debug_id)
 
         self.assertIsNotNone(found_bundle)
         self.assertEqual(found_bundle.id, dif.id)
@@ -542,7 +543,7 @@ class IOSSymbolicationTestCase(GlitchTestCase):
     def test_find_source_bundle_not_found(self):
         debug_id = "00000000-0000-0000-0000-000000000000"
 
-        found_bundle = find_source_bundle(self.project.id, debug_id)
+        found_bundle = async_to_sync(find_source_bundle)(self.project.id, debug_id)
 
         self.assertIsNone(found_bundle)
 
@@ -552,7 +553,7 @@ class IOSSymbolicationTestCase(GlitchTestCase):
 
         self.create_source_bundle(debug_id, "test code")
 
-        found_bundle = find_source_bundle(other_project.id, debug_id)
+        found_bundle = async_to_sync(find_source_bundle)(other_project.id, debug_id)
 
         self.assertIsNone(found_bundle)
 
@@ -569,7 +570,7 @@ struct ContentView: View {
         file_path = "/Users/test/ContentView.swift"
         dif = self.create_source_bundle(debug_id, source_code, file_path)
 
-        lines = extract_source_from_bundle(dif, file_path)
+        lines = async_to_sync(read_source_files)(dif, [file_path]).get(file_path)
 
         self.assertIsNotNone(lines)
         self.assertEqual(len(lines), 7)
@@ -581,15 +582,16 @@ struct ContentView: View {
         debug_id = "93ec5160-1d69-3227-8410-c2687fce4ea2"
         dif = self.create_source_bundle(debug_id, "test code")
 
-        lines = extract_source_from_bundle(dif, "/NonExistent.swift")
+        lines = async_to_sync(read_source_files)(dif, ["/NonExistent.swift"]).get(
+            "/NonExistent.swift"
+        )
 
         self.assertIsNone(lines)
 
 
-class JvmSourceContextTestCase(GlitchTestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.create_user()
+class JvmSourceContextTestCase(GlitchTipTransactionTestCase):
+    def setUp(self):
+        self.create_logged_in_user()
 
     def test_jvm_module_to_path_standard(self):
         result = jvm_module_to_path("com.example.MyClass", "MyClass.java")
@@ -623,7 +625,7 @@ class JvmSourceContextTestCase(GlitchTestCase):
             project=self.project,
             data={"kind": "sources", "debug_id": debug_id},
         )
-        found = find_source_bundle(self.project.id, debug_id)
+        found = async_to_sync(find_source_bundle)(self.project.id, debug_id)
         self.assertIsNotNone(found)
         self.assertEqual(found.id, dif.id)
 
@@ -701,7 +703,7 @@ class JvmSourceContextTestCase(GlitchTestCase):
             }
         }
 
-        result = StacktraceProcessor.resolve_jvm_source_context(
+        result = async_to_sync(StacktraceProcessor.resolve_jvm_source_context)(
             event_json, self.project.id, [debug_id]
         )
 
@@ -739,7 +741,7 @@ class JvmSourceContextTestCase(GlitchTestCase):
                 ]
             }
         }
-        result = StacktraceProcessor.resolve_jvm_source_context(
+        result = async_to_sync(StacktraceProcessor.resolve_jvm_source_context)(
             event_json, self.project.id, [debug_id]
         )
         self.assertFalse(result)
@@ -811,12 +813,6 @@ class NativeSymbolicationTestCase(GlitchTestCase):
         """Flutter on Android sends instruction_addr with no image_addr/debug_meta."""
         sym_cache = FakeSymCache([0x2000, 0x4000])
 
-        mock_obj = MagicMock()
-        mock_obj.arch = "arm64"
-
-        mock_archive = MagicMock()
-        mock_archive.get_object.return_value = mock_obj
-
         stacktrace = {
             "frames": [
                 {"instruction_addr": "0x402000", "function": "bK"},
@@ -824,16 +820,11 @@ class NativeSymbolicationTestCase(GlitchTestCase):
             ]
         }
 
-        with (
-            patch("apps.difs.stacktrace_processor.Archive") as MockArchive,
-            patch("apps.difs.stacktrace_processor.SymCache") as MockSymCache,
-        ):
-            MockArchive.open.return_value = mock_archive
-            MockSymCache.from_object.return_value = sym_cache
+        sym_cache.arch = "arm64"
 
-            result = StacktraceProcessor.resolve_native_stacktrace(
-                stacktrace, "/fake/symbols.so", arch="arm64"
-            )
+        result = StacktraceProcessor.resolve_native_stacktrace(
+            stacktrace, sym_cache, arch="arm64"
+        )
 
         self.assertIsNotNone(result)
         self.assertEqual(result.score, 2)
@@ -843,12 +834,6 @@ class NativeSymbolicationTestCase(GlitchTestCase):
     def test_frame_outside_the_image_does_not_drop_the_stacktrace(self):
         """One frame below the base must not cost every other frame its symbol."""
         sym_cache = FakeSymCache([0x2000, 0x4000])
-
-        mock_obj = MagicMock()
-        mock_obj.arch = "arm64"
-
-        mock_archive = MagicMock()
-        mock_archive.get_object.return_value = mock_obj
 
         stacktrace = {
             "frames": [
@@ -862,16 +847,11 @@ class NativeSymbolicationTestCase(GlitchTestCase):
             ]
         }
 
-        with (
-            patch("apps.difs.stacktrace_processor.Archive") as MockArchive,
-            patch("apps.difs.stacktrace_processor.SymCache") as MockSymCache,
-        ):
-            MockArchive.open.return_value = mock_archive
-            MockSymCache.from_object.return_value = sym_cache
+        sym_cache.arch = "arm64"
 
-            result = StacktraceProcessor.resolve_native_stacktrace(
-                stacktrace, "/fake/symbols.so", arch="arm64"
-            )
+        result = StacktraceProcessor.resolve_native_stacktrace(
+            stacktrace, sym_cache, arch="arm64"
+        )
 
         self.assertIsNotNone(result)
         self.assertEqual(result.score, 2)
@@ -890,12 +870,6 @@ class NativeSymbolicationTestCase(GlitchTestCase):
         mock_sym_cache = MagicMock()
         mock_sym_cache.lookup.return_value = [mock_symbol]
 
-        mock_obj = MagicMock()
-        mock_obj.arch = "x86_64"
-
-        mock_archive = MagicMock()
-        mock_archive.get_object.return_value = mock_obj
-
         stacktrace = {
             "frames": [
                 {
@@ -906,16 +880,11 @@ class NativeSymbolicationTestCase(GlitchTestCase):
             ]
         }
 
-        with (
-            patch("apps.difs.stacktrace_processor.Archive") as MockArchive,
-            patch("apps.difs.stacktrace_processor.SymCache") as MockSymCache,
-        ):
-            MockArchive.open.return_value = mock_archive
-            MockSymCache.from_object.return_value = mock_sym_cache
+        mock_sym_cache.arch = "x86_64"
 
-            result = StacktraceProcessor.resolve_native_stacktrace(
-                stacktrace, "/fake/symbols.elf", arch="x86_64"
-            )
+        result = StacktraceProcessor.resolve_native_stacktrace(
+            stacktrace, mock_sym_cache, arch="x86_64"
+        )
 
         self.assertIsNotNone(result)
         self.assertEqual(result.score, 1)
@@ -941,11 +910,6 @@ class NativeSymbolicationTestCase(GlitchTestCase):
 
         mock_sym_cache = MagicMock()
         mock_sym_cache.lookup.side_effect = lookup
-
-        mock_obj = MagicMock()
-        mock_obj.arch = "x86_64"
-        mock_archive = MagicMock()
-        mock_archive.get_object.return_value = mock_obj
 
         event = {
             "contexts": {"os": {"name": "Android"}, "device": {"arch": "x86_64"}},
@@ -976,18 +940,13 @@ class NativeSymbolicationTestCase(GlitchTestCase):
             },
         }
 
-        with (
-            patch("apps.difs.stacktrace_processor.Archive") as MockArchive,
-            patch("apps.difs.stacktrace_processor.SymCache") as MockSymCache,
-        ):
-            MockArchive.open.return_value = mock_archive
-            MockSymCache.from_object.return_value = mock_sym_cache
+        mock_sym_cache.arch = "x86_64"
 
-            result = StacktraceProcessor.resolve_stacktrace(
-                event,
-                "/fake/symbols.elf",
-                debug_id="df398b02-1681-3b54-8fa5-b205e1ecfd7e",
-            )
+        result = StacktraceProcessor.resolve_stacktrace(
+            event,
+            mock_sym_cache,
+            debug_id="df398b02-1681-3b54-8fa5-b205e1ecfd7e",
+        )
 
         self.assertIsNotNone(result)
         self.assertEqual(result.score, 1)
@@ -1009,9 +968,6 @@ class NativeSymbolicationTestCase(GlitchTestCase):
         mock_sym_cache.lookup.side_effect = lambda addr: (
             [raw_symbol] if addr == 0x100ABC else []
         )
-        mock_obj = MagicMock()
-        mock_archive = MagicMock()
-        mock_archive.get_object.return_value = mock_obj
 
         event = {
             "contexts": {"os": {"name": "Android"}, "device": {"arch": "x86_64"}},
@@ -1032,18 +988,13 @@ class NativeSymbolicationTestCase(GlitchTestCase):
             },
         }
 
-        with (
-            patch("apps.difs.stacktrace_processor.Archive") as MockArchive,
-            patch("apps.difs.stacktrace_processor.SymCache") as MockSymCache,
-        ):
-            MockArchive.open.return_value = mock_archive
-            MockSymCache.from_object.return_value = mock_sym_cache
+        mock_sym_cache.arch = "x86_64"
 
-            result = StacktraceProcessor.resolve_stacktrace(
-                event,
-                "/fake/symbols.elf",
-                debug_id="df398b02-1681-3b54-8fa5-b205e1ecfd7e",
-            )
+        result = StacktraceProcessor.resolve_stacktrace(
+            event,
+            mock_sym_cache,
+            debug_id="df398b02-1681-3b54-8fa5-b205e1ecfd7e",
+        )
 
         # base stayed 0, so the frame resolved against the raw instruction_addr
         self.assertIsNotNone(result)
@@ -1052,11 +1003,6 @@ class NativeSymbolicationTestCase(GlitchTestCase):
     def test_unparseable_debug_meta_image_addr_falls_back_to_estimation(self):
         """A garbage image_addr must not pin the base at 0 and skip estimation."""
         sym_cache = FakeSymCache([0x2000, 0x4000])
-
-        mock_obj = MagicMock()
-        mock_obj.arch = "x86_64"
-        mock_archive = MagicMock()
-        mock_archive.get_object.return_value = mock_obj
 
         event = {
             "contexts": {"os": {"name": "Android"}, "device": {"arch": "x86_64"}},
@@ -1083,18 +1029,13 @@ class NativeSymbolicationTestCase(GlitchTestCase):
             },
         }
 
-        with (
-            patch("apps.difs.stacktrace_processor.Archive") as MockArchive,
-            patch("apps.difs.stacktrace_processor.SymCache") as MockSymCache,
-        ):
-            MockArchive.open.return_value = mock_archive
-            MockSymCache.from_object.return_value = sym_cache
+        sym_cache.arch = "x86_64"
 
-            result = StacktraceProcessor.resolve_stacktrace(
-                event,
-                "/fake/symbols.elf",
-                debug_id="df398b02-1681-3b54-8fa5-b205e1ecfd7e",
-            )
+        result = StacktraceProcessor.resolve_stacktrace(
+            event,
+            sym_cache,
+            debug_id="df398b02-1681-3b54-8fa5-b205e1ecfd7e",
+        )
 
         # base 0x400000 recovered by estimation, both frames resolve
         self.assertIsNotNone(result)
@@ -1190,7 +1131,7 @@ class ResolverRoutingTestCase(GlitchTestCase):
                 StacktraceProcessor, "resolve_proguard_stacktrace"
             ) as mock_proguard,
         ):
-            StacktraceProcessor.resolve_stacktrace(event, "/fake/symbol.elf")
+            StacktraceProcessor.resolve_stacktrace(event, MagicMock())
             mock_native.assert_called_once()
             mock_proguard.assert_not_called()
 
@@ -1222,33 +1163,31 @@ class ResolverRoutingTestCase(GlitchTestCase):
                 StacktraceProcessor, "resolve_proguard_stacktrace"
             ) as mock_proguard,
         ):
-            StacktraceProcessor.resolve_stacktrace(event, "/fake/mapping.txt")
+            StacktraceProcessor.resolve_stacktrace(event, MagicMock())
             mock_proguard.assert_called_once()
             mock_native.assert_not_called()
 
 
-class DifTypeFilteringTestCase(GlitchTestCase):
-    """Test that event_difs_resolve_stacktrace filters DIFs by type at the DB level."""
+class DifTypeFilteringTestCase(GlitchTipTransactionTestCase):
+    """Test that resolve_event_stacktraces filters DIFs by type at the DB level."""
 
-    @classmethod
-    def setUpTestData(cls):
-        cls.create_user()
+    def setUp(self):
+        self.create_logged_in_user()
 
     def test_source_bundles_excluded_from_native_loop(self):
         """Source bundles (kind='src'/'sources') should never enter the native/proguard loop."""
-        from apps.difs.tasks import event_difs_resolve_stacktrace
-        from apps.event_ingest.schema import ErrorIssueEventSchema
-
         # Create a source bundle DIF — should be excluded
         baker.make(
             "difs.DebugInformationFile",
             project=self.project,
+            file__blob=baker.make("files.FileBlob"),
             data={"kind": "sources", "debug_id": "aaa"},
         )
         # Create a native DIF — should be excluded for Android events
         baker.make(
             "difs.DebugInformationFile",
             project=self.project,
+            file__blob=baker.make("files.FileBlob"),
             data={"kind": "debug", "symbol_type": "native"},
         )
 
@@ -1276,20 +1215,20 @@ class DifTypeFilteringTestCase(GlitchTestCase):
             contexts={"os": {"name": "Android"}},
         )
 
-        with patch("apps.difs.tasks.difs_concat_file_blobs_to_disk") as mock_concat:
-            event_difs_resolve_stacktrace(event, self.project.id)
+        with patch(
+            "apps.difs.tasks.get_cache", new=AsyncMock(return_value=None)
+        ) as mock_get_cache:
+            async_to_sync(resolve_event_stacktraces)(event, self.project.id)
             # Android event should only try proguard DIFs — neither the source
-            # bundle nor the native DIF should cause a blob download.
-            mock_concat.assert_not_called()
+            # bundle nor the native DIF should cause a cache lookup.
+            mock_get_cache.assert_not_called()
 
     def test_proguard_excluded_for_non_android(self):
         """Proguard DIFs should be excluded for non-Android events."""
-        from apps.difs.tasks import event_difs_resolve_stacktrace
-        from apps.event_ingest.schema import ErrorIssueEventSchema
-
         baker.make(
             "difs.DebugInformationFile",
             project=self.project,
+            file__blob=baker.make("files.FileBlob"),
             data={"symbol_type": "proguard", "debug_id": "bbb"},
         )
 
@@ -1318,22 +1257,22 @@ class DifTypeFilteringTestCase(GlitchTestCase):
             contexts={"os": {"name": "iOS"}, "device": {"arch": "arm64"}},
         )
 
-        with patch("apps.difs.tasks.difs_concat_file_blobs_to_disk") as mock_concat:
-            event_difs_resolve_stacktrace(event, self.project.id)
-            # Non-Android event should exclude proguard DIFs — no blob download.
-            mock_concat.assert_not_called()
+        with patch(
+            "apps.difs.tasks.get_cache", new=AsyncMock(return_value=None)
+        ) as mock_get_cache:
+            async_to_sync(resolve_event_stacktraces)(event, self.project.id)
+            # Non-Android event should exclude proguard DIFs — no cache lookup.
+            mock_get_cache.assert_not_called()
 
     def test_native_difs_filtered_by_debug_id(self):
         """When event has native debug images, only matching DIFs should be tried."""
-        from apps.difs.tasks import event_difs_resolve_stacktrace
-        from apps.event_ingest.schema import ErrorIssueEventSchema
-
         matching_id = "df398b02-1681-3b54-8fa5-b205e1ecfd7e"
         non_matching_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
         baker.make(
             "difs.DebugInformationFile",
             project=self.project,
+            file__blob=baker.make("files.FileBlob"),
             data={
                 "kind": "debug",
                 "symbol_type": "native",
@@ -1343,6 +1282,7 @@ class DifTypeFilteringTestCase(GlitchTestCase):
         baker.make(
             "difs.DebugInformationFile",
             project=self.project,
+            file__blob=baker.make("files.FileBlob"),
             data={
                 "kind": "debug",
                 "symbol_type": "native",
@@ -1384,25 +1324,26 @@ class DifTypeFilteringTestCase(GlitchTestCase):
             },
         )
 
-        with patch("apps.difs.tasks.difs_concat_file_blobs_to_disk") as mock_concat:
-            event_difs_resolve_stacktrace(event, self.project.id)
+        with patch(
+            "apps.difs.tasks.get_cache", new=AsyncMock(return_value=None)
+        ) as mock_get_cache:
+            async_to_sync(resolve_event_stacktraces)(event, self.project.id)
             # Should only try the matching DIF (1 call), not both
-            self.assertEqual(mock_concat.call_count, 1)
+            self.assertEqual(mock_get_cache.call_count, 1)
 
     def test_android_native_frames_query_native_difs(self):
         """Android events with native frames should query native DIFs, not proguard."""
-        from apps.difs.tasks import event_difs_resolve_stacktrace
-        from apps.event_ingest.schema import ErrorIssueEventSchema
-
         # Create both proguard and native DIFs
         baker.make(
             "difs.DebugInformationFile",
             project=self.project,
+            file__blob=baker.make("files.FileBlob"),
             data={"kind": "debug", "symbol_type": "proguard", "debug_id": "aaa"},
         )
         baker.make(
             "difs.DebugInformationFile",
             project=self.project,
+            file__blob=baker.make("files.FileBlob"),
             data={"kind": "debug", "symbol_type": "native", "debug_id": "bbb"},
         )
 
@@ -1432,10 +1373,12 @@ class DifTypeFilteringTestCase(GlitchTestCase):
             },
         )
 
-        with patch("apps.difs.tasks.difs_concat_file_blobs_to_disk") as mock_concat:
-            event_difs_resolve_stacktrace(event, self.project.id)
+        with patch(
+            "apps.difs.tasks.get_cache", new=AsyncMock(return_value=None)
+        ) as mock_get_cache:
+            async_to_sync(resolve_event_stacktraces)(event, self.project.id)
             # Should try the native DIF (1 call), not the proguard one
-            self.assertEqual(mock_concat.call_count, 1)
+            self.assertEqual(mock_get_cache.call_count, 1)
 
 
 class NormalizeDebugIdTestCase(GlitchTestCase):

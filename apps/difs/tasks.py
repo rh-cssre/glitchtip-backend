@@ -1,9 +1,9 @@
-import contextlib
 import logging
 import tempfile
 from hashlib import sha1
 
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from django.core.files import File as DjangoFile
 from django.tasks import task
 from gt_rust.symbolic import Archive, normalize_debug_id, parse_addr
@@ -14,10 +14,14 @@ from apps.event_ingest.schema import (
     ErrorIssueEventSchema,
     JvmDebugImage,
     NativeDebugImage,
+    ProguardDebugImage,
 )
 from apps.files.models import File, FileBlob
 from apps.projects.models import Project
 from apps.shared.schema.exception import StackTraceFrame
+from apps.symbolication.models import CacheKind
+from apps.symbolication.sources import blob_path
+from apps.symbolication.store import CacheSource, get_cache
 
 
 def getLogger():
@@ -104,59 +108,136 @@ def _update_source_context_on_event(event: ErrorIssueEventSchema, event_json: di
         getLogger().error(f"_update_source_context_on_event: {e}")
 
 
-def event_difs_resolve_stacktrace(event: ErrorIssueEventSchema, project_id: int):
+# Rows read when choosing fallback candidates for an event without debug ids.
+FALLBACK_SCAN_ROWS = 200
+_32BIT_ARCHS = frozenset({"arm", "x86", "mips", "ppc"})
+
+
+def _extract_proguard_uuids(event: ErrorIssueEventSchema) -> list[str]:
+    """Normalized uuids of the ProGuard mappings the event names."""
+    if not event.debug_meta:
+        return []
+    return [
+        normalize_debug_id(str(image.uuid))
+        for image in event.debug_meta.images
+        if isinstance(image, ProguardDebugImage) and image.uuid
+    ]
+
+
+def _is_64bit_event(event_json: dict) -> bool:
+    """Whether any native frame's address needs 64 bits, so 32-bit debug
+    files cannot match."""
+    for value in (event_json.get("exception") or {}).get("values", []):
+        for frame in (value.get("stacktrace") or {}).get("frames", []):
+            addr = frame.get("instruction_addr")
+            if addr:
+                try:
+                    if parse_addr(addr) > 0xFFFFFFFF:
+                        return True
+                except Exception:
+                    pass
+    return False
+
+
+def _has_debug_info(dif: DebugInformationFile) -> bool:
+    return "debug" in ((dif.data or {}).get("features") or [])
+
+
+async def _candidate_difs(queryset, debug_ids: list[str], accept) -> list:
+    """The debug files to try: one per debug id, newest first.
+
+    With debug ids (from the event), every id's newest upload that carries
+    debug info wins over a newer symbols-only one. Without them, the newest
+    GLITCHTIP_SYMBOLICATION_FALLBACK_CANDIDATES distinct debug ids are tried,
+    reading a bounded number of rows. ``accept`` filters out debug files that
+    cannot match the event (e.g. 32-bit files for a 64-bit crash).
+    """
+    queryset = queryset.select_related("file__blob").order_by("-created")
+    if debug_ids:
+        limit = len(debug_ids)
+        queryset = queryset.filter(data__debug_id__in=debug_ids)
+    else:
+        limit = settings.GLITCHTIP_SYMBOLICATION_FALLBACK_CANDIDATES
+        if limit <= 0:
+            return []
+        queryset = queryset[:FALLBACK_SCAN_ROWS]
+    chosen: dict = {}
+    async for dif in queryset:
+        if dif.file is None or dif.file.blob is None or not accept(dif):
+            continue
+        debug_id = (dif.data or {}).get("debug_id")
+        current = chosen.get(debug_id)
+        if current is None:
+            if len(chosen) >= limit:
+                continue
+            chosen[debug_id] = dif
+        elif _has_debug_info(dif) and not _has_debug_info(current):
+            chosen[debug_id] = dif
+    return list(chosen.values())
+
+
+def _cache_source(dif: DebugInformationFile, kind: CacheKind) -> CacheSource:
+    blob = dif.file.blob
+    if kind == CacheKind.PROGUARD:
+        cache_key = blob.checksum
+    else:
+        data = dif.data or {}
+        cache_key = (
+            f"{blob.checksum}:{data.get('debug_id') or ''}:{data.get('arch') or ''}"
+        )
+    return CacheSource(kind=kind, cache_key=cache_key, source_blob_id=blob.id)
+
+
+async def resolve_event_stacktraces(event: ErrorIssueEventSchema, project_id: int):
+    """Symbolicate an event's native or ProGuard frames, and add JVM source
+    context, using stored caches of the project's debug files."""
     # Serialize once for is_android check; native/proguard resolution may
     # mutate this dict but we re-serialize from the Pydantic event below.
     event_json = event.model_dump(mode="json")
     is_android = StacktraceProcessor.is_android_event(event_json)
     native_frames = StacktraceProcessor.has_native_frames(event_json)
 
-    # Filter DIFs at DB level: exclude source bundles (handled separately by
-    # resolve_jvm_source_context), and only fetch the relevant symbol type.
+    # Source bundles are handled separately by resolve_jvm_source_context
+    # and add_native_source_context.
     difs = DebugInformationFile.objects.filter(project_id=project_id).exclude(
         data__kind__in=["src", "sources"]
     )
     if is_android and not native_frames:
-        difs = difs.filter(data__symbol_type="proguard")
+        kind = CacheKind.PROGUARD
+        candidates = await _candidate_difs(
+            difs.filter(data__symbol_type="proguard"),
+            _extract_proguard_uuids(event),
+            accept=lambda dif: True,
+        )
+    elif native_frames:
+        kind = CacheKind.SYMCACHE
+        is_64bit = _is_64bit_event(event_json)
+        candidates = await _candidate_difs(
+            difs.exclude(data__symbol_type="proguard"),
+            _extract_native_debug_ids(event),
+            accept=lambda dif: (
+                not (is_64bit and (dif.data or {}).get("arch") in _32BIT_ARCHS)
+            ),
+        )
     else:
-        difs = difs.exclude(data__symbol_type="proguard")
-        native_debug_ids = _extract_native_debug_ids(event)
-        if native_debug_ids:
-            difs = difs.filter(data__debug_id__in=native_debug_ids)
-    difs = difs.select_related("file", "file__blob").order_by("-created")
+        # No instruction addresses and no ProGuard frames: nothing a debug
+        # file can resolve.
+        candidates = []
 
-    # Detect 64-bit addresses to skip 32-bit DIFs that can't match.
-    _is_64bit = False
-    if native_frames:
-        for value in (event_json.get("exception") or {}).get("values", []):
-            for frame in (value.get("stacktrace") or {}).get("frames", []):
-                addr = frame.get("instruction_addr")
-                if addr:
-                    try:
-                        if parse_addr(addr) > 0xFFFFFFFF:
-                            _is_64bit = True
-                            break
-                    except Exception:
-                        pass
-            if _is_64bit:
-                break
-
-    _32bit_archs = {"arm", "x86", "mips", "ppc"}
     resolved_stracktrackes = []
-
-    for dif in difs:
-        if _is_64bit and dif.data.get("arch") in _32bit_archs:
+    for dif in candidates:
+        cache = await get_cache(_cache_source(dif, kind))
+        if cache is None:
             continue
-        blobs = [dif.file.blob]
-        with difs_concat_file_blobs_to_disk(blobs) as symbol_file:
-            remapped_stacktrace = StacktraceProcessor.resolve_stacktrace(
-                event_json,
-                symbol_file.name,
-                project_id=project_id,
-                debug_id=dif.data.get("debug_id"),
+        debug_id = dif.data.get("debug_id")
+        remapped_stacktrace = StacktraceProcessor.resolve_stacktrace(
+            event_json, cache, debug_id=debug_id
+        )
+        if remapped_stacktrace is not None and remapped_stacktrace.score > 0:
+            await StacktraceProcessor.add_native_source_context(
+                remapped_stacktrace, project_id, debug_id
             )
-            if remapped_stacktrace is not None and remapped_stacktrace.score > 0:
-                resolved_stracktrackes.append(remapped_stacktrace)
+            resolved_stracktrackes.append(remapped_stacktrace)
 
     if len(resolved_stracktrackes) > 0:
         best_remapped_stacktrace = max(
@@ -183,7 +264,7 @@ def event_difs_resolve_stacktrace(event: ErrorIssueEventSchema, project_id: int)
     jvm_debug_ids = _extract_jvm_debug_ids(event)
     if jvm_debug_ids:
         event_json = event.model_dump(mode="json")
-        if StacktraceProcessor.resolve_jvm_source_context(
+        if await StacktraceProcessor.resolve_jvm_source_context(
             event_json, project_id, jvm_debug_ids
         ):
             _update_source_context_on_event(event, event_json)
@@ -254,26 +335,11 @@ def difs_create_file_from_chunks(name, checksum, chunks):
     return file
 
 
-@contextlib.contextmanager
-def difs_concat_file_blobs_to_disk(blobs):
-    output = tempfile.NamedTemporaryFile()
-    for blob in blobs:
-        with blob.blob.open("rb") as binary_file:
-            output.write(binary_file.read())
-
-    output.flush()
-    output.seek(0)
-    try:
-        yield output
-    finally:
-        output.close()
-
-
 def difs_extract_metadata_from_file(file):
-    with difs_concat_file_blobs_to_disk([file.blob]) as _input:
+    with blob_path(file.blob) as path:
         # Only one kind of file format is supported now
         try:
-            archive = Archive.open(_input.name)
+            archive = Archive.open(path)
         except Exception as err:
             getLogger().error("Extract metadata error: %s", err)
             raise UnsupportedFile() from err

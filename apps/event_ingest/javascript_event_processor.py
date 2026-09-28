@@ -8,6 +8,8 @@ from urllib.parse import urlsplit
 from gt_rust.symbolic import SourceMapCache
 
 from apps.sourcecode.models import DebugSymbolBundle
+from apps.symbolication.models import CacheKind
+from apps.symbolication.store import CacheSource, get_cache
 
 if TYPE_CHECKING:
     from apps.shared.schema.exception import EventException, StackTraceFrame
@@ -77,7 +79,7 @@ class JavascriptEventProcessor:
         # Parsed sourcemaps memoized for the lifetime of this processor, i.e.
         # for one event. A new processor is created per event, so this never
         # outlives the event and needs no eviction or staleness handling.
-        self._sourcemap_caches: dict[tuple[int, int], SourceMapCache] = {}
+        self._sourcemap_caches: dict[tuple[int, int], SourceMapCache | None] = {}
 
     def get_stacktrace_exceptions(self) -> list["EventException"]:
         data = self.data
@@ -97,30 +99,34 @@ class JavascriptEventProcessor:
             if frame is not None and frame.lineno is not None
         ]
 
-    def get_sourcemap_cache(self, minified_source, map_file) -> SourceMapCache:
-        # SourceMapCache.from_bytes() parses the whole minified source and
-        # sourcemap, which is costly for large bundles. A single event's frames
-        # mostly share one bundle, so memoize per (minified file id, sourcemap
-        # file id) pair to parse each bundle at most once per event rather than
-        # once per frame.
+    async def get_sourcemap_cache(self, minified_source, map_file):
+        """The stored lookup cache for this minified file and sourcemap, or
+        None while it is unavailable. Memoized for the event, so frames that
+        share a bundle ask the cache store once."""
         key = (minified_source.id, map_file.id)
-        cache = self._sourcemap_caches.get(key)
-        if cache is None:
-            minified_source.blob.blob.seek(0)
-            map_file.blob.blob.seek(0)
-            cache = SourceMapCache.from_bytes(
-                minified_source.blob.blob.read(),
-                map_file.blob.blob.read(),
+        if key in self._sourcemap_caches:
+            return self._sourcemap_caches[key]
+        cache = None
+        if minified_source.blob_id and map_file.blob_id:
+            cache = await get_cache(
+                CacheSource(
+                    kind=CacheKind.SOURCEMAP,
+                    cache_key=f"{minified_source.blob.checksum}:{map_file.blob.checksum}",
+                    source_blob_id=minified_source.blob_id,
+                    secondary_blob_id=map_file.blob_id,
+                )
             )
-            self._sourcemap_caches[key] = cache
+        self._sourcemap_caches[key] = cache
         return cache
 
-    def lookup_token(self, frame, map_file, minified_source):
+    async def lookup_token(self, frame, map_file, minified_source):
         # Required to determine source
         if not frame.abs_path or not frame.lineno or not frame.colno:
             return None
 
-        cache = self.get_sourcemap_cache(minified_source, map_file)
+        cache = await self.get_sourcemap_cache(minified_source, map_file)
+        if cache is None:
+            return None
         # Both positions are 1-based, as the SDK sends them; the lookup
         # converts to 0-based itself.
         return cache.lookup(
@@ -223,7 +229,7 @@ class JavascriptEventProcessor:
                 return debug_bundle.file, debug_bundle.sourcemap_file
         return None
 
-    def remap_exception(self, exception: "EventException", debug_id_map):
+    async def remap_exception(self, exception: "EventException", debug_id_map):
         raw_stacktrace = None
         for frame in self.get_valid_frames(exception):
             source_files = self.find_source_files(frame, debug_id_map)
@@ -234,7 +240,7 @@ class JavascriptEventProcessor:
             if not map_file:
                 continue
 
-            token = self.lookup_token(frame, map_file, minified_source)
+            token = await self.lookup_token(frame, map_file, minified_source)
             if token is None:
                 continue
 
@@ -247,7 +253,7 @@ class JavascriptEventProcessor:
         if raw_stacktrace is not None:
             exception.raw_stacktrace = raw_stacktrace
 
-    def transform(self):
+    async def transform(self):
         exceptions = self.get_stacktrace_exceptions()
         if not exceptions or not self.debug_bundles:
             return
@@ -255,4 +261,4 @@ class JavascriptEventProcessor:
         # Map minified filenames to debug_ids from debug_meta
         debug_id_map = self.build_debug_id_map()
         for exception in exceptions:
-            self.remap_exception(exception, debug_id_map)
+            await self.remap_exception(exception, debug_id_map)

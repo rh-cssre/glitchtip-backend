@@ -3,10 +3,10 @@
 * ``measure_symbolication``, a context manager that records what
   symbolication costs: which stored files it opens (at ``Storage.open``, and
   reopens of an open ``FieldFile``), how many bytes it reads and writes,
-  every call into ``gt_rust.symbolic``, and which debug files the native and
-  ProGuard resolvers try. ``cold=True`` empties any cache registered in
-  ``CACHE_RESET_HOOKS``; the ``cache_*`` counters are for a cache layer to
-  report into, and stay 0 until one does.
+  every call into ``gt_rust.symbolic``, which debug files the native and
+  ProGuard resolvers try, and the symbolication cache's hits, misses, loads
+  and builds. ``cold=True`` (the default) first empties the process caches
+  registered in ``CACHE_RESET_HOOKS``.
 * ``IN_MEMORY_STORAGE``, which the tests apply so fixtures never touch the
   repository's uploads/ directory.
 * Upload helpers that store fixtures through the same code the upload APIs
@@ -48,6 +48,7 @@ from apps.difs.tasks import difs_create_difs, difs_create_file_from_chunks
 from apps.files.assemble import assemble_artifacts
 from apps.files.models import FileBlob
 from apps.sourcecode.models import DebugSymbolBundle
+from apps.symbolication import store as symbolication_store
 
 FIXTURES = Path(__file__).parent / "test_data" / "symbolication"
 NATIVE_FIXTURES = FIXTURES / "native"
@@ -89,7 +90,7 @@ IN_MEMORY_STORAGE = override_settings(
 # Called by ``measure_symbolication(cold=True)`` before measuring, so a run
 # starts with every symbolication cache empty. A cache layer adds a function
 # here that empties it; with none registered, cold and warm are the same.
-CACHE_RESET_HOOKS: list = []
+CACHE_RESET_HOOKS: list = [symbolication_store.clear_process_caches]
 
 
 @dataclass
@@ -103,8 +104,9 @@ class SymbolicationCost:
     opened_by_storage: Counter = field(default_factory=Counter)
     # Names of stored files reopened through an existing FieldFile.
     reopens: list[str] = field(default_factory=list)
-    # Bytes actually read through those opens.
+    # Bytes actually read through those opens, and the largest single read.
     bytes_read: int = 0
+    largest_read: int = 0
     # Stored size of every file at open time: an upper bound on bytes_read
     # that does not depend on how the caller reads.
     bytes_opened: int = 0
@@ -118,12 +120,15 @@ class SymbolicationCost:
     # One entry per debug file the native/ProGuard resolver was run against:
     # the debug id recorded on that file.
     resolver_attempts: list[str | None] = field(default_factory=list)
-    # Cache counters for a symbolication cache layer. Nothing reports these
-    # yet, so they stay 0: the cache layer must increment them (through
-    # ``record``) when it lands, and the cost tests then assert on them.
+    # Symbolication cache events (see apps.symbolication.store): RAM tier
+    # hits and misses, loads from the disk tier and from file storage, cache
+    # builds, and lookups that went on without a cache.
     cache_hits: int = 0
     cache_misses: int = 0
+    cache_disk_hits: int = 0
+    cache_storage_loads: int = 0
     cache_builds: int = 0
+    cache_unavailable: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def record(self, **increments):
@@ -210,6 +215,8 @@ class _CountingReader:
     def read(self, *args):
         data = self._raw.read(*args)
         self._cost.record(bytes_read=len(data))
+        with self._cost._lock:
+            self._cost.largest_read = max(self._cost.largest_read, len(data))
         return data
 
     def read1(self, *args):
@@ -347,7 +354,21 @@ def measure_symbolication(cold: bool = True):
             cost.resolver_attempts.append(debug_id)
         return original_resolve(cls, *args, **kwargs)
 
+    cache_counters = {
+        "hit": "cache_hits",
+        "miss": "cache_misses",
+        "disk_hit": "cache_disk_hits",
+        "storage_load": "cache_storage_loads",
+        "build": "cache_builds",
+        "unavailable": "cache_unavailable",
+    }
+
+    def observe(event):
+        cost.record(**{cache_counters[event]: 1})
+
     with contextlib.ExitStack() as stack:
+        symbolication_store.add_observer(observe)
+        stack.callback(symbolication_store.remove_observer, observe)
         stack.enter_context(mock.patch.object(Storage, "open", counting_open))
         stack.enter_context(mock.patch.object(Storage, "save", counting_save))
         stack.enter_context(
