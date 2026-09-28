@@ -230,6 +230,49 @@ GLITCHTIP_UPTIME_RETENTION_DAYS = env.int(
 GLITCHTIP_FILE_RETENTION_DAYS = env.int(
     "GLITCHTIP_FILE_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
 )
+# Symbolication caches. Each uploaded sourcemap, native debug file and
+# ProGuard mapping is processed once, on the first event that needs it, into
+# a compact lookup cache kept in the default file storage. Events then load
+# that cache instead of re-parsing the upload. See apps/symbolication.
+#
+# In-process LRU of loaded caches, in MB. 0 disables it (every event then
+# loads the cache from the disk tier or file storage).
+GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB = env.int(
+    "GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB", default=32
+)
+# Seconds an unused cache stays in the RAM tier. It drains to empty when idle.
+GLITCHTIP_SYMBOLICATION_RAM_CACHE_IDLE_SECONDS = env.int(
+    "GLITCHTIP_SYMBOLICATION_RAM_CACHE_IDLE_SECONDS", default=600
+)
+# Optional node-local directory to keep caches in (memory-mapped on load),
+# e.g. a Kubernetes emptyDir. Empty disables the tier. A missing or
+# read-only directory is logged once and the tier is skipped.
+GLITCHTIP_SYMBOLICATION_DISK_CACHE_DIR = env.str(
+    "GLITCHTIP_SYMBOLICATION_DISK_CACHE_DIR", default=""
+)
+GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB = env.int(
+    "GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB", default=1024
+)
+# How long an event waits for its cache to be built before it is stored
+# unsymbolicated. The build carries on, so later events find the cache.
+GLITCHTIP_SYMBOLICATION_BUILD_WAIT_SECONDS = env.float(
+    "GLITCHTIP_SYMBOLICATION_BUILD_WAIT_SECONDS", default=5.0
+)
+# Concurrent cache builds per worker process. Builds of large inputs are
+# memory heavy; keep this low.
+GLITCHTIP_SYMBOLICATION_BUILD_CONCURRENCY = env.int(
+    "GLITCHTIP_SYMBOLICATION_BUILD_CONCURRENCY", default=1
+)
+# When an event carries no debug id (no debug_meta) or no ProGuard uuid, try
+# at most this many of the project's newest debug files. 0 disables it.
+GLITCHTIP_SYMBOLICATION_FALLBACK_CANDIDATES = env.int(
+    "GLITCHTIP_SYMBOLICATION_FALLBACK_CANDIDATES", default=3
+)
+# ProGuard mappings larger than this (MB) are not processed: building their
+# cache needs roughly 20 times the mapping size in memory.
+GLITCHTIP_PROGUARD_MAX_MAPPING_MB = env.int(
+    "GLITCHTIP_PROGUARD_MAX_MAPPING_MB", default=100
+)
 GLITCHTIP_LOG_RETENTION_DAYS = env.int(
     "GLITCHTIP_LOG_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
 )
@@ -662,6 +705,7 @@ INSTALLED_APPS += [
     "apps.stripe",
     "apps.sourcecode",
     "apps.difs",
+    "apps.symbolication",
     "apps.api_tokens",
     "apps.files",
     "apps.issue_events",
@@ -1129,9 +1173,13 @@ if GLITCHTIP_ENABLE_UPTIME:
         "schedule": UPTIME_CHECK_INTERVAL,
     }
 
+# Non-batch queues tasks may be sent to (batch queues in VTASKS_QUEUES are
+# added by django-vtasks).
+TASK_QUEUE_NAMES = ["default", "symbolication"]
 TASKS = {
     "default": {
         "BACKEND": "django_vtasks.backends.db.DatabaseTaskBackend",
+        "QUEUES": TASK_QUEUE_NAMES,
     }
 }
 
@@ -1152,6 +1200,11 @@ VTASKS_QUEUES = {
             "count": env.int("VTASKS_INGEST_BATCH_COUNT", 25),
             "timeout": 2.0,
         },
+    },
+    # Symbolication cache builds: few at a time, since each can take a lot of
+    # memory; events never build caches themselves.
+    "symbolication": {
+        "worker_concurrency": GLITCHTIP_SYMBOLICATION_BUILD_CONCURRENCY,
     },
 }
 
@@ -1189,6 +1242,7 @@ if VALKEY_URL:
         "default": {
             "BACKEND": "django_vtasks.backends.valkey.ValkeyTaskBackend",
             "OPTIONS": {"cache_alias": "default"},
+            "QUEUES": TASK_QUEUE_NAMES,
         }
     }
     SESSION_ENGINE = "django.contrib.sessions.backends.cache"
@@ -1508,6 +1562,7 @@ if TESTING:
     TASKS = {
         "default": {
             "BACKEND": "django_vtasks.backends.immediate.ImmediateBackend",
+            "QUEUES": TASK_QUEUE_NAMES,
         }
     }
     SESSION_ENGINE = "django.contrib.sessions.backends.cache"
