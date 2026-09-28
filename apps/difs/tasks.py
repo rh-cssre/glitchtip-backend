@@ -5,6 +5,7 @@ from hashlib import sha1
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.core.files import File as DjangoFile
+from django.db.models import Q
 from django.tasks import task
 from gt_rust.symbolic import Archive, normalize_debug_id, parse_addr
 
@@ -198,9 +199,12 @@ async def resolve_event_stacktraces(event: ErrorIssueEventSchema, project_id: in
     native_frames = StacktraceProcessor.has_native_frames(event_json)
 
     # Source bundles are handled separately by resolve_jvm_source_context
-    # and add_native_source_context.
+    # and add_native_source_context. The has_key guard matters: in SQL,
+    # NOT (data->'kind' IN (...)) is NULL, not true, for a row without a
+    # kind, so a bare exclude(data__kind__in=...) would also drop every
+    # ProGuard mapping (they have no kind).
     difs = DebugInformationFile.objects.filter(project_id=project_id).exclude(
-        data__kind__in=["src", "sources"]
+        Q(data__has_key="kind") & Q(data__kind__in=["src", "sources"])
     )
     if is_android and not native_frames:
         kind = CacheKind.PROGUARD

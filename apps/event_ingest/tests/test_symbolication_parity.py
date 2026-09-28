@@ -217,14 +217,6 @@ KNOWN_WRONG: list[KnownWrong] = [
         IMAGE_BASE,
     ),
     # ProGuard
-    KnownWrong(
-        "proguard_uploaded_mapping",
-        frame(0, 0, 1, "function"),
-        "b",
-        "onSubmit",
-        "uploaded mappings have no 'kind', and exclude(data__kind__in=...) drops "
-        "such rows in SQL; once fixed this golden equals proguard_deobfuscation",
-    ),
     KnownWrong("proguard_deobfuscation", frame(0, 0, 1, "lineno"), 2, 23, LINENO_KEY),
     KnownWrong("proguard_deobfuscation", frame(0, 0, 2, "lineno"), 3, 6, LINENO_KEY),
     KnownWrong(
@@ -876,45 +868,17 @@ class ProguardSymbolicationGoldenTests(SymbolicationGoldenTestCase):
             JVM_BUNDLE_DEBUG_ID,
         )
 
-    def select_mapping(self):
-        """Give the uploaded mapping a ``kind``, so the DIF query keeps it.
-
-        Uploaded mappings have no ``kind``, and the query's source-bundle
-        exclusion (``exclude(data__kind__in=...)``) drops every such row in
-        SQL, so without this the resolver never runs (test_uploaded_mapping).
-        The value is invented; it only routes around that bug. Once the
-        query is fixed, test_uploaded_mapping's golden must equal
-        proguard_deobfuscation.json (see KNOWN_WRONG), and this goes.
-        """
-        mapping = DebugInformationFile.objects.get(data__symbol_type="proguard")
-        mapping.data["kind"] = "mapping"
-        mapping.save(update_fields=["data"])
-
-    def test_uploaded_mapping(self):
-        """A mapping and JVM source bundle as the upload API stores them.
-
-        Pins a current bug: the mapping is never selected, so the frames come
-        back still obfuscated. See KNOWN_WRONG.
-        """
-        self.upload()
-        self.assertMatchesGolden(
-            "proguard_uploaded_mapping",
-            self.process([proguard_event("proguard", [ILLEGAL_ARGUMENT])]),
-        )
-
     def test_deobfuscation_and_source_context(self):
-        """What the ProGuard resolver and JVM source context produce once the
-        mapping is selected (see select_mapping).
+        """A mapping and JVM source bundle as the upload API stores them.
 
         Pins current bugs: line numbers stay obfuscated, the inlined outer
         frame is dropped, abs_path keeps the obfuscated file, and a blank
         source line is dropped as context. See KNOWN_WRONG.
         """
         self.upload()
-        self.select_mapping()
         self.assertMatchesGolden(
             "proguard_deobfuscation",
-            self.process([proguard_event("proguard-selected", [ILLEGAL_ARGUMENT])]),
+            self.process([proguard_event("proguard", [ILLEGAL_ARGUMENT])]),
         )
 
     def test_chained_exceptions(self):
@@ -924,7 +888,6 @@ class ProguardSymbolicationGoldenTests(SymbolicationGoldenTestCase):
         KNOWN_WRONG.
         """
         self.upload()
-        self.select_mapping()
         wrapper = {
             "type": "RuntimeException",
             "value": "click handler failed",
@@ -955,9 +918,3 @@ class KnownWrongTests(SimpleTestCase):
                         value = value[step]
                 self.assertEqual(value, entry.current)
                 self.assertNotEqual(entry.current, entry.expected)
-
-    def test_uploaded_mapping_output_differs_from_selected_mapping(self):
-        """Once uploaded mappings are selected, these two goldens must match."""
-        uploaded = json.loads((GOLDENS / "proguard_uploaded_mapping.json").read_text())
-        selected = json.loads((GOLDENS / "proguard_deobfuscation.json").read_text())
-        self.assertNotEqual(uploaded, selected)

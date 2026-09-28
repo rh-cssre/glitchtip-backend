@@ -95,7 +95,6 @@ def run_child(scenario: str, events: int) -> dict:
     from django.utils import timezone
     from model_bakery import baker
 
-    from apps.difs.models import DebugInformationFile
     from apps.event_ingest.process_event import process_issue_events
     from apps.event_ingest.schema import ErrorIssueEventSchema, IssueTaskMessage
     from apps.event_ingest.tests.symbolication import (
@@ -229,11 +228,6 @@ def run_child(scenario: str, events: int) -> dict:
             upload_proguard_mapping(
                 project, mapping + f"# build {index}\n".encode(), str(uuid.uuid4())
             )
-        # Uploaded mappings are skipped by the DIF query (they have no
-        # "kind"); give them one so the resolver's cost is what gets measured.
-        for dif in DebugInformationFile.objects.filter(project=project):
-            dif.data["kind"] = "mapping"
-            dif.save(update_fields=["data"])
         return lambda: {
             "platform": "java",
             "contexts": {"os": {"name": "Android"}},

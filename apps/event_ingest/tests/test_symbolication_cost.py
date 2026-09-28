@@ -306,35 +306,9 @@ class ProguardCostTests(SymbolicationCostTestCase):
             },
         )
 
-    def select_mappings(self):
-        # See ProguardSymbolicationGoldenTests.select_mapping.
-        for dif in DebugInformationFile.objects.all():
-            dif.data["kind"] = "mapping"
-            dif.save(update_fields=["data"])
-
-    def test_uploaded_mappings_are_never_selected(self):
-        """Uploaded mappings have no ``kind`` in their data, and the DIF query's
-        source-bundle exclusion drops such rows, so no mapping is ever read.
-        Intended: exactly the mapping the event names is read (1 open)."""
-        with measure_symbolication() as cost:
-            self.process([self.event()])
-        self.assertEqual(cost.files_opened, 0)
-        self.assertEqual(cost.proguard_opens, 0)
-        self.assertEqual(cost.resolver_attempts, [])
-        cost.assert_only(SCHEMA_CALLS)
-
-        # Positive control: the same event, once the mappings are selected,
-        # is seen reading them.
-        self.select_mappings()
-        with measure_symbolication() as cost:
-            self.process([self.event()])
-        self.assertGreater(cost.files_opened, 0)
-        self.assertGreater(cost.cache_builds, 0)
-
     def test_only_the_named_mapping_is_built(self):
-        """Once mappings are selected, only the one the event names is used:
-        one build, whatever else the project holds."""
-        self.select_mappings()
+        """Only the mapping the event names is used: one build, whatever else
+        the project holds."""
         with measure_symbolication() as cost:
             self.process([self.event()])
         self.assertEqual(cost.resolver_attempts, [self.mapping_uuids[7]])
