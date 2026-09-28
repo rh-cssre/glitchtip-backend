@@ -1,8 +1,8 @@
 """The folded gate, exercised through the two routes that use it.
 
 ``apps/alerts`` is the only consumer so far -- ``list_project_alerts`` is
-``@paginate`` over ``@org_scoped`` and ``delete_project_alert`` is
-``@org_scoped`` alone. What is under test is ``glitchtip.api.permissions``,
+``@org_scoped_list`` and ``delete_project_alert`` is ``@org_scoped``
+alone. What is under test is ``glitchtip.api.permissions``,
 not alerts, so these move if the decorator grows a second consumer worth
 testing it through.
 """
@@ -25,6 +25,7 @@ from glitchtip.api.permissions import (
     OrgScope,
     _resolve_roles,
     org_scoped,
+    org_scoped_list,
     resolve_org_id,
 )
 from glitchtip.base_models import ORG_SCOPED_MODELS, OrgScopedModel
@@ -241,6 +242,35 @@ class OrgScopedDeclarationTestCase(SimpleTestCase):
                 return qs
 
         self.assertIn("@paginate above", str(ctx.exception))
+
+    def test_the_list_gate_keeps_the_import_time_guards(self):
+        # It delegates to org_scoped, so these are the same guards, not copies.
+        with self.assertRaises(ImproperlyConfigured):
+            org_scoped_list(["project:admin"], AlertRecipient)
+
+        with self.assertRaises(ImproperlyConfigured) as ctx:
+
+            @org_scoped_list(["project:read"], ProjectAlert)
+            async def view(request, organization_slug: str):
+                return ProjectAlert.objects.all()
+
+        self.assertIn("qs", str(ctx.exception))
+
+    def test_the_list_gate_paginates(self):
+        # The whole point of the wrapper: a list route cannot leave pagination
+        # off, and leaving it off is otherwise a quiet 200 with every row.
+        from glitchtip.api.api import api
+
+        paths = api.get_openapi_schema()["paths"]
+        operations = [
+            item["get"]
+            for path, item in paths.items()
+            if path.endswith("/{project_slug}/alerts/") and "get" in item
+        ]
+        self.assertEqual(len(operations), 1)
+        names = [p["name"] for p in operations[0].get("parameters", [])]
+        self.assertIn("cursor", names)
+        self.assertIn("limit", names)
 
     def test_qs_is_not_a_parameter_on_the_real_routes(self):
         """The signature edit is only worth anything if ninja honours it.

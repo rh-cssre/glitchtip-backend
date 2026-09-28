@@ -6,6 +6,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db.models import Exists, QuerySet
 from django.http import Http404
 from ninja.errors import HttpError
+from ninja.pagination import paginate
 
 from apps.organizations_ext.constants import ROLES, Scopes
 from apps.organizations_ext.models import Organization, OrganizationUser
@@ -204,6 +205,16 @@ def org_scoped(scopes: list[Scopes], model: type[OrgScopedModel]):
             ]
         )
         return gated
+
+    return decorator
+
+
+def org_scoped_list(scopes: list[Scopes], model: type[OrgScopedModel]):
+    """``org_scoped`` with pagination folded in for list routes."""
+    gate = org_scoped(scopes, model)
+
+    def decorator(view):
+        return paginate(gate(view))
 
     return decorator
 
