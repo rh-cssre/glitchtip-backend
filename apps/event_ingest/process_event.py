@@ -592,23 +592,37 @@ def hydrate_stacktrace(event: TaskIssueEvent):
 
 
 async def _fetch_issue_hashes_raw(
-    pairs: list[tuple[int, str]], db_alias: str
+    keys: list[tuple[int, str, int]], db_alias: str
 ) -> dict[tuple[int, str], dict]:
-    """Fetch IssueHash rows with issue status via JOIN unnest lookup."""
-    if not pairs:
+    """Fetch IssueHash rows with issue status via JOIN unnest lookup.
+
+    ``keys`` are (project_id, hash, organization_id). IssueIndex is
+    hash-partitioned on organization_id, so each row should probe only its
+    own organization's partition. A plain join on both keys does not ensure
+    that: the planner can probe on ``issue_id`` alone and check the org
+    afterwards, touching every partition. The LATERAL subquery puts both keys
+    in the partition's index condition, and its LIMIT (each issue has one
+    IssueIndex row) keeps the planner from flattening it back into a join.
+    """
+    if not keys:
         return {}
 
     sql = """
         SELECT ih.project_id, ih.value, ih.issue_id,
                si.status AS issue__status,
                i.resolved_in_release_id AS issue__resolved_in_release_id
-        FROM unnest(%s::bigint[], %s::uuid[]) AS k(project_id, value)
+        FROM unnest(%s::bigint[], %s::uuid[], %s::int[])
+            AS k(project_id, value, organization_id)
         JOIN issue_events_issuehash ih
             ON ih.project_id = k.project_id AND ih.value = k.value
         JOIN issue_events_issue i ON i.id = ih.issue_id
-        JOIN issue_events_issueindex si ON si.issue_id = ih.issue_id
+        JOIN LATERAL (
+            SELECT status FROM issue_events_issueindex
+            WHERE issue_id = ih.issue_id AND organization_id = k.organization_id
+            LIMIT 1
+        ) si ON true
     """
-    columns, rows = await fetchall_unnest(sql, list(pairs), db_alias=db_alias)
+    columns, rows = await fetchall_unnest(sql, list(keys), db_alias=db_alias)
     dicts = [dict(zip(columns, row)) for row in rows]
     return {(h["project_id"], h["value"].hex): h for h in dicts}
 
@@ -616,11 +630,16 @@ async def _fetch_issue_hashes_raw(
 async def _fetch_issue_hashes(
     processing_events: list[ProcessingEvent], db_alias: str
 ) -> dict[tuple[int, str], dict]:
-    """Collect unique (project_id, issue_hash) pairs and fetch via raw SQL."""
-    pairs = list(
-        {(pe.project_id, pe.issue_hash) for pe in processing_events if pe.issue_hash}
+    """Collect unique (project_id, issue_hash, organization_id) keys and fetch
+    via raw SQL."""
+    keys = list(
+        {
+            (pe.project_id, pe.issue_hash, pe.organization_id)
+            for pe in processing_events
+            if pe.issue_hash
+        }
     )
-    return await _fetch_issue_hashes_raw(pairs, db_alias)
+    return await _fetch_issue_hashes_raw(keys, db_alias)
 
 
 async def _create_issue_and_hash(
@@ -1014,7 +1033,7 @@ async def process_issue_events(
     # Avoids unnecessary IntegrityErrors caused by replication lag.
     if read_only_db != "default":
         missing = [
-            (pe.project_id, pe.issue_hash)
+            (pe.project_id, pe.issue_hash, pe.organization_id)
             for pe in processing_events
             if (pe.project_id, pe.issue_hash) not in hash_dict
         ]
@@ -1566,24 +1585,31 @@ class _TxnGroupRef:
 
 
 async def _fetch_transaction_groups(
-    keys: list[tuple[int, str, str, str]], db_alias: str
+    keys: dict[tuple[int, str, str, str], int], db_alias: str
 ) -> dict[tuple[int, str, str, str], _TxnGroupRef]:
-    """Fetch TransactionGroup id/organization_id via JOIN unnest lookup."""
+    """Fetch TransactionGroup id/organization_id via JOIN unnest lookup.
+
+    ``keys`` maps each (project_id, transaction, op, method) to its
+    organization_id. Joining on that hash partition key lets Postgres prune to
+    one partition per row at run time; without it every row probes every
+    partition.
+    """
     if not keys:
         return {}
 
     _, rows = await fetchall_unnest(
         sql=(
             "SELECT tg.id, tg.organization_id, tg.project_id, tg.transaction, tg.op, tg.method "
-            "FROM unnest(%s::int[], %s::text[], %s::text[], %s::text[]) "
-            "    AS k(project_id, transaction, op, method) "
+            "FROM unnest(%s::int[], %s::text[], %s::text[], %s::text[], %s::int[]) "
+            "    AS k(project_id, transaction, op, method, organization_id) "
             "JOIN performance_transactiongroup tg "
             "    ON tg.project_id = k.project_id "
             "   AND tg.transaction = k.transaction "
             "   AND tg.op = k.op "
-            "   AND tg.method = k.method"
+            "   AND tg.method = k.method "
+            "   AND tg.organization_id = k.organization_id"
         ),
-        value_params=keys,
+        value_params=[(*key, org_id) for key, org_id in keys.items()],
         db_alias=db_alias,
     )
     return {
@@ -1663,9 +1689,7 @@ async def process_transaction_events(
     # 2. Batch fetch existing TransactionGroups (single query)
     existing: dict[GroupKey, _TxnGroupRef] = {}
     if unique_keys:
-        existing = await _fetch_transaction_groups(
-            list(unique_keys.keys()), read_only_db
-        )
+        existing = await _fetch_transaction_groups(unique_keys, read_only_db)
 
     # Batch create any missing groups
     missing_keys = [k for k in unique_keys if k not in existing]
@@ -1698,7 +1722,9 @@ async def process_transaction_events(
         )
         # Re-fetch to get IDs (the INSERT above can't return ids when
         # rows are skipped via ON CONFLICT)
-        refetched = await _fetch_transaction_groups(missing_keys, "default")
+        refetched = await _fetch_transaction_groups(
+            {k: unique_keys[k] for k in missing_keys}, "default"
+        )
         existing.update(refetched)
 
     # 3. Collect durations, error counts, and spans per group
