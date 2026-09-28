@@ -11,9 +11,7 @@
           "stacktrace": {
             "frames": [
               {
-                "function": "_init",
-                "instruction_addr": "0x5555555551a6",
-                "lineno": 0
+                "instruction_addr": "0x5555555551a6"
               },
               {
                 "instruction_addr": "0x55555555518c"
@@ -29,7 +27,6 @@
       ]
     },
     "metadata": {
-      "function": "_init",
       "type": "SIGSEGV",
       "value": "Segfault"
     },

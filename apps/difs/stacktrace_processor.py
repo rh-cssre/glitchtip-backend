@@ -46,6 +46,66 @@ def _normalize_debug_id_or_none(value) -> str | None:
         return None
 
 
+# Registers holding the instruction pointer, by the names SDKs report them.
+INSTRUCTION_POINTER_REGISTERS = ("pc", "rip", "eip", "ip")
+
+
+def adjusted_frame_indexes(stacktrace: dict, exception: dict | None) -> set[int]:
+    """Which frames' instruction_addr to move back before lookup.
+
+    A caller frame reports a return address, the instruction after its call;
+    looking that up attributes the frame to the line after the call. How far
+    an SDK's addresses already are from the call is its
+    ``instruction_addr_adjustment`` on the stack trace:
+
+    * "all": every frame is a return address;
+    * "all_but_first": every frame except the crashing one (the first from
+      the callee end, which is the LAST in the oldest-first frame list);
+    * "none": the SDK or its unwinder already adjusted them;
+    * "auto", or absent: "all_but_first", unless the exception has a crash
+      signal, the stack trace carries registers, and the instruction pointer
+      is not the crashing frame's address. Then even the crashing frame was
+      recovered by unwinding, so it is a return address too: "all".
+
+    Frames are moved back by 1 byte, not one instruction: any byte of the
+    call instruction resolves to the call's line, and 1 needs no knowledge
+    of the architecture's instruction widths.
+    """
+    frames = stacktrace.get("frames") or []
+    if not frames:
+        return set()
+    mode = stacktrace.get("instruction_addr_adjustment") or "auto"
+    last = len(frames) - 1
+    if mode == "none":
+        return set()
+    if mode == "all":
+        return set(range(len(frames)))
+    if mode == "auto" and _crashing_frame_was_unwound(stacktrace, exception, frames):
+        return set(range(len(frames)))
+    return set(range(last))
+
+
+def _crashing_frame_was_unwound(stacktrace, exception, frames) -> bool:
+    meta = ((exception or {}).get("mechanism") or {}).get("meta") or {}
+    registers = stacktrace.get("registers") or {}
+    if not meta.get("signal") or not registers:
+        return False
+    pointer = next(
+        (
+            registers[name]
+            for name in INSTRUCTION_POINTER_REGISTERS
+            if name in registers
+        ),
+        None,
+    )
+    crashing = frames[-1] or {}
+    if pointer is None or crashing.get("instruction_addr") is None:
+        return False
+    return _parse_addr_or_none(pointer) != _parse_addr_or_none(
+        crashing.get("instruction_addr")
+    )
+
+
 class ResolvedStacktrace:
     def __init__(self, score=0, frames=None, context_requests=None):
         self.score = score
@@ -204,7 +264,8 @@ class StacktraceProcessor:
 
             # Process the first exception only.
             exceptions = (event.get("exception") or {}).get("values")
-            stacktrace = exceptions[0].get("stacktrace")
+            exception = exceptions[0]
+            stacktrace = exception.get("stacktrace")
             if stacktrace is None:
                 return
         except Exception as e:
@@ -239,6 +300,7 @@ class StacktraceProcessor:
             arch=arch,
             debug_id=debug_id,
             image_addr_from_meta=image_addr_from_meta,
+            exception=exception,
         )
 
     @classmethod
@@ -283,6 +345,7 @@ class StacktraceProcessor:
         arch=None,
         debug_id=None,
         image_addr_from_meta=None,
+        exception=None,
     ):
         # A debug file for another architecture cannot resolve these frames.
         if arch is not None and sym_cache.arch not in alternative_arch.get(
@@ -317,7 +380,8 @@ class StacktraceProcessor:
                 addrs = [addr for addr in parsed if addr is not None]
                 estimated_base = _estimate_image_base(sym_cache, addrs)
 
-            for frame in frames:
+            adjusted = adjusted_frame_indexes(stacktrace, exception)
+            for index, frame in enumerate(frames):
                 if frame is None:
                     resolved_frames.append(frame)
                     continue
@@ -341,6 +405,10 @@ class StacktraceProcessor:
                     # Probing it would abort the whole stacktrace.
                     resolved_frames.append(frame)
                     continue
+                # A return address: look up the call itself, or the frame
+                # shows the line after the call (see adjusted_frame_indexes).
+                if index in adjusted and addr > 0:
+                    addr -= 1
                 symbol = sym_cache.lookup(addr)
                 digested_symbol = digest_symbol(symbol)
 

@@ -111,10 +111,6 @@ def frame_count(event: int, exception: int) -> tuple:
     return (event, "exception", "values", exception, "stacktrace", "frames", len)
 
 
-RETURN_ADDRESS = (
-    "caller frames report a return address, the instruction after the call; "
-    "it is looked up as is instead of minus one, so the line after the call"
-)
 IMAGE_BASE = (
     "the image base estimate anchors on the first frame and page-aligned "
     "offsets, and writes a wrong symbol rather than none"
@@ -165,32 +161,6 @@ KNOWN_WRONG: list[KnownWrong] = [
     ),
     # Native
     KnownWrong(
-        "native_elf_debug_meta", frame(0, 0, 1, "lineno"), 39, 38, RETURN_ADDRESS
-    ),
-    KnownWrong(
-        "native_elf_debug_meta", frame(0, 0, 2, "lineno"), 31, 29, RETURN_ADDRESS
-    ),
-    KnownWrong(
-        "native_elf_debug_and_stripped",
-        frame(0, 0, 2, "lineno"),
-        31,
-        29,
-        RETURN_ADDRESS,
-    ),
-    KnownWrong(
-        "native_macho_debug_meta", frame(0, 0, 2, "lineno"), 30, 29, RETURN_ADDRESS
-    ),
-    KnownWrong(
-        "native_pdb_no_debug_meta", frame(0, 0, 2, "lineno"), 31, 29, RETURN_ADDRESS
-    ),
-    KnownWrong(
-        "native_elf_no_debug_meta",
-        frame(0, 0, 0, "function"),
-        "_init",
-        "__libc_start_main",
-        IMAGE_BASE,
-    ),
-    KnownWrong(
         "native_elf_no_debug_meta",
         frame(0, 0, 3, "function"),
         None,
@@ -200,7 +170,7 @@ KNOWN_WRONG: list[KnownWrong] = [
     KnownWrong(
         "native_elf_no_debug_meta_own_frames",
         frame(0, 0, 0, "function"),
-        "_init",
+        None,
         "main",
         IMAGE_BASE,
     ),
@@ -648,6 +618,27 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
             images=[self.elf_image()],
         )
         self.assertMatchesGolden("native_elf_debug_meta", self.process([payload]))
+
+    def test_elf_with_addresses_already_adjusted(self):
+        """sentry-native built with libunwindstack sends frames already moved
+        back from their return addresses, and says so with
+        instruction_addr_adjustment "none". They are looked up as sent: no
+        second adjustment."""
+        self.upload("crash.elf", "lib", ELF_DEBUG_ID)
+        frames = crash_frames("elf", ELF_IMAGE_ADDR, with_image_addr=False)
+        for frame in frames[1:-1]:  # the callers, already adjusted
+            frame["instruction_addr"] = hex(int(frame["instruction_addr"], 16) - 1)
+        payload = native_event(
+            "elf-adjustment-none",
+            frames,
+            arch="x86_64",
+            os_name="Android",
+            images=[self.elf_image()],
+        )
+        payload["exception"]["values"][0]["stacktrace"][
+            "instruction_addr_adjustment"
+        ] = "none"
+        self.assertMatchesGolden("native_elf_adjustment_none", self.process([payload]))
 
     def test_elf_with_and_without_debug_info(self):
         """Two uploads for one debug id, the full ELF and a copy with its

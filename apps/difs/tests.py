@@ -18,6 +18,7 @@ from apps.difs.stacktrace_processor import (
     MAX_SCORED_ADDRS,
     StacktraceProcessor,
     _estimate_image_base,
+    adjusted_frame_indexes,
     digest_symbol,
     find_source_bundle,
     jvm_module_to_path,
@@ -755,15 +756,18 @@ class FakeSymCache:
     raises rather than returning no match.
     """
 
-    def __init__(self, valid_offsets):
+    def __init__(self, valid_offsets, span=1):
+        # Each offset resolves within ``span`` bytes either side, so a caller
+        # frame's return address minus one still lands on it.
         self.valid_offsets = set(valid_offsets)
+        self.span = span
         self.lookups = []
 
     def lookup(self, addr):
         self.lookups.append(addr)
         if not 0 <= addr <= 0xFFFFFFFFFFFFFFFF:
             raise OverflowError("can't convert negative number to unsigned")
-        if addr not in self.valid_offsets:
+        if not any(o - self.span < addr < o + self.span for o in self.valid_offsets):
             return []
         location = MagicMock()
         location.symbol = "_MyHomePageState._incrementCounter"
@@ -811,7 +815,7 @@ class NativeSymbolicationTestCase(GlitchTestCase):
 
     def test_resolve_frames_without_image_addr(self):
         """Flutter on Android sends instruction_addr with no image_addr/debug_meta."""
-        sym_cache = FakeSymCache([0x2000, 0x4000])
+        sym_cache = FakeSymCache([0x2000, 0x4000], span=0x10)
 
         stacktrace = {
             "frames": [
@@ -833,7 +837,7 @@ class NativeSymbolicationTestCase(GlitchTestCase):
 
     def test_frame_outside_the_image_does_not_drop_the_stacktrace(self):
         """One frame below the base must not cost every other frame its symbol."""
-        sym_cache = FakeSymCache([0x2000, 0x4000])
+        sym_cache = FakeSymCache([0x2000, 0x4000], span=0x10)
 
         stacktrace = {
             "frames": [
@@ -1002,7 +1006,7 @@ class NativeSymbolicationTestCase(GlitchTestCase):
 
     def test_unparseable_debug_meta_image_addr_falls_back_to_estimation(self):
         """A garbage image_addr must not pin the base at 0 and skip estimation."""
-        sym_cache = FakeSymCache([0x2000, 0x4000])
+        sym_cache = FakeSymCache([0x2000, 0x4000], span=0x10)
 
         event = {
             "contexts": {"os": {"name": "Android"}, "device": {"arch": "x86_64"}},
@@ -1040,6 +1044,104 @@ class NativeSymbolicationTestCase(GlitchTestCase):
         # base 0x400000 recovered by estimation, both frames resolve
         self.assertIsNotNone(result)
         self.assertEqual(result.score, 2)
+
+
+class ReturnAddressTestCase(GlitchTestCase):
+    def test_caller_frames_are_looked_up_one_byte_back(self):
+        """Callers report the address after their call; the innermost frame
+        (the last) reports the faulting instruction itself."""
+        sym_cache = FakeSymCache([0x1FFF, 0x3000])
+        sym_cache.arch = "x86_64"
+        stacktrace = {
+            "frames": [
+                {"instruction_addr": "0x402000", "image_addr": "0x400000"},
+                {"instruction_addr": "0x403000", "image_addr": "0x400000"},
+            ]
+        }
+
+        result = StacktraceProcessor.resolve_native_stacktrace(
+            stacktrace, sym_cache, arch="x86_64"
+        )
+
+        self.assertEqual(sym_cache.lookups, [0x1FFF, 0x3000])
+        self.assertEqual(result.score, 2)
+
+
+class InstructionAddrAdjustmentTestCase(GlitchTestCase):
+    """instruction_addr_adjustment decides which frames are looked up one byte
+    back. Frames are oldest first, so the crashing frame is the last."""
+
+    FRAMES = [
+        {"instruction_addr": "0x401000"},
+        {"instruction_addr": "0x402000"},
+        {"instruction_addr": "0x403000"},
+    ]
+
+    def adjusted(self, stacktrace, exception=None):
+        return adjusted_frame_indexes({"frames": self.FRAMES, **stacktrace}, exception)
+
+    def signal_exception(self):
+        return {
+            "mechanism": {"type": "signalhandler", "meta": {"signal": {"number": 11}}}
+        }
+
+    def test_all(self):
+        self.assertEqual(
+            self.adjusted({"instruction_addr_adjustment": "all"}), {0, 1, 2}
+        )
+
+    def test_all_but_first_leaves_the_crashing_frame(self):
+        self.assertEqual(
+            self.adjusted({"instruction_addr_adjustment": "all_but_first"}), {0, 1}
+        )
+
+    def test_none_as_libunwindstack_sends(self):
+        self.assertEqual(self.adjusted({"instruction_addr_adjustment": "none"}), set())
+
+    def test_absent_or_auto_is_all_but_first(self):
+        self.assertEqual(self.adjusted({}), {0, 1})
+        self.assertEqual(self.adjusted({"instruction_addr_adjustment": "auto"}), {0, 1})
+
+    def test_auto_with_a_signal_and_a_mismatched_pc_is_all(self):
+        """The crashing frame came from unwinding, not from the registers, so
+        it is a return address too."""
+        stacktrace = {"registers": {"pc": "0x409999"}}
+        self.assertEqual(self.adjusted(stacktrace, self.signal_exception()), {0, 1, 2})
+        self.assertEqual(
+            self.adjusted({"registers": {"rip": "0x409999"}}, self.signal_exception()),
+            {0, 1, 2},
+        )
+
+    def test_auto_with_a_signal_and_a_matching_pc_is_all_but_first(self):
+        stacktrace = {"registers": {"pc": "0x403000"}}
+        self.assertEqual(self.adjusted(stacktrace, self.signal_exception()), {0, 1})
+
+    def test_auto_needs_both_a_signal_and_registers(self):
+        self.assertEqual(
+            self.adjusted(
+                {"registers": {"pc": "0x409999"}}, {"mechanism": {"type": "x"}}
+            ),
+            {0, 1},
+        )
+        self.assertEqual(self.adjusted({}, self.signal_exception()), {0, 1})
+
+    def test_resolution_follows_the_mode(self):
+        sym_cache = FakeSymCache([0x1000, 0x2000, 0x3000])
+        sym_cache.arch = "x86_64"
+        frames = [{**frame, "image_addr": "0x400000"} for frame in self.FRAMES]
+        StacktraceProcessor.resolve_native_stacktrace(
+            {"frames": frames, "instruction_addr_adjustment": "none"},
+            sym_cache,
+            arch="x86_64",
+        )
+        self.assertEqual(sym_cache.lookups, [0x1000, 0x2000, 0x3000])
+        sym_cache.lookups.clear()
+        StacktraceProcessor.resolve_native_stacktrace(
+            {"frames": frames, "instruction_addr_adjustment": "all"},
+            sym_cache,
+            arch="x86_64",
+        )
+        self.assertEqual(sym_cache.lookups, [0xFFF, 0x1FFF, 0x2FFF])
 
 
 class HasNativeFramesTestCase(GlitchTestCase):

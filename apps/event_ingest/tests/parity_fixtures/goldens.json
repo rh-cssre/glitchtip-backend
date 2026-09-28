@@ -285,6 +285,7 @@
                           "vars": null
                         }
                       ],
+                      "instruction_addr_adjustment": null,
                       "registers": null
                     },
                     "thread_id": null,
@@ -351,6 +352,7 @@
                           "vars": null
                         }
                       ],
+                      "instruction_addr_adjustment": null,
                       "registers": null
                     }
                   }
@@ -512,6 +514,7 @@
                           "vars": null
                         }
                       ],
+                      "instruction_addr_adjustment": null,
                       "registers": null
                     },
                     "thread_id": null,
@@ -661,6 +664,7 @@
                           "vars": null
                         }
                       ],
+                      "instruction_addr_adjustment": null,
                       "registers": null
                     },
                     "thread_id": null,
@@ -810,6 +814,7 @@
                           "vars": null
                         }
                       ],
+                      "instruction_addr_adjustment": null,
                       "registers": null
                     },
                     "thread_id": null,

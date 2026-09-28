@@ -16,42 +16,43 @@
               },
               {
                 "abs_path": "/src/native/crash.cpp",
-                "context_line": "    return 0;",
+                "context_line": "    app::run_job(1);",
                 "filename": "/src/native/crash.cpp",
                 "function": "main",
                 "instruction_addr": "0x5555555551a6",
-                "lineno": 39,
+                "lineno": 38,
                 "post_context": [
+                  "    return 0;",
                   "}"
                 ],
                 "pre_context": [
+                  "",
                   "}  // namespace app",
                   "",
                   "extern \"C\" int main()",
-                  "{",
-                  "    app::run_job(1);"
+                  "{"
                 ]
               },
               {
                 "abs_path": "/src/native/crash.cpp",
-                "context_line": "    sink = job;",
+                "context_line": "        crash_here(nullptr);",
                 "filename": "/src/native/crash.cpp",
                 "function": "app::run_job(int)",
                 "instruction_addr": "0x55555555518c",
-                "lineno": 31,
+                "lineno": 29,
                 "post_context": [
+                  "    }",
+                  "    sink = job;",
                   "}",
                   "",
-                  "}  // namespace app",
-                  "",
-                  "extern \"C\" int main()"
+                  "}  // namespace app"
                 ],
                 "pre_context": [
+                  "}",
+                  "",
                   "__attribute__((noinline)) void run_job(int job)",
                   "{",
-                  "    if (job > 0) {",
-                  "        crash_here(nullptr);",
-                  "    }"
+                  "    if (job > 0) {"
                 ]
               },
               {

@@ -36,25 +36,25 @@
               },
               {
                 "abs_path": "/src/native/crash.cpp",
-                "context_line": "    }",
+                "context_line": "        crash_here(nullptr);",
                 "filename": "/src/native/crash.cpp",
                 "function": "app::run_job(int)",
                 "image_addr": "0x100000000",
                 "instruction_addr": "0x1000003c8",
-                "lineno": 30,
+                "lineno": 29,
                 "post_context": [
+                  "    }",
                   "    sink = job;",
                   "}",
                   "",
-                  "}  // namespace app",
-                  ""
+                  "}  // namespace app"
                 ],
                 "pre_context": [
+                  "}",
                   "",
                   "__attribute__((noinline)) void run_job(int job)",
                   "{",
-                  "    if (job > 0) {",
-                  "        crash_here(nullptr);"
+                  "    if (job > 0) {"
                 ]
               },
               {
