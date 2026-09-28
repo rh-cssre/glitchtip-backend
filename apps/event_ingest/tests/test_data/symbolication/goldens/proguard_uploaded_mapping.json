@@ -1,0 +1,43 @@
+[
+  {
+    "culprit": null,
+    "exception": {
+      "values": [
+        {
+          "module": "java.lang",
+          "stacktrace": {
+            "frames": [
+              {
+                "abs_path": "View.java",
+                "filename": "View.java",
+                "function": "performClick",
+                "in_app": false,
+                "lineno": 7659,
+                "module": "android.view.View"
+              },
+              {
+                "abs_path": "SourceFile",
+                "filename": "SourceFile",
+                "function": "b",
+                "in_app": true,
+                "lineno": 2,
+                "module": "a.a.a"
+              },
+              {
+                "abs_path": "SourceFile",
+                "filename": "SourceFile",
+                "function": "a",
+                "in_app": true,
+                "lineno": 3,
+                "module": "a.a.b"
+              }
+            ]
+          },
+          "type": "IllegalArgumentException",
+          "value": "value must be positive: -1"
+        }
+      ]
+    },
+    "title": "IllegalArgumentException: value must be positive: -1"
+  }
+]

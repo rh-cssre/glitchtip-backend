@@ -1,0 +1,55 @@
+[
+  {
+    "culprit": null,
+    "exception": {
+      "values": [
+        {
+          "module": "java.lang",
+          "stacktrace": {
+            "frames": [
+              {
+                "abs_path": "View.java",
+                "filename": "View.java",
+                "function": "performClick",
+                "in_app": false,
+                "lineno": 7659,
+                "module": "android.view.View"
+              },
+              {
+                "abs_path": "SourceFile",
+                "filename": "MainActivity.kt",
+                "function": "onSubmit",
+                "in_app": true,
+                "lineno": 2,
+                "module": "com.example.app.MainActivity"
+              },
+              {
+                "abs_path": "SourceFile",
+                "context_line": "object Validator {",
+                "filename": "Validator.kt",
+                "function": "requirePositive",
+                "in_app": true,
+                "lineno": 3,
+                "module": "com.example.app.data.Validator",
+                "post_context": [
+                  "    fun requirePositive(value: Int) {",
+                  "        if (value <= 0) {",
+                  "            throw IllegalArgumentException(\"value must be positive: $value\")",
+                  "        }",
+                  "    }"
+                ],
+                "pre_context": [
+                  "package com.example.app.data",
+                  ""
+                ]
+              }
+            ]
+          },
+          "type": "IllegalArgumentException",
+          "value": "value must be positive: -1"
+        }
+      ]
+    },
+    "title": "IllegalArgumentException: value must be positive: -1"
+  }
+]

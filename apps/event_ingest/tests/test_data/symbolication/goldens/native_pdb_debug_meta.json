@@ -1,0 +1,35 @@
+[
+  {
+    "culprit": null,
+    "exception": {
+      "values": [
+        {
+          "mechanism": {
+            "handled": false,
+            "type": "signalhandler"
+          },
+          "stacktrace": {
+            "frames": [
+              {
+                "function": "__libc_start_main",
+                "instruction_addr": "0x7ffff7a21b40"
+              },
+              {
+                "instruction_addr": "0x140001088"
+              },
+              {
+                "instruction_addr": "0x140001064"
+              },
+              {
+                "instruction_addr": "0x140001038"
+              }
+            ]
+          },
+          "type": "SIGSEGV",
+          "value": "Segfault"
+        }
+      ]
+    },
+    "title": "SIGSEGV: Segfault"
+  }
+]
