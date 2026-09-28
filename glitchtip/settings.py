@@ -235,6 +235,10 @@ GLITCHTIP_FILE_RETENTION_DAYS = env.int(
 # a compact lookup cache kept in the default file storage. Events then load
 # that cache instead of re-parsing the upload. See apps/symbolication.
 #
+# These GLITCHTIP_SYMBOLICATION_* settings (and GLITCHTIP_PROGUARD_MAX_MAPPING_MB)
+# are internal tuning and testing knobs, deliberately left out of the user
+# documentation: the defaults are meant to be right for every install.
+#
 # In-process LRU of loaded caches, in MB. 0 disables it (every event then
 # loads the cache from the disk tier or file storage).
 GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB = env.int(
