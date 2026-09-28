@@ -91,9 +91,6 @@ class KnownWrong(NamedTuple):
     why: str
 
 
-# Values the goldens record that are wrong, and what they should be. A fix
-# for one of these regenerates the golden, and removes the entry here;
-# test_known_wrong_entries_match_the_goldens keeps this list honest.
 def frame(event: int, exception: int, index: int, field: str) -> tuple:
     return (
         event,
@@ -107,16 +104,15 @@ def frame(event: int, exception: int, index: int, field: str) -> tuple:
     )
 
 
-def frame_count(event: int, exception: int) -> tuple:
-    return (event, "exception", "values", exception, "stacktrace", "frames", len)
-
-
-# Values the goldens record that are wrong, and what they should be. Where
-# several fixes touch one value, "expected" assumes only the named fix. A fix
-# regenerates the goldens and updates or removes its entries here;
-# test_known_wrong_entries_match_the_goldens keeps this list honest.
+# Values the goldens record that are questionable, and what they arguably
+# should be. A change to one regenerates the golden and removes its entry
+# here; test_known_wrong_entries_match_the_goldens keeps this list honest.
+#
+# Left on purpose: all are in_app decisions. in_app follows the SDK's value
+# and the URL and source-path rules this processor was ported with, and it
+# feeds grouping, so changing it is a behaviour change of its own, not a
+# symbolication fix.
 KNOWN_WRONG: list[KnownWrong] = [
-    # JavaScript
     KnownWrong(
         "js_debug_id_bundles",
         frame(0, 0, 0, "in_app"),
@@ -794,9 +790,7 @@ class KnownWrongTests(SimpleTestCase):
             with self.subTest(golden=entry.golden, path=entry.path):
                 value = json.loads((GOLDENS / f"{entry.golden}.json").read_text())
                 for step in entry.path:
-                    if step is len:
-                        value = len(value)
-                    elif isinstance(value, dict):
+                    if isinstance(value, dict):
                         value = value.get(step)
                     else:
                         value = value[step]
