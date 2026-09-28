@@ -218,14 +218,6 @@ KNOWN_WRONG: list[KnownWrong] = [
     # ProGuard
     KnownWrong(
         "proguard_deobfuscation",
-        frame_count(0, 0),
-        3,
-        4,
-        "an inlined call remaps to two frames, and remap_frame(...)[0] keeps only "
-        "the innermost (UserRepository.loadUser is dropped)",
-    ),
-    KnownWrong(
-        "proguard_deobfuscation",
         frame(0, 0, 1, "abs_path"),
         "SourceFile",
         "MainActivity.kt",
@@ -861,8 +853,11 @@ class ProguardSymbolicationGoldenTests(SymbolicationGoldenTestCase):
     def test_deobfuscation_and_source_context(self):
         """A mapping and JVM source bundle as the upload API stores them.
 
-        Pins current bugs: the inlined outer frame is dropped, and abs_path
-        keeps the obfuscated file. See KNOWN_WRONG.
+        The inlined call (Validator.requirePositive inside
+        UserRepository.loadUser) comes back as both frames.
+
+        Pins a current bug: abs_path keeps the obfuscated file. See
+        KNOWN_WRONG.
         """
         self.upload()
         self.assertMatchesGolden(

@@ -246,27 +246,29 @@ class StacktraceProcessor:
         try:
             frames = stacktrace.get("frames")
             score = 0
-            resolved_frames = copy.copy(frames)
-            for index, frame in enumerate(frames):
-                if frame is None:
-                    continue
-                frame = copy.copy(frame)
-                module = frame.get("module")
-                function = frame.get("function")
-                lineno = frame.get("lineno")
+            resolved_frames = []
+            for frame in frames:
+                lineno = frame.get("lineno") if frame is not None else None
                 if lineno is None:
+                    resolved_frames.append(frame)
                     continue
-                result = mapper.remap_frame(module, function, lineno)
-                if len(result) > 0:
-                    remapped_frame = result[0]
-                    frame["resolved"] = True
-                    frame["filename"] = remapped_frame.file
-                    frame["lineno"] = remapped_frame.line
-                    frame["function"] = remapped_frame.method
-                    frame["module"] = remapped_frame.class_name
-                    score = score + 1
-
-                resolved_frames[index] = frame
+                result = mapper.remap_frame(
+                    frame.get("module"), frame.get("function"), lineno
+                )
+                if not result:
+                    resolved_frames.append(copy.copy(frame))
+                    continue
+                # An inlined call remaps to several frames, innermost first;
+                # frames are listed outermost first, so they go in reversed.
+                for remapped_frame in reversed(result):
+                    remapped = copy.copy(frame)
+                    remapped["resolved"] = True
+                    remapped["filename"] = remapped_frame.file
+                    remapped["lineno"] = remapped_frame.line
+                    remapped["function"] = remapped_frame.method
+                    remapped["module"] = remapped_frame.class_name
+                    resolved_frames.append(remapped)
+                score = score + 1
 
             return ResolvedStacktrace(score=score, frames=resolved_frames)
 

@@ -38,6 +38,28 @@
               },
               {
                 "abs_path": "SourceFile",
+                "context_line": "        Validator.requirePositive(id)",
+                "filename": "UserRepository.kt",
+                "function": "loadUser",
+                "in_app": true,
+                "lineno": 9,
+                "module": "com.example.app.data.UserRepository",
+                "post_context": [
+                  "        cache[id] = name",
+                  "        return name",
+                  "    }",
+                  "}"
+                ],
+                "pre_context": [
+                  "    private val cache = mutableMapOf<Int, String>()",
+                  "",
+                  "    fun loadUser(id: Int): String {",
+                  "        cache[id]?.let { return it }",
+                  "        val name = \"user-$id\""
+                ]
+              },
+              {
+                "abs_path": "SourceFile",
                 "context_line": "            throw IllegalArgumentException(\"value must be positive: $value\")",
                 "filename": "Validator.kt",
                 "function": "requirePositive",
