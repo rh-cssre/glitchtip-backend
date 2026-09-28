@@ -192,10 +192,10 @@ class JavascriptEventProcessor:
 
         # Source context — built into SourceMapCacheToken
         if token.context_line is not None:
-            frame.context_line = token.context_line.rstrip("\n")
-            frame.pre_context = [line.rstrip("\n") for line in token.pre_context]
+            frame.context_line = token.context_line.rstrip("\r\n")
+            frame.pre_context = [line.rstrip("\r\n") for line in token.pre_context]
             frame.post_context = [
-                line.rstrip("\n") for line in token.post_context if line != ""
+                line.rstrip("\r\n") for line in token.post_context if line != ""
             ]
 
     def build_debug_id_map(self) -> dict[str, str]:

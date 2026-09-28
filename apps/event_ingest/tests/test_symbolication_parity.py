@@ -139,13 +139,6 @@ KNOWN_WRONG: list[KnownWrong] = [
         False,
         "the tslib frame is a node_modules source but keeps the SDK's in_app",
     ),
-    KnownWrong(
-        "js_release_and_filename",
-        frame(0, 0, 0, "context_line"),
-        '    throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");\r',
-        '    throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");',
-        "context lines are only stripped of \\n, so CRLF sources keep a \\r",
-    ),
     # Native
     # ProGuard
     KnownWrong(
@@ -350,9 +343,8 @@ class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
         """Release artifacts matched by file name: a webpack bundle whose
         sources carry webpack:// and node_modules paths.
 
-        Pins current bugs: the tslib frame (a node_modules source) keeps the
-        SDK's in_app, and its context line keeps the source's CRLF \\r. See
-        KNOWN_WRONG.
+        Pins a known limitation: the tslib frame (a node_modules source)
+        keeps the SDK's in_app. See KNOWN_WRONG.
         """
         code = (EXISTING_TEST_DATA / "bundle.js").read_bytes()
         sourcemap = (EXISTING_TEST_DATA / "bundle.js.map").read_bytes()
