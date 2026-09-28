@@ -48,6 +48,62 @@ _IP_OFFSETS: dict[PROCESSOR_ARCHITECTURE, tuple[int, int]] = {
 }
 
 
+class InvalidMinidump(ValueError):
+    """The minidump's structure doesn't fit inside the file."""
+
+
+# Streams minidump_to_event reads, with the size of one list entry for the
+# list-shaped ones (MINIDUMP_THREAD, MINIDUMP_MODULE).
+_KEPT_STREAMS: dict[MINIDUMP_STREAM_TYPE, int | None] = {
+    MINIDUMP_STREAM_TYPE.ThreadListStream: 48,
+    MINIDUMP_STREAM_TYPE.ModuleListStream: 108,
+    MINIDUMP_STREAM_TYPE.ExceptionStream: None,
+    MINIDUMP_STREAM_TYPE.SystemInfoStream: None,
+}
+_MAX_STREAMS = 1024
+
+
+def bound_minidump(data: bytes) -> bytes:
+    """Return a copy of ``data`` that is safe to hand to MinidumpFile.
+
+    The ``minidump`` package trusts every count in the file and loops that
+    many times, so a few crafted bytes can claim millions of streams or
+    threads and exhaust memory. Reject any header, directory entry or list
+    count that doesn't fit inside the file, and mark the streams we never
+    read as unused so the package skips them rather than trusting their
+    counts too.
+    """
+    if len(data) < 32 or data[:4] != b"MDMP":
+        raise InvalidMinidump("truncated header")
+    count, dir_rva = struct.unpack_from("<II", data, 8)
+    if count > _MAX_STREAMS or dir_rva + count * 12 > len(data):
+        raise InvalidMinidump("stream directory out of bounds")
+    bounded = bytearray(data)
+    for i in range(count):
+        entry = dir_rva + i * 12
+        stream_type, size, rva = struct.unpack_from("<III", data, entry)
+        if rva + size > len(data):
+            raise InvalidMinidump("stream out of bounds")
+        try:
+            kept = MINIDUMP_STREAM_TYPE(stream_type) in _KEPT_STREAMS
+        except ValueError:
+            kept = False
+        if not kept:
+            struct.pack_into(
+                "<I", bounded, entry, MINIDUMP_STREAM_TYPE.UnusedStream.value
+            )
+            continue
+        item_size = _KEPT_STREAMS[MINIDUMP_STREAM_TYPE(stream_type)]
+        if item_size is None:
+            continue
+        if size < 4:
+            raise InvalidMinidump("list stream too short")
+        (items,) = struct.unpack_from("<I", data, rva)
+        if 4 + items * item_size > size:
+            raise InvalidMinidump("list count exceeds stream size")
+    return bytes(bounded)
+
+
 def parse_cv_record_debug_id(cv_record_bytes: bytes) -> str | None:
     """Parse a CodeView PDB70 (RSDS) record to extract a normalized debug_id.
 
@@ -208,7 +264,7 @@ def minidump_to_event(data: bytes, sentry_meta: dict | None = None) -> dict:
     _prev_level = _root.level
     _root.setLevel(logging.CRITICAL)
     try:
-        mf = MinidumpFile.parse_bytes(data)
+        mf = MinidumpFile.parse_bytes(bound_minidump(data))
     finally:
         _root.setLevel(_prev_level)
     os_name, image_type = _get_os_and_image_type(mf)

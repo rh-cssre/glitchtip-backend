@@ -25,7 +25,7 @@ from glitchtip.partition_manager import UUID7Helper
 
 from .api import get_ip_address
 from .authentication import EventAuthHttpRequest, event_auth
-from .minidump_event import minidump_to_event
+from .minidump_event import InvalidMinidump, minidump_to_event
 from .pii_scrubber import resolve_scrubber
 from .rust_envelope import (
     EnvelopeTooBig,
@@ -381,6 +381,8 @@ async def event_envelope_view(request: EventAuthHttpRequest, project_id: int):
                 await ingest_event.aenqueue(
                     serialize_for_vtasks(asdict(interchange_event))
                 )
+        except InvalidMinidump as e:
+            logger.info("Rejected minidump attachment on %s: %s", request.path, e)
         except Exception as e:
             capture_exception(e)
             logger.error(
@@ -465,6 +467,8 @@ async def minidump_view(request: EventAuthHttpRequest, project_id: int):
     # Parse minidump into event
     try:
         event_data = await sync_to_async(minidump_to_event)(minidump_data, sentry_meta)
+    except InvalidMinidump:
+        return JsonResponse({"detail": "Invalid minidump file"}, status=400)
     except Exception as e:
         capture_exception(e)
         logger.error("Failed to parse minidump on %s", request.path, exc_info=e)
