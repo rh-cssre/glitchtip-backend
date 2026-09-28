@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import tempfile
+import threading
 import uuid
 from unittest import mock
 
@@ -30,6 +31,7 @@ from apps.issue_events.models import IssueEvent
 from . import store
 from .maintenance import cleanup_symbolication_caches
 from .models import CacheKind, CacheState, SymbolicationCache
+from .sources import STORAGE_READ_THREADS, run_storage_read
 from .tasks import build_cache
 
 
@@ -112,6 +114,21 @@ class DiskTierTests(SimpleTestCase):
         self.assertTrue(os.path.exists(second))
         # No temporary files are left behind.
         self.assertEqual(len(self.files()), 1)
+
+
+class StorageReadPoolTests(SimpleTestCase):
+    def test_reads_run_on_the_bounded_pool(self):
+        async def names():
+            return await asyncio.gather(
+                *(
+                    run_storage_read(lambda: threading.current_thread().name)
+                    for _ in range(10)
+                )
+            )
+
+        thread_names = set(async_to_sync(names)())
+        self.assertTrue(all(n.startswith("symbolication-read") for n in thread_names))
+        self.assertLessEqual(len(thread_names), STORAGE_READ_THREADS)
 
 
 def native_crash() -> dict:

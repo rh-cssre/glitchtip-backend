@@ -1,11 +1,10 @@
-import asyncio
 import copy
 import logging
 
 from gt_rust.symbolic import demangle, normalize_debug_id, parse_addr
 
 from apps.difs.models import DebugInformationFile
-from apps.symbolication.sources import read_bundle_members
+from apps.symbolication.sources import read_bundle_members, run_storage_read
 
 alternative_arch = {"x86": ["x86", "x86_64"]}
 
@@ -97,12 +96,12 @@ async def read_source_files(source_bundle, file_paths) -> dict[str, list[str]]:
     """
     Source lines of ``file_paths`` from a source bundle, keyed by path; paths
     the bundle lacks are left out. Source bundles store files with a
-    'files/' prefix. The zip is read in place, on a worker thread since
-    storage has no async API.
+    'files/' prefix. The zip is read in place, on the bounded storage read
+    pool since storage has no async API.
     """
     members = {f"files{path}": path for path in file_paths}
     try:
-        lines = await asyncio.to_thread(
+        lines = await run_storage_read(
             read_bundle_members, source_bundle.file.blob, list(members)
         )
     except Exception as e:

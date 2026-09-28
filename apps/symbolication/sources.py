@@ -1,12 +1,35 @@
 """Access to uploaded source artifacts (FileBlobs) without whole-file reads."""
 
+import asyncio
 import contextlib
 import os
 import shutil
 import tempfile
+import threading
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 
 COPY_CHUNK = 1024 * 1024
+# Threads for storage reads on the ingest path (a stored cache on a tier
+# miss, source bundle members). Storage backends have no async API; a small
+# fixed pool keeps a burst of misses from fanning out over the loop's default
+# executor, where each new thread would grow its own malloc arena.
+STORAGE_READ_THREADS = 2
+
+_read_executor: ThreadPoolExecutor | None = None
+_read_executor_lock = threading.Lock()
+
+
+async def run_storage_read(func, *args):
+    """Run a blocking storage read on the bounded read pool."""
+    global _read_executor
+    with _read_executor_lock:
+        if _read_executor is None:
+            _read_executor = ThreadPoolExecutor(
+                max_workers=STORAGE_READ_THREADS,
+                thread_name_prefix="symbolication-read",
+            )
+    return await asyncio.get_running_loop().run_in_executor(_read_executor, func, *args)
 
 
 @contextlib.contextmanager

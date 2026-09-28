@@ -39,6 +39,7 @@ from gt_rust.symbolic import (
 )
 
 from .models import CacheKind, CacheState, SymbolicationCache
+from .sources import run_storage_read
 
 logger = logging.getLogger(__name__)
 
@@ -327,8 +328,9 @@ async def _load_ready(row: SymbolicationCache, source: CacheSource):
     if cache is not None:
         _notify("disk_hit")
         return cache
-    # Storage backends have no async API: one thread hop, on a tier miss only.
-    data = await asyncio.to_thread(_read_stored, row.storage_name)
+    # Storage backends have no async API: one bounded thread hop, on a tier
+    # miss only.
+    data = await run_storage_read(_read_stored, row.storage_name)
     _notify("storage_load")
     # Verify once, as the bytes arrive from storage; the local copy is then
     # trusted when a later process maps it.
