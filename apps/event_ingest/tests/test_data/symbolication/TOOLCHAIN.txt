@@ -1,0 +1,4 @@
+g++ (Debian 14.2.0-19) 14.2.0
+Debian clang version 19.1.7 (3+b1)
+Debian LLD 19.1.7 (compatible with GNU linkers)
+esbuild 0.25.10
