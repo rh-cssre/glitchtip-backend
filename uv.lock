@@ -1498,7 +1498,7 @@ requires-dist = [
     { name = "django-vcache", specifier = ">=3.2.0" },
     { name = "django-vtasks", extras = ["valkey"], specifier = "~=3.2.0" },
     { name = "duckdb", specifier = ">=1.2.0" },
-    { name = "glitchtip-rust", specifier = ">=0.10.0" },
+    { name = "glitchtip-rust", specifier = ">=0.11.0" },
     { name = "google-cloud-logging", specifier = "~=3.0" },
     { name = "granian", extras = ["reload", "uvloop"], specifier = ">=2.6.0" },
     { name = "mcp", extras = ["cli"], specifier = ">=2.1.1,<3" },
@@ -1536,24 +1536,24 @@ lint = [
 
 [[package]]
 name = "glitchtip-rust"
-version = "0.10.0"
+version = "0.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django-vpg" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f0/9d/73ea0ca9d6f0f0b6c6824d4da7b846070ee23866fcd5b8c01a18c3a981aa/glitchtip_rust-0.10.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:73d07a3b43b7bd44eea3dba76216cd14046f8ae7c0bb1c92dd6823a80e7d717d", size = 6870717, upload-time = "2026-09-11T16:53:28.345Z" },
-    { url = "https://files.pythonhosted.org/packages/3b/4e/0e376ae8c5a2338f0c849fb7f81ac50ae96a445dd203c9726eea6d0d92f0/glitchtip_rust-0.10.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:32497ac92670808bb1debc19a82f0431cef05ecb707468bf7762733f338785c8", size = 7255453, upload-time = "2026-09-11T16:53:30.403Z" },
-    { url = "https://files.pythonhosted.org/packages/27/ba/8866b456fc3344de589126d63c7c8919b32a9b6ad6878522cc9c1eb6defe/glitchtip_rust-0.10.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:f7467b494647e07432e9a2585d5b08c23d5a1632bdcea2ba58408b65d37bf5db", size = 6868297, upload-time = "2026-09-11T16:53:31.872Z" },
-    { url = "https://files.pythonhosted.org/packages/d0/ee/cf76f6c8c9352b9c6d5b27c63190992442bbd5e031378dba03fe801e9ce2/glitchtip_rust-0.10.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:73c05e82266d32f8ea889e1550e91c6fe0afb27de9b609da29354b396c6221fc", size = 7255326, upload-time = "2026-09-11T16:53:33.306Z" },
-    { url = "https://files.pythonhosted.org/packages/c1/2f/32a02a0f8042f625cb3fdfe945592d8f4c0f90644a29b4780a91583d2c3b/glitchtip_rust-0.10.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:234531ad3170db56200bc93f9e96f0ddc963488fbe7aee90ef2f9ec7c46e401b", size = 6875945, upload-time = "2026-09-11T16:53:34.892Z" },
-    { url = "https://files.pythonhosted.org/packages/b1/f7/4da2b2779c28fcfe33e996fd65a245ae1fd62e5d440dc88e5d10659a79ad/glitchtip_rust-0.10.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:87e1e1ba8c6ec9fdc2c2bc9489d090003a705336faa7a7b21b4801e14febacb4", size = 7257127, upload-time = "2026-09-11T16:53:36.529Z" },
-    { url = "https://files.pythonhosted.org/packages/fc/39/d854f2526b44db70e15acfb54b97fe21b1662170943fb18da5db7496763b/glitchtip_rust-0.10.0-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:4f3468423098ce12d68d78c1488026994bddd2055e20f9e2602bf73258e03419", size = 6873041, upload-time = "2026-09-11T16:53:38.031Z" },
-    { url = "https://files.pythonhosted.org/packages/97/78/394b57f41997aa32a3f1748b0a291514c038d8f7f8ee7aeb15448106acf8/glitchtip_rust-0.10.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:d61072d5abb650ca27f6beccef0391d7abd81900b219cd8550e599e64f72ec34", size = 7257177, upload-time = "2026-09-11T16:53:39.654Z" },
-    { url = "https://files.pythonhosted.org/packages/74/90/6a0be1a700d7be81e0ef4a078ea90edc40830760adaf759bb488104fbe0b/glitchtip_rust-0.10.0-cp314-cp314-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2446c51e191b7fa982516b2368cfb8edf0d54f6ca116d9c370481bb93a9c6445", size = 6875564, upload-time = "2026-09-11T16:53:41.117Z" },
-    { url = "https://files.pythonhosted.org/packages/d6/3f/e41593227d792d04a4bcc7421b19daefa911c667b6458f12b019460a335e/glitchtip_rust-0.10.0-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:528d1603952aa7147561808b7f1dd687d310bdc9f567a9455487f79648503b27", size = 7257285, upload-time = "2026-09-11T16:53:42.858Z" },
-    { url = "https://files.pythonhosted.org/packages/71/99/b07d0afa6ec3cf353ddb9e057afb306521f6d892695f046b4d28fda1cbc5/glitchtip_rust-0.10.0-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:23ea6a896085e1c87aaecbf009c24118511b7ea16b88a35506e0f90415d0aa26", size = 6872769, upload-time = "2026-09-11T16:53:44.369Z" },
-    { url = "https://files.pythonhosted.org/packages/7a/2f/ac7cad291fc6d8f7ba2630db237c72faa4a4e24e4f93defc80b5f0824ac8/glitchtip_rust-0.10.0-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:293fd63bebf18ff904734b87159a05d7d5e152d363ce87e5ade21c5274512dbb", size = 7257416, upload-time = "2026-09-11T16:53:46.178Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/73/2cf162c403cc12af00b7e9de1711a15bc372a32901581d7e2cf77b0e3a97/glitchtip_rust-0.11.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2625d7df7385346ec9ae73c2d4ac0d2d471be92e6048420c19fabd9df8c86662", size = 6953104, upload-time = "2026-09-29T13:32:52.373Z" },
+    { url = "https://files.pythonhosted.org/packages/89/19/b60502176b76bbd51c2c92b08e619f5a0c6bf2434083fff742ae239b6046/glitchtip_rust-0.11.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e52a0592cc1d12685023886aaaf0a21bac47378f351fa0685304a3e0ff4fbde4", size = 7345543, upload-time = "2026-09-29T13:32:54.574Z" },
+    { url = "https://files.pythonhosted.org/packages/38/d2/379ff3c5f6617f7ca4b08bba672e16016faa6ec7470035b45ca18303204c/glitchtip_rust-0.11.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:19afcdbb30ba6bd7f32252812ef5814f82717f49c6d5895adef127b3f2be1762", size = 6950747, upload-time = "2026-09-29T13:32:56.35Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/c0/f31b296f8327951642e930012ae7905b41c7613baa2bbc07451d138b7201/glitchtip_rust-0.11.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:cb746d5d1fa022c7ee9444e1b75f5aaa873ecf8762fb8b832f68541404d67724", size = 7344314, upload-time = "2026-09-29T13:32:58.016Z" },
+    { url = "https://files.pythonhosted.org/packages/57/92/b9c216bea4bfc63b757040c1eb07fde2c021b31eeffdf17876f08d507d0b/glitchtip_rust-0.11.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:9462e7d46d2df71b479907f8495feaf77251b5e49e9146d2aafd398b18b0c82f", size = 6953970, upload-time = "2026-09-29T13:32:59.581Z" },
+    { url = "https://files.pythonhosted.org/packages/3f/58/ef40424ab0b1bbf0ae328cf9a339a42c66244db8373b495828f5c6e165ae/glitchtip_rust-0.11.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:35331f55d8d3d5580e17adb8b74a6a193618f1e87ec0a61767914d4cd36f9dec", size = 7348087, upload-time = "2026-09-29T13:33:01.119Z" },
+    { url = "https://files.pythonhosted.org/packages/14/5b/78a0f64b6306bea980d1cda568c05df8fa8fac865211d1572e6dc078e8ca/glitchtip_rust-0.11.0-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:e6e20d0d23a561763903a7a7211effc1805e688441eb22cc25a48176569456e8", size = 6952622, upload-time = "2026-09-29T13:33:02.726Z" },
+    { url = "https://files.pythonhosted.org/packages/82/d5/b9092fa2489b34048971fcd51695737e3a2551bebb35a2ba49de215bf339/glitchtip_rust-0.11.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:a5c157c9100c58a8058deb18a47ba6e781cbc48d3977f6e1aa935d666084e832", size = 7347346, upload-time = "2026-09-29T13:33:04.27Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/c2/60b8bf3231e701db8c559a4e978d848b27c53acaba8797c8759f9e5e2e88/glitchtip_rust-0.11.0-cp314-cp314-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:af991142d00c317f5b40ba168001a035fd137d95312e9a8f0135aac4d16df70c", size = 6952366, upload-time = "2026-09-29T13:33:06.069Z" },
+    { url = "https://files.pythonhosted.org/packages/de/bf/be0272289bb93177d365f85ef11a28d12f627ddd42b1366018f08ea68b62/glitchtip_rust-0.11.0-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2028bc99f17ff6c84cd8cf7a691ecd0def6ae257f7175acde2f505c74372160a", size = 7348329, upload-time = "2026-09-29T13:33:07.772Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/cd/c3bf60bc96cb57039d5a98a74843334841324d2340e01404fa35d28f746d/glitchtip_rust-0.11.0-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:ae62bf21e55693e4fc72e8b2aa6aaa3d9c1a95971ba6ea21fab948e9dae1febd", size = 6952354, upload-time = "2026-09-29T13:33:09.595Z" },
+    { url = "https://files.pythonhosted.org/packages/58/46/ad83a076083fa72c9143513d4e68fca29c4da24beccd4c5a24d00444c1ae/glitchtip_rust-0.11.0-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:c30073d4b23c495efdacb3f99dcee3a402f796dcd5043f8b63f845b7ed6ce6f3", size = 7346642, upload-time = "2026-09-29T13:33:11.267Z" },
 ]
 
 [[package]]
@@ -3228,8 +3228,8 @@ name = "pyzstd"
 version = "0.19.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "backports-zstd", marker = "python_full_version < '3.14'" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "backports-zstd" },
+    { name = "typing-extensions", marker = "python_full_version != '3.13.*'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/4c/66/59fed71d0d2065e02974b40296f836a237c364c8bbe07295f2d0dc33c278/pyzstd-0.19.1.tar.gz", hash = "sha256:36723d3c915b3981de9198d0a2c82b2f5fe3eaa36e4d8d586937830a8afc7d72", size = 69531, upload-time = "2025-12-13T08:15:33.455Z" }
 wheels = [

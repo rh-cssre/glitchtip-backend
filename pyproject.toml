@@ -40,7 +40,7 @@ dependencies = [
     "granian[reload,uvloop]>=2.6.0",
     "servestatic[brotli]>=4.3",
     "django-vcache>=3.2.0",
-    "glitchtip-rust>=0.10.0",
+    "glitchtip-rust>=0.11.0",
     "uuid6>=2024.1.12",
     # Bounded below 3: the SDK moves its server API across majors (v2 renamed
     # FastMCP to MCPServer), so a major bump is a code change, not a relock.
