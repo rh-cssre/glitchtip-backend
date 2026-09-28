@@ -198,45 +198,56 @@ def jvm_module_to_path(module, filename):
     return f"/_/_/{jvm_filename}"
 
 
-def _estimate_image_base(sym_cache, instruction_addrs):
+PAGE_SIZE = 0x1000
+# How far below a frame the image base is searched for.
+MAX_BASE_DISTANCE = 0x500000
+# How many of the frames are tried as the anchor for the search.
+MAX_BASE_PROBES = 4
+
+
+def _estimate_image_base(sym_cache, instruction_addrs) -> int | None:
     """Estimate the image base address when debug_meta is absent.
 
     Some SDKs (e.g. Flutter on Android) send native frames with absolute
-    instruction_addr but no image_addr / debug_meta.  We recover the base by
-    probing: pick one address, slide it across the sym_cache's valid range,
-    and choose the base offset that resolves the most frames.
+    instruction_addr but no image_addr / debug_meta. Images are loaded at a
+    page boundary, so the base is one of the page boundaries a little below
+    the frames. Each candidate is scored by how many sampled frames it
+    resolves; candidates come from several frames, since the first may be in
+    another image (libc, say). Returns None unless a base resolves at least
+    two frames and half of the sample: a guess that resolves less would
+    attach wrong symbols rather than none.
     """
-    if not instruction_addrs:
-        return 0
-
-    probe = instruction_addrs[0]
     sample = instruction_addrs[:MAX_SCORED_ADDRS]
-    best_base = 0
-    best_score = 0
-    threshold = max(len(sample) // 2, 1)
-
-    for elf_offset in range(0, 0x500000, 0x1000):
-        # SymCache.lookup returns a (possibly empty) list of SourceLocation.
-        if not sym_cache.lookup(elf_offset):
-            continue
-        candidate_base = probe - elf_offset
-        if candidate_base < 0:
-            # elf_offset only grows, so no later candidate can be valid either.
-            break
-        score = sum(
-            1
-            for addr in sample
-            # An address outside the base's addressable range is not part of
-            # this image and cannot be probed.
-            if candidate_base <= addr <= candidate_base + UINT64_MAX
-            and sym_cache.lookup(addr - candidate_base)
-        )
-        if score > best_score:
-            best_score = score
-            best_base = candidate_base
-            if score >= threshold:
+    if len(sample) < 2:
+        return None
+    threshold = max(2, (len(sample) + 1) // 2)
+    scores: dict[int, int] = {}
+    best_base, best_score = None, 0
+    for probe in list(dict.fromkeys(sample))[:MAX_BASE_PROBES]:
+        page = probe - probe % PAGE_SIZE
+        for distance in range(0, MAX_BASE_DISTANCE, PAGE_SIZE):
+            candidate_base = page - distance
+            if candidate_base < 0:
                 break
-    return best_base
+            if candidate_base in scores:
+                continue
+            # SymCache.lookup returns a (possibly empty) list of SourceLocation.
+            if not sym_cache.lookup(probe - candidate_base):
+                continue
+            score = sum(
+                1
+                for addr in sample
+                # An address outside the base's addressable range is not part
+                # of this image and cannot be probed.
+                if candidate_base <= addr <= candidate_base + UINT64_MAX
+                and sym_cache.lookup(addr - candidate_base)
+            )
+            scores[candidate_base] = score
+            if score > best_score:
+                best_base, best_score = candidate_base, score
+                if score == len(sample):
+                    return best_base
+    return best_base if best_score >= threshold else None
 
 
 class StacktraceProcessor:
@@ -378,6 +389,7 @@ class StacktraceProcessor:
                     if f and f.get("instruction_addr")
                 )
                 addrs = [addr for addr in parsed if addr is not None]
+                # None when no base fits: those frames then stay unresolved.
                 estimated_base = _estimate_image_base(sym_cache, addrs)
 
             adjusted = adjusted_frame_indexes(stacktrace, exception)

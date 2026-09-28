@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from apps.difs.api import _PROGUARD_SNIFF_BYTES, extract_proguard_metadata
 from apps.difs.stacktrace_processor import (
+    MAX_BASE_PROBES,
     MAX_SCORED_ADDRS,
     StacktraceProcessor,
     _estimate_image_base,
@@ -802,12 +803,39 @@ class EstimateImageBaseTestCase(GlitchTestCase):
 
         _estimate_image_base(sym_cache, addrs)
 
-        # One lookup per candidate offset, plus one per scored address. Only
-        # 0x1000 resolves, so scoring runs once and must not walk all 500.
-        candidate_offsets = 0x500000 // 0x1000
+        # Per probe, one lookup per candidate base plus one per scored
+        # address; never a walk over all 500 frames.
+        candidate_bases = 0x500000 // 0x1000
         self.assertLessEqual(
-            len(sym_cache.lookups), candidate_offsets + MAX_SCORED_ADDRS
+            len(sym_cache.lookups),
+            MAX_BASE_PROBES * (candidate_bases + MAX_SCORED_ADDRS),
         )
+
+
+class EstimateImageBaseAnchorTestCase(GlitchTestCase):
+    def test_base_is_page_aligned_when_frames_are_not(self):
+        """Frames sit mid-page; the base found is the page boundary below."""
+        sym_cache = FakeSymCache([0x1165, 0x118C, 0x11A6])
+
+        base = _estimate_image_base(sym_cache, [0x5555555551A6, 0x55555555518C])
+
+        self.assertEqual(base, 0x555555554000)
+
+    def test_a_foreign_first_frame_does_not_anchor_the_search(self):
+        sym_cache = FakeSymCache([0x1165, 0x118C, 0x11A6])
+
+        base = _estimate_image_base(
+            sym_cache, [0x7FFFF7A21B40, 0x5555555551A6, 0x55555555518C]
+        )
+
+        self.assertEqual(base, 0x555555554000)
+
+    def test_no_base_when_nothing_fits(self):
+        """Better no symbols than wrong ones."""
+        sym_cache = FakeSymCache([0x1000])
+
+        self.assertIsNone(_estimate_image_base(sym_cache, [0x7F0000, 0x9F0000]))
+        self.assertIsNone(_estimate_image_base(sym_cache, [0x101000]))
 
 
 class NativeSymbolicationTestCase(GlitchTestCase):
@@ -1000,9 +1028,13 @@ class NativeSymbolicationTestCase(GlitchTestCase):
             debug_id="df398b02-1681-3b54-8fa5-b205e1ecfd7e",
         )
 
-        # base stayed 0, so the frame resolved against the raw instruction_addr
+        # The other image's base (0x100000) was not applied: no lookup at
+        # 0xABC. With one frame there is too little to estimate a base from,
+        # so the frame stays unresolved rather than guessed.
+        looked_up = [call.args[0] for call in mock_sym_cache.lookup.call_args_list]
+        self.assertNotIn(0xABC, looked_up)
         self.assertIsNotNone(result)
-        self.assertEqual(result.score, 1)
+        self.assertEqual(result.score, 0)
 
     def test_unparseable_debug_meta_image_addr_falls_back_to_estimation(self):
         """A garbage image_addr must not pin the base at 0 and skip estimation."""

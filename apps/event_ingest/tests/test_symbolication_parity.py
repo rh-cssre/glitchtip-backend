@@ -111,11 +111,6 @@ def frame_count(event: int, exception: int) -> tuple:
     return (event, "exception", "values", exception, "stacktrace", "frames", len)
 
 
-IMAGE_BASE = (
-    "the image base estimate anchors on the first frame and page-aligned "
-    "offsets, and writes a wrong symbol rather than none"
-)
-
 # Values the goldens record that are wrong, and what they should be. Where
 # several fixes touch one value, "expected" assumes only the named fix. A fix
 # regenerates the goldens and updates or removes its entries here;
@@ -160,20 +155,6 @@ KNOWN_WRONG: list[KnownWrong] = [
         "context lines are only stripped of \\n, so CRLF sources keep a \\r",
     ),
     # Native
-    KnownWrong(
-        "native_elf_no_debug_meta",
-        frame(0, 0, 3, "function"),
-        None,
-        "app::crash_here(int*)",
-        IMAGE_BASE,
-    ),
-    KnownWrong(
-        "native_elf_no_debug_meta_own_frames",
-        frame(0, 0, 0, "function"),
-        None,
-        "main",
-        IMAGE_BASE,
-    ),
     # ProGuard
     KnownWrong(
         "proguard_deobfuscation",
@@ -664,12 +645,8 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
         )
 
     def test_elf_without_debug_meta(self):
-        """No debug_meta and no image_addr: the image base is estimated.
-
-        Pins a current bug: the estimate anchors on the first frame, a
-        system library frame here, which comes back as ``_init`` at line 0
-        while the app's frames stay unresolved. See KNOWN_WRONG.
-        """
+        """No debug_meta and no image_addr: the image base is estimated, even
+        though the first frame is in another image (a system library)."""
         self.upload("crash.elf", "lib", ELF_DEBUG_ID)
         payload = native_event(
             "elf-no-debug-meta",
@@ -681,11 +658,7 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
 
     def test_elf_without_debug_meta_or_foreign_frames(self):
         """The Flutter-on-Android shape: only the app's own frames, absolute
-        addresses, no image_addr and no debug_meta.
-
-        Pins a current bug: the base estimate is still wrong. See
-        KNOWN_WRONG.
-        """
+        addresses, no image_addr and no debug_meta."""
         self.upload("crash.elf", "lib", ELF_DEBUG_ID)
         payload = native_event(
             "elf-no-debug-meta-own-frames",
