@@ -121,9 +121,11 @@ class JavascriptEventProcessor:
             return None
 
         cache = self.get_sourcemap_cache(minified_source, map_file)
+        # Both positions are 1-based, as the SDK sends them; the lookup
+        # converts to 0-based itself.
         return cache.lookup(
             frame.lineno,
-            frame.colno - 1,
+            frame.colno,
             5,  # context_lines
         )
 
