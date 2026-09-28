@@ -261,7 +261,7 @@ class StacktraceProcessor:
                     remapped_frame = result[0]
                     frame["resolved"] = True
                     frame["filename"] = remapped_frame.file
-                    frame["lineNo"] = remapped_frame.line
+                    frame["lineno"] = remapped_frame.line
                     frame["function"] = remapped_frame.method
                     frame["module"] = remapped_frame.class_name
                     score = score + 1

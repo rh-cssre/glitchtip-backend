@@ -123,7 +123,6 @@ IMAGE_BASE = (
     "the image base estimate anchors on the first frame and page-aligned "
     "offsets, and writes a wrong symbol rather than none"
 )
-LINENO_KEY = "resolve_proguard_stacktrace writes frame['lineNo'], not 'lineno'"
 
 # Values the goldens record that are wrong, and what they should be. Where
 # several fixes touch one value, "expected" assumes only the named fix. A fix
@@ -217,8 +216,6 @@ KNOWN_WRONG: list[KnownWrong] = [
         IMAGE_BASE,
     ),
     # ProGuard
-    KnownWrong("proguard_deobfuscation", frame(0, 0, 1, "lineno"), 2, 23, LINENO_KEY),
-    KnownWrong("proguard_deobfuscation", frame(0, 0, 2, "lineno"), 3, 6, LINENO_KEY),
     KnownWrong(
         "proguard_deobfuscation",
         frame_count(0, 0),
@@ -233,13 +230,6 @@ KNOWN_WRONG: list[KnownWrong] = [
         "SourceFile",
         "MainActivity.kt",
         "abs_path keeps the obfuscated file name when filename is remapped",
-    ),
-    KnownWrong(
-        "proguard_deobfuscation",
-        frame(0, 0, 1, "context_line"),
-        None,
-        "",
-        "a blank source line is dropped as context instead of stored as ''",
     ),
     KnownWrong(
         "proguard_chained_exceptions",
@@ -871,9 +861,8 @@ class ProguardSymbolicationGoldenTests(SymbolicationGoldenTestCase):
     def test_deobfuscation_and_source_context(self):
         """A mapping and JVM source bundle as the upload API stores them.
 
-        Pins current bugs: line numbers stay obfuscated, the inlined outer
-        frame is dropped, abs_path keeps the obfuscated file, and a blank
-        source line is dropped as context. See KNOWN_WRONG.
+        Pins current bugs: the inlined outer frame is dropped, and abs_path
+        keeps the obfuscated file. See KNOWN_WRONG.
         """
         self.upload()
         self.assertMatchesGolden(

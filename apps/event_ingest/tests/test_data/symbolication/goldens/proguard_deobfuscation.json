@@ -17,30 +17,44 @@
               },
               {
                 "abs_path": "SourceFile",
+                "context_line": "        val name = repository.loadUser(-1)",
                 "filename": "MainActivity.kt",
                 "function": "onSubmit",
                 "in_app": true,
-                "lineno": 2,
-                "module": "com.example.app.MainActivity"
+                "lineno": 23,
+                "module": "com.example.app.MainActivity",
+                "post_context": [
+                  "        view.contentDescription = name",
+                  "    }",
+                  "}"
+                ],
+                "pre_context": [
+                  "        title = repository.loadUser(1)",
+                  "    }",
+                  "",
+                  "    fun onSubmit(view: View) {",
+                  "        view.isEnabled = false"
+                ]
               },
               {
                 "abs_path": "SourceFile",
-                "context_line": "object Validator {",
+                "context_line": "            throw IllegalArgumentException(\"value must be positive: $value\")",
                 "filename": "Validator.kt",
                 "function": "requirePositive",
                 "in_app": true,
-                "lineno": 3,
+                "lineno": 6,
                 "module": "com.example.app.data.Validator",
                 "post_context": [
-                  "    fun requirePositive(value: Int) {",
-                  "        if (value <= 0) {",
-                  "            throw IllegalArgumentException(\"value must be positive: $value\")",
                   "        }",
-                  "    }"
+                  "    }",
+                  "}"
                 ],
                 "pre_context": [
                   "package com.example.app.data",
-                  ""
+                  "",
+                  "object Validator {",
+                  "    fun requirePositive(value: Int) {",
+                  "        if (value <= 0) {"
                 ]
               }
             ]
