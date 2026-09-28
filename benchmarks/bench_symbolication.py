@@ -25,6 +25,13 @@ Usage:
     docker compose run --rm web python benchmarks/bench_symbolication.py \\
         --events 50 --scenario js_large --scenario native_no_debug_meta
     ... --json   # machine-readable output
+    ... --concurrent 4 --storage-latency-ms 30   # 4 batches at once, S3-like
+
+``--concurrent`` additionally runs that many batches of 5 events at once on
+one event loop from cold caches, with a probe of how late the loop runs
+(event-loop lag), and reports peak RSS for it. ``--storage-latency-ms``
+emulates object storage: every open waits that long, and nothing is read or
+memory-mapped in place.
 
 Local only; not part of CI.
 """
@@ -86,7 +93,9 @@ def reset_peak_rss():
         f.write("5")
 
 
-def run_child(scenario: str, events: int) -> dict:
+def run_child(
+    scenario: str, events: int, batches: int = 0, latency_ms: float = 0
+) -> dict:
     use_test_settings()
     from django.db import connections
 
@@ -115,6 +124,9 @@ def run_child(scenario: str, events: int) -> dict:
 
     project = baker.make("projects.Project", organization__scrub_ip_addresses=False)
     organization = project.organization
+
+    if latency_ms:
+        remote_like_storage(latency_ms)
 
     def upload_elf_and_sources():
         upload_native_project(project, 1, 1)
@@ -251,20 +263,22 @@ def run_child(scenario: str, events: int) -> dict:
         "proguard": setup_proguard,
     }[scenario]()
 
-    def process_one(fields=None):
+    def message(fields=None):
         payload = {
             "event_id": uuid.uuid4().hex,
             "timestamp": timezone.now().isoformat(),
             "level": "error",
             **(fields or make_payload()),
         }
-        message = IssueTaskMessage(
+        return IssueTaskMessage(
             project_id=project.id,
             organization_id=organization.id,
             received=timezone.now(),
             payload=ErrorIssueEventSchema(**payload),
         )
-        run_async_closing(process_issue_events, [message])
+
+    def process_one(fields=None):
+        run_async_closing(process_issue_events, [message(fields)])
 
     # Warm up imports and connections with an event that has no exception, so
     # nothing is symbolicated yet.
@@ -290,7 +304,14 @@ def run_child(scenario: str, events: int) -> dict:
             timings.append(time.perf_counter() - start)
     peak = read_status_kib("VmHWM")
 
+    concurrent = {}
+    if batches:
+        concurrent = run_concurrent(
+            batches, lambda: [message() for _ in range(5)], process_issue_events
+        )
+
     return {
+        **concurrent,
         "scenario": scenario,
         "events": events,
         "ms_per_event_mean": statistics.mean(timings) * 1000,
@@ -305,6 +326,70 @@ def run_child(scenario: str, events: int) -> dict:
         "mib_read_per_event": cost.bytes_read / events / 2**20,
         "sourcemap_parses_per_event": cost.sourcemap_parses / events,
         "resolver_attempts_per_event": len(cost.resolver_attempts) / events,
+    }
+
+
+def remote_like_storage(latency_ms: float):
+    """Make local file storage behave like object storage: every open waits
+    ``latency_ms`` (a request round trip), and nothing is read or mapped in
+    place, so builds stream their inputs and loads download."""
+    from unittest import mock
+
+    from django.core.files.storage import Storage
+
+    from apps.symbolication import sources, store
+
+    original_open = Storage.open
+
+    def slow_open(storage, name, mode="rb"):
+        time.sleep(latency_ms / 1000)
+        return original_open(storage, name, mode)
+
+    for patch in (
+        mock.patch.object(Storage, "open", slow_open),
+        mock.patch.object(sources, "local_path", return_value=None),
+        mock.patch.object(store, "local_path", return_value=None),
+    ):
+        patch.start()
+
+
+def run_concurrent(batches: int, make_batch, process_issue_events) -> dict:
+    """Run ``batches`` ingest batches at once on one event loop, from cold
+    caches, while a probe measures how late the loop runs its callbacks."""
+    import asyncio
+
+    from apps.event_ingest.tests.symbolication import measure_symbolication
+    from apps.event_ingest.tests.utils import run_async_closing
+
+    lags = []
+
+    async def probe(stop):
+        while not stop.is_set():
+            expected = time.perf_counter() + 0.005
+            await asyncio.sleep(0.005)
+            lags.append(max(0.0, time.perf_counter() - expected))
+
+    async def run():
+        stop = asyncio.Event()
+        watcher = asyncio.create_task(probe(stop))
+        await asyncio.gather(
+            *(process_issue_events(make_batch()) for _ in range(batches))
+        )
+        stop.set()
+        await watcher
+
+    rss_before = read_status_kib("VmRSS")
+    reset_peak_rss()
+    start = time.perf_counter()
+    with measure_symbolication(cold=True) as cost:
+        run_async_closing(run)
+    return {
+        "concurrent_batches": batches,
+        "concurrent_seconds": time.perf_counter() - start,
+        "concurrent_peak_growth_mib": (read_status_kib("VmHWM") - rss_before) / 1024,
+        "concurrent_max_loop_lag_ms": max(lags, default=0) * 1000,
+        "concurrent_storage_reads": cost.files_opened,
+        "concurrent_builds": cost.cache_builds,
     }
 
 
@@ -348,6 +433,20 @@ def print_table(results: list[dict]):
     print(row([title for title, *_ in columns]))
     for result in results:
         print(row([fmt.format(result[key]) for _, _, fmt, key in columns]))
+    concurrent = [r for r in results if r.get("concurrent_batches")]
+    if concurrent:
+        print()
+        print(
+            f"{'concurrent (cold)':<22}{'batches':>8}{'seconds':>9}{'+MiB peak':>10}"
+            f"{'loop lag ms':>12}{'reads':>7}{'builds':>7}"
+        )
+        for r in concurrent:
+            print(
+                f"{r['scenario']:<22}{r['concurrent_batches']:>8}"
+                f"{r['concurrent_seconds']:>9.2f}{r['concurrent_peak_growth_mib']:>10.1f}"
+                f"{r['concurrent_max_loop_lag_ms']:>12.1f}"
+                f"{r['concurrent_storage_reads']:>7}{r['concurrent_builds']:>7}"
+            )
 
 
 def main():
@@ -358,11 +457,31 @@ def main():
     parser.add_argument(
         "--keepdb", action="store_true", help="Reuse and keep the scratch database."
     )
+    parser.add_argument(
+        "--concurrent",
+        type=int,
+        default=0,
+        metavar="BATCHES",
+        help="Also run BATCHES batches of 5 events at once, from cold caches.",
+    )
+    parser.add_argument(
+        "--storage-latency-ms",
+        type=float,
+        default=0,
+        help="Emulate object storage: this latency per open, and no local "
+        "paths or in-place maps.",
+    )
     parser.add_argument("--child", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     if args.child:
-        print(json.dumps(run_child(args.child, args.events)))
+        print(
+            json.dumps(
+                run_child(
+                    args.child, args.events, args.concurrent, args.storage_latency_ms
+                )
+            )
+        )
         return
 
     media_root = tempfile.mkdtemp(prefix="bench-symbolication-")
@@ -379,6 +498,10 @@ def main():
                     scenario,
                     "--events",
                     str(args.events),
+                    "--concurrent",
+                    str(args.concurrent),
+                    "--storage-latency-ms",
+                    str(args.storage_latency_ms),
                 ],
                 capture_output=True,
                 text=True,
