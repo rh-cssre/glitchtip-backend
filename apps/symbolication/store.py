@@ -4,10 +4,13 @@ An event asks for the cache of one artifact with ``get_cache``. The lookup
 goes, cheapest first:
 
 1. the in-process RAM tier (an LRU of loaded caches, bounded in bytes, that
-   drains to empty when idle);
+   drains to empty when idle), or for a cache too big for it, a one-entry
+   slot held for a few seconds;
 2. the optional node-local disk tier (``GLITCHTIP_SYMBOLICATION_DISK_CACHE_DIR``),
    whose files are memory-mapped;
-3. the cache stored in the default file storage, the source of truth;
+3. the cache stored in the default file storage, the source of truth:
+   memory-mapped in place when that storage is local disk, otherwise
+   downloaded once per process however many events want it at once;
 4. a build, queued on the ``symbolication`` task queue. The event waits for
    it up to ``GLITCHTIP_SYMBOLICATION_BUILD_WAIT_SECONDS`` and otherwise goes
    on without it. Events never parse an upload themselves.
@@ -41,7 +44,7 @@ from gt_rust.symbolic import (
 )
 
 from .models import CacheKind, CacheState, SymbolicationCache
-from .sources import run_storage_read
+from .sources import run_storage_read, submit_storage_read
 
 logger = logging.getLogger(__name__)
 
@@ -157,11 +160,12 @@ class MemoryTier:
             entry[2] = time.monotonic()
             return entry[0]
 
-    def put(self, key, cache):
+    def put(self, key, cache) -> bool:
+        """Keep ``cache``; False if it is too big for this tier."""
         capacity = self.capacity()
         size = cache.nbytes
         if not capacity or size > capacity // 4:
-            return
+            return False
         with self._lock:
             old = self._entries.pop(key, None)
             if old is not None:
@@ -172,6 +176,7 @@ class MemoryTier:
                 _, (_, evicted, _) = self._entries.popitem(last=False)
                 self._bytes -= evicted
             self._schedule_sweep()
+        return True
 
     def clear(self):
         with self._lock:
@@ -201,6 +206,71 @@ class MemoryTier:
 
 
 memory_tier = MemoryTier()
+
+
+class OversizedSlot:
+    """Room for ONE loaded cache too big for the RAM tier, for a few seconds.
+
+    Without it every event for a large artifact (a big sourcemap, a big
+    native library) would load its cache from storage again. Holding one
+    such cache briefly lets a run of events on the same artifact share it,
+    while the extra memory stays bounded to one copy. It is released after
+    GLITCHTIP_SYMBOLICATION_OVERSIZED_TTL_SECONDS without use (0 disables
+    the slot), by a timer that only runs while it is occupied.
+    """
+
+    def __init__(self):
+        self._entry = None  # [key, cache, last_used]
+        self._lock = threading.Lock()
+        self._timer: threading.Timer | None = None
+
+    @staticmethod
+    def ttl() -> float:
+        return settings.GLITCHTIP_SYMBOLICATION_OVERSIZED_TTL_SECONDS
+
+    def get(self, key):
+        with self._lock:
+            if self._entry is None or self._entry[0] != key:
+                return None
+            self._entry[2] = time.monotonic()
+            return self._entry[1]
+
+    def put(self, key, cache):
+        if self.ttl() <= 0:
+            return
+        with self._lock:
+            self._entry = [key, cache, time.monotonic()]
+            self._schedule_expiry()
+
+    def clear(self):
+        with self._lock:
+            self._entry = None
+            if self._timer is not None:
+                self._timer.cancel()
+                self._timer = None
+
+    def __len__(self):
+        return 0 if self._entry is None else 1
+
+    def _schedule_expiry(self):
+        # Caller holds the lock.
+        if self._timer is None and self._entry is not None:
+            self._timer = threading.Timer(max(self.ttl(), 0.1), self.expire)
+            self._timer.daemon = True
+            self._timer.start()
+
+    def expire(self):
+        with self._lock:
+            self._timer = None
+            if self._entry is None:
+                return
+            if time.monotonic() - self._entry[2] >= self.ttl():
+                self._entry = None
+            else:
+                self._schedule_expiry()
+
+
+oversized_slot = OversizedSlot()
 
 
 # --- Disk tier ---------------------------------------------------------------
@@ -340,21 +410,43 @@ disk_tier = DiskTier()
 
 
 def clear_process_caches():
-    """Empty this process's RAM tier (for tests and cold measurements)."""
+    """Empty this process's in-memory caches (for tests and cold
+    measurements)."""
     memory_tier.clear()
+    oversized_slot.clear()
 
 
 # --- Lookup ------------------------------------------------------------------
 
 
+def _local_stored_path(name: str) -> str | None:
+    """The stored cache's path when file storage keeps it on local disk."""
+    try:
+        path = default_storage.path(name)
+    except NotImplementedError:
+        return None
+    # Some backends report a path without keeping the file there (the
+    # in-memory storage), so check it exists.
+    return path if os.path.isfile(path) else None
+
+
 def _load_from_tiers(name: str, source: CacheSource):
-    """Load a READY cache from the disk tier, else from file storage.
+    """Load a READY cache, cheapest source first.
 
     Blocking (storage has no async API, and verifying a large cache takes
     milliseconds), so it runs on the bounded read pool. Returns the cache
-    and which tier it came from.
+    and where it came from.
     """
+    loader = LOADERS[source.kind]
     digest = source.source_digest
+    # Local file storage: memory-map the stored file itself. That relies on a
+    # stored cache never being rewritten in place (see tasks._build).
+    path = _local_stored_path(name)
+    if path is not None:
+        return (
+            loader.load_file(path, verify=True, expected_source_digest=digest),
+            "storage_map",
+        )
     cache = disk_tier.load(source.kind, source.cache_key, digest)
     if cache is not None:
         return cache, "disk_hit"
@@ -362,15 +454,36 @@ def _load_from_tiers(name: str, source: CacheSource):
         data = stored.read()
     # Verify once, as the bytes arrive from storage; the local copy is then
     # trusted when a later process maps it.
-    cache = LOADERS[source.kind].load(data, verify=True, expected_source_digest=digest)
+    cache = loader.load(data, verify=True, expected_source_digest=digest)
     disk_tier.publish(source.kind, source.cache_key, data)
     return cache, "storage_load"
 
 
-async def _load_ready(row: SymbolicationCache, source: CacheSource):
+# Loads in flight, by cache key: concurrent events for one artifact (on any
+# of the process's event loops) wait on one load instead of each fetching
+# the cache from storage.
+_loads_in_flight: dict = {}
+_loads_lock = threading.Lock()
+
+
+async def _load_ready(row: SymbolicationCache, source: CacheSource, key):
     """Load a READY cache off the loop; see _load_from_tiers."""
-    cache, tier = await run_storage_read(_load_from_tiers, row.storage_name, source)
-    _notify(tier)
+    with _loads_lock:
+        future = _loads_in_flight.get(key)
+        leader = future is None
+        if leader:
+            future = submit_storage_read(_load_from_tiers, row.storage_name, source)
+            _loads_in_flight[key] = future
+    try:
+        cache, tier = await asyncio.wrap_future(future)
+    finally:
+        if leader:
+            with _loads_lock:
+                _loads_in_flight.pop(key, None)
+    if leader:
+        _notify(tier)
+    else:
+        _notify("shared_load")
     return cache
 
 
@@ -439,7 +552,7 @@ async def get_cache(source: CacheSource):
     """The loaded cache for ``source``, or None if it is not available in
     time (building, unbuildable, or its source is gone)."""
     key = (source.kind, format_tag(source.kind), source.cache_key)
-    cache = memory_tier.get(key)
+    cache = memory_tier.get(key) or oversized_slot.get(key)
     if cache is not None:
         _notify("hit")
         return cache
@@ -470,7 +583,7 @@ async def get_cache(source: CacheSource):
         row = refreshed
 
     try:
-        cache = await _load_ready(row, source)
+        cache = await _load_ready(row, source, key)
     except CacheStaleError:
         # Written by another format generation: not damage, just rebuild.
         logger.info("Rebuilding stale symbolication cache %s", row.storage_name)
@@ -488,7 +601,8 @@ async def get_cache(source: CacheSource):
             await run_storage_read(_delete_stored, row.storage_name)
         await _rebuild(row)
         return None
-    memory_tier.put(key, cache)
+    if not memory_tier.put(key, cache):
+        oversized_slot.put(key, cache)
     return cache
 
 

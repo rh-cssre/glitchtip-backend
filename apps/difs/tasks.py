@@ -21,7 +21,7 @@ from apps.files.models import File, FileBlob
 from apps.projects.models import Project
 from apps.shared.schema.exception import StackTraceFrame
 from apps.symbolication.models import CacheKind
-from apps.symbolication.sources import blob_path
+from apps.symbolication.sources import blob_input
 from apps.symbolication.store import CacheSource, get_cache
 
 
@@ -349,10 +349,14 @@ def difs_create_file_from_chunks(name, checksum, chunks):
 
 
 def difs_extract_metadata_from_file(file):
-    with blob_path(file.blob) as path:
+    with blob_input(file.blob) as source:
         # Only one kind of file format is supported now
         try:
-            archive = Archive.open(path)
+            archive = (
+                Archive.open(source)
+                if isinstance(source, str)
+                else Archive.from_bytes(source)
+            )
         except Exception as err:
             getLogger().error("Extract metadata error: %s", err)
             raise UnsupportedFile() from err

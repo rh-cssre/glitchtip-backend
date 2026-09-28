@@ -248,6 +248,11 @@ GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB = env.int(
 GLITCHTIP_SYMBOLICATION_RAM_CACHE_IDLE_SECONDS = env.int(
     "GLITCHTIP_SYMBOLICATION_RAM_CACHE_IDLE_SECONDS", default=600
 )
+# Seconds one loaded cache too big for the RAM tier is kept for reuse by
+# the events after it (only one at a time). 0 disables it.
+GLITCHTIP_SYMBOLICATION_OVERSIZED_TTL_SECONDS = env.float(
+    "GLITCHTIP_SYMBOLICATION_OVERSIZED_TTL_SECONDS", default=10.0
+)
 # Optional node-local directory to keep caches in (memory-mapped on load),
 # e.g. a Kubernetes emptyDir. Empty disables the tier. A missing or
 # read-only directory is logged once and the tier is skipped.

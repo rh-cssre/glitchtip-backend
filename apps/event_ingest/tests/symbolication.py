@@ -126,7 +126,11 @@ class SymbolicationCost:
     cache_hits: int = 0
     cache_misses: int = 0
     cache_disk_hits: int = 0
+    # A stored cache read into memory, memory-mapped in place (local file
+    # storage), or shared from another event's load already in flight.
     cache_storage_loads: int = 0
+    cache_storage_maps: int = 0
+    cache_shared_loads: int = 0
     cache_builds: int = 0
     cache_unavailable: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
@@ -359,6 +363,8 @@ def measure_symbolication(cold: bool = True):
         "miss": "cache_misses",
         "disk_hit": "cache_disk_hits",
         "storage_load": "cache_storage_loads",
+        "storage_map": "cache_storage_maps",
+        "shared_load": "cache_shared_loads",
         "build": "cache_builds",
         "unavailable": "cache_unavailable",
     }

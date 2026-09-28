@@ -1,6 +1,7 @@
 """Building symbolication caches, on the dedicated ``symbolication`` queue."""
 
 import asyncio
+import contextlib
 import logging
 import os
 import tempfile
@@ -8,7 +9,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from django.conf import settings
-from django.core.files.base import File
+from django.core.files.base import ContentFile, File
 from django.core.files.storage import default_storage
 from django.db.models import F, Q
 from django.tasks import task
@@ -16,7 +17,7 @@ from django.utils import timezone
 from gt_rust.symbolic import CacheTooLargeError, SymbolicError
 
 from .models import CacheKind, CacheState, SymbolicationCache
-from .sources import blob_path
+from .sources import blob_input
 from .store import (
     LOADERS,
     MAX_ATTEMPTS,
@@ -45,47 +46,60 @@ def _build_executor() -> ThreadPoolExecutor:
         return _executor
 
 
+def _build_args(row: SymbolicationCache, source, sourcemap) -> tuple[tuple, dict]:
+    """The arguments to the loader's build/build_to after the destination."""
+    digest = source_digest(row.source_blob.checksum)
+    if row.kind == CacheKind.SOURCEMAP:
+        return (source, sourcemap), {"source_digest": digest}
+    if row.kind == CacheKind.SYMCACHE:
+        _, debug_id, arch = row.cache_key.split(":", 2)
+        return (source,), {
+            "debug_id": debug_id or None,
+            "arch": arch or None,
+            "source_digest": digest,
+        }
+    return (source,), {
+        "source_digest": digest,
+        "max_mapping_bytes": settings.GLITCHTIP_PROGUARD_MAX_MAPPING_MB * 1024 * 1024,
+    }
+
+
+def _store(name: str, content) -> str:
+    # Replace a cache only by delete + save, never by rewriting the file in
+    # place: with local file storage other processes may have the old file
+    # memory-mapped (store._load_from_tiers). Unlinking leaves their maps
+    # valid; truncating or overwriting would not.
+    if default_storage.exists(name):
+        default_storage.delete(name)
+    return default_storage.save(name, content)
+
+
 def _build(row: SymbolicationCache) -> tuple[str, int]:
     """Build and store the cache for ``row``. Runs on the build executor.
 
     The cache is written to a temporary file by gt_rust (build_to) and
     streamed to storage from there, so a large cache is never held as one
-    Python bytes object.
+    Python bytes object; without a writable temporary directory it is built
+    in memory instead.
     """
     loader = LOADERS[row.kind]
-    digest = source_digest(row.source_blob.checksum)
-    with (
-        blob_path(row.source_blob) as source,
-        tempfile.TemporaryDirectory(prefix="gt-symbol-cache-") as scratch,
-    ):
-        built = os.path.join(scratch, "cache")
+    name = storage_name(row.kind, row.cache_key)
+    with contextlib.ExitStack() as inputs:
+        source = inputs.enter_context(blob_input(row.source_blob))
+        sourcemap = None
         if row.kind == CacheKind.SOURCEMAP:
-            with blob_path(row.secondary_blob) as sourcemap:
-                size = loader.build_to(built, source, sourcemap, source_digest=digest)
-        elif row.kind == CacheKind.SYMCACHE:
-            _, debug_id, arch = row.cache_key.split(":", 2)
-            size = loader.build_to(
-                built,
-                source,
-                debug_id=debug_id or None,
-                arch=arch or None,
-                source_digest=digest,
-            )
-        else:
-            size = loader.build_to(
-                built,
-                source,
-                source_digest=digest,
-                max_mapping_bytes=settings.GLITCHTIP_PROGUARD_MAX_MAPPING_MB
-                * 1024
-                * 1024,
-            )
-        name = storage_name(row.kind, row.cache_key)
-        if default_storage.exists(name):
-            default_storage.delete(name)
-        with open(built, "rb") as cache_file:
-            stored = default_storage.save(name, File(cache_file, name=name))
-    return stored, size
+            sourcemap = inputs.enter_context(blob_input(row.secondary_blob))
+        args, kwargs = _build_args(row, source, sourcemap)
+        try:
+            scratch = tempfile.TemporaryDirectory(prefix="gt-symbol-cache-")
+        except OSError:
+            data = loader.build(*args, **kwargs)
+            return _store(name, ContentFile(data)), len(data)
+        with scratch as directory:
+            built = os.path.join(directory, "cache")
+            size = loader.build_to(built, *args, **kwargs)
+            with open(built, "rb") as cache_file:
+                return _store(name, File(cache_file, name=name)), size
 
 
 @task(queue_name="symbolication")

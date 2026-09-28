@@ -3,10 +3,12 @@ import logging
 import os
 import tempfile
 import threading
+import time
 import uuid
 from unittest import mock
 
 from asgiref.sync import async_to_sync
+from django.conf import settings as django_settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.test import SimpleTestCase, override_settings
@@ -28,7 +30,7 @@ from apps.event_ingest.tests.utils import EventIngestTestCase, run_async_closing
 from apps.files.models import FileBlob
 from apps.issue_events.models import IssueEvent
 
-from . import store
+from . import sources, store
 from .maintenance import cleanup_symbolication_caches
 from .models import CacheKind, CacheState, SymbolicationCache
 from .sources import STORAGE_READ_THREADS, run_storage_read
@@ -389,3 +391,180 @@ class CacheLifecycleTests(EventIngestTestCase):
                         self.assertTrue(self.resolved(self.process(native_crash())))
                     self.assertEqual(cost.cache_storage_loads, 1)
             self.assertEqual(len(logs.records), 1)
+
+
+@IN_MEMORY_STORAGE
+class StoredCacheLoadTests(EventIngestTestCase):
+    """How a READY cache is loaded when it is not in memory."""
+
+    def setUp(self):
+        super().setUp()
+        self.dif = upload_native_dif(
+            self.project,
+            "crash.elf",
+            (NATIVE_FIXTURES / "crash.elf").read_bytes(),
+            "lib",
+            ELF_DEBUG_ID,
+        )
+        self.source = store.CacheSource(
+            kind=CacheKind.SYMCACHE,
+            cache_key=f"{self.dif.file.blob.checksum}:{ELF_DEBUG_ID}:x86_64",
+            source_blob_id=self.dif.file.blob.id,
+        )
+        # Build it; the cost tests below start from a READY row.
+        self.assertIsNotNone(async_to_sync(store.get_cache)(self.source))
+
+    def get_many(self, count):
+        async def gather():
+            return await asyncio.gather(
+                *(store.get_cache(self.source) for _ in range(count))
+            )
+
+        return async_to_sync(gather)()
+
+    def test_remote_storage_is_read_into_memory(self):
+        with measure_symbolication() as cost:
+            self.assertIsNotNone(async_to_sync(store.get_cache)(self.source))
+        self.assertEqual(cost.cache_storage_loads, 1)
+        self.assertEqual(cost.cache_storage_maps, 0)
+        self.assertEqual(cost.files_opened, 1)
+
+    def test_concurrent_events_share_one_storage_load(self):
+        original = store._load_from_tiers
+
+        def slow_download(*args):
+            # A large cache from remote storage: long enough for every
+            # event to arrive while the first download is in flight.
+            time.sleep(0.3)
+            return original(*args)
+
+        with (
+            mock.patch.object(store, "_load_from_tiers", slow_download),
+            measure_symbolication() as cost,
+        ):
+            caches = self.get_many(5)
+        self.assertTrue(all(caches))
+        self.assertEqual(cost.cache_storage_loads, 1)
+        self.assertEqual(cost.cache_shared_loads, 4)
+        self.assertEqual(cost.files_opened, 1)
+
+    @override_settings(
+        GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB=0,
+        GLITCHTIP_SYMBOLICATION_OVERSIZED_TTL_SECONDS=60,
+    )
+    def test_a_cache_too_big_for_memory_is_kept_briefly_for_reuse(self):
+        with measure_symbolication() as cost:
+            async_to_sync(store.get_cache)(self.source)
+        self.assertEqual(cost.cache_storage_loads, 1)
+        self.assertEqual(len(store.memory_tier), 0)
+        self.assertEqual(len(store.oversized_slot), 1)
+
+        # A repeat within the TTL reuses it: no storage read.
+        with measure_symbolication(cold=False) as cost:
+            self.assertIsNotNone(async_to_sync(store.get_cache)(self.source))
+        self.assertEqual(cost.files_opened, 0)
+        self.assertEqual(cost.cache_hits, 1)
+
+        # Once expired it is gone, and the next event reads storage again.
+        with override_settings(GLITCHTIP_SYMBOLICATION_OVERSIZED_TTL_SECONDS=0):
+            store.oversized_slot.expire()
+        self.assertEqual(len(store.oversized_slot), 0)
+        with measure_symbolication(cold=False) as cost:
+            async_to_sync(store.get_cache)(self.source)
+        self.assertEqual(cost.cache_storage_loads, 1)
+
+    def test_only_one_oversized_cache_is_held(self):
+        slot = store.OversizedSlot()
+        self.addCleanup(slot.clear)
+        with override_settings(GLITCHTIP_SYMBOLICATION_OVERSIZED_TTL_SECONDS=60):
+            slot.put("a", FakeCache(1))
+            slot.put("b", FakeCache(1))
+        self.assertIsNone(slot.get("a"))
+        self.assertIsNotNone(slot.get("b"))
+        self.assertEqual(len(slot), 1)
+
+
+class LocalStorageLoadTests(EventIngestTestCase):
+    """With local file storage the stored cache is memory-mapped in place."""
+
+    def setUp(self):
+        super().setUp()
+        media = tempfile.TemporaryDirectory()
+        self.addCleanup(media.cleanup)
+        settings_override = override_settings(
+            MEDIA_ROOT=media.name,
+            STORAGES={
+                **django_settings.STORAGES,
+                "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            },
+        )
+        settings_override.enable()
+        self.addCleanup(settings_override.disable)
+
+    def test_stored_cache_is_mapped_not_read(self):
+        dif = upload_native_dif(
+            self.project,
+            "crash.elf",
+            (NATIVE_FIXTURES / "crash.elf").read_bytes(),
+            "lib",
+            ELF_DEBUG_ID,
+        )
+        source = store.CacheSource(
+            kind=CacheKind.SYMCACHE,
+            cache_key=f"{dif.file.blob.checksum}:{ELF_DEBUG_ID}:x86_64",
+            source_blob_id=dif.file.blob.id,
+        )
+        with measure_symbolication() as cost:
+            self.assertIsNotNone(async_to_sync(store.get_cache)(source))
+        self.assertEqual(cost.cache_builds, 1)
+        # The build mapped its local source instead of opening it, and the
+        # cache was mapped from where it was stored.
+        self.assertEqual(cost.cache_storage_maps, 1)
+        self.assertEqual(cost.cache_storage_loads, 0)
+        self.assertEqual(cost.files_opened, 0)
+
+        with measure_symbolication() as cost:
+            self.assertIsNotNone(async_to_sync(store.get_cache)(source))
+        self.assertEqual(cost.cache_storage_maps, 1)
+        self.assertEqual(cost.files_opened, 0)
+        self.assertEqual(cost.bytes_read, 0)
+
+
+@IN_MEMORY_STORAGE
+class NoTempDirTests(EventIngestTestCase):
+    def test_builds_fall_back_to_memory_without_a_temp_dir(self):
+        """A read-only root with no writable /tmp: builds read their inputs
+        into memory, and say so once."""
+        previous_disable = logging.root.manager.disable
+        logging.disable(logging.NOTSET)
+        self.addCleanup(logging.disable, previous_disable)
+        read_only = OSError(30, "Read-only file system")
+        with (
+            mock.patch.object(sources, "_warned_no_temp_dir", False),
+            mock.patch.object(
+                sources.tempfile, "NamedTemporaryFile", side_effect=read_only
+            ),
+            mock.patch(
+                "apps.symbolication.tasks.tempfile.TemporaryDirectory",
+                side_effect=read_only,
+            ),
+            self.assertLogs("apps.symbolication.sources", "WARNING") as logs,
+        ):
+            for name, content in [
+                ("crash.elf", (NATIVE_FIXTURES / "crash.elf").read_bytes()),
+                (
+                    "crash.macho.dwarf",
+                    (NATIVE_FIXTURES / "crash.macho.dwarf").read_bytes(),
+                ),
+            ]:
+                blob = store_blob(name, content)
+                row = SymbolicationCache.objects.create(
+                    kind=CacheKind.SYMCACHE,
+                    cache_key=f"{blob.checksum}::",
+                    format_tag=store.format_tag(CacheKind.SYMCACHE),
+                    source_blob=blob,
+                )
+                async_to_sync(build_cache.func)(row.id)
+                row.refresh_from_db()
+                self.assertEqual(row.state, CacheState.READY, row.error)
+        self.assertEqual(len(logs.records), 1)

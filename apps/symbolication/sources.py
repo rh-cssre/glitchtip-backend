@@ -2,12 +2,15 @@
 
 import asyncio
 import contextlib
+import logging
 import os
 import shutil
 import tempfile
 import threading
 import zipfile
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
+
+logger = logging.getLogger(__name__)
 
 COPY_CHUNK = 1024 * 1024
 # Threads for storage reads on the ingest path (a stored cache on a tier
@@ -20,8 +23,8 @@ _read_executor: ThreadPoolExecutor | None = None
 _read_executor_lock = threading.Lock()
 
 
-async def run_storage_read(func, *args):
-    """Run a blocking storage read on the bounded read pool."""
+def submit_storage_read(func, *args) -> Future:
+    """Start a blocking storage read on the bounded read pool."""
     global _read_executor
     with _read_executor_lock:
         if _read_executor is None:
@@ -29,16 +32,38 @@ async def run_storage_read(func, *args):
                 max_workers=STORAGE_READ_THREADS,
                 thread_name_prefix="symbolication-read",
             )
-    return await asyncio.get_running_loop().run_in_executor(_read_executor, func, *args)
+    return _read_executor.submit(func, *args)
+
+
+async def run_storage_read(func, *args):
+    """Run a blocking storage read on the bounded read pool."""
+    return await asyncio.wrap_future(submit_storage_read(func, *args))
+
+
+_warned_no_temp_dir = False
+
+
+def _warn_no_temp_dir(err: OSError):
+    global _warned_no_temp_dir
+    if not _warned_no_temp_dir:
+        _warned_no_temp_dir = True
+        logger.warning(
+            "No writable temporary directory (%s); symbolication builds read "
+            "their inputs into memory instead.",
+            err,
+        )
 
 
 @contextlib.contextmanager
-def blob_path(file_blob):
-    """A local filesystem path holding the blob's bytes.
+def blob_input(file_blob):
+    """The blob's bytes as a build input: a local path when possible.
 
     With local file storage that is the stored file itself, which the Rust
     side memory-maps. Otherwise the blob is streamed to a temporary file in
-    chunks, so it is never held in memory whole.
+    chunks, so it is never held in memory whole. Only if no temporary file
+    can be created (a read-only root with no writable /tmp) is the blob read
+    into bytes: that costs its size in memory, but builds run one at a time
+    on their own queue. gt_rust takes either form.
     """
     field_file = file_blob.blob
     try:
@@ -50,10 +75,14 @@ def blob_path(file_blob):
     if path is not None and os.path.isfile(path):
         yield path
         return
-    with (
-        field_file.storage.open(field_file.name, "rb") as source,
-        tempfile.NamedTemporaryFile(prefix="gt-symbol-source-") as target,
-    ):
+    try:
+        target = tempfile.NamedTemporaryFile(prefix="gt-symbol-source-")
+    except OSError as err:
+        _warn_no_temp_dir(err)
+        with field_file.storage.open(field_file.name, "rb") as source:
+            yield source.read()
+        return
+    with target, field_file.storage.open(field_file.name, "rb") as source:
         shutil.copyfileobj(source, target, COPY_CHUNK)
         target.flush()
         yield target.name
