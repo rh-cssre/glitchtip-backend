@@ -1,6 +1,6 @@
 [
   {
-    "culprit": "a.a.a in b",
+    "culprit": "com.example.app.MainActivity in onSubmit",
     "exception": {
       "values": [
         {
@@ -98,11 +98,24 @@
               },
               {
                 "abs_path": "SourceFile",
-                "filename": "SourceFile",
-                "function": "b",
+                "context_line": "        val name = repository.loadUser(-1)",
+                "filename": "MainActivity.kt",
+                "function": "onSubmit",
                 "in_app": true,
-                "lineno": 2,
-                "module": "a.a.a"
+                "lineno": 23,
+                "module": "com.example.app.MainActivity",
+                "post_context": [
+                  "        view.contentDescription = name",
+                  "    }",
+                  "}"
+                ],
+                "pre_context": [
+                  "        title = repository.loadUser(1)",
+                  "    }",
+                  "",
+                  "    fun onSubmit(view: View) {",
+                  "        view.isEnabled = false"
+                ]
               }
             ]
           },
@@ -112,8 +125,8 @@
       ]
     },
     "metadata": {
-      "filename": "SourceFile",
-      "function": "b",
+      "filename": "MainActivity.kt",
+      "function": "onSubmit",
       "type": "RuntimeException",
       "value": "click handler failed"
     },

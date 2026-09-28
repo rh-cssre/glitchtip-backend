@@ -260,8 +260,8 @@ class StacktraceProcessor:
         pass
 
     @classmethod
-    def resolve_stacktrace(cls, event, cache, debug_id=None):
-        """Resolve the first exception's frames with one loaded cache: a
+    def resolve_stacktrace(cls, event, cache, debug_id=None, exception_index=0):
+        """Resolve one exception's frames with one loaded cache: a
         ProguardCache for an Android event without native frames, otherwise
         a SymCache."""
         # Process event
@@ -273,9 +273,8 @@ class StacktraceProcessor:
                 return
             arch = (contexts.get("device") or {}).get("arch")
 
-            # Process the first exception only.
             exceptions = (event.get("exception") or {}).get("values")
-            exception = exceptions[0]
+            exception = exceptions[exception_index]
             stacktrace = exception.get("stacktrace")
             if stacktrace is None:
                 return

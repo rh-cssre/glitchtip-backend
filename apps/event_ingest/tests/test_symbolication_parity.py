@@ -163,13 +163,6 @@ KNOWN_WRONG: list[KnownWrong] = [
         "MainActivity.kt",
         "abs_path keeps the obfuscated file name when filename is remapped",
     ),
-    KnownWrong(
-        "proguard_chained_exceptions",
-        frame(0, 1, 1, "function"),
-        "b",
-        "onSubmit",
-        "only the first exception is deobfuscated (values[0])",
-    ),
 ]
 
 
@@ -818,11 +811,8 @@ class ProguardSymbolicationGoldenTests(SymbolicationGoldenTestCase):
         )
 
     def test_chained_exceptions(self):
-        """A wrapped exception and its cause, both obfuscated.
-
-        Pins a current bug: only the first exception is deobfuscated. See
-        KNOWN_WRONG.
-        """
+        """A wrapped exception and its cause, both obfuscated: both are
+        deobfuscated."""
         self.upload()
         wrapper = {
             "type": "RuntimeException",

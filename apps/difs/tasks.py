@@ -228,24 +228,35 @@ async def resolve_event_stacktraces(event: ErrorIssueEventSchema, project_id: in
         # file can resolve.
         candidates = []
 
-    resolved_stracktrackes = []
+    # Chained exceptions each carry their own stack trace; resolve every one.
+    exception_indexes = [
+        index
+        for index, value in enumerate(
+            (event_json.get("exception") or {}).get("values") or []
+        )
+        if value and value.get("stacktrace")
+    ]
+    resolved: dict[int, list] = {index: [] for index in exception_indexes}
     for dif in candidates:
         cache = await get_cache(_cache_source(dif, kind))
         if cache is None:
             continue
         debug_id = dif.data.get("debug_id")
-        remapped_stacktrace = StacktraceProcessor.resolve_stacktrace(
-            event_json, cache, debug_id=debug_id
-        )
-        if remapped_stacktrace is not None and remapped_stacktrace.score > 0:
-            await StacktraceProcessor.add_native_source_context(
-                remapped_stacktrace, project_id, debug_id
+        for index in exception_indexes:
+            remapped_stacktrace = StacktraceProcessor.resolve_stacktrace(
+                event_json, cache, debug_id=debug_id, exception_index=index
             )
-            resolved_stracktrackes.append(remapped_stacktrace)
+            if remapped_stacktrace is not None and remapped_stacktrace.score > 0:
+                await StacktraceProcessor.add_native_source_context(
+                    remapped_stacktrace, project_id, debug_id
+                )
+                resolved[index].append(remapped_stacktrace)
 
-    if len(resolved_stracktrackes) > 0:
+    for index, results in resolved.items():
+        if not results:
+            continue
         best_remapped_stacktrace = max(
-            resolved_stracktrackes,
+            results,
             key=lambda item: (
                 sum(
                     1
@@ -259,8 +270,7 @@ async def resolve_event_stacktraces(event: ErrorIssueEventSchema, project_id: in
                 sum(1 for f in item.frames if f and f.get("filename")),
             ),
         )
-
-        update_frames(event, best_remapped_stacktrace.frames)
+        update_frames(event, best_remapped_stacktrace.frames, index)
 
     # JVM source context (runs after proguard deobfuscation if applicable).
     # Re-serialize from the Pydantic event to pick up any frame changes from
@@ -274,11 +284,10 @@ async def resolve_event_stacktraces(event: ErrorIssueEventSchema, project_id: in
             _update_source_context_on_event(event, event_json)
 
 
-def update_frames(event: ErrorIssueEventSchema, frames):
-    # This should be rewritten
+def update_frames(event: ErrorIssueEventSchema, frames, exception_index=0):
     try:
         new_frames = [StackTraceFrame(**frame) for frame in frames if frame is not None]
-        event.exception.values[0].stacktrace.frames = new_frames
+        event.exception.values[exception_index].stacktrace.frames = new_frames
     except Exception as e:
         getLogger().error(f"StacktraceProcessor: Unexpected error: {e}")
 
