@@ -258,7 +258,7 @@ class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
 
         Pins current bugs: an app:///node_modules/ frame comes out in_app, and a dependency frame
         the SDK marked in_app stays in_app. See KNOWN_WRONG. A webpack://
-        frame URL is in test_webpack_frame_url_fails_the_batch.
+        frame URL is in test_webpack_frame_url.
         """
         self.upload_debug_id_bundles()
         payload = js_event(
@@ -301,14 +301,10 @@ class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
         )
         self.assertMatchesGolden("js_debug_id_bundles", self.process([payload]))
 
-    def test_webpack_frame_url_fails_the_batch(self):
-        """A frame whose URL is webpack:///... and resolves.
-
-        Pins a current bug: the webpack branch of process_frame assigns
-        ``frame["module"]`` on a StackTraceFrame, which raises TypeError, and
-        the error escapes process_issue_events, so no event of the batch is
-        stored. Intended: the event is stored, symbolicated.
-        """
+    def test_webpack_frame_url(self):
+        """A frame whose URL is webpack:///..., in the same batch as an event
+        with nothing to symbolicate: both are stored, and the frame's
+        filename and module come from the webpack path."""
         self.upload_debug_id_bundles()
         plain = js_event(
             "js-webpack-neighbour",
@@ -329,9 +325,7 @@ class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
                 "images": [sourcemap_image(WIDGET_WEBPACK_URL, WIDGET_DEBUG_ID)]
             },
         )
-        with self.assertRaisesMessage(TypeError, "does not support item assignment"):
-            self.process([plain, webpack])
-        self.assertFalse(IssueEvent.objects.exists())
+        self.assertMatchesGolden("js_webpack_frame_url", self.process([plain, webpack]))
 
     def test_two_events_in_one_batch(self):
         """Two events in one ingest batch naming different images: the first

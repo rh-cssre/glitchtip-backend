@@ -172,7 +172,7 @@ class JavascriptEventProcessor:
             elif filename.startswith("./"):
                 in_app = True
             # We want to explicitly generate a webpack module name
-            frame["module"] = generate_module(filename)
+            frame.module = generate_module(filename)
         elif "/node_modules/" in abs_path:
             in_app = False
 
