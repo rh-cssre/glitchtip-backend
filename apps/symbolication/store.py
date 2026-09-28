@@ -31,6 +31,8 @@ from django.core.files.storage import default_storage
 from django.db import IntegrityError
 from django.utils import timezone
 from gt_rust.symbolic import (
+    CacheCorruptError,
+    CacheStaleError,
     ProguardCache,
     SourceMapCache,
     SymbolicError,
@@ -77,9 +79,22 @@ class CacheSource:
     """Which artifact a cache is built from."""
 
     kind: CacheKind
+    # Starts with the source blob's SHA-1 checksum.
     cache_key: str
     source_blob_id: int
     secondary_blob_id: int | None = None
+
+    @property
+    def source_digest(self) -> bytes | None:
+        """The source blob's raw SHA-1, as recorded in the cache header."""
+        return source_digest(self.cache_key.split(":", 1)[0])
+
+
+def source_digest(checksum: str) -> bytes | None:
+    try:
+        return bytes.fromhex(checksum)
+    except ValueError:
+        return None
 
 
 # --- Observers ---------------------------------------------------------------
@@ -238,13 +253,21 @@ class DiskTier:
     def path(self, directory: str, kind: CacheKind, cache_key: str) -> str:
         return os.path.join(directory, storage_name(kind, cache_key))
 
-    def load(self, kind: CacheKind, cache_key: str):
+    def load(self, kind: CacheKind, cache_key: str, digest: bytes | None):
+        """Map a local copy, or None. Blocking: run it on the read pool.
+
+        The file is read ahead into the page cache first. The mapping is
+        read at random, and a lookup that faults pages in from disk on the
+        event loop costs around a millisecond a frame; faulting them in here,
+        on the read pool, costs the loop nothing.
+        """
         directory = self.directory()
         if directory is None:
             return None
         path = self.path(directory, kind, cache_key)
         try:
-            cache = LOADERS[kind].load_file(path)
+            _read_ahead(path)
+            cache = LOADERS[kind].load_file(path, expected_source_digest=digest)
         except FileNotFoundError:
             return None
         except (OSError, SymbolicError):
@@ -306,6 +329,13 @@ class DiskTier:
                     total -= size
 
 
+def _read_ahead(path: str):
+    with open(path, "rb", buffering=0) as local:
+        os.posix_fadvise(local.fileno(), 0, 0, os.POSIX_FADV_WILLNEED)
+        while local.read(1024 * 1024):
+            pass
+
+
 disk_tier = DiskTier()
 
 
@@ -317,26 +347,36 @@ def clear_process_caches():
 # --- Lookup ------------------------------------------------------------------
 
 
-def _read_stored(name: str) -> bytes:
+def _load_from_tiers(name: str, source: CacheSource):
+    """Load a READY cache from the disk tier, else from file storage.
+
+    Blocking (storage has no async API, and verifying a large cache takes
+    milliseconds), so it runs on the bounded read pool. Returns the cache
+    and which tier it came from.
+    """
+    digest = source.source_digest
+    cache = disk_tier.load(source.kind, source.cache_key, digest)
+    if cache is not None:
+        return cache, "disk_hit"
     with default_storage.open(name, "rb") as stored:
-        return stored.read()
+        data = stored.read()
+    # Verify once, as the bytes arrive from storage; the local copy is then
+    # trusted when a later process maps it.
+    cache = LOADERS[source.kind].load(data, verify=True, expected_source_digest=digest)
+    disk_tier.publish(source.kind, source.cache_key, data)
+    return cache, "storage_load"
 
 
 async def _load_ready(row: SymbolicationCache, source: CacheSource):
-    """Load a READY cache from the disk tier or file storage."""
-    cache = disk_tier.load(source.kind, source.cache_key)
-    if cache is not None:
-        _notify("disk_hit")
-        return cache
-    # Storage backends have no async API: one bounded thread hop, on a tier
-    # miss only.
-    data = await run_storage_read(_read_stored, row.storage_name)
-    _notify("storage_load")
-    # Verify once, as the bytes arrive from storage; the local copy is then
-    # trusted when a later process maps it.
-    cache = LOADERS[source.kind].load(data, verify=True)
-    disk_tier.publish(source.kind, source.cache_key, data)
+    """Load a READY cache off the loop; see _load_from_tiers."""
+    cache, tier = await run_storage_read(_load_from_tiers, row.storage_name, source)
+    _notify(tier)
     return cache
+
+
+def _delete_stored(name: str):
+    with contextlib.suppress(Exception):
+        default_storage.delete(name)
 
 
 async def _request_build(source: CacheSource) -> SymbolicationCache:
@@ -431,17 +471,31 @@ async def get_cache(source: CacheSource):
 
     try:
         cache = await _load_ready(row, source)
-    except (SymbolicError, OSError):
+    except CacheStaleError:
+        # Written by another format generation: not damage, just rebuild.
+        logger.info("Rebuilding stale symbolication cache %s", row.storage_name)
+        await _rebuild(row)
+        return None
+    except (SymbolicError, OSError) as err:
+        # CacheCorruptError, an unreadable file, or a cache that does not
+        # match its source: discard it and rebuild from the source.
         logger.warning(
-            "Stored symbolication cache %s is unreadable; rebuilding it.",
+            "Stored symbolication cache %s is unusable (%s); rebuilding it.",
             row.storage_name,
-            exc_info=True,
+            err,
         )
-        if await SymbolicationCache.objects.filter(
-            id=row.id, state=CacheState.READY
-        ).aupdate(state=CacheState.PENDING, updated=timezone.now()):
-            await _enqueue(row.id)
-        _notify("unavailable")
+        if isinstance(err, CacheCorruptError):
+            await run_storage_read(_delete_stored, row.storage_name)
+        await _rebuild(row)
         return None
     memory_tier.put(key, cache)
     return cache
+
+
+async def _rebuild(row: SymbolicationCache):
+    """Send a READY row back to be built again."""
+    if await SymbolicationCache.objects.filter(
+        id=row.id, state=CacheState.READY
+    ).aupdate(state=CacheState.PENDING, updated=timezone.now()):
+        await _enqueue(row.id)
+    _notify("unavailable")

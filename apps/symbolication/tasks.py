@@ -2,20 +2,29 @@
 
 import asyncio
 import logging
+import os
+import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from django.conf import settings
-from django.core.files.base import ContentFile
+from django.core.files.base import File
 from django.core.files.storage import default_storage
 from django.db.models import F, Q
 from django.tasks import task
 from django.utils import timezone
-from gt_rust.symbolic import SymbolicError
+from gt_rust.symbolic import CacheTooLargeError, SymbolicError
 
 from .models import CacheKind, CacheState, SymbolicationCache
 from .sources import blob_path
-from .store import LOADERS, MAX_ATTEMPTS, STALE_BUILD, _notify, storage_name
+from .store import (
+    LOADERS,
+    MAX_ATTEMPTS,
+    STALE_BUILD,
+    _notify,
+    source_digest,
+    storage_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,38 +46,46 @@ def _build_executor() -> ThreadPoolExecutor:
 
 
 def _build(row: SymbolicationCache) -> tuple[str, int]:
-    """Build and store the cache for ``row``. Runs on the build executor."""
+    """Build and store the cache for ``row``. Runs on the build executor.
+
+    The cache is written to a temporary file by gt_rust (build_to) and
+    streamed to storage from there, so a large cache is never held as one
+    Python bytes object.
+    """
     loader = LOADERS[row.kind]
-    # The raw SHA-1 of the source, recorded in the cache header.
-    try:
-        digest = bytes.fromhex(row.source_blob.checksum)
-    except ValueError:
-        digest = None
-    with blob_path(row.source_blob) as source:
+    digest = source_digest(row.source_blob.checksum)
+    with (
+        blob_path(row.source_blob) as source,
+        tempfile.TemporaryDirectory(prefix="gt-symbol-cache-") as scratch,
+    ):
+        built = os.path.join(scratch, "cache")
         if row.kind == CacheKind.SOURCEMAP:
             with blob_path(row.secondary_blob) as sourcemap:
-                data = loader.build(source, sourcemap, source_digest=digest)
+                size = loader.build_to(built, source, sourcemap, source_digest=digest)
         elif row.kind == CacheKind.SYMCACHE:
             _, debug_id, arch = row.cache_key.split(":", 2)
-            data = loader.build(
+            size = loader.build_to(
+                built,
                 source,
                 debug_id=debug_id or None,
                 arch=arch or None,
                 source_digest=digest,
             )
         else:
-            data = loader.build(
+            size = loader.build_to(
+                built,
                 source,
                 source_digest=digest,
                 max_mapping_bytes=settings.GLITCHTIP_PROGUARD_MAX_MAPPING_MB
                 * 1024
                 * 1024,
             )
-    name = storage_name(row.kind, row.cache_key)
-    if default_storage.exists(name):
-        default_storage.delete(name)
-    stored = default_storage.save(name, ContentFile(data))
-    return stored, len(data)
+        name = storage_name(row.kind, row.cache_key)
+        if default_storage.exists(name):
+            default_storage.delete(name)
+        with open(built, "rb") as cache_file:
+            stored = default_storage.save(name, File(cache_file, name=name))
+    return stored, size
 
 
 @task(queue_name="symbolication")
@@ -100,9 +117,23 @@ async def build_cache(cache_id: int):
         stored, size = await asyncio.get_running_loop().run_in_executor(
             _build_executor(), _build, row
         )
+    except CacheTooLargeError as err:
+        # Deterministic for this input: never retried. Events that need it
+        # are stored without ProGuard deobfuscation.
+        logger.warning(
+            "ProGuard mapping for symbolication cache %s is over "
+            "GLITCHTIP_PROGUARD_MAX_MAPPING_MB; events using it stay "
+            "obfuscated: %s",
+            cache_id,
+            err,
+        )
+        await _finish(
+            row, CacheState.FAILED, error=str(err)[:1000], attempts=MAX_ATTEMPTS
+        )
+        return
     except SymbolicError as err:
-        # The input itself cannot be turned into a cache (malformed, or over
-        # the size cap): do not retry it with this format.
+        # The input itself cannot be turned into a cache (malformed): do not
+        # retry it with this format.
         logger.info("Symbolication cache %s cannot be built: %s", cache_id, err)
         await _finish(
             row, CacheState.FAILED, error=str(err)[:1000], attempts=MAX_ATTEMPTS

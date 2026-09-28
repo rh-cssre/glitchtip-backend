@@ -100,7 +100,7 @@ class DiskTierTests(SimpleTestCase):
     def test_off_by_default(self):
         self.assertIsNone(self.tier.directory())
         self.assertIsNone(self.tier.publish(CacheKind.SYMCACHE, "k", b"data"))
-        self.assertIsNone(self.tier.load(CacheKind.SYMCACHE, "k"))
+        self.assertIsNone(self.tier.load(CacheKind.SYMCACHE, "k", None))
 
     def test_publishes_whole_files_and_evicts_oldest_over_the_cap(self):
         with override_settings(
@@ -251,6 +251,27 @@ class CacheLifecycleTests(EventIngestTestCase):
         self.assertEqual(cost.cache_builds, 0)
         self.assertEqual(cost.files_opened, 0)
         self.assertEqual(cost.cache_unavailable, 1)
+
+    def test_corrupt_stored_cache_is_discarded_and_rebuilt(self):
+        self.upload_elf()
+        self.process(native_crash())
+        row = SymbolicationCache.objects.get()
+        with default_storage.open(row.storage_name, "rb") as stored:
+            data = bytearray(stored.read())
+        data[-1] ^= 0xFF  # damage the payload, so verification fails
+        default_storage.delete(row.storage_name)
+        default_storage.save(row.storage_name, ContentFile(bytes(data)))
+
+        with measure_symbolication() as cost:
+            event = self.process(native_crash())
+        # The damaged cache is rebuilt (here at once, by the synchronous test
+        # task backend); this event goes on without it.
+        self.assertFalse(self.resolved(event))
+        self.assertEqual(cost.cache_builds, 1)
+        self.assertEqual(SymbolicationCache.objects.get().state, CacheState.READY)
+        with measure_symbolication() as cost:
+            self.assertTrue(self.resolved(self.process(native_crash())))
+        self.assertEqual(cost.cache_builds, 0)
 
     @override_settings(GLITCHTIP_SYMBOLICATION_BUILD_WAIT_SECONDS=0.05)
     def test_event_goes_on_unsymbolicated_when_the_build_is_slow(self):

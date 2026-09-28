@@ -256,7 +256,7 @@ class SourceCodeTestCase(GlitchTipTransactionTestCase):
         )
 
         with patch.object(
-            SourceMapCache, "build", wraps=SourceMapCache.build
+            SourceMapCache, "build_to", wraps=SourceMapCache.build_to
         ) as mock_build:
             self.client.post(
                 envelope_url, list_to_envelope(data), content_type="application/json"

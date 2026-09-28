@@ -263,15 +263,20 @@ GLITCHTIP_SYMBOLICATION_BUILD_WAIT_SECONDS = env.float(
 GLITCHTIP_SYMBOLICATION_BUILD_CONCURRENCY = env.int(
     "GLITCHTIP_SYMBOLICATION_BUILD_CONCURRENCY", default=1
 )
-# When an event carries no debug id (no debug_meta) or no ProGuard uuid, try
-# at most this many of the project's newest debug files. 0 disables it.
+# When a native event carries no debug id (no debug_meta), or an Android
+# event no ProGuard uuid, try at most this many of the project's newest
+# distinct debug ids (native: filtered by architecture). Debug files have no
+# release, so there is no same-release preference. 0 disables the fallback.
 GLITCHTIP_SYMBOLICATION_FALLBACK_CANDIDATES = env.int(
     "GLITCHTIP_SYMBOLICATION_FALLBACK_CANDIDATES", default=3
 )
-# ProGuard mappings larger than this (MB) are not processed: building their
-# cache needs roughly 20 times the mapping size in memory.
+# ProGuard mappings larger than this (MB) are not processed. Building a
+# mapping's cache peaks at about 9 times the mapping's size in memory (up to
+# about 22 times for dense mappings), so the default's worst case is about
+# 450 MB, up to 1.1 GB, on one build worker thread. Events whose mapping is
+# over the cap are stored obfuscated, and the refusal is logged once.
 GLITCHTIP_PROGUARD_MAX_MAPPING_MB = env.int(
-    "GLITCHTIP_PROGUARD_MAX_MAPPING_MB", default=100
+    "GLITCHTIP_PROGUARD_MAX_MAPPING_MB", default=50
 )
 GLITCHTIP_LOG_RETENTION_DAYS = env.int(
     "GLITCHTIP_LOG_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS

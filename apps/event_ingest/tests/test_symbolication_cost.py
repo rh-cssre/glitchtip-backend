@@ -12,7 +12,9 @@ from django.test import override_settings
 from django.utils import timezone
 
 from apps.difs.models import DebugInformationFile
+from apps.symbolication.models import CacheState, SymbolicationCache
 from apps.symbolication.sources import COPY_CHUNK
+from apps.symbolication.store import MAX_ATTEMPTS
 
 from ..process_event import process_issue_events
 from ..schema import ErrorIssueEventSchema, IssueTaskMessage
@@ -46,18 +48,18 @@ FALLBACK_CANDIDATES = 3
 # cache_format_tag runs once per cache kind per process.
 SCHEMA_CALLS = {"normalize_debug_id", "parse_addr", "cache_format_tag"}
 NATIVE_CALLS = SCHEMA_CALLS | {
-    "SymCache.build",
+    "SymCache.build_to",
     "SymCache.load",
     "SymCache.lookup",
     "demangle",
 }
 PROGUARD_CALLS = SCHEMA_CALLS | {
-    "ProguardCache.build",
+    "ProguardCache.build_to",
     "ProguardCache.load",
     "ProguardCache.remap_frame",
 }
 JS_CALLS = SCHEMA_CALLS | {
-    "SourceMapCache.build",
+    "SourceMapCache.build_to",
     "SourceMapCache.load",
     "SourceMapCache.lookup",
 }
@@ -245,7 +247,7 @@ class NativeDebugFileCostTests(SymbolicationCostTestCase):
             self.process([native_crash(debug_meta=elf_debug_meta())])
         self.assertServedFromMemory(cost)
         self.assertEqual(cost.resolver_attempts, [ELF_DEBUG_ID])
-        cost.assert_only(NATIVE_CALLS - {"SymCache.build", "SymCache.load"})
+        cost.assert_only(NATIVE_CALLS - {"SymCache.build_to", "SymCache.load"})
 
 
 class NativeSourceContextCostTests(SymbolicationCostTestCase):
@@ -321,6 +323,49 @@ class ProguardCostTests(SymbolicationCostTestCase):
         self.assertServedFromMemory(cost)
 
 
+class ProguardSizeCapTests(SymbolicationCostTestCase):
+    @override_settings(GLITCHTIP_PROGUARD_MAX_MAPPING_MB=0)
+    def test_a_mapping_over_the_cap_is_never_built(self):
+        """Over GLITCHTIP_PROGUARD_MAX_MAPPING_MB the build is refused before
+        it allocates: the row is marked failed for good, and events are
+        stored still obfuscated."""
+        mapping_uuid = str(uuid.uuid4())
+        upload_proguard_mapping(
+            self.project, (PROGUARD_FIXTURES / "mapping.txt").read_bytes(), mapping_uuid
+        )
+        event = base_event(
+            platform="java",
+            contexts={"os": {"name": "Android"}},
+            debug_meta={"images": [{"type": "proguard", "uuid": mapping_uuid}]},
+            exception={
+                "values": [
+                    {
+                        "type": "IllegalStateException",
+                        "value": "boom",
+                        "stacktrace": {
+                            "frames": [
+                                {"module": "a.a.a", "function": "b", "lineno": 2}
+                            ]
+                        },
+                    }
+                ]
+            },
+        )
+        with measure_symbolication() as cost:
+            self.process([event])
+        row = SymbolicationCache.objects.get()
+        self.assertEqual(row.state, CacheState.FAILED)
+        self.assertEqual(row.attempts, MAX_ATTEMPTS)
+        self.assertIn("cap", row.error)
+        self.assertEqual(cost.cache_builds, 0)
+        self.assertEqual(cost.cache_unavailable, 1)
+
+        with measure_symbolication() as cost:
+            self.process([event | {"event_id": uuid.uuid4().hex}])
+        self.assertEqual(cost.rust_calls["ProguardCache.build_to"], 0)
+        self.assertEqual(cost.files_opened, 0)
+
+
 class JavascriptParseCostTests(SymbolicationCostTestCase):
     URL = "https://example.com/assets/app.min.js"
 
@@ -367,7 +412,7 @@ class JavascriptParseCostTests(SymbolicationCostTestCase):
             self.process([self.event()])
         self.assertEqual(cost.cache_builds, 1)
         self.assertEqual(cost.sourcemap_parses, 0)  # no per-event from_bytes
-        self.assertEqual(cost.rust_calls["SourceMapCache.build"], 1)
+        self.assertEqual(cost.rust_calls["SourceMapCache.build_to"], 1)
         self.assertEqual(cost.rust_calls["SourceMapCache.load"], 1)
         self.assertEqual(cost.rust_calls["SourceMapCache.lookup"], 3)
         cost.assert_only(JS_CALLS)
@@ -379,7 +424,7 @@ class JavascriptParseCostTests(SymbolicationCostTestCase):
                 self.process([self.event()])
         self.assertServedFromMemory(cost)
         self.assertEqual(cost.rust_calls["SourceMapCache.lookup"], 9)
-        cost.assert_only(JS_CALLS - {"SourceMapCache.build", "SourceMapCache.load"})
+        cost.assert_only(JS_CALLS - {"SourceMapCache.build_to", "SourceMapCache.load"})
 
     def test_events_in_one_batch_share_one_build(self):
         with measure_symbolication() as cost:
