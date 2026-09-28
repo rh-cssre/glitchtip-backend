@@ -200,7 +200,7 @@
           "event_id": "<event_id>",
           "ip_address": null,
           "level": 5,
-          "title": "<untitled>"
+          "title": "SIGSEGV: Crash with signal SIGSEGV at address 0x400100"
         }
       ],
       "logs": [],
@@ -215,20 +215,84 @@
               "breadcrumbs": null,
               "contexts": {
                 "device": {
-                  "arch": "unknown",
+                  "arch": "x86_64",
                   "type": "device"
                 },
                 "os": {
-                  "name": "Unknown",
+                  "name": "Linux",
                   "type": "os"
                 }
               },
-              "debug_meta": null,
+              "debug_meta": {
+                "images": [
+                  {
+                    "code_file": "/usr/bin/test_app",
+                    "code_id": null,
+                    "debug_checksum": null,
+                    "debug_id": "01020304-0506-0708-090a-0b0c0d0e0f10",
+                    "image_addr": "0x400000",
+                    "image_size": 65536,
+                    "type": "elf"
+                  }
+                ]
+              },
               "dist": null,
               "environment": null,
               "errors": null,
               "event_id": "<event_id>",
-              "exception": null,
+              "exception": {
+                "values": [
+                  {
+                    "mechanism": {
+                      "data": null,
+                      "description": null,
+                      "handled": false,
+                      "help_link": null,
+                      "is_exception_group": null,
+                      "meta": null,
+                      "parent_id": null,
+                      "source": null,
+                      "synthetic": null,
+                      "type": "minidump"
+                    },
+                    "module": null,
+                    "raw_stacktrace": null,
+                    "stacktrace": {
+                      "frames": [
+                        {
+                          "abs_path": null,
+                          "addr_mode": null,
+                          "colno": null,
+                          "context_line": null,
+                          "filename": null,
+                          "function": null,
+                          "function_id": null,
+                          "image_addr": "0x400000",
+                          "in_app": true,
+                          "instruction_addr": "0x400100",
+                          "lineno": null,
+                          "lock": null,
+                          "module": null,
+                          "package": "/usr/bin/test_app",
+                          "platform": null,
+                          "post_context": null,
+                          "pre_context": null,
+                          "raw_function": null,
+                          "source_link": null,
+                          "stack_start": null,
+                          "symbol": null,
+                          "symbol_addr": null,
+                          "vars": null
+                        }
+                      ],
+                      "registers": null
+                    },
+                    "thread_id": null,
+                    "type": "SIGSEGV",
+                    "value": "Crash with signal SIGSEGV at address 0x400100"
+                  }
+                ]
+              },
               "extra": null,
               "fingerprint": null,
               "level": "fatal",
@@ -243,10 +307,58 @@
               "server_name": null,
               "tags": null,
               "template": null,
-              "threads": null,
+              "threads": {
+                "values": [
+                  {
+                    "crashed": true,
+                    "current": true,
+                    "id": "100",
+                    "name": null,
+                    "raw_stacktrace": null,
+                    "stacktrace": null
+                  },
+                  {
+                    "crashed": false,
+                    "current": false,
+                    "id": "200",
+                    "name": null,
+                    "raw_stacktrace": null,
+                    "stacktrace": {
+                      "frames": [
+                        {
+                          "abs_path": null,
+                          "addr_mode": null,
+                          "colno": null,
+                          "context_line": null,
+                          "filename": null,
+                          "function": null,
+                          "function_id": null,
+                          "image_addr": "0x400000",
+                          "in_app": null,
+                          "instruction_addr": "0x400200",
+                          "lineno": null,
+                          "lock": null,
+                          "module": null,
+                          "package": "/usr/bin/test_app",
+                          "platform": null,
+                          "post_context": null,
+                          "pre_context": null,
+                          "raw_function": null,
+                          "source_link": null,
+                          "stack_start": null,
+                          "symbol": null,
+                          "symbol_addr": null,
+                          "vars": null
+                        }
+                      ],
+                      "registers": null
+                    }
+                  }
+                ]
+              },
               "timestamp": "<timestamp>",
               "transaction": null,
-              "type": 0,
+              "type": 1,
               "user": null
             },
             "project_id": "<project_id>",

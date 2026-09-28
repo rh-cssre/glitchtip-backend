@@ -415,6 +415,13 @@ GLITCHTIP_COLD_STORAGE_CLEANUP_ENABLED = env.bool(
     "GLITCHTIP_COLD_STORAGE_CLEANUP_ENABLED", True
 )
 
+# Client IP resolution for the Python ingest paths (/store/, /security/).
+# django-ipware 8 defaults to a "modern" algorithm that trusts CDN headers
+# such as True-Client-IP and skips private leading X-Forwarded-For hops;
+# "legacy" keeps the 7.x behavior, which the Rust /envelope/ path mirrors,
+# so one request resolves to the same IP whichever path serves it.
+IPWARE_ALGORITHM = "legacy"
+
 # Freezes acceptance of new events, for use during db maintenance
 MAINTENANCE_EVENT_FREEZE = env.bool("MAINTENANCE_EVENT_FREEZE", False)
 

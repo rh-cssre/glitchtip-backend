@@ -10,6 +10,7 @@ wire format, and worker-side re-validation of the payloads.
 import gzip
 import json
 import uuid
+from pathlib import Path
 
 from django.core.cache import cache
 from django.tasks import task_backends
@@ -27,6 +28,10 @@ from .utils import (
     pop_rust_ingest_messages,
     run_task_messages,
 )
+
+MINIDUMP = (
+    Path(__file__).parent / "test_data" / "minidump_linux_x86_64.dmp"
+).read_bytes()
 
 
 class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
@@ -267,12 +272,14 @@ class RustIngestTestCase(AsgiIngestTestMixin, EventIngestTestCase):
 
     MINIDUMP_ENVELOPE = (
         b"{}\n"
-        b'{"type": "attachment", "attachment_type": "event.minidump", "length": 8}\n'
-        b"MDMPxxxx\n"
+        + b'{"type": "attachment", "attachment_type": "event.minidump", "length": %d}\n'
+        % len(MINIDUMP)
+        + MINIDUMP
+        + b"\n"
     )
 
     async def test_minidump_envelope_falls_back_to_django_view(self):
-        # A garbage minidump exercises the pre-side-effect fallback: the
+        # A minidump attachment exercises the pre-side-effect fallback: the
         # Rust path hands the buffered request to the Django view, which is
         # where the (in-progress, not end-to-end) minidump -> event
         # conversion lives. What is pinned here is the handback and the

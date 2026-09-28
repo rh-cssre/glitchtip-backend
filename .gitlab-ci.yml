@@ -35,9 +35,8 @@ workflow:
     - if: $CI_PIPELINE_SOURCE == 'schedule'
 
 # Lowest tested stack: Python 3.12, PostgreSQL 15, Redis.
-# PostgreSQL 14 is still supported and still works; this lane moved to 15
-# because Django 6.1 drops PostgreSQL 14, and the floor we test against
-# should lead the floor we document rather than trail it.
+# PostgreSQL 15 is the minimum supported version (Django 6.1 refuses 14), so
+# this lane tests the documented floor.
 test-min:
   image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.12-$BASE_LAYER
   variables:

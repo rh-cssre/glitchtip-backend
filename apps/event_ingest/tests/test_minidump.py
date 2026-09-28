@@ -1,4 +1,6 @@
 import gzip
+import random
+import struct
 import uuid
 
 from django.core.cache import cache
@@ -9,6 +11,8 @@ from django.test.client import BOUNDARY, MULTIPART_CONTENT, encode_multipart
 from django.urls import reverse
 
 from apps.event_ingest.minidump_event import (
+    InvalidMinidump,
+    bound_minidump,
     minidump_to_event,
     parse_cv_record_debug_id,
 )
@@ -42,6 +46,95 @@ class ParseCvRecordDebugIdTest(TestCase):
     def test_too_short(self):
         """Records shorter than 24 bytes return None."""
         self.assertIsNone(parse_cv_record_debug_id(b"RSDS" + b"\x00" * 10))
+
+
+def _minidump(streams: list[tuple[int, bytes]]) -> bytes:
+    """Build a minidump: header, stream directory, then the stream bodies."""
+    dir_rva = 32
+    body_rva = dir_rva + 12 * len(streams)
+    directory, bodies = b"", b""
+    for stream_type, body in streams:
+        directory += struct.pack("<III", stream_type, len(body), body_rva + len(bodies))
+        bodies += body
+    header = b"MDMP" + struct.pack("<IIIIIQ", 0xA793, len(streams), dir_rva, 0, 0, 0)
+    return header + directory + bodies
+
+
+class BoundMinidumpTest(TestCase):
+    """The minidump package loops over whatever counts a file claims, so a
+    few bytes claiming millions of entries exhaust memory. These inputs must
+    be rejected before it sees them."""
+
+    def test_rejects_truncated_header(self):
+        with self.assertRaises(InvalidMinidump):
+            bound_minidump(b"MDMPgarbage")
+
+    def test_rejects_stream_count_past_end_of_file(self):
+        data = bytearray(_minidump([]))
+        struct.pack_into("<I", data, 8, 0x00FFFFFF)
+        with self.assertRaises(InvalidMinidump):
+            bound_minidump(bytes(data))
+
+    def test_rejects_stream_past_end_of_file(self):
+        data = bytearray(_minidump([(7, b"\0" * 56)]))
+        struct.pack_into("<I", data, 36, 1 << 30)  # DataSize of stream 0
+        with self.assertRaises(InvalidMinidump):
+            bound_minidump(bytes(data))
+
+    def test_rejects_thread_count_larger_than_stream(self):
+        thread_list = struct.pack("<I", 134_217_730) + b"\0" * 96
+        with self.assertRaises(InvalidMinidump):
+            bound_minidump(_minidump([(3, thread_list)]))
+
+    def test_unread_streams_are_marked_unused(self):
+        memory_list = struct.pack("<I", 0xFFFFFFFF)
+        bounded = bound_minidump(_minidump([(5, memory_list)]))
+        self.assertEqual(struct.unpack_from("<I", bounded, 32)[0], 0)
+
+    def test_real_minidumps_pass_unchanged_in_meaning(self):
+        for name in ("minidump_linux_x86_64.dmp", "breakpad_linux_null_deref.dmp"):
+            with open(f"apps/event_ingest/tests/test_data/{name}", "rb") as f:
+                data = f.read()
+            bounded = bound_minidump(data)
+            self.assertEqual(len(bounded), len(data))
+            self.assertEqual(
+                minidump_to_event(bounded)["threads"],
+                minidump_to_event(data)["threads"],
+            )
+
+    def test_mutated_minidumps_are_bounded_or_rejected(self):
+        """Every list stream left for the parser fits in its stream."""
+        with open(
+            "apps/event_ingest/tests/test_data/breakpad_linux_null_deref.dmp", "rb"
+        ) as f:
+            base = f.read()
+        rng = random.Random(0)
+        for _ in range(500):
+            data = bytearray(base)
+            for _ in range(rng.randint(1, 4)):
+                off = rng.randrange(0, len(data) - 4) & ~3
+                struct.pack_into(
+                    "<I",
+                    data,
+                    off,
+                    rng.choice([0xFFFFFFFF, 1 << 24, rng.getrandbits(32)]),
+                )
+            try:
+                bounded = bound_minidump(bytes(data))
+            except InvalidMinidump:
+                continue
+            count, dir_rva = struct.unpack_from("<II", bounded, 8)
+            for i in range(count):
+                stream_type, size, rva = struct.unpack_from(
+                    "<III", bounded, dir_rva + i * 12
+                )
+                self.assertLessEqual(rva + size, len(bounded))
+                item_size = {3: 48, 4: 108}.get(stream_type)
+                if item_size:
+                    (items,) = struct.unpack_from("<I", bounded, rva)
+                    self.assertLessEqual(4 + items * item_size, size)
+                else:
+                    self.assertIn(stream_type, (0, 6, 7))
 
 
 class MinidumpToEventTest(TestCase):
@@ -280,6 +373,15 @@ class MinidumpViewTest(EventIngestTestCase):
         res = await self.async_client.post(self.url, {"sentry": "{}"})
         self.assertEqual(res.status_code, 400)
         self.assertIn("Missing", res.json()["detail"])
+
+    async def test_malformed_minidump_is_rejected(self):
+        """A dump whose counts overrun the file is a 400, not a parse."""
+        uploaded = SimpleUploadedFile(
+            "crash.dmp", b"MDMPgarbage", content_type="application/octet-stream"
+        )
+        res = await self.async_client.post(self.url, {"upload_file_minidump": uploaded})
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("Invalid minidump", res.json()["detail"])
 
     async def test_invalid_magic(self):
         """Non-minidump file returns 400."""
