@@ -1,13 +1,16 @@
 """Shared helpers for the symbolication parity and cost tests.
 
-Three things live here:
-
 * ``measure_symbolication``, a context manager that records what
-  symbolication costs: which stored files it opens, how many bytes it reads
-  from storage, how many sourcemaps it parses, and which debug files the
-  native and ProGuard resolvers try.
+  symbolication costs: which stored files it opens (at ``Storage.open``, and
+  reopens of an open ``FieldFile``), how many bytes it reads and writes,
+  every call into ``gt_rust.symbolic``, and which debug files the native and
+  ProGuard resolvers try. ``cold=True`` empties any cache registered in
+  ``CACHE_RESET_HOOKS``; the ``cache_*`` counters are for a cache layer to
+  report into, and stay 0 until one does.
+* ``IN_MEMORY_STORAGE``, which the tests apply so fixtures never touch the
+  repository's uploads/ directory.
 * Upload helpers that store fixtures through the same code the upload APIs
-  use, so the stored rows look like real uploads.
+  use and check that the upload created what a real one would.
 * ``make_large_bundle``, which generates a multi-megabyte minified bundle and
   sourcemap on the fly, since a fixture that size is not worth committing.
 
@@ -17,28 +20,39 @@ The fixtures themselves are in ``test_data/symbolication``; see
 
 import contextlib
 import hashlib
+import inspect
 import io
 import json
+import sys
+import threading
 import uuid
 import zipfile
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from unittest import mock
 
 from asgiref.sync import async_to_sync
+from django.conf import settings
 from django.core.files.base import ContentFile
-from django.core.files.storage import storages
+from django.core.files.base import File as DjangoFile
+from django.core.files.storage import Storage
+from django.db.models.fields.files import FieldFile
+from django.test import override_settings
+from gt_rust import symbolic
 
-from apps.difs import stacktrace_processor
 from apps.difs.api import create_dif_from_read_only_file
 from apps.difs.models import DebugInformationFile
+from apps.difs.stacktrace_processor import StacktraceProcessor
 from apps.difs.tasks import difs_create_difs, difs_create_file_from_chunks
-from apps.event_ingest import javascript_event_processor
 from apps.files.assemble import assemble_artifacts
 from apps.files.models import FileBlob
+from apps.sourcecode.models import DebugSymbolBundle
 
 FIXTURES = Path(__file__).parent / "test_data" / "symbolication"
 NATIVE_FIXTURES = FIXTURES / "native"
+# The source the native fixtures are built from, as compiled.
+CRASH_SOURCE = FIXTURES / "generator" / "native" / "crash.cpp"
 JS_FIXTURES = FIXTURES / "js"
 PROGUARD_FIXTURES = FIXTURES / "proguard"
 GOLDENS = FIXTURES / "goldens"
@@ -62,25 +76,61 @@ FOREIGN_ADDR = 0x7FFF_F7A2_1B40
 
 # --- Cost measurement --------------------------------------------------------
 
+# Tests that measure symbolication, or store fixtures for it, run against an
+# in-memory default storage: nothing lands in the repository's uploads/
+# directory, and every read is visible to the instruments below.
+IN_MEMORY_STORAGE = override_settings(
+    STORAGES={
+        **settings.STORAGES,
+        "default": {"BACKEND": "django.core.files.storage.InMemoryStorage"},
+    }
+)
+
+# Called by ``measure_symbolication(cold=True)`` before measuring, so a run
+# starts with every symbolication cache empty. A cache layer adds a function
+# here that empties it; with none registered, cold and warm are the same.
+CACHE_RESET_HOOKS: list = []
+
 
 @dataclass
 class SymbolicationCost:
     """What one measured block of symbolication did."""
 
     # Storage names of every file opened for reading, in order, repeats kept.
+    # A reopen of an already-open stored file counts as an open.
     opened: list[str] = field(default_factory=list)
-    # Bytes read from storage across all of those opens.
+    # Opens per storage class, e.g. {"InMemoryStorage": 3}.
+    opened_by_storage: Counter = field(default_factory=Counter)
+    # Names of stored files reopened through an existing FieldFile.
+    reopens: list[str] = field(default_factory=list)
+    # Bytes actually read through those opens.
     bytes_read: int = 0
-    # SourceMapCache.from_bytes calls, and the bytes handed to them.
-    sourcemap_parses: int = 0
-    sourcemap_parse_bytes: int = 0
+    # Stored size of every file at open time: an upper bound on bytes_read
+    # that does not depend on how the caller reads.
+    bytes_opened: int = 0
+    # Files written to storage while measuring, and their bytes.
+    files_written: int = 0
+    bytes_written: int = 0
+    # Calls into gt_rust.symbolic by qualified name, e.g.
+    # "SourceMapCache.from_bytes", and the bytes passed in as arguments.
+    rust_calls: Counter = field(default_factory=Counter)
+    rust_bytes: Counter = field(default_factory=Counter)
     # One entry per debug file the native/ProGuard resolver was run against:
     # the debug id recorded on that file.
     resolver_attempts: list[str | None] = field(default_factory=list)
-    # Heavy native/ProGuard parser entry points.
-    archive_opens: int = 0
-    symcache_builds: int = 0
-    proguard_opens: int = 0
+    # Cache counters for a symbolication cache layer. Nothing reports these
+    # yet, so they stay 0: the cache layer must increment them (through
+    # ``record``) when it lands, and the cost tests then assert on them.
+    cache_hits: int = 0
+    cache_misses: int = 0
+    cache_builds: int = 0
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def record(self, **increments):
+        """Add to counters; safe from the worker threads ingest runs on."""
+        with self._lock:
+            for name, amount in increments.items():
+                setattr(self, name, getattr(self, name) + amount)
 
     @property
     def files_opened(self) -> int:
@@ -90,9 +140,68 @@ class SymbolicationCost:
     def distinct_files_opened(self) -> int:
         return len(set(self.opened))
 
+    @property
+    def sourcemap_parses(self) -> int:
+        return self.rust_calls["SourceMapCache.from_bytes"]
+
+    @property
+    def sourcemap_parse_bytes(self) -> int:
+        return self.rust_bytes["SourceMapCache.from_bytes"]
+
+    @property
+    def archive_opens(self) -> int:
+        return self.rust_calls["Archive.open"] + self.rust_calls["Archive.from_bytes"]
+
+    @property
+    def symcache_builds(self) -> int:
+        return (
+            self.rust_calls["SymCache.from_object"]
+            + self.rust_calls["SymCache.from_bytes"]
+            + self.rust_calls["Object.make_symcache"]
+        )
+
+    @property
+    def proguard_opens(self) -> int:
+        return (
+            self.rust_calls["ProguardMapper.open"]
+            + self.rust_calls["ProguardMapper.from_bytes"]
+        )
+
+    def assert_only(self, allowed: set[str]):
+        """Fail if any gt_rust.symbolic entry point outside ``allowed`` ran.
+
+        Pins the set of parser entry points a scenario uses, so a new one
+        cannot do work the named counters do not see.
+        """
+        unexpected = set(self.rust_calls) - set(allowed)
+        if unexpected:
+            raise AssertionError(
+                f"unexpected gt_rust.symbolic calls: {sorted(unexpected)} "
+                f"(all calls: {dict(self.rust_calls)})"
+            )
+
 
 class _CountingReader:
-    """Wraps a storage file object and counts what is read through it."""
+    """Wraps a stored file's stream and counts what is read through it.
+
+    Only the attributes below are available. Anything else that could read
+    around the count (fileno, getvalue, getbuffer, ...) raises, so a new
+    read path shows up as an error rather than as zero bytes.
+    """
+
+    _PASSTHROUGH = frozenset(
+        {
+            "seek",
+            "tell",
+            "close",
+            "closed",
+            "name",
+            "mode",
+            "size",
+            "seekable",
+            "readable",
+        }
+    )
 
     def __init__(self, raw, cost: SymbolicationCost):
         self._raw = raw
@@ -100,101 +209,159 @@ class _CountingReader:
 
     def read(self, *args):
         data = self._raw.read(*args)
-        self._cost.bytes_read += len(data)
+        self._cost.record(bytes_read=len(data))
+        return data
+
+    def read1(self, *args):
+        data = self._raw.read1(*args)
+        self._cost.record(bytes_read=len(data))
         return data
 
     def readinto(self, buffer):
         count = self._raw.readinto(buffer)
-        self._cost.bytes_read += count or 0
+        self._cost.record(bytes_read=count or 0)
         return count
 
     def readline(self, *args):
         data = self._raw.readline(*args)
-        self._cost.bytes_read += len(data)
+        self._cost.record(bytes_read=len(data))
         return data
+
+    def readlines(self, *args):
+        lines = self._raw.readlines(*args)
+        self._cost.record(bytes_read=sum(len(line) for line in lines))
+        return lines
 
     def __iter__(self):
         for line in self._raw:
-            self._cost.bytes_read += len(line)
+            self._cost.record(bytes_read=len(line))
             yield line
 
     def __getattr__(self, name):
-        return getattr(self._raw, name)
-
-
-@contextlib.contextmanager
-def measure_symbolication():
-    """Record the storage reads and parser calls symbolication makes.
-
-    Storage is measured at the storage backend's ``_open``, which every read of
-    a stored blob goes through whatever the caller does with it afterwards, so
-    the numbers stay comparable when the callers change. The parser counters
-    patch the current entry points and are informational.
-    """
-    cost = SymbolicationCost()
-    storage_class = type(storages["default"])
-    original_open = storage_class._open
-
-    def counting_open(storage, name, mode="rb"):
-        django_file = original_open(storage, name, mode)
-        cost.opened.append(name)
-        django_file.file = _CountingReader(django_file.file, cost)
-        return django_file
-
-    sourcemap_from_bytes = javascript_event_processor.SourceMapCache.from_bytes
-
-    def counting_sourcemap_from_bytes(minified, sourcemap):
-        cost.sourcemap_parses += 1
-        cost.sourcemap_parse_bytes += len(minified) + len(sourcemap)
-        return sourcemap_from_bytes(minified, sourcemap)
-
-    resolve_stacktrace = stacktrace_processor.StacktraceProcessor.resolve_stacktrace
-
-    def counting_resolve_stacktrace(event, symbol_file, project_id=None, debug_id=None):
-        cost.resolver_attempts.append(debug_id)
-        return resolve_stacktrace(
-            event, symbol_file, project_id=project_id, debug_id=debug_id
+        if name in self._PASSTHROUGH:
+            return getattr(self._raw, name)
+        raise AttributeError(
+            f"{name!r} would bypass the byte count; add counting for it to "
+            "_CountingReader"
         )
 
-    archive_open = stacktrace_processor.Archive.open
-    symcache_from_object = stacktrace_processor.SymCache.from_object
-    proguard_open = stacktrace_processor.ProguardMapper.open
 
-    def counting(counter_name, func):
+def _is_bytes(value) -> bool:
+    return isinstance(value, (bytes, bytearray, memoryview))
+
+
+def _rust_patches(cost: SymbolicationCost):
+    """Patches wrapping every public callable of gt_rust.symbolic."""
+
+    def counted(name, func):
         def wrapper(*args, **kwargs):
-            setattr(cost, counter_name, getattr(cost, counter_name) + 1)
+            size = sum(len(arg) for arg in args if _is_bytes(arg))
+            with cost._lock:
+                cost.rust_calls[name] += 1
+                cost.rust_bytes[name] += size
             return func(*args, **kwargs)
 
         return wrapper
 
-    with (
-        mock.patch.object(storage_class, "_open", counting_open),
-        mock.patch.object(
-            javascript_event_processor.SourceMapCache,
-            "from_bytes",
-            counting_sourcemap_from_bytes,
-        ),
-        mock.patch.object(
-            stacktrace_processor.StacktraceProcessor,
-            "resolve_stacktrace",
-            counting_resolve_stacktrace,
-        ),
-        mock.patch.object(
-            stacktrace_processor.Archive,
-            "open",
-            counting("archive_opens", archive_open),
-        ),
-        mock.patch.object(
-            stacktrace_processor.SymCache,
-            "from_object",
-            counting("symcache_builds", symcache_from_object),
-        ),
-        mock.patch.object(
-            stacktrace_processor.ProguardMapper,
-            "open",
-            counting("proguard_opens", proguard_open),
-        ),
-    ):
+    patches = []
+    for attr_name, value in vars(symbolic).items():
+        if attr_name.startswith("_"):
+            continue
+        if inspect.isclass(value):
+            for method_name, descriptor in vars(value).items():
+                if method_name.startswith("_"):
+                    continue
+                qualified = f"{attr_name}.{method_name}"
+                if isinstance(descriptor, staticmethod):
+                    replacement = staticmethod(counted(qualified, descriptor.__func__))
+                elif type(descriptor).__name__ == "method_descriptor":
+                    replacement = counted(qualified, descriptor)
+                else:  # properties and other data descriptors
+                    continue
+                patches.append(mock.patch.object(value, method_name, replacement))
+        elif callable(value):
+            wrapper = counted(attr_name, value)
+            # Consumers import these by name, so patch every module holding it.
+            for module in list(sys.modules.values()):
+                if getattr(module, "__dict__", {}).get(attr_name) is value:
+                    patches.append(mock.patch.object(module, attr_name, wrapper))
+    return patches
+
+
+@contextlib.contextmanager
+def measure_symbolication(cold: bool = True):
+    """Record the storage I/O and parser calls symbolication makes.
+
+    Storage is measured at ``Storage.open`` and ``Storage.save``, the base
+    class every backend inherits, so the numbers stay comparable when the
+    callers change. Reopening an already-open ``FieldFile`` bypasses the
+    storage, so that is recorded as an open too. Every public callable of
+    ``gt_rust.symbolic`` is counted in ``rust_calls``.
+
+    ``cold`` empties any registered symbolication cache first (see
+    ``CACHE_RESET_HOOKS``).
+    """
+    if cold:
+        for reset in CACHE_RESET_HOOKS:
+            reset()
+
+    cost = SymbolicationCost()
+    original_open = Storage.open
+    original_save = Storage.save
+    original_fieldfile_open = FieldFile.open
+
+    def counting_open(storage, name, mode="rb"):
+        stored = original_open(storage, name, mode)
+        cost.record(bytes_opened=storage.size(name))
+        with cost._lock:
+            cost.opened.append(name)
+            cost.opened_by_storage[type(storage).__name__] += 1
+        return DjangoFile(_CountingReader(stored, cost), name=name)
+
+    def counting_save(storage, name, content, max_length=None):
+        cost.record(files_written=1, bytes_written=content.size or 0)
+        return original_save(storage, name, content, max_length=max_length)
+
+    def counting_fieldfile_open(field_file, mode="rb"):
+        existing = getattr(field_file, "_file", None)
+        if existing is not None:
+            # Django reopens an existing file in place (seek, or a raw open()
+            # of a local path) without going through the storage.
+            cost.record(bytes_opened=field_file.storage.size(field_file.name))
+            with cost._lock:
+                cost.opened.append(field_file.name)
+                cost.reopens.append(field_file.name)
+                cost.opened_by_storage[type(field_file.storage).__name__] += 1
+        result = original_fieldfile_open(field_file, mode)
+        stream = field_file._file.file
+        if not isinstance(stream, _CountingReader):
+            field_file._file.file = _CountingReader(stream, cost)
+        return result
+
+    original_resolve = StacktraceProcessor.resolve_stacktrace.__func__
+    signature = inspect.signature(original_resolve)
+
+    def counting_resolve_stacktrace(cls, *args, **kwargs):
+        debug_id = signature.bind(cls, *args, **kwargs).arguments.get("debug_id")
+        with cost._lock:
+            cost.resolver_attempts.append(debug_id)
+        return original_resolve(cls, *args, **kwargs)
+
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(mock.patch.object(Storage, "open", counting_open))
+        stack.enter_context(mock.patch.object(Storage, "save", counting_save))
+        stack.enter_context(
+            mock.patch.object(FieldFile, "open", counting_fieldfile_open)
+        )
+        stack.enter_context(
+            mock.patch.object(
+                StacktraceProcessor,
+                "resolve_stacktrace",
+                classmethod(counting_resolve_stacktrace),
+            )
+        )
+        for patch in _rust_patches(cost):
+            stack.enter_context(patch)
         yield cost
 
 
@@ -247,6 +414,31 @@ def upload_artifact_bundle(
     blob = store_blob("artifact-bundle.zip", content)
     assemble_artifacts(organization, release, blob.checksum, [blob.checksum])
 
+    # Fail here, not in a golden, if the upload did not create what a real
+    # one would: one bundle per minified file, with its sourcemap attached
+    # when one was uploaded alongside it.
+    map_names = {a["name"] for a in artifacts if a["type"] == "source_map"}
+    for artifact in artifacts:
+        if artifact["type"] != "minified_source":
+            continue
+        bundles = DebugSymbolBundle.objects.filter(
+            organization=organization, file__name=artifact["name"]
+        ).select_related("sourcemap_file", "release")
+        debug_id = artifact.get("headers", {}).get("debug-id")
+        if debug_id:
+            bundles = bundles.filter(debug_id=debug_id)
+        if release:
+            bundles = bundles.filter(release__version=release)
+        bundle = bundles.get()
+        expected_map = artifact.get("headers", {}).get("sourcemap") or artifact.get(
+            "headers", {}
+        ).get("Sourcemap")
+        if expected_map in map_names:
+            assert bundle.sourcemap_file is not None, artifact["name"]
+            assert bundle.sourcemap_file.name == expected_map, artifact["name"]
+        else:
+            assert bundle.sourcemap_file is None, artifact["name"]
+
 
 def debug_id_bundle(name: str, code: bytes, sourcemap: bytes, debug_id: str):
     """The artifact pair a debug-id aware SDK build tool uploads for a bundle."""
@@ -279,12 +471,75 @@ def release_bundle(name: str, code: bytes, sourcemap: bytes):
     ]
 
 
-def upload_native_dif(project, name: str, content: bytes) -> list[DebugInformationFile]:
-    """Upload a native debug file or source bundle the way ``difs_assemble`` does."""
+def upload_native_dif(
+    project, name: str, content: bytes, kind: str, debug_id: str
+) -> DebugInformationFile:
+    """Upload a native debug file or source bundle the way ``difs_assemble``
+    does, and check it was stored with the expected ``kind`` and debug id."""
     blob = store_blob(name, content)
     file = difs_create_file_from_chunks(name, blob.checksum, [blob.checksum])
     difs_create_difs(project, name, file)
-    return list(DebugInformationFile.objects.filter(project=project, file=file))
+    difs = list(DebugInformationFile.objects.filter(project=project, file=file))
+    assert len(difs) == 1, f"{name}: expected one debug file, got {difs}"
+    [dif] = difs
+    assert dif.data["kind"] == kind, (name, dif.data)
+    assert dif.data["debug_id"] == debug_id, (name, dif.data)
+    return dif
+
+
+def upload_copies(project, original: DebugInformationFile, content: bytes, debug_ids):
+    """Store one more debug file shaped like ``original`` per entry of
+    ``debug_ids``, recorded under that debug id.
+
+    Each copy is a distinct file (``content`` with a different 4-byte tail,
+    as a rebuild or a differently stripped copy would be). The rows copy
+    ``original``'s metadata as the upload path records it, without parsing
+    every copy.
+    """
+    for index, debug_id in enumerate(debug_ids):
+        name = f"{original.name}-{index:04d}"
+        blob = store_blob(name, content + index.to_bytes(4, "little"))
+        file = difs_create_file_from_chunks(name, blob.checksum, [blob.checksum])
+        DebugInformationFile.objects.create(
+            project=project,
+            name=name,
+            file=file,
+            data={**original.data, "debug_id": debug_id},
+        )
+
+
+def upload_native_project(project, distinct_debug_ids: int, uploads_per_debug_id: int):
+    """The shape of a project that has uploaded native debug files for a
+    while: many builds, each uploaded several times (CI retries, per-variant
+    uploads). One debug id is the real ELF fixture's, and its first upload is
+    the real file. Returns that DIF."""
+    elf = (NATIVE_FIXTURES / "crash.elf").read_bytes()
+    real = upload_native_dif(project, "crash.elf", elf, "lib", ELF_DEBUG_ID)
+    other_ids = [
+        str(uuid.UUID(int=index + 1)) for index in range(distinct_debug_ids - 1)
+    ]
+    # The real file is the first upload of its debug id; the rest are copies.
+    upload_copies(
+        project,
+        real,
+        elf,
+        [ELF_DEBUG_ID] * (uploads_per_debug_id - 1)
+        + [debug_id for debug_id in other_ids for _ in range(uploads_per_debug_id)],
+    )
+    return real
+
+
+def upload_crash_sources(project, debug_id: str) -> DebugInformationFile:
+    """Upload a source bundle holding crash.cpp for ``debug_id``."""
+    return upload_native_dif(
+        project,
+        f"{debug_id}.src.zip",
+        make_source_bundle(
+            debug_id, {"/src/native/crash.cpp": CRASH_SOURCE.read_text()}
+        ),
+        "src",
+        debug_id,
+    )
 
 
 def upload_proguard_mapping(project, content: bytes, mapping_uuid: str):
@@ -323,9 +578,16 @@ def make_source_bundle(debug_id: str, sources: dict[str, str], arch="any") -> by
 # --- Native fixture addresses ------------------------------------------------
 
 
-def native_symbols() -> dict[str, dict[str, int]]:
-    """Function offsets per object format, as written by the generator."""
+def native_symbols() -> dict[str, dict[str, dict[str, int]]]:
+    """Function starts and crash frame addresses per object format, as
+    offsets from the image base (written by the generator)."""
     return json.loads((NATIVE_FIXTURES / "symbols.json").read_text())
+
+
+def crash_frame_offsets(fmt: str) -> list[int]:
+    """Offsets of the crash's frames in ``fmt``, outermost first."""
+    frames = native_symbols()[fmt]["frames"]
+    return [frames[name] for name in ("main", "run_job", "crash_here")]
 
 
 # --- Large generated bundle --------------------------------------------------

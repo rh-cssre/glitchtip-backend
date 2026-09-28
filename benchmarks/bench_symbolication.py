@@ -96,66 +96,39 @@ def run_child(scenario: str, events: int) -> dict:
     from model_bakery import baker
 
     from apps.difs.models import DebugInformationFile
-    from apps.difs.tasks import difs_create_file_from_chunks
     from apps.event_ingest.process_event import process_issue_events
     from apps.event_ingest.schema import ErrorIssueEventSchema, IssueTaskMessage
     from apps.event_ingest.tests.symbolication import (
+        ELF_DEBUG_ID,
+        ELF_IMAGE_ADDR,
         JS_FIXTURES,
-        NATIVE_FIXTURES,
         PROGUARD_FIXTURES,
+        crash_frame_offsets,
         debug_id_bundle,
         make_large_bundle,
-        make_source_bundle,
         measure_symbolication,
-        native_symbols,
-        store_blob,
         upload_artifact_bundle,
-        upload_native_dif,
+        upload_crash_sources,
+        upload_native_project,
         upload_proguard_mapping,
     )
     from apps.event_ingest.tests.utils import run_async_closing
 
     project = baker.make("projects.Project", organization__scrub_ip_addresses=False)
     organization = project.organization
-    elf_offsets = native_symbols()["elf"]
-    elf_image = 0x5555_5555_4000
 
     def upload_elf_and_sources():
-        elf = (NATIVE_FIXTURES / "crash.elf").read_bytes()
-        [dif] = upload_native_dif(project, "crash.elf", elf)
-        upload_native_dif(
-            project,
-            "crash.src.zip",
-            make_source_bundle(
-                dif.data["debug_id"],
-                {"/src/native/crash.cpp": (NATIVE_FIXTURES / "crash.cpp").read_text()},
-            ),
-        )
-        return elf, dif
+        upload_native_project(project, 1, 1)
+        upload_crash_sources(project, ELF_DEBUG_ID)
 
     def upload_many_elfs():
-        elf, real = upload_elf_and_sources()
-        debug_ids = [real.data["debug_id"]] + [
-            str(uuid.UUID(int=index + 1)) for index in range(DISTINCT_DEBUG_IDS - 1)
-        ]
-        for index in range(1, DISTINCT_DEBUG_IDS * UPLOADS_PER_DEBUG_ID):
-            name = f"crash-{index:03d}.elf"
-            blob = store_blob(name, elf + index.to_bytes(4, "little"))
-            file = difs_create_file_from_chunks(name, blob.checksum, [blob.checksum])
-            DebugInformationFile.objects.create(
-                project=project,
-                name=name,
-                file=file,
-                data={
-                    **real.data,
-                    "debug_id": debug_ids[index // UPLOADS_PER_DEBUG_ID],
-                },
-            )
+        upload_native_project(project, DISTINCT_DEBUG_IDS, UPLOADS_PER_DEBUG_ID)
+        upload_crash_sources(project, ELF_DEBUG_ID)
 
     def native_frames():
         return [
-            {"instruction_addr": hex(elf_image + elf_offsets[name] + 8)}
-            for name in ("main", "run_job", "crash_here")
+            {"instruction_addr": hex(ELF_IMAGE_ADDR + offset)}
+            for offset in crash_frame_offsets("elf")
         ]
 
     def exception(type_, value, frames):
@@ -214,7 +187,7 @@ def run_child(scenario: str, events: int) -> dict:
         )
 
     def setup_native_debug_meta():
-        _, dif = upload_elf_and_sources()
+        upload_elf_and_sources()
         return lambda: {
             "platform": "native",
             "contexts": {"os": {"name": "Linux"}, "device": {"arch": "x86_64"}},
@@ -222,8 +195,8 @@ def run_child(scenario: str, events: int) -> dict:
                 "images": [
                     {
                         "type": "elf",
-                        "debug_id": dif.data["debug_id"],
-                        "image_addr": hex(elf_image),
+                        "debug_id": ELF_DEBUG_ID,
+                        "image_addr": hex(ELF_IMAGE_ADDR),
                     }
                 ]
             },
@@ -350,7 +323,7 @@ def create_bench_database(keep: bool):
     from glitchtip.test_runner import TimedTestRunner
 
     connections["default"].settings_dict["TEST"]["NAME"] = BENCH_DB
-    runner = TimedTestRunner(verbosity=0, keepdb=keep)
+    runner = TimedTestRunner(verbosity=0, keepdb=keep, interactive=False)
     # Migrations print progress on stdout; keep stdout for the results.
     with contextlib.redirect_stdout(sys.stderr):
         return runner, runner.setup_databases()
