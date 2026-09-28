@@ -50,17 +50,20 @@ SCHEMA_CALLS = {"normalize_debug_id", "parse_addr", "cache_format_tag"}
 NATIVE_CALLS = SCHEMA_CALLS | {
     "SymCache.build_to",
     "SymCache.load",
+    "SymCache.load_file",
     "SymCache.lookup",
     "demangle",
 }
 PROGUARD_CALLS = SCHEMA_CALLS | {
     "ProguardCache.build_to",
     "ProguardCache.load",
+    "ProguardCache.load_file",
     "ProguardCache.remap_frame",
 }
 JS_CALLS = SCHEMA_CALLS | {
     "SourceMapCache.build_to",
     "SourceMapCache.load",
+    "SourceMapCache.load_file",
     "SourceMapCache.lookup",
 }
 
@@ -247,7 +250,9 @@ class NativeDebugFileCostTests(SymbolicationCostTestCase):
             self.process([native_crash(debug_meta=elf_debug_meta())])
         self.assertServedFromMemory(cost)
         self.assertEqual(cost.resolver_attempts, [ELF_DEBUG_ID])
-        cost.assert_only(NATIVE_CALLS - {"SymCache.build_to", "SymCache.load"})
+        cost.assert_only(
+            NATIVE_CALLS - {"SymCache.build_to", "SymCache.load", "SymCache.load_file"}
+        )
 
 
 class NativeSourceContextCostTests(SymbolicationCostTestCase):
@@ -413,7 +418,7 @@ class JavascriptParseCostTests(SymbolicationCostTestCase):
         self.assertEqual(cost.cache_builds, 1)
         self.assertEqual(cost.sourcemap_parses, 0)  # no per-event from_bytes
         self.assertEqual(cost.rust_calls["SourceMapCache.build_to"], 1)
-        self.assertEqual(cost.rust_calls["SourceMapCache.load"], 1)
+        self.assertEqual(cost.rust_calls["SourceMapCache.load_file"], 1)
         self.assertEqual(cost.rust_calls["SourceMapCache.lookup"], 3)
         cost.assert_only(JS_CALLS)
 
@@ -424,13 +429,20 @@ class JavascriptParseCostTests(SymbolicationCostTestCase):
                 self.process([self.event()])
         self.assertServedFromMemory(cost)
         self.assertEqual(cost.rust_calls["SourceMapCache.lookup"], 9)
-        cost.assert_only(JS_CALLS - {"SourceMapCache.build_to", "SourceMapCache.load"})
+        cost.assert_only(
+            JS_CALLS
+            - {
+                "SourceMapCache.build_to",
+                "SourceMapCache.load",
+                "SourceMapCache.load_file",
+            }
+        )
 
     def test_events_in_one_batch_share_one_build(self):
         with measure_symbolication() as cost:
             self.process([self.event() for _ in range(3)])
         self.assertEqual(cost.cache_builds, 1)
-        self.assertEqual(cost.rust_calls["SourceMapCache.load"], 1)
+        self.assertEqual(cost.rust_calls["SourceMapCache.load_file"], 1)
 
     def test_a_cold_process_loads_the_stored_cache_without_rebuilding(self):
         """A new process (empty RAM tier) loads the stored cache: one storage
