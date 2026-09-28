@@ -190,6 +190,10 @@ DebugImage = (
 # Types we intentionally ignore (no processing needed). Anything not in this
 # set and not handled by a typed model above is unknown.
 KNOWN_IGNORED_IMAGE_TYPES: frozenset[str] = frozenset()
+# Types with a model above.
+TYPED_IMAGE_TYPES = frozenset(
+    {"sourcemap", "jvm", "macho", "elf", "pe", "pe_dotnet", "wasm", "proguard"}
+)
 
 
 class DebugMeta(LaxIngestSchema):
@@ -198,11 +202,14 @@ class DebugMeta(LaxIngestSchema):
     @model_validator(mode="after")
     def _warn_unknown_image_types(self):
         for image in self.images:
+            # An image of a known type lands here only if it failed that
+            # type's validation (a malformed debug id, say): not unknown.
             if (
                 isinstance(image, OtherDebugImage)
                 and image.type not in KNOWN_IGNORED_IMAGE_TYPES
+                and image.type not in TYPED_IMAGE_TYPES
             ):
-                logger.warning("Unknown debug image type: %s", image.type)
+                logger.warning("Unknown debug image type: %.40s", image.type)
         return self
 
 

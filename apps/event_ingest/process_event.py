@@ -39,6 +39,7 @@ from apps.shared.raw_sql import (
     is_unique_violation,
 )
 from apps.sourcecode.models import DebugSymbolBundle
+from apps.symbolication.store import LookupContext
 from glitchtip.cold_storage import is_duckdb_available
 from glitchtip.partition_manager import UUID7Helper
 from sentry.culprit import generate_culprit
@@ -859,8 +860,16 @@ async def process_issue_events(
 
     # Collected/calculated event data while processing
     processing_events: list[ProcessingEvent] = []
+    # Symbolication caches this batch has given up on, so no later event of
+    # the batch waits for them again.
+    batch_unavailable: set = set()
     for ingest_event in messages:
         event = ingest_event.payload
+        # Each event gets its own wait budget for symbolication caches.
+        context = LookupContext.for_event(
+            organization_id=ingest_event.organization_id,
+            batch_unavailable=batch_unavailable,
+        )
         hydrate_stacktrace(event)
         event.contexts = generate_contexts(event)
         event_tags = generate_tags(event)
@@ -898,8 +907,16 @@ async def process_issue_events(
                         or debug_file.debug_id in event_debug_ids
                     )
                 ],
+                context,
             )
-            await processor.transform()
+            try:
+                await processor.transform()
+            except Exception as err:
+                # Symbolication must never fail ingest.
+                logger.warning(
+                    "JavaScript symbolication failed (%s); storing the event as sent.",
+                    type(err).__name__,
+                )
         elif isinstance(event, ErrorIssueEventSchema) and event.exception:
             # Projects may not appear in projects_with_data (which is built
             # from release/environment joins), so check has_difs from the
@@ -922,7 +939,16 @@ async def process_issue_events(
                 )
                 _has_difs = exists_rows[0][0]
             if _has_difs:
-                await resolve_event_stacktraces(event, ingest_event.project_id)
+                try:
+                    await resolve_event_stacktraces(
+                        event, ingest_event.project_id, context
+                    )
+                except Exception as err:
+                    # Symbolication must never fail ingest.
+                    logger.warning(
+                        "Native symbolication failed (%s); storing the event as sent.",
+                        type(err).__name__,
+                    )
 
         event_data = event.model_dump(
             mode="json",

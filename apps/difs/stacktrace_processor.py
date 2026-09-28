@@ -1,10 +1,16 @@
 import copy
 import logging
 
+from django.conf import settings
 from gt_rust.symbolic import demangle, normalize_debug_id, parse_addr
 
 from apps.difs.models import DebugInformationFile
-from apps.symbolication.sources import read_bundle_members, run_storage_read
+from apps.symbolication.sources import (
+    MAX_SOURCE_PATHS,
+    bundle_lane,
+    load_lane,
+    read_bundle_members,
+)
 
 alternative_arch = {"x86": ["x86", "x86_64"]}
 
@@ -124,7 +130,7 @@ def digest_symbol(symbol):
         # They provide function names which help understand the call stack
         return item
     except Exception as e:
-        getLogger().info(f"digest_symbol: exception {e}, symbol={symbol}")
+        getLogger().info(f"digest_symbol: exception {type(e)}")
 
 
 def getLogger():
@@ -148,7 +154,7 @@ async def find_source_bundle(project_id, debug_id):
             .afirst()
         )
     except Exception as e:
-        getLogger().error(f"find_source_bundle: Error finding source bundle: {e}")
+        getLogger().error(f"find_source_bundle: Error finding source bundle: {type(e)}")
         return None
 
 
@@ -156,16 +162,19 @@ async def read_source_files(source_bundle, file_paths) -> dict[str, list[str]]:
     """
     Source lines of ``file_paths`` from a source bundle, keyed by path; paths
     the bundle lacks are left out. Source bundles store files with a
-    'files/' prefix. The zip is read in place, on the bounded storage read
-    pool since storage has no async API.
+    'files/' prefix. The zip is read in place, on its own bounded lane since
+    storage has no async API, and at most MAX_SOURCE_PATHS paths are read.
     """
-    members = {f"files{path}": path for path in file_paths}
+    members = {f"files{path}": path for path in sorted(file_paths)[:MAX_SOURCE_PATHS]}
     try:
-        lines = await run_storage_read(
-            read_bundle_members, source_bundle.file.blob, list(members)
+        lines = await bundle_lane.run(
+            read_bundle_members,
+            source_bundle.file.blob,
+            list(members),
+            timeout=settings.GLITCHTIP_SYMBOLICATION_LOAD_TIMEOUT_SECONDS,
         )
     except Exception as e:
-        getLogger().error(f"read_source_files: Error extracting source: {e}")
+        getLogger().error(f"read_source_files: Error extracting source: {type(e)}")
         return {}
     return {members[member]: text for member, text in lines.items()}
 
@@ -205,24 +214,46 @@ MAX_BASE_DISTANCE = 0x500000
 MAX_BASE_PROBES = 4
 
 
+def _score_base(sym_cache, sample, candidate_base) -> tuple[int, int]:
+    """(distinct functions hit, frames resolved) for ``candidate_base``."""
+    functions = set()
+    resolved = 0
+    for addr in sample:
+        # An address outside the base's addressable range is not part of
+        # this image and cannot be probed.
+        if not candidate_base <= addr <= candidate_base + UINT64_MAX:
+            continue
+        locations = sym_cache.lookup(addr - candidate_base)
+        if locations:
+            resolved += 1
+            functions.add(locations[0].symbol)
+    return len(functions), resolved
+
+
 def _estimate_image_base(sym_cache, instruction_addrs) -> int | None:
     """Estimate the image base address when debug_meta is absent.
 
     Some SDKs (e.g. Flutter on Android) send native frames with absolute
     instruction_addr but no image_addr / debug_meta. Images are loaded at a
     page boundary, so the base is one of the page boundaries a little below
-    the frames. Each candidate is scored by how many sampled frames it
-    resolves; candidates come from several frames, since the first may be in
-    another image (libc, say). Returns None unless a base resolves at least
-    two frames and half of the sample: a guess that resolves less would
-    attach wrong symbols rather than none.
+    the frames. Candidates come from several frames, since the first may be
+    in another image (libc, say), and the search stops after the first frame
+    whose candidates reach the threshold.
+
+    A candidate is scored by how many different functions the sampled frames
+    resolve to, then by how many resolve at all. Counting functions matters:
+    below an image, every address can resolve to its last symbol, and in a
+    dense symbol table wrong bases resolve every frame to something; either
+    way the frames pile onto few functions. Returns None unless one base,
+    and only one, has the best score, resolving at least two functions and
+    half of the sample: no symbols beat wrong ones.
     """
     sample = instruction_addrs[:MAX_SCORED_ADDRS]
     if len(sample) < 2:
         return None
     threshold = max(2, (len(sample) + 1) // 2)
-    scores: dict[int, int] = {}
-    best_base, best_score = None, 0
+    scores: dict[int, tuple[int, int]] = {}
+    best_base, best_score, tied = None, (0, 0), False
     for probe in list(dict.fromkeys(sample))[:MAX_BASE_PROBES]:
         page = probe - probe % PAGE_SIZE
         for distance in range(0, MAX_BASE_DISTANCE, PAGE_SIZE):
@@ -234,20 +265,32 @@ def _estimate_image_base(sym_cache, instruction_addrs) -> int | None:
             # SymCache.lookup returns a (possibly empty) list of SourceLocation.
             if not sym_cache.lookup(probe - candidate_base):
                 continue
-            score = sum(
-                1
-                for addr in sample
-                # An address outside the base's addressable range is not part
-                # of this image and cannot be probed.
-                if candidate_base <= addr <= candidate_base + UINT64_MAX
-                and sym_cache.lookup(addr - candidate_base)
-            )
+            score = _score_base(sym_cache, sample, candidate_base)
             scores[candidate_base] = score
             if score > best_score:
-                best_base, best_score = candidate_base, score
-                if score == len(sample):
-                    return best_base
-    return best_base if best_score >= threshold else None
+                best_base, best_score, tied = candidate_base, score, False
+            elif score == best_score:
+                tied = True
+        if best_score[1] >= threshold:
+            break
+    functions, resolved = best_score
+    if tied or functions < 2 or resolved < threshold:
+        return None
+    return best_base
+
+
+# Default for resolve_native_stacktrace's estimated_base: estimate inline.
+ESTIMATE = object()
+
+
+def _instruction_addrs(stacktraces) -> list[int]:
+    parsed = (
+        _parse_addr_or_none(frame.get("instruction_addr"))
+        for stacktrace in stacktraces
+        for frame in stacktrace.get("frames") or []
+        if frame and frame.get("instruction_addr")
+    )
+    return [addr for addr in parsed if addr is not None]
 
 
 class StacktraceProcessor:
@@ -260,7 +303,9 @@ class StacktraceProcessor:
         pass
 
     @classmethod
-    def resolve_stacktrace(cls, event, cache, debug_id=None, exception_index=0):
+    def resolve_stacktrace(
+        cls, event, cache, debug_id=None, exception_index=0, estimated_base=ESTIMATE
+    ):
         """Resolve one exception's frames with one loaded cache: a
         ProguardCache for an Android event without native frames, otherwise
         a SymCache."""
@@ -279,9 +324,8 @@ class StacktraceProcessor:
             if stacktrace is None:
                 return
         except Exception as e:
-            getLogger().error(
-                f"StacktraceProcessor: Invalid event: {event}, error: {e}"
-            )
+            # Never log the event: it is the client's data.
+            getLogger().error(f"StacktraceProcessor: invalid event: {type(e)}")
             return
 
         is_android = cls.is_android_event(event)
@@ -311,6 +355,7 @@ class StacktraceProcessor:
             debug_id=debug_id,
             image_addr_from_meta=image_addr_from_meta,
             exception=exception,
+            estimated_base=estimated_base,
         )
 
     @classmethod
@@ -349,7 +394,7 @@ class StacktraceProcessor:
             return ResolvedStacktrace(score=score, frames=resolved_frames)
 
         except Exception as e:
-            getLogger().error(f"StacktraceProcessor: Unexpected error: {e}")
+            getLogger().error(f"StacktraceProcessor: Unexpected error: {type(e)}")
 
     @classmethod
     def resolve_native_stacktrace(
@@ -360,7 +405,14 @@ class StacktraceProcessor:
         debug_id=None,
         image_addr_from_meta=None,
         exception=None,
+        estimated_base=ESTIMATE,
     ):
+        """Resolve one stack trace's frames with ``sym_cache``.
+
+        ``estimated_base`` is the image base for frames with no image_addr
+        when debug_meta gives none: a precomputed estimate (None for none
+        found), or ESTIMATE to estimate it here from these frames.
+        """
         # A debug file for another architecture cannot resolve these frames.
         if arch is not None and sym_cache.arch not in alternative_arch.get(
             arch, [arch]
@@ -375,6 +427,7 @@ class StacktraceProcessor:
 
             # A frame's own image_addr wins. For frames without one, fall back
             # to the base debug_meta supplies, and only then to estimation.
+            precomputed = estimated_base
             estimated_base = 0
             meta_base = (
                 _parse_addr_or_none(image_addr_from_meta)
@@ -386,14 +439,13 @@ class StacktraceProcessor:
                 # falls through so estimation still runs.
                 estimated_base = meta_base
             elif frames and not any(f.get("image_addr") for f in frames if f):
-                parsed = (
-                    _parse_addr_or_none(f.get("instruction_addr"))
-                    for f in frames
-                    if f and f.get("instruction_addr")
-                )
-                addrs = [addr for addr in parsed if addr is not None]
-                # None when no base fits: those frames then stay unresolved.
-                estimated_base = _estimate_image_base(sym_cache, addrs)
+                if precomputed is ESTIMATE:
+                    # None when no base fits: those frames stay unresolved.
+                    estimated_base = _estimate_image_base(
+                        sym_cache, _instruction_addrs([stacktrace])
+                    )
+                else:
+                    estimated_base = precomputed
 
             adjusted = adjusted_frame_indexes(stacktrace, exception)
             for index, frame in enumerate(frames):
@@ -459,7 +511,7 @@ class StacktraceProcessor:
                 context_requests=context_requests,
             )
         except Exception as e:
-            getLogger().error(f"StacktraceProcessor: Unexpected error: {e}")
+            getLogger().error(f"StacktraceProcessor: Unexpected error: {type(e)}")
 
     @classmethod
     def update_frames(cls, event, frames):
@@ -470,7 +522,7 @@ class StacktraceProcessor:
             stacktrace["frames"] = frames
             event.data = data
         except Exception as e:
-            getLogger().error(f"StacktraceProcessor: Unexpected error: {e}")
+            getLogger().error(f"StacktraceProcessor: Unexpected error: {type(e)}")
 
     @classmethod
     def has_native_frames(cls, event):
@@ -497,17 +549,57 @@ class StacktraceProcessor:
             return False
 
     @classmethod
-    async def add_native_source_context(cls, resolved, project_id, debug_id):
+    async def estimate_base_for_event(
+        cls, event, sym_cache, debug_id, exception_indexes
+    ) -> int | None:
+        """The image base for frames without image_addr, estimated once from
+        all of the event's exceptions (on the load lane: in a dense symbol
+        table it can take tens of milliseconds). None when there is nothing
+        to estimate, debug_meta already gives the base, or no base fits."""
+        norm_debug_id = _normalize_debug_id_or_none(debug_id)
+        for image in (event.get("debug_meta") or {}).get("images") or []:
+            img_id = image.get("debug_id")
+            if (
+                image.get("type") in NATIVE_IMAGE_TYPES
+                and img_id
+                and _normalize_debug_id_or_none(img_id) == norm_debug_id
+                and image.get("image_addr") is not None
+            ):
+                return None
+        values = (event.get("exception") or {}).get("values") or []
+        stacktraces = [
+            values[index]["stacktrace"]
+            for index in exception_indexes
+            if not any(
+                frame.get("image_addr")
+                for frame in values[index]["stacktrace"].get("frames") or []
+                if frame
+            )
+        ]
+        addrs = _instruction_addrs(stacktraces)
+        if len(addrs) < 2:
+            return None
+        return await load_lane.run(_estimate_image_base, sym_cache, addrs)
+
+    @classmethod
+    async def add_native_source_context(cls, results, project_id, debug_id):
         """Fill source context into resolved native frames from the source
-        bundle uploaded for ``debug_id``, if any."""
-        if not resolved.context_requests:
+        bundle uploaded for ``debug_id``, if any: one lookup and one read for
+        all of ``results`` (the stack traces resolved with that debug id)."""
+        requests = [
+            (resolved, index, path, line)
+            for resolved in results
+            for index, path, line in resolved.context_requests
+        ]
+        if not requests:
             return
         source_bundle = await find_source_bundle(project_id, debug_id)
         if source_bundle is None:
             return
-        paths = {path for _, path, _ in resolved.context_requests}
-        sources = await read_source_files(source_bundle, paths)
-        for index, path, line in resolved.context_requests:
+        sources = await read_source_files(
+            source_bundle, {path for _, _, path, _ in requests}
+        )
+        for resolved, index, path, line in requests:
             source_lines = sources.get(path)
             if source_lines and line <= len(source_lines):
                 frame = resolved.frames[index]
@@ -529,7 +621,7 @@ class StacktraceProcessor:
             if not exceptions:
                 return False
         except Exception as e:
-            getLogger().error(f"resolve_jvm_source_context: Invalid event: {e}")
+            getLogger().error(f"resolve_jvm_source_context: Invalid event: {type(e)}")
             return False
 
         # Find source bundles for all debug_ids

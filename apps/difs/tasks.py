@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import tempfile
 from hashlib import sha1
@@ -10,7 +11,7 @@ from django.tasks import task
 from gt_rust.symbolic import Archive, normalize_debug_id, parse_addr
 
 from apps.difs.models import DebugInformationFile
-from apps.difs.stacktrace_processor import StacktraceProcessor
+from apps.difs.stacktrace_processor import ResolvedStacktrace, StacktraceProcessor
 from apps.event_ingest.schema import (
     ErrorIssueEventSchema,
     JvmDebugImage,
@@ -22,7 +23,7 @@ from apps.projects.models import Project
 from apps.shared.schema.exception import StackTraceFrame
 from apps.symbolication.models import CacheKind
 from apps.symbolication.sources import blob_input
-from apps.symbolication.store import CacheSource, get_cache
+from apps.symbolication.store import CacheSource, LookupContext, get_cache
 
 
 def getLogger():
@@ -106,11 +107,13 @@ def _update_source_context_on_event(event: ErrorIssueEventSchema, event_json: di
                     pydantic_frames[j].pre_context = json_frame.get("pre_context")
                     pydantic_frames[j].post_context = json_frame.get("post_context")
     except Exception as e:
-        getLogger().error(f"_update_source_context_on_event: {e}")
+        getLogger().error(f"_update_source_context_on_event: {type(e)}")
 
 
-# Rows read when choosing fallback candidates for an event without debug ids.
+# Rows read when choosing candidate debug files for an event.
 FALLBACK_SCAN_ROWS = 200
+# Exceptions of one event symbolicated at most.
+MAX_EXCEPTIONS = 10
 _32BIT_ARCHS = frozenset({"arm", "x86", "mips", "ppc"})
 
 
@@ -145,7 +148,8 @@ def _has_debug_info(dif: DebugInformationFile) -> bool:
 
 
 async def _candidate_difs(queryset, debug_ids: list[str], accept) -> list:
-    """The debug files to try: one per debug id, newest first.
+    """The debug files to try: one per debug id, newest first, at most
+    GLITCHTIP_SYMBOLICATION_MAX_CANDIDATES however many ids the event names.
 
     With debug ids (from the event), every id's newest upload that carries
     debug info wins over a newer symbols-only one. Without them, the newest
@@ -154,14 +158,15 @@ async def _candidate_difs(queryset, debug_ids: list[str], accept) -> list:
     cannot match the event (e.g. 32-bit files for a 64-bit crash).
     """
     queryset = queryset.select_related("file__blob").order_by("-created")
+    cap = settings.GLITCHTIP_SYMBOLICATION_MAX_CANDIDATES
     if debug_ids:
-        limit = len(debug_ids)
-        queryset = queryset.filter(data__debug_id__in=debug_ids)
+        limit = min(len(debug_ids), cap)
+        queryset = queryset.filter(data__debug_id__in=debug_ids)[:FALLBACK_SCAN_ROWS]
     else:
-        limit = settings.GLITCHTIP_SYMBOLICATION_FALLBACK_CANDIDATES
-        if limit <= 0:
-            return []
+        limit = min(settings.GLITCHTIP_SYMBOLICATION_FALLBACK_CANDIDATES, cap)
         queryset = queryset[:FALLBACK_SCAN_ROWS]
+    if limit <= 0:
+        return []
     chosen: dict = {}
     async for dif in queryset:
         if dif.file is None or dif.file.blob is None or not accept(dif):
@@ -189,9 +194,23 @@ def _cache_source(dif: DebugInformationFile, kind: CacheKind) -> CacheSource:
     return CacheSource(kind=kind, cache_key=cache_key, source_blob_id=blob.id)
 
 
-async def resolve_event_stacktraces(event: ErrorIssueEventSchema, project_id: int):
+def _rank(resolved: ResolvedStacktrace):
+    """Which candidate's result an exception keeps: most frames resolved,
+    then most with a source file."""
+    return (
+        resolved.score,
+        sum(1 for f in resolved.frames if f and f.get("filename")),
+    )
+
+
+async def resolve_event_stacktraces(
+    event: ErrorIssueEventSchema,
+    project_id: int,
+    context: LookupContext | None = None,
+):
     """Symbolicate an event's native or ProGuard frames, and add JVM source
     context, using stored caches of the project's debug files."""
+    context = context or LookupContext.for_event()
     # Serialize once for is_android check; native/proguard resolution may
     # mutate this dict but we re-serialize from the Pydantic event below.
     event_json = event.model_dump(mode="json")
@@ -228,49 +247,52 @@ async def resolve_event_stacktraces(event: ErrorIssueEventSchema, project_id: in
         # file can resolve.
         candidates = []
 
-    # Chained exceptions each carry their own stack trace; resolve every one.
+    # Chained exceptions each carry their own stack trace; resolve each (up
+    # to a bound: the payload decides how many there are).
     exception_indexes = [
         index
         for index, value in enumerate(
             (event_json.get("exception") or {}).get("values") or []
         )
         if value and value.get("stacktrace")
-    ]
-    resolved: dict[int, list] = {index: [] for index in exception_indexes}
-    for dif in candidates:
-        cache = await get_cache(_cache_source(dif, kind))
+    ][:MAX_EXCEPTIONS]
+    caches = await asyncio.gather(
+        *(get_cache(_cache_source(dif, kind), context) for dif in candidates)
+    )
+    best: dict[int, tuple] = {}
+    for dif, cache in zip(candidates, caches):
         if cache is None:
             continue
         debug_id = dif.data.get("debug_id")
+        estimated_base = None
+        if kind == CacheKind.SYMCACHE:
+            estimated_base = await StacktraceProcessor.estimate_base_for_event(
+                event_json, cache, debug_id, exception_indexes
+            )
         for index in exception_indexes:
             remapped_stacktrace = StacktraceProcessor.resolve_stacktrace(
-                event_json, cache, debug_id=debug_id, exception_index=index
+                event_json,
+                cache,
+                debug_id=debug_id,
+                exception_index=index,
+                estimated_base=estimated_base,
             )
-            if remapped_stacktrace is not None and remapped_stacktrace.score > 0:
-                await StacktraceProcessor.add_native_source_context(
-                    remapped_stacktrace, project_id, debug_id
-                )
-                resolved[index].append(remapped_stacktrace)
+            if remapped_stacktrace is None or remapped_stacktrace.score <= 0:
+                continue
+            if index not in best or _rank(remapped_stacktrace) > _rank(best[index][0]):
+                best[index] = (remapped_stacktrace, debug_id)
 
-    for index, results in resolved.items():
-        if not results:
-            continue
-        best_remapped_stacktrace = max(
-            results,
-            key=lambda item: (
-                sum(
-                    1
-                    for f in item.frames
-                    if f
-                    and f.get("filename")
-                    and f.get("pre_context")
-                    and f.get("post_context")
-                ),
-                item.score,
-                sum(1 for f in item.frames if f and f.get("filename")),
-            ),
+    # Source context for the winners only: one source bundle lookup and one
+    # read per debug id, whatever the number of frames and exceptions.
+    by_debug_id: dict = {}
+    for remapped_stacktrace, debug_id in best.values():
+        by_debug_id.setdefault(debug_id, []).append(remapped_stacktrace)
+    for debug_id, results in by_debug_id.items():
+        await StacktraceProcessor.add_native_source_context(
+            results, project_id, debug_id
         )
-        update_frames(event, best_remapped_stacktrace.frames, index)
+    for index, (remapped_stacktrace, _) in best.items():
+        update_frames(event, remapped_stacktrace.frames, index)
 
     # JVM source context (runs after proguard deobfuscation if applicable).
     # Re-serialize from the Pydantic event to pick up any frame changes from
@@ -289,7 +311,8 @@ def update_frames(event: ErrorIssueEventSchema, frames, exception_index=0):
         new_frames = [StackTraceFrame(**frame) for frame in frames if frame is not None]
         event.exception.values[exception_index].stacktrace.frames = new_frames
     except Exception as e:
-        getLogger().error(f"StacktraceProcessor: Unexpected error: {e}")
+        # The error text of a validation error quotes the event's values.
+        getLogger().error(f"StacktraceProcessor: could not update frames: {type(e)}")
 
 
 def difs_get_file_from_chunks(checksum, chunks):

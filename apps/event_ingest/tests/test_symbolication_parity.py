@@ -469,6 +469,11 @@ class JavascriptBundleSelectionTests(SimpleTestCase):
         debug_id_map = {APP_URL.rsplit("/", 1)[-1]: APP_DEBUG_ID}
         return processor.find_source_files(frame, debug_id_map)
 
+    def test_a_debug_id_bundle_without_its_sourcemap_falls_back_to_names(self):
+        app, decoy, _ = self.bundles(decoy_first=False)
+        app.sourcemap_file = None
+        self.assertEqual(self.find([app, decoy]), (decoy.file, decoy.sourcemap_file))
+
     def test_debug_id_match_beats_a_later_file_name_match(self):
         app, _, bundles = self.bundles(decoy_first=False)
         self.assertEqual(self.find(bundles), (app.file, app.sourcemap_file))

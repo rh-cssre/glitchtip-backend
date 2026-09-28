@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import logging
 import re
@@ -9,7 +10,7 @@ from gt_rust.symbolic import SourceMapCache
 
 from apps.sourcecode.models import DebugSymbolBundle
 from apps.symbolication.models import CacheKind
-from apps.symbolication.store import CacheSource, get_cache
+from apps.symbolication.store import CacheSource, LookupContext, get_cache
 
 if TYPE_CHECKING:
     from apps.shared.schema.exception import EventException, StackTraceFrame
@@ -72,10 +73,12 @@ class JavascriptEventProcessor:
         release_id: int,
         data: "IssueEventSchema",
         debug_bundles: list[DebugSymbolBundle],
+        context: LookupContext | None = None,
     ):
         self.release_id = release_id
         self.data = data
         self.debug_bundles = debug_bundles
+        self.context = context
         # Parsed sourcemaps memoized for the lifetime of this processor, i.e.
         # for one event. A new processor is created per event, so this never
         # outlives the event and needs no eviction or staleness handling.
@@ -114,7 +117,8 @@ class JavascriptEventProcessor:
                     cache_key=f"{minified_source.blob.checksum}:{map_file.blob.checksum}",
                     source_blob_id=minified_source.blob_id,
                     secondary_blob_id=map_file.blob_id,
-                )
+                ),
+                self.context,
             )
         self._sourcemap_caches[key] = cache
         return cache
@@ -211,11 +215,14 @@ class JavascriptEventProcessor:
         minified_filename = frame.abs_path.split("/")[-1] if frame.abs_path else ""
         debug_id = debug_id_map.get(minified_filename)
         # A debug id identifies the bundle exactly: it wins over any file name
-        # match, wherever the bundles fall in the list.
+        # match, wherever the bundles fall in the list. One uploaded without
+        # its sourcemap cannot be used, though, so then fall back to names.
         if debug_id:
             for debug_bundle in self.debug_bundles:
-                if debug_bundle.debug_id and str(debug_id) == str(
+                if (
                     debug_bundle.debug_id
+                    and debug_bundle.sourcemap_file
+                    and str(debug_id) == str(debug_bundle.debug_id)
                 ):
                     return debug_bundle.file, debug_bundle.sourcemap_file
 
@@ -256,5 +263,17 @@ class JavascriptEventProcessor:
 
         # Map minified filenames to debug_ids from debug_meta
         debug_id_map = self.build_debug_id_map()
+        # Load every bundle the event's frames need at once, so their waits
+        # overlap instead of adding up.
+        needed = {}
+        for exception in exceptions:
+            for frame in self.get_valid_frames(exception):
+                source_files = self.find_source_files(frame, debug_id_map)
+                if source_files is not None and source_files[1]:
+                    minified_source, map_file = source_files
+                    needed[(minified_source.id, map_file.id)] = source_files
+        await asyncio.gather(
+            *(self.get_sourcemap_cache(*files) for files in needed.values())
+        )
         for exception in exceptions:
             await self.remap_exception(exception, debug_id_map)

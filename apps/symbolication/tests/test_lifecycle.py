@@ -493,6 +493,19 @@ class LookupTests(CacheTestCase):
             [event] = self.process(native_crash())
         self.assertFalse(self.resolved(event))
 
+    def test_symbolication_errors_never_fail_ingest(self):
+        self.upload_elf()
+        lift_log_disable(self)
+        with (
+            mock.patch(
+                "apps.event_ingest.process_event.resolve_event_stacktraces",
+                side_effect=RuntimeError("boom"),
+            ),
+            self.assertLogs("apps.event_ingest.process_event", "WARNING"),
+        ):
+            [event] = self.process(native_crash())
+        self.assertIsNotNone(event)
+
     def test_cancelling_one_waiter_leaves_the_shared_load_running(self):
         dif = self.upload_elf()
         self.assertIsNotNone(self.get(self.source_for(dif)))
@@ -792,3 +805,19 @@ class MaintenanceTests(CacheTestCase):
             ["keep"],
         )
 
+
+class EstimationOnceTests(CacheTestCase):
+    def test_the_base_is_estimated_once_per_debug_file(self):
+        """Chained exceptions share one estimate, instead of one each."""
+        self.upload_elf()
+        payload = native_crash()
+        del payload["debug_meta"]
+        first = payload["exception"]["values"][0]
+        payload["exception"]["values"] = [first, first, first]
+        with mock.patch(
+            "apps.difs.stacktrace_processor._estimate_image_base",
+            return_value=ELF_IMAGE_ADDR,
+        ) as estimate:
+            [event] = self.process(payload)
+        estimate.assert_called_once()
+        self.assertTrue(self.resolved(event))

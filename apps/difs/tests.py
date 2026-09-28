@@ -63,8 +63,8 @@ class ExtractProguardMetadataTestCase(GlitchTestCase):
         self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
 
     def test_accepts_empty_content(self):
-        # Matches the pre-existing, already-permissive behavior of
-        # ProguardMapper.open(), which does not error on an empty mapping.
+        # Nothing to reject: an empty mapping also builds an empty
+        # ProguardCache, it just remaps nothing.
         metadata = extract_proguard_metadata(b"")
         self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
 
@@ -79,11 +79,9 @@ class ExtractProguardMetadataTestCase(GlitchTestCase):
         self.assertIsNone(metadata)
 
     def test_rejects_plain_text(self):
-        # ProguardMapper.open() from `symbolic` accepts this too (verified
-        # locally against both 10.1.1 and 13.9.0 -- its line parser silently
-        # skips anything it can't parse as a mapping record rather than
-        # erroring), so this is a deliberate tightening, not a preserved
-        # behavior.
+        # The mapping parser would accept this too (it skips any line it
+        # cannot parse as a mapping record rather than erroring), so this is
+        # a deliberate tightening at upload.
         metadata = extract_proguard_metadata(
             b"hello world, this is not a proguard mapping at all\njust some prose.\n"
         )
@@ -106,8 +104,8 @@ class ExtractProguardMetadataTestCase(GlitchTestCase):
     def test_ignores_non_utf8_bytes_past_the_sniff_window(self):
         # Only the first _PROGUARD_SNIFF_BYTES are inspected -- a valid class
         # record within that window is enough, regardless of what a huge real
-        # mapping file contains further down (checked in full by the real
-        # ProguardMapper at resolve time instead).
+        # mapping file contains further down (checked in full when its
+        # ProguardCache is built, on first use).
         content = b"com.example.Foo -> a.b.c:\n" + b"\xff" * (2 * _PROGUARD_SNIFF_BYTES)
         metadata = extract_proguard_metadata(content)
         self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
@@ -559,7 +557,7 @@ class IOSSymbolicationTestCase(GlitchTipTransactionTestCase):
 
         self.assertIsNone(found_bundle)
 
-    def test_extract_source_from_bundle(self):
+    def test_read_source_files_from_bundle(self):
         debug_id = "93ec5160-1d69-3227-8410-c2687fce4ea2"
         source_code = """import SwiftUI
 
@@ -580,7 +578,7 @@ struct ContentView: View {
         self.assertEqual(lines[2], "struct ContentView: View {")
         self.assertEqual(lines[4], '        Text("Hello")')
 
-    def test_extract_source_from_bundle_nonexistent_file(self):
+    def test_read_source_files_skips_a_missing_file(self):
         debug_id = "93ec5160-1d69-3227-8410-c2687fce4ea2"
         dif = self.create_source_bundle(debug_id, "test code")
 
@@ -768,10 +766,12 @@ class FakeSymCache:
         self.lookups.append(addr)
         if not 0 <= addr <= 0xFFFFFFFFFFFFFFFF:
             raise OverflowError("can't convert negative number to unsigned")
-        if not any(o - self.span < addr < o + self.span for o in self.valid_offsets):
+        hits = [o for o in self.valid_offsets if o - self.span < addr < o + self.span]
+        if not hits:
             return []
         location = MagicMock()
-        location.symbol = "_MyHomePageState._incrementCounter"
+        # A distinct function per offset, as in a real symbol table.
+        location.symbol = f"function_{hits[0]:x}"
         location.full_path = "/lib/main.dart"
         location.line = 68
         location.lang = "unknown"
@@ -836,6 +836,48 @@ class EstimateImageBaseAnchorTestCase(GlitchTestCase):
 
         self.assertIsNone(_estimate_image_base(sym_cache, [0x7F0000, 0x9F0000]))
         self.assertIsNone(_estimate_image_base(sym_cache, [0x101000]))
+
+
+class EstimateImageBaseAmbiguityTestCase(GlitchTestCase):
+    def test_refuses_when_bases_tie(self):
+        """In a dense symbol table many bases resolve every frame to some
+        function: with no clear best there is no answer."""
+
+        class Dense(FakeSymCache):
+            def lookup(self, addr):
+                self.lookups.append(addr)
+                location = MagicMock()
+                location.symbol = f"function_{addr // 0x10:x}"
+                return [location]
+
+        base = _estimate_image_base(Dense([]), [0x402468, 0x40ABCD, 0x413579])
+
+        self.assertIsNone(base)
+
+    def test_frames_on_one_function_are_not_enough(self):
+        """Below an image, every address can resolve to its last symbol."""
+
+        class LastSymbolForever(FakeSymCache):
+            def lookup(self, addr):
+                self.lookups.append(addr)
+                location = MagicMock()
+                location.symbol = "_fini"
+                return [location]
+
+        base = _estimate_image_base(
+            LastSymbolForever([]), [0x5555555551A6, 0x55555555518C]
+        )
+
+        self.assertIsNone(base)
+
+    def test_stops_after_the_first_anchor_that_fits(self):
+        sym_cache = FakeSymCache([0x1165, 0x118C, 0x11A6])
+        addrs = [0x5555555551A6, 0x55555555518C, 0x555555555165, 0x7FFFF7A21B40]
+
+        self.assertEqual(_estimate_image_base(sym_cache, addrs), 0x555555554000)
+
+        # One anchor's candidates, not all four anchors'.
+        self.assertLess(len(sym_cache.lookups), 2 * (0x500000 // 0x1000))
 
 
 class NativeSymbolicationTestCase(GlitchTestCase):
@@ -1621,6 +1663,16 @@ class NormalizeDebugIdTestCase(GlitchTestCase):
         ]:
             image = NativeDebugImage(type="wasm", debug_id=base + appendix)
             self.assertEqual(image.debug_id, expected)
+
+    def test_a_malformed_known_image_is_not_reported_as_unknown(self):
+        from apps.event_ingest.schema import DebugMeta
+
+        with patch("apps.event_ingest.schema.logger") as logger:
+            DebugMeta.model_validate(
+                {"images": [{"type": "elf", "debug_id": "garbage"}, {"type": "new"}]}
+            )
+        self.assertEqual(logger.warning.call_count, 1)
+        self.assertEqual(logger.warning.call_args.args[1], "new")
 
     def test_native_debug_image_still_rejects_garbage(self):
         """Genuinely invalid debug_id should still fail validation as before."""
