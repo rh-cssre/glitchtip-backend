@@ -118,14 +118,6 @@ def frame_count(event: int, exception: int) -> tuple:
 KNOWN_WRONG: list[KnownWrong] = [
     # JavaScript
     KnownWrong(
-        "js_two_events_one_batch",
-        frame(1, 0, 0, "filename"),
-        "../src/math.js",
-        "/assets/app.3f9a1c.min.js",
-        "the second event names no app image; it is symbolicated only because "
-        "the first event wrote code_file onto the shared bundle object",
-    ),
-    KnownWrong(
         "js_debug_id_bundles",
         frame(0, 0, 0, "in_app"),
         True,
@@ -329,14 +321,9 @@ class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
 
     def test_two_events_in_one_batch(self):
         """Two events in one ingest batch naming different images: the first
-        names the app bundle, the second only the widget, yet its frame is
-        in the app bundle.
-
-        Pins a current bug: the second event is symbolicated against the app
-        bundle, because processing the first one wrote its code_file onto the
-        bundle object the whole batch shares. Alone in a batch it would not
-        be. See KNOWN_WRONG.
-        """
+        names the app bundle, the second only the widget, though its frame is
+        in the app bundle. Only the first is symbolicated against it; the
+        second would be alone in a batch too."""
         self.upload_debug_id_bundles()
         exception = {
             "type": "RangeError",

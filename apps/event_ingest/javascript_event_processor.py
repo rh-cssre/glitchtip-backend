@@ -221,12 +221,7 @@ class JavascriptEventProcessor:
 
         # Fallback to matching by filename
         for debug_bundle in self.debug_bundles:
-            file_name = debug_bundle.file.name
-            code_file = debug_bundle.data.get("code_file")
-            if code_file:  # Get name, not full path
-                code_file = code_file.split("/")[-1]
-
-            if minified_filename in [file_name, code_file]:
+            if minified_filename == debug_bundle.file.name:
                 return debug_bundle.file, debug_bundle.sourcemap_file
         return None
 

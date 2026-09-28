@@ -878,31 +878,25 @@ async def process_issue_events(
             None,
         )
         if event.platform in ("javascript", "node"):
-            event_debug_files = [
-                debug_file
-                for debug_file in debug_files
-                if debug_file.organization_id == ingest_event.organization_id
-            ]
-
-            # Assign code_file to file headers
-            if event.debug_meta:
-                for sourcemap_image in [
-                    image
-                    for image in event.debug_meta.images
-                    if isinstance(image, SourceMapImage)
-                ]:
-                    for debug_file in event_debug_files:
-                        if sourcemap_image.debug_id == debug_file.debug_id:
-                            debug_file.data["code_file"] = sourcemap_image.code_file
-
+            # This event's own bundles: those its debug_meta names by debug
+            # id, and its release's. The batch-wide list is never modified,
+            # so one event's debug_meta cannot leak into another's lookups.
+            event_debug_ids = {
+                image.debug_id
+                for image in (event.debug_meta.images if event.debug_meta else [])
+                if isinstance(image, SourceMapImage)
+            }
             processor = JavascriptEventProcessor(
                 release_id,
                 event,
                 [
                     debug_file
-                    for debug_file in event_debug_files
-                    if debug_file.release_id == release_id
-                    or debug_file.data.get("code_file")
+                    for debug_file in debug_files
+                    if debug_file.organization_id == ingest_event.organization_id
+                    and (
+                        (release_id is not None and debug_file.release_id == release_id)
+                        or debug_file.debug_id in event_debug_ids
+                    )
                 ],
             )
             await processor.transform()
