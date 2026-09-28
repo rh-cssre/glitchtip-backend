@@ -1,23 +1,22 @@
 [
   {
-    "culprit": "divide(assets/app)",
+    "culprit": "formatLabel(assets/app.3f9a1c)",
     "exception": {
       "values": [
         {
           "raw_stacktrace": {
             "frames": [
               {
-                "abs_path": "app:///assets/widget.min.js",
+                "abs_path": "app:///node_modules/widget-kit/widget.min.js",
                 "colno": 188,
-                "filename": "app:///assets/widget.min.js",
+                "filename": "app:///node_modules/widget-kit/widget.min.js",
                 "function": "?",
-                "in_app": true,
                 "lineno": 1
               },
               {
-                "abs_path": "app:///assets/widget.min.js",
+                "abs_path": "app:///node_modules/widget-kit/widget.min.js",
                 "colno": 67,
-                "filename": "app:///assets/widget.min.js",
+                "filename": "app:///node_modules/widget-kit/widget.min.js",
                 "function": "?",
                 "in_app": true,
                 "lineno": 1
@@ -27,14 +26,14 @@
           "stacktrace": {
             "frames": [
               {
-                "abs_path": "app:///assets/widget.min.js",
+                "abs_path": "app:///node_modules/widget-kit/widget.min.js",
                 "colno": 24,
                 "context_line": "  return elements.map((element) => renderWidget(element, { size: \"large\" }));",
                 "filename": "../src/widget.js",
                 "function": "<anonymous>",
                 "in_app": true,
                 "lineno": 11,
-                "module": "assets/widget",
+                "module": "widget-kit/widget",
                 "post_context": [
                   "}",
                   "",
@@ -49,14 +48,14 @@
                 ]
               },
               {
-                "abs_path": "app:///assets/widget.min.js",
+                "abs_path": "app:///node_modules/widget-kit/widget.min.js",
                 "colno": 8,
                 "context_line": "  if (!element) {",
                 "filename": "../src/widget.js",
                 "function": "renderWidget",
                 "in_app": true,
                 "lineno": 3,
-                "module": "assets/widget",
+                "module": "widget-kit/widget",
                 "post_context": [
                   "    throw new Error(\"renderWidget needs an element for \" + settings.size);",
                   "  }",
@@ -90,50 +89,57 @@
                 "lineno": 1
               },
               {
-                "abs_path": "https://example.com/assets/app.min.js",
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
                 "colno": 75,
-                "filename": "/assets/app.min.js",
+                "filename": "/assets/app.3f9a1c.min.js",
                 "function": "?",
                 "in_app": true,
                 "lineno": 2
               },
               {
-                "abs_path": "https://example.com/assets/app.min.js",
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
                 "colno": 372,
-                "filename": "/assets/app.min.js",
-                "function": "?",
+                "filename": "/assets/app.3f9a1c.min.js",
+                "function": "t",
                 "in_app": true,
                 "lineno": 1
               },
               {
-                "abs_path": "https://example.com/assets/app.min.js",
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
                 "colno": 345,
-                "filename": "/assets/app.min.js",
+                "filename": "/assets/app.3f9a1c.min.js",
                 "function": "?",
                 "in_app": true,
                 "lineno": 1
               },
               {
-                "abs_path": "https://example.com/assets/app.min.js",
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
                 "colno": 260,
-                "filename": "/assets/app.min.js",
+                "filename": "/assets/app.3f9a1c.min.js",
                 "function": "?",
                 "in_app": true,
                 "lineno": 1
               },
               {
-                "abs_path": "https://example.com/assets/app.min.js",
-                "filename": "/assets/app.min.js",
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "filename": "/assets/app.3f9a1c.min.js",
                 "function": "?",
                 "in_app": true,
                 "lineno": 1
               },
               {
-                "abs_path": "https://example.com/assets/app.min.js",
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 37,
+                "filename": "/assets/app.3f9a1c.min.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              },
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
                 "colno": 147,
-                "filename": "/assets/app.min.js",
+                "filename": "/assets/app.3f9a1c.min.js",
                 "function": "?",
-                "in_app": true,
                 "lineno": 1
               }
             ]
@@ -149,14 +155,14 @@
                 "lineno": 1
               },
               {
-                "abs_path": "https://example.com/assets/app.min.js",
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
                 "colno": 51,
                 "context_line": "  for (const [name, values] of Object.entries(data)) {",
                 "filename": "../src/index.js",
                 "function": "buildReport",
                 "in_app": true,
                 "lineno": 23,
-                "module": "assets/app",
+                "module": "assets/app.3f9a1c",
                 "post_context": [
                   "    builder.addRow(name, values);",
                   "  }",
@@ -173,14 +179,14 @@
                 ]
               },
               {
-                "abs_path": "https://example.com/assets/app.min.js",
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
                 "colno": 15,
                 "context_line": "    this.rows.push(formatLabel(name, mean));",
                 "filename": "../src/index.js",
                 "function": "ReportBuilder.addRow",
                 "in_app": true,
                 "lineno": 12,
-                "module": "assets/app",
+                "module": "assets/app.3f9a1c",
                 "post_context": [
                   "    return this;",
                   "  }",
@@ -197,14 +203,14 @@
                 ]
               },
               {
-                "abs_path": "https://example.com/assets/app.min.js",
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
                 "colno": 11,
                 "context_line": "    const mean = average(values);",
                 "filename": "../src/index.js",
                 "function": "ReportBuilder.addRow",
                 "in_app": true,
                 "lineno": 11,
-                "module": "assets/app",
+                "module": "assets/app.3f9a1c",
                 "post_context": [
                   "    this.rows.push(formatLabel(name, mean));",
                   "    return this;",
@@ -221,14 +227,14 @@
                 ]
               },
               {
-                "abs_path": "https://example.com/assets/app.min.js",
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
                 "colno": 3,
                 "context_line": "  return divide(total, values.length);",
                 "filename": "../src/math.js",
                 "function": "average",
                 "in_app": true,
                 "lineno": 10,
-                "module": "assets/app",
+                "module": "assets/app.3f9a1c",
                 "post_context": [
                   "}"
                 ],
@@ -241,21 +247,40 @@
                 ]
               },
               {
-                "abs_path": "https://example.com/assets/app.min.js",
-                "filename": "/assets/app.min.js",
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "filename": "/assets/app.3f9a1c.min.js",
                 "function": "?",
                 "in_app": true,
                 "lineno": 1
               },
               {
-                "abs_path": "https://example.com/assets/app.min.js",
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 17,
+                "context_line": "  if (value === undefined) {",
+                "filename": "../node_modules/tiny-format/index.js",
+                "function": "formatLabel",
+                "in_app": true,
+                "lineno": 3,
+                "module": "assets/app.3f9a1c",
+                "post_context": [
+                  "    throw new TypeError(\"formatLabel: value is required for \" + label);",
+                  "  }",
+                  "  return label + \": \" + String(value);",
+                  "}"
+                ],
+                "pre_context": [
+                  "// A stand-in third-party dependency, so the bundle has a node_modules source.",
+                  "export function formatLabel(label, value) {"
+                ]
+              },
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
                 "colno": 23,
                 "context_line": "  if (denominator === 0) {",
                 "filename": "../src/math.js",
                 "function": "divide",
-                "in_app": true,
                 "lineno": 2,
-                "module": "assets/app",
+                "module": "assets/app.3f9a1c",
                 "post_context": [
                   "    throw new RangeError(\"Cannot divide \" + numerator + \" by zero\");",
                   "  }",
@@ -275,8 +300,8 @@
       ]
     },
     "metadata": {
-      "filename": "../src/math.js",
-      "function": "divide",
+      "filename": "../node_modules/tiny-format/index.js",
+      "function": "formatLabel",
       "type": "RangeError",
       "value": "Cannot divide 3 by zero"
     },

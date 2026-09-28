@@ -16,46 +16,44 @@
               },
               {
                 "abs_path": "/src/native/crash.cpp",
-                "context_line": "{",
+                "context_line": "    return 0;",
                 "filename": "/src/native/crash.cpp",
                 "function": "main()",
                 "image_addr": "0x140000000",
-                "instruction_addr": "0x140001088",
-                "lineno": 37,
+                "instruction_addr": "0x140001096",
+                "lineno": 39,
                 "post_context": [
-                  "    app::run_job(1);",
-                  "    return 0;",
                   "}"
                 ],
                 "pre_context": [
+                  "}  // namespace app",
+                  "",
+                  "extern \"C\" int main()",
+                  "{",
+                  "    app::run_job(1);"
+                ]
+              },
+              {
+                "abs_path": "/src/native/crash.cpp",
+                "context_line": "    sink = job;",
+                "filename": "/src/native/crash.cpp",
+                "function": "app::run_job(int)",
+                "image_addr": "0x140000000",
+                "instruction_addr": "0x140001068",
+                "lineno": 31,
+                "post_context": [
                   "}",
                   "",
                   "}  // namespace app",
                   "",
                   "extern \"C\" int main()"
-                ]
-              },
-              {
-                "abs_path": "/src/native/crash.cpp",
-                "context_line": "        crash_here(nullptr);",
-                "filename": "/src/native/crash.cpp",
-                "function": "app::run_job(int)",
-                "image_addr": "0x140000000",
-                "instruction_addr": "0x140001064",
-                "lineno": 29,
-                "post_context": [
-                  "    }",
-                  "    sink = job;",
-                  "}",
-                  "",
-                  "}  // namespace app"
                 ],
                 "pre_context": [
-                  "}",
-                  "",
                   "__attribute__((noinline)) void run_job(int job)",
                   "{",
-                  "    if (job > 0) {"
+                  "    if (job > 0) {",
+                  "        crash_here(nullptr);",
+                  "    }"
                 ]
               },
               {

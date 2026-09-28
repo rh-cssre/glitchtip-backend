@@ -1,0 +1,94 @@
+[
+  {
+    "culprit": "app::crash_here(int*)",
+    "exception": {
+      "values": [
+        {
+          "mechanism": {
+            "handled": false,
+            "type": "signalhandler"
+          },
+          "stacktrace": {
+            "frames": [
+              {
+                "function": "__libc_start_main",
+                "instruction_addr": "0x7ffff7a21b40"
+              },
+              {
+                "abs_path": "/src/native/crash.cpp",
+                "context_line": "    return 0;",
+                "filename": "/src/native/crash.cpp",
+                "function": "main",
+                "instruction_addr": "0x5555555551a6",
+                "lineno": 39,
+                "post_context": [
+                  "}"
+                ],
+                "pre_context": [
+                  "}  // namespace app",
+                  "",
+                  "extern \"C\" int main()",
+                  "{",
+                  "    app::run_job(1);"
+                ]
+              },
+              {
+                "abs_path": "/src/native/crash.cpp",
+                "context_line": "    sink = job;",
+                "filename": "/src/native/crash.cpp",
+                "function": "app::run_job(int)",
+                "instruction_addr": "0x55555555518c",
+                "lineno": 31,
+                "post_context": [
+                  "}",
+                  "",
+                  "}  // namespace app",
+                  "",
+                  "extern \"C\" int main()"
+                ],
+                "pre_context": [
+                  "__attribute__((noinline)) void run_job(int job)",
+                  "{",
+                  "    if (job > 0) {",
+                  "        crash_here(nullptr);",
+                  "    }"
+                ]
+              },
+              {
+                "abs_path": "/src/native/crash.cpp",
+                "context_line": "    *target = local;",
+                "filename": "/src/native/crash.cpp",
+                "function": "app::crash_here(int*)",
+                "instruction_addr": "0x555555555165",
+                "lineno": 23,
+                "post_context": [
+                  "}",
+                  "",
+                  "__attribute__((noinline)) void run_job(int job)",
+                  "{",
+                  "    if (job > 0) {"
+                ],
+                "pre_context": [
+                  "}  // namespace config",
+                  "",
+                  "__attribute__((noinline)) void crash_here(int *target)",
+                  "{",
+                  "    int local = config::parse_value(sink);"
+                ]
+              }
+            ]
+          },
+          "type": "SIGSEGV",
+          "value": "Segfault"
+        }
+      ]
+    },
+    "metadata": {
+      "filename": "/src/native/crash.cpp",
+      "function": "app::crash_here",
+      "type": "SIGSEGV",
+      "value": "Segfault"
+    },
+    "title": "SIGSEGV: Segfault"
+  }
+]

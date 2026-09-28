@@ -12,14 +12,14 @@
             "frames": [
               {
                 "function": "_init",
-                "instruction_addr": "0x5555555551a0",
+                "instruction_addr": "0x5555555551a6",
                 "lineno": 0
               },
               {
-                "instruction_addr": "0x555555555185"
+                "instruction_addr": "0x55555555518c"
               },
               {
-                "instruction_addr": "0x555555555161"
+                "instruction_addr": "0x555555555165"
               }
             ]
           },

@@ -2,26 +2,37 @@
 
 Each test uploads fixtures through the upload code, runs events through
 ``process_issue_events``, and compares what symbolication decides on the
-stored event (frames, context, title, culprit) with a golden JSON file in
-``test_data/symbolication/goldens``.
+stored event (frames, context, title, culprit, metadata) with a golden JSON
+file in ``test_data/symbolication/goldens``.
 
-The goldens record current behaviour, quirks included, so a reimplementation
-can be checked for identical results. When a change is meant to alter the
-output, regenerate them and review the diff:
+The goldens record current behaviour, quirks and bugs included, so a
+reimplementation can be checked for identical results. The values known to
+be wrong are listed in ``KNOWN_WRONG`` below, with what they should be; a
+fix changes those goldens on purpose. When a change is meant to alter the
+output, regenerate the goldens and review the diff:
 
-    UPDATE_SYMBOLICATION_GOLDENS=1 python manage.py test \\
-        apps.event_ingest.tests.test_symbolication_parity
+    docker compose run --rm -e UPDATE_SYMBOLICATION_GOLDENS=1 web \\
+        python manage.py test apps.event_ingest.tests.test_symbolication_parity
+
+In update mode each golden test writes its file and then skips; it refuses
+to run when ``CI`` is set.
 """
 
 import json
 import os
 import uuid
+from typing import NamedTuple
 
+from django.test import SimpleTestCase
 from django.utils import timezone
 
 from apps.difs.models import DebugInformationFile
+from apps.files.models import File
 from apps.issue_events.models import IssueEvent
+from apps.shared.schema.exception import StackTraceFrame
+from apps.sourcecode.models import DebugSymbolBundle
 
+from ..javascript_event_processor import JavascriptEventProcessor
 from ..process_event import process_issue_events
 from ..schema import ErrorIssueEventSchema, IssueTaskMessage
 from .symbolication import (
@@ -30,6 +41,7 @@ from .symbolication import (
     ELF_IMAGE_ADDR,
     FOREIGN_ADDR,
     GOLDENS,
+    IN_MEMORY_STORAGE,
     JS_FIXTURES,
     JVM_BUNDLE_DEBUG_ID,
     MACHO_DEBUG_ID,
@@ -40,13 +52,14 @@ from .symbolication import (
     PROGUARD_FIXTURES,
     PROGUARD_UUID,
     WIDGET_DEBUG_ID,
+    crash_frame_offsets,
     debug_id_bundle,
     golden_view,
     make_large_bundle,
     make_source_bundle,
-    native_symbols,
     release_bundle,
     upload_artifact_bundle,
+    upload_crash_sources,
     upload_native_dif,
     upload_proguard_mapping,
 )
@@ -56,11 +69,221 @@ UPDATE_GOLDENS = os.environ.get("UPDATE_SYMBOLICATION_GOLDENS") == "1"
 
 EXISTING_TEST_DATA = JS_FIXTURES.parent.parent
 
+# The frame URL of the app bundle carries a content hash, so its basename
+# differs from the name the bundle was uploaded under: only the debug id
+# (through debug_meta) can connect them.
+APP_URL = "https://example.com/assets/app.3f9a1c.min.js"
+# A different bundle uploaded under the hashed basename itself, with a debug
+# id no event names. A lookup by file name alone would pick it.
+DECOY_DEBUG_ID = "d3c0d3c0-0000-4000-8000-00000000d3c0"
+WIDGET_NODE_MODULES_URL = "app:///node_modules/widget-kit/widget.min.js"
+WIDGET_WEBPACK_URL = "webpack:///./dist/widget.min.js"
+
+
+class KnownWrong(NamedTuple):
+    """One value a golden records that is known to be wrong."""
+
+    golden: str
+    # Path to the value inside the golden: event index, then keys/indexes.
+    path: tuple
+    current: object
+    expected: object
+    why: str
+
+
+# Values the goldens record that are wrong, and what they should be. A fix
+# for one of these regenerates the golden, and removes the entry here;
+# test_known_wrong_entries_match_the_goldens keeps this list honest.
+def frame(event: int, exception: int, index: int, field: str) -> tuple:
+    return (
+        event,
+        "exception",
+        "values",
+        exception,
+        "stacktrace",
+        "frames",
+        index,
+        field,
+    )
+
+
+def frame_count(event: int, exception: int) -> tuple:
+    return (event, "exception", "values", exception, "stacktrace", "frames", len)
+
+
+JS_COLUMN = (
+    "the JS column fix: lookup_token passes colno - 1, and SourceMapCache.lookup "
+    "takes 1-based columns and subtracts 1 itself, so it looks one column left"
+)
+RETURN_ADDRESS = (
+    "caller frames report a return address, the instruction after the call; "
+    "it is looked up as is instead of minus one, so the line after the call"
+)
+PDB_AGE = (
+    "the stored PDB debug id keeps its age suffix, NativeDebugImage drops it, "
+    "so the debug_id filter never matches"
+)
+IMAGE_BASE = (
+    "the image base estimate anchors on the first frame and page-aligned "
+    "offsets, and writes a wrong symbol rather than none"
+)
+LINENO_KEY = "resolve_proguard_stacktrace writes frame['lineNo'], not 'lineno'"
+
+# Values the goldens record that are wrong, and what they should be. Where
+# several fixes touch one value, "expected" assumes only the named fix. A fix
+# regenerates the goldens and updates or removes its entries here;
+# test_known_wrong_entries_match_the_goldens keeps this list honest.
+KNOWN_WRONG: list[KnownWrong] = [
+    # JavaScript
+    KnownWrong("js_debug_id_bundles", frame(0, 0, 0, "colno"), 24, 36, JS_COLUMN),
+    KnownWrong("js_debug_id_bundles", frame(0, 0, 1, "lineno"), 3, 4, JS_COLUMN),
+    KnownWrong("js_debug_id_bundles", frame(0, 1, 1, "lineno"), 23, 24, JS_COLUMN),
+    KnownWrong("js_debug_id_bundles", frame(0, 1, 2, "colno"), 15, 20, JS_COLUMN),
+    KnownWrong("js_debug_id_bundles", frame(0, 1, 3, "colno"), 11, 18, JS_COLUMN),
+    KnownWrong("js_debug_id_bundles", frame(0, 1, 4, "colno"), 3, 10, JS_COLUMN),
+    KnownWrong("js_debug_id_bundles", frame(0, 1, 6, "lineno"), 3, 4, JS_COLUMN),
+    KnownWrong("js_debug_id_bundles", frame(0, 1, 7, "lineno"), 2, 3, JS_COLUMN),
+    KnownWrong("js_two_events_one_batch", frame(0, 0, 0, "colno"), 3, 10, JS_COLUMN),
+    KnownWrong(
+        "js_release_and_filename", frame(0, 0, 0, "lineno"), 121, 124, JS_COLUMN
+    ),
+    KnownWrong("js_release_and_filename", frame(0, 0, 1, "lineno"), 5, 9, JS_COLUMN),
+    KnownWrong("js_large_bundle", frame(0, 0, 0, "lineno"), 1, 3, JS_COLUMN),
+    KnownWrong("js_large_bundle", frame(0, 0, 1, "lineno"), 301, 303, JS_COLUMN),
+    KnownWrong("js_large_bundle", frame(0, 0, 2, "lineno"), 595, 597, JS_COLUMN),
+    KnownWrong(
+        "js_two_events_one_batch",
+        frame(1, 0, 0, "filename"),
+        "../src/math.js",
+        "/assets/app.3f9a1c.min.js",
+        "the second event names no app image; it is symbolicated only because "
+        "the first event wrote code_file onto the shared bundle object",
+    ),
+    KnownWrong(
+        "js_debug_id_bundles",
+        frame(0, 0, 0, "in_app"),
+        True,
+        False,
+        "an app:///node_modules/ URL comes out in_app: the app: branch decides "
+        "from the original source path only",
+    ),
+    KnownWrong(
+        "js_debug_id_bundles",
+        frame(0, 1, 6, "in_app"),
+        True,
+        False,
+        "a node_modules source keeps the SDK's in_app on an http(s) URL",
+    ),
+    KnownWrong(
+        "js_release_and_filename",
+        frame(0, 0, 0, "in_app"),
+        True,
+        False,
+        "the tslib frame is a node_modules source but keeps the SDK's in_app",
+    ),
+    KnownWrong(
+        "js_release_and_filename",
+        frame(0, 0, 0, "context_line"),
+        "            return { value: o && o[i++], done: !o };\r",
+        "            return { value: o && o[i++], done: !o };",
+        "context lines are only stripped of \\n, so CRLF sources keep a \\r",
+    ),
+    # Native
+    KnownWrong(
+        "native_elf_debug_meta", frame(0, 0, 1, "lineno"), 39, 38, RETURN_ADDRESS
+    ),
+    KnownWrong(
+        "native_elf_debug_meta", frame(0, 0, 2, "lineno"), 31, 29, RETURN_ADDRESS
+    ),
+    KnownWrong(
+        "native_elf_debug_and_stripped",
+        frame(0, 0, 2, "lineno"),
+        31,
+        29,
+        RETURN_ADDRESS,
+    ),
+    KnownWrong(
+        "native_macho_debug_meta", frame(0, 0, 2, "lineno"), 30, 29, RETURN_ADDRESS
+    ),
+    KnownWrong(
+        "native_pdb_no_debug_meta", frame(0, 0, 2, "lineno"), 31, 29, RETURN_ADDRESS
+    ),
+    KnownWrong(
+        "native_pdb_debug_meta",
+        frame(0, 0, 3, "function"),
+        None,
+        "app::crash_here(int*)",
+        PDB_AGE,
+    ),
+    KnownWrong(
+        "native_elf_no_debug_meta",
+        frame(0, 0, 0, "function"),
+        "_init",
+        "__libc_start_main",
+        IMAGE_BASE,
+    ),
+    KnownWrong(
+        "native_elf_no_debug_meta",
+        frame(0, 0, 3, "function"),
+        None,
+        "app::crash_here(int*)",
+        IMAGE_BASE,
+    ),
+    KnownWrong(
+        "native_elf_no_debug_meta_own_frames",
+        frame(0, 0, 0, "function"),
+        "_init",
+        "main",
+        IMAGE_BASE,
+    ),
+    # ProGuard
+    KnownWrong(
+        "proguard_uploaded_mapping",
+        frame(0, 0, 1, "function"),
+        "b",
+        "onSubmit",
+        "uploaded mappings have no 'kind', and exclude(data__kind__in=...) drops "
+        "such rows in SQL; once fixed this golden equals proguard_deobfuscation",
+    ),
+    KnownWrong("proguard_deobfuscation", frame(0, 0, 1, "lineno"), 2, 23, LINENO_KEY),
+    KnownWrong("proguard_deobfuscation", frame(0, 0, 2, "lineno"), 3, 6, LINENO_KEY),
+    KnownWrong(
+        "proguard_deobfuscation",
+        frame_count(0, 0),
+        3,
+        4,
+        "an inlined call remaps to two frames, and remap_frame(...)[0] keeps only "
+        "the innermost (UserRepository.loadUser is dropped)",
+    ),
+    KnownWrong(
+        "proguard_deobfuscation",
+        frame(0, 0, 1, "abs_path"),
+        "SourceFile",
+        "MainActivity.kt",
+        "abs_path keeps the obfuscated file name when filename is remapped",
+    ),
+    KnownWrong(
+        "proguard_deobfuscation",
+        frame(0, 0, 1, "context_line"),
+        None,
+        "",
+        "a blank source line is dropped as context instead of stored as ''",
+    ),
+    KnownWrong(
+        "proguard_chained_exceptions",
+        frame(0, 1, 1, "function"),
+        "b",
+        "onSubmit",
+        "only the first exception is deobfuscated (values[0])",
+    ),
+]
+
 
 def event_id(name: str) -> str:
     return uuid.uuid5(uuid.NAMESPACE_URL, f"symbolication/{name}").hex
 
 
+@IN_MEMORY_STORAGE
 class SymbolicationGoldenTestCase(EventIngestTestCase):
     maxDiff = None
 
@@ -83,17 +306,19 @@ class SymbolicationGoldenTestCase(EventIngestTestCase):
         actual = [golden_view(event) for event in events]
         path = GOLDENS / f"{name}.json"
         if UPDATE_GOLDENS:
+            if os.environ.get("CI"):
+                self.fail("Refusing to update symbolication goldens in CI.")
             GOLDENS.mkdir(exist_ok=True)
             path.write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n")
-            return
+            self.skipTest("golden updated")
         self.assertTrue(
             path.exists(), f"No golden {path.name}; see the module docstring."
         )
         self.assertEqual(actual, json.loads(path.read_text()))
 
 
-def js_frame(url: str, lineno: int | None, colno: int | None, function="?"):
-    frame = {"filename": url, "function": function, "in_app": True}
+def js_frame(url: str, lineno: int | None, colno: int | None, function="?", **extra):
+    frame = {"filename": url, "function": function, "in_app": True, **extra}
     if lineno is not None:
         frame["lineno"] = lineno
     if colno is not None:
@@ -113,28 +338,43 @@ def js_event(name: str, exceptions: list[dict], **extra) -> dict:
     }
 
 
-class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
-    def read_js(self, name: str) -> tuple[bytes, bytes]:
-        return (
-            (JS_FIXTURES / name).read_bytes(),
-            (JS_FIXTURES / f"{name}.map").read_bytes(),
-        )
+def sourcemap_image(code_file: str, debug_id: str) -> dict:
+    return {"type": "sourcemap", "code_file": code_file, "debug_id": debug_id}
 
-    def test_debug_id_bundles(self):
-        """Debug-id bundles: two bundles, several frames sharing one, and
-        frames with no map, no column, or an app:// URL."""
-        app_code, app_map = self.read_js("app.min.js")
-        widget_code, widget_map = self.read_js("widget.min.js")
+
+def read_js(name: str) -> tuple[bytes, bytes]:
+    return (
+        (JS_FIXTURES / name).read_bytes(),
+        (JS_FIXTURES / f"{name}.map").read_bytes(),
+    )
+
+
+class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
+    def upload_debug_id_bundles(self):
+        app_code, app_map = read_js("app.min.js")
+        widget_code, widget_map = read_js("widget.min.js")
         upload_artifact_bundle(
             self.organization,
             self.project,
             debug_id_bundle("app.min.js", app_code, app_map, APP_DEBUG_ID)
+            + debug_id_bundle("widget.min.js", widget_code, widget_map, WIDGET_DEBUG_ID)
             + debug_id_bundle(
-                "widget.min.js", widget_code, widget_map, WIDGET_DEBUG_ID
+                APP_URL.rsplit("/", 1)[-1], widget_code, widget_map, DECOY_DEBUG_ID
             ),
         )
-        app_url = "https://example.com/assets/app.min.js"
-        widget_url = "app:///assets/widget.min.js"
+
+    def test_debug_id_bundles(self):
+        """Debug-id bundles: two bundles plus a decoy with the frame's
+        basename, several frames sharing a bundle, frames with no map, no
+        column, a minified function name, and in_app decided by the URL
+        (omitted by the SDK on the app:// frame and the last app frame).
+
+        Pins current bugs: the column lookup is one to the left, an
+        app:///node_modules/ frame comes out in_app, and a dependency frame
+        the SDK marked in_app stays in_app. See KNOWN_WRONG. A webpack://
+        frame URL is in test_webpack_frame_url_fails_the_batch.
+        """
+        self.upload_debug_id_bundles()
         payload = js_event(
             "js-debug-id",
             [
@@ -143,8 +383,8 @@ class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
                     "value": "renderWidget needs an element for large",
                     "stacktrace": {
                         "frames": [
-                            js_frame(widget_url, 1, 188),
-                            js_frame(widget_url, 1, 67),
+                            js_frame(WIDGET_NODE_MODULES_URL, 1, 188, in_app=None),
+                            js_frame(WIDGET_NODE_MODULES_URL, 1, 67),
                         ]
                     },
                 },
@@ -154,12 +394,13 @@ class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
                     "stacktrace": {
                         "frames": [
                             js_frame("https://example.com/assets/vendor.js", 1, 10),
-                            js_frame(app_url, 2, 75),
-                            js_frame(app_url, 1, 372),
-                            js_frame(app_url, 1, 345),
-                            js_frame(app_url, 1, 260),
-                            js_frame(app_url, 1, None),
-                            js_frame(app_url, 1, 147),
+                            js_frame(APP_URL, 2, 75),
+                            js_frame(APP_URL, 1, 372, function="t"),
+                            js_frame(APP_URL, 1, 345),
+                            js_frame(APP_URL, 1, 260),
+                            js_frame(APP_URL, 1, None),
+                            js_frame(APP_URL, 1, 37),
+                            js_frame(APP_URL, 1, 147, in_app=None),
                         ]
                     },
                     "mechanism": {"type": "onerror", "handled": False},
@@ -167,24 +408,85 @@ class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
             ],
             debug_meta={
                 "images": [
-                    {
-                        "type": "sourcemap",
-                        "code_file": app_url,
-                        "debug_id": APP_DEBUG_ID,
-                    },
-                    {
-                        "type": "sourcemap",
-                        "code_file": widget_url,
-                        "debug_id": WIDGET_DEBUG_ID,
-                    },
+                    sourcemap_image(APP_URL, APP_DEBUG_ID),
+                    sourcemap_image(WIDGET_NODE_MODULES_URL, WIDGET_DEBUG_ID),
                 ]
             },
         )
         self.assertMatchesGolden("js_debug_id_bundles", self.process([payload]))
 
+    def test_webpack_frame_url_fails_the_batch(self):
+        """A frame whose URL is webpack:///... and resolves.
+
+        Pins a current bug: the webpack branch of process_frame assigns
+        ``frame["module"]`` on a StackTraceFrame, which raises TypeError, and
+        the error escapes process_issue_events, so no event of the batch is
+        stored. Intended: the event is stored, symbolicated.
+        """
+        self.upload_debug_id_bundles()
+        plain = js_event(
+            "js-webpack-neighbour",
+            [{"type": "Error", "value": "unrelated", "stacktrace": {"frames": []}}],
+        )
+        webpack = js_event(
+            "js-webpack",
+            [
+                {
+                    "type": "Error",
+                    "value": "renderWidget needs an element for large",
+                    "stacktrace": {
+                        "frames": [js_frame(WIDGET_WEBPACK_URL, 1, 67, in_app=None)]
+                    },
+                }
+            ],
+            debug_meta={
+                "images": [sourcemap_image(WIDGET_WEBPACK_URL, WIDGET_DEBUG_ID)]
+            },
+        )
+        with self.assertRaisesMessage(TypeError, "does not support item assignment"):
+            self.process([plain, webpack])
+        self.assertFalse(IssueEvent.objects.exists())
+
+    def test_two_events_in_one_batch(self):
+        """Two events in one ingest batch naming different images: the first
+        names the app bundle, the second only the widget, yet its frame is
+        in the app bundle.
+
+        Pins a current bug: the second event is symbolicated against the app
+        bundle, because processing the first one wrote its code_file onto the
+        bundle object the whole batch shares. Alone in a batch it would not
+        be. See KNOWN_WRONG.
+        """
+        self.upload_debug_id_bundles()
+        exception = {
+            "type": "RangeError",
+            "value": "Cannot divide 3 by zero",
+            "stacktrace": {"frames": [js_frame(APP_URL, 1, 260)]},
+        }
+        first = js_event(
+            "js-batch-first",
+            [exception],
+            debug_meta={"images": [sourcemap_image(APP_URL, APP_DEBUG_ID)]},
+        )
+        second = js_event(
+            "js-batch-second",
+            [exception],
+            debug_meta={
+                "images": [sourcemap_image(WIDGET_NODE_MODULES_URL, WIDGET_DEBUG_ID)]
+            },
+        )
+        self.assertMatchesGolden(
+            "js_two_events_one_batch", self.process([first, second])
+        )
+
     def test_release_and_filename(self):
         """Release artifacts matched by file name: a webpack bundle whose
-        sources carry webpack:// and node_modules paths."""
+        sources carry webpack:// and node_modules paths.
+
+        Pins current bugs: the tslib frame (a node_modules source) keeps the
+        SDK's in_app, and its context line keeps the source's CRLF \\r. See
+        KNOWN_WRONG.
+        """
         code = (EXISTING_TEST_DATA / "bundle.js").read_bytes()
         sourcemap = (EXISTING_TEST_DATA / "bundle.js.map").read_bytes()
         upload_artifact_bundle(
@@ -219,7 +521,7 @@ class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
     def test_no_matching_map(self):
         """Nothing resolves: a release with other files, and a debug-id
         minified file uploaded without its sourcemap."""
-        code, sourcemap = self.read_js("widget.min.js")
+        code, sourcemap = read_js("widget.min.js")
         upload_artifact_bundle(
             self.organization,
             self.project,
@@ -227,7 +529,7 @@ class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
             release="web@2.0.0",
         )
         orphan_debug_id = "5d0c2f0e-8b0e-4a53-9d5b-2f5a3d4c1b10"
-        app_code, _ = self.read_js("app.min.js")
+        app_code, _ = read_js("app.min.js")
         upload_artifact_bundle(
             self.organization,
             self.project,
@@ -240,6 +542,7 @@ class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
                 }
             ],
         )
+        orphan_url = "https://example.com/assets/orphan.min.js"
         payload = js_event(
             "js-no-match",
             [
@@ -249,29 +552,23 @@ class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
                     "stacktrace": {
                         "frames": [
                             js_frame("https://example.com/assets/main.js", 1, 50),
-                            js_frame(
-                                "https://example.com/assets/orphan.min.js", 1, 147
-                            ),
+                            js_frame(orphan_url, 1, 147),
                         ]
                     },
                 }
             ],
             release="web@2.0.0",
-            debug_meta={
-                "images": [
-                    {
-                        "type": "sourcemap",
-                        "code_file": "https://example.com/assets/orphan.min.js",
-                        "debug_id": orphan_debug_id,
-                    }
-                ]
-            },
+            debug_meta={"images": [sourcemap_image(orphan_url, orphan_debug_id)]},
         )
         self.assertMatchesGolden("js_no_matching_map", self.process([payload]))
 
     def test_large_bundle(self):
         """A generated bundle of a few megabytes, looked up at both ends and
-        the middle."""
+        the middle.
+
+        Pins a current bug: with the column one to the left, each throw
+        resolves to its function's first line. See KNOWN_WRONG.
+        """
         bundle = make_large_bundle()
         upload_artifact_bundle(
             self.organization,
@@ -294,17 +591,51 @@ class JavascriptSymbolicationGoldenTests(SymbolicationGoldenTestCase):
                     "stacktrace": {"frames": frames},
                 }
             ],
-            debug_meta={
-                "images": [
-                    {
-                        "type": "sourcemap",
-                        "code_file": url,
-                        "debug_id": bundle.debug_id,
-                    }
-                ]
-            },
+            debug_meta={"images": [sourcemap_image(url, bundle.debug_id)]},
         )
         self.assertMatchesGolden("js_large_bundle", self.process([payload]))
+
+
+class JavascriptBundleSelectionTests(SimpleTestCase):
+    """Which uploaded bundle a frame is matched to, at the processor level.
+
+    The goldens cannot tell a debug-id match from a file-name match: the
+    ingest pipeline copies the debug_meta code_file onto the matching bundle
+    first, so both routes find the same bundle. These call
+    ``find_source_files`` directly with bundles in a fixed order.
+    """
+
+    def bundles(self, decoy_first: bool):
+        app = DebugSymbolBundle(
+            debug_id=APP_DEBUG_ID,
+            file=File(name="app.min.js"),
+            sourcemap_file=File(name="app.min.js.map"),
+            data={},
+        )
+        decoy = DebugSymbolBundle(
+            debug_id=DECOY_DEBUG_ID,
+            file=File(name=APP_URL.rsplit("/", 1)[-1]),
+            sourcemap_file=File(name="decoy.js.map"),
+            data={},
+        )
+        return app, decoy, [decoy, app] if decoy_first else [app, decoy]
+
+    def find(self, bundles):
+        processor = JavascriptEventProcessor(None, None, bundles)
+        frame = StackTraceFrame(abs_path=APP_URL, lineno=1, colno=1)
+        debug_id_map = {APP_URL.rsplit("/", 1)[-1]: APP_DEBUG_ID}
+        return processor.find_source_files(frame, debug_id_map)
+
+    def test_debug_id_match_beats_a_later_file_name_match(self):
+        app, _, bundles = self.bundles(decoy_first=False)
+        self.assertEqual(self.find(bundles), (app.file, app.sourcemap_file))
+
+    def test_earlier_file_name_match_beats_a_debug_id_match(self):
+        """Pins a current bug: matching stops at the first bundle that
+        matches either way, so the decoy wins when it comes first. Intended:
+        a debug-id match anywhere wins."""
+        _, decoy, bundles = self.bundles(decoy_first=True)
+        self.assertEqual(self.find(bundles), (decoy.file, decoy.sourcemap_file))
 
 
 def native_event(
@@ -337,68 +668,83 @@ def native_event(
     return payload
 
 
+def crash_frames(fmt: str, base: int, with_image_addr: bool) -> list[dict]:
+    """The crash's frames, outermost first, after one system library frame.
+    Addresses are the real return addresses and faulting instruction."""
+    frames = [{"instruction_addr": hex(FOREIGN_ADDR), "function": "__libc_start_main"}]
+    for offset in crash_frame_offsets(fmt):
+        frame = {"instruction_addr": hex(base + offset)}
+        if with_image_addr:
+            frame["image_addr"] = hex(base)
+        frames.append(frame)
+    return frames
+
+
 class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
-    def setUp(self):
-        super().setUp()
-        self.symbols = native_symbols()
-
-    def upload(self, filename: str, debug_id: str, with_sources=True):
+    def upload(self, filename: str, kind: str, debug_id: str):
         upload_native_dif(
-            self.project, filename, (NATIVE_FIXTURES / filename).read_bytes()
+            self.project,
+            filename,
+            (NATIVE_FIXTURES / filename).read_bytes(),
+            kind,
+            debug_id,
         )
-        if with_sources:
-            source = (NATIVE_FIXTURES / "crash.cpp").read_text()
-            upload_native_dif(
-                self.project,
-                f"{filename}.src.zip",
-                make_source_bundle(debug_id, {"/src/native/crash.cpp": source}),
-            )
+        upload_crash_sources(self.project, debug_id)
 
-    def frames(self, fmt: str, base: int, with_image_addr: bool) -> list[dict]:
-        """The crash's frames, outermost first, plus one foreign frame."""
-        # Return addresses land a few bytes into each caller.
-        offsets = [
-            ("main", 8),
-            ("run_job", 20),
-            ("crash_here", 24),
-        ]
-        frames = [
-            {"instruction_addr": hex(FOREIGN_ADDR), "function": "__libc_start_main"}
-        ]
-        for function, delta in offsets:
-            frame = {
-                "instruction_addr": hex(base + self.symbols[fmt][function] + delta)
-            }
-            if with_image_addr:
-                frame["image_addr"] = hex(base)
-            frames.append(frame)
-        return frames
+    def elf_image(self):
+        return {
+            "type": "elf",
+            "debug_id": ELF_DEBUG_ID,
+            "code_file": "/usr/bin/crash",
+            "image_addr": hex(ELF_IMAGE_ADDR),
+            "image_size": 0x4000,
+        }
 
     def test_elf_with_debug_meta(self):
-        self.upload("crash.elf", ELF_DEBUG_ID)
+        self.upload("crash.elf", "lib", ELF_DEBUG_ID)
         payload = native_event(
             "elf-debug-meta",
-            self.frames("elf", ELF_IMAGE_ADDR, with_image_addr=False),
+            crash_frames("elf", ELF_IMAGE_ADDR, with_image_addr=False),
             arch="x86_64",
             os_name="Linux",
-            images=[
-                {
-                    "type": "elf",
-                    "debug_id": ELF_DEBUG_ID,
-                    "code_file": "/usr/bin/crash",
-                    "image_addr": hex(ELF_IMAGE_ADDR),
-                    "image_size": 0x4000,
-                }
-            ],
+            images=[self.elf_image()],
         )
         self.assertMatchesGolden("native_elf_debug_meta", self.process([payload]))
 
+    def test_elf_with_and_without_debug_info(self):
+        """Two uploads for one debug id, the full ELF and a copy with its
+        DWARF stripped (uploaded later, so tried first). The result with
+        source context is kept."""
+        self.upload("crash.elf", "lib", ELF_DEBUG_ID)
+        upload_native_dif(
+            self.project,
+            "crash.stripped.elf",
+            (NATIVE_FIXTURES / "crash.stripped.elf").read_bytes(),
+            "lib",
+            ELF_DEBUG_ID,
+        )
+        payload = native_event(
+            "elf-debug-and-stripped",
+            crash_frames("elf", ELF_IMAGE_ADDR, with_image_addr=False),
+            arch="x86_64",
+            os_name="Linux",
+            images=[self.elf_image()],
+        )
+        self.assertMatchesGolden(
+            "native_elf_debug_and_stripped", self.process([payload])
+        )
+
     def test_elf_without_debug_meta(self):
-        """No debug_meta and no image_addr: the image base is estimated."""
-        self.upload("crash.elf", ELF_DEBUG_ID)
+        """No debug_meta and no image_addr: the image base is estimated.
+
+        Pins a current bug: the estimate anchors on the first frame, a
+        system library frame here, which comes back as ``_init`` at line 0
+        while the app's frames stay unresolved. See KNOWN_WRONG.
+        """
+        self.upload("crash.elf", "lib", ELF_DEBUG_ID)
         payload = native_event(
             "elf-no-debug-meta",
-            self.frames("elf", ELF_IMAGE_ADDR, with_image_addr=False),
+            crash_frames("elf", ELF_IMAGE_ADDR, with_image_addr=False),
             arch="x86_64",
             os_name="Linux",
         )
@@ -406,11 +752,15 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
 
     def test_elf_without_debug_meta_or_foreign_frames(self):
         """The Flutter-on-Android shape: only the app's own frames, absolute
-        addresses, no image_addr and no debug_meta."""
-        self.upload("crash.elf", ELF_DEBUG_ID)
+        addresses, no image_addr and no debug_meta.
+
+        Pins a current bug: the base estimate is still wrong. See
+        KNOWN_WRONG.
+        """
+        self.upload("crash.elf", "lib", ELF_DEBUG_ID)
         payload = native_event(
             "elf-no-debug-meta-own-frames",
-            self.frames("elf", ELF_IMAGE_ADDR, with_image_addr=False)[1:],
+            crash_frames("elf", ELF_IMAGE_ADDR, with_image_addr=False)[1:],
             arch="x86_64",
             os_name="Android",
         )
@@ -420,10 +770,10 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
 
     def test_macho_with_debug_meta(self):
         """A dSYM, with image_addr on every frame as the Apple SDKs send."""
-        self.upload("crash.macho.dwarf", MACHO_DEBUG_ID)
+        self.upload("crash.macho.dwarf", "dbg", MACHO_DEBUG_ID)
         payload = native_event(
             "macho-debug-meta",
-            self.frames("macho", MACHO_IMAGE_ADDR, with_image_addr=True),
+            crash_frames("macho", MACHO_IMAGE_ADDR, with_image_addr=True),
             arch="arm64",
             os_name="iOS",
             platform="cocoa",
@@ -440,10 +790,12 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
         self.assertMatchesGolden("native_macho_debug_meta", self.process([payload]))
 
     def test_pdb_with_debug_meta(self):
-        self.upload("crash.pdb", PDB_DEBUG_ID)
+        """Pins a current bug: the stored debug id keeps the PDB age and the
+        event's loses it, so the PDB is never found. See KNOWN_WRONG."""
+        self.upload("crash.pdb", "dbg", PDB_DEBUG_ID)
         payload = native_event(
             "pdb-debug-meta",
-            self.frames("pe", PE_IMAGE_ADDR, with_image_addr=False),
+            crash_frames("pe", PE_IMAGE_ADDR, with_image_addr=False),
             arch="x86_64",
             os_name="Windows",
             images=[
@@ -460,14 +812,67 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
         self.assertMatchesGolden("native_pdb_debug_meta", self.process([payload]))
 
     def test_pdb_without_debug_meta(self):
-        self.upload("crash.pdb", PDB_DEBUG_ID)
+        self.upload("crash.pdb", "dbg", PDB_DEBUG_ID)
         payload = native_event(
             "pdb-no-debug-meta",
-            self.frames("pe", PE_IMAGE_ADDR, with_image_addr=True),
+            crash_frames("pe", PE_IMAGE_ADDR, with_image_addr=True),
             arch="x86_64",
             os_name="Windows",
         )
         self.assertMatchesGolden("native_pdb_no_debug_meta", self.process([payload]))
+
+
+def proguard_frames() -> list[dict]:
+    """Obfuscated frames: a framework frame the mapping does not know, a
+    plain call, and an inlined one."""
+    return [
+        {
+            "module": "android.view.View",
+            "function": "performClick",
+            "filename": "View.java",
+            "lineno": 7659,
+            "in_app": False,
+        },
+        {
+            "module": "a.a.a",
+            "function": "b",
+            "filename": "SourceFile",
+            "lineno": 2,
+            "in_app": True,
+        },
+        {
+            "module": "a.a.b",
+            "function": "a",
+            "filename": "SourceFile",
+            "lineno": 3,
+            "in_app": True,
+        },
+    ]
+
+
+def proguard_event(name: str, exceptions: list[dict]) -> dict:
+    return {
+        "event_id": event_id(name),
+        "timestamp": timezone.now().isoformat(),
+        "platform": "java",
+        "level": "error",
+        "contexts": {"os": {"name": "Android", "version": "14"}},
+        "exception": {"values": exceptions},
+        "debug_meta": {
+            "images": [
+                {"type": "proguard", "uuid": PROGUARD_UUID},
+                {"type": "jvm", "debug_id": JVM_BUNDLE_DEBUG_ID},
+            ]
+        },
+    }
+
+
+ILLEGAL_ARGUMENT = {
+    "type": "IllegalArgumentException",
+    "value": "value must be positive: -1",
+    "module": "java.lang",
+    "stacktrace": {"frames": proguard_frames()},
+}
 
 
 class ProguardSymbolicationGoldenTests(SymbolicationGoldenTestCase):
@@ -477,6 +882,13 @@ class ProguardSymbolicationGoldenTests(SymbolicationGoldenTestCase):
             (PROGUARD_FIXTURES / "mapping.txt").read_bytes(),
             PROGUARD_UUID,
         )
+        self.assertTrue(
+            DebugInformationFile.objects.filter(
+                project=self.project,
+                data__debug_id=PROGUARD_UUID,
+                data__symbol_type="proguard",
+            ).exists()
+        )
         sources = {}
         for path in sorted((PROGUARD_FIXTURES / "src").rglob("*.kt")):
             relative = path.relative_to(PROGUARD_FIXTURES / "src").with_suffix(".jvm")
@@ -485,81 +897,92 @@ class ProguardSymbolicationGoldenTests(SymbolicationGoldenTestCase):
             self.project,
             "jvm-sources.zip",
             make_source_bundle(JVM_BUNDLE_DEBUG_ID, sources),
+            "src",
+            JVM_BUNDLE_DEBUG_ID,
         )
 
-    def payload(self, name: str) -> dict:
-        """An Android crash whose frames are obfuscated: an inlined call, a
-        plain one, and a framework frame the mapping does not know."""
-        return {
-            "event_id": event_id(name),
-            "timestamp": timezone.now().isoformat(),
-            "platform": "java",
-            "level": "error",
-            "contexts": {"os": {"name": "Android", "version": "14"}},
-            "exception": {
-                "values": [
-                    {
-                        "type": "IllegalArgumentException",
-                        "value": "value must be positive: -1",
-                        "module": "java.lang",
-                        "stacktrace": {
-                            "frames": [
-                                {
-                                    "module": "android.view.View",
-                                    "function": "performClick",
-                                    "filename": "View.java",
-                                    "lineno": 7659,
-                                    "in_app": False,
-                                },
-                                {
-                                    "module": "a.a.a",
-                                    "function": "b",
-                                    "filename": "SourceFile",
-                                    "lineno": 2,
-                                    "in_app": True,
-                                },
-                                {
-                                    "module": "a.a.b",
-                                    "function": "a",
-                                    "filename": "SourceFile",
-                                    "lineno": 3,
-                                    "in_app": True,
-                                },
-                            ]
-                        },
-                    }
-                ]
-            },
-            "debug_meta": {
-                "images": [
-                    {"type": "proguard", "uuid": PROGUARD_UUID},
-                    {"type": "jvm", "debug_id": JVM_BUNDLE_DEBUG_ID},
-                ]
-            },
-        }
+    def select_mapping(self):
+        """Give the uploaded mapping a ``kind``, so the DIF query keeps it.
+
+        Uploaded mappings have no ``kind``, and the query's source-bundle
+        exclusion (``exclude(data__kind__in=...)``) drops every such row in
+        SQL, so without this the resolver never runs (test_uploaded_mapping).
+        The value is invented; it only routes around that bug. Once the
+        query is fixed, test_uploaded_mapping's golden must equal
+        proguard_deobfuscation.json (see KNOWN_WRONG), and this goes.
+        """
+        mapping = DebugInformationFile.objects.get(data__symbol_type="proguard")
+        mapping.data["kind"] = "mapping"
+        mapping.save(update_fields=["data"])
 
     def test_uploaded_mapping(self):
         """A mapping and JVM source bundle as the upload API stores them.
 
-        The DIF query excludes source bundles with ``exclude(data__kind__in=
-        ...)``, which in SQL also drops every row whose data has no ``kind``
-        key, and uploaded mappings have none. So the golden records the frames
-        coming back still obfuscated.
+        Pins a current bug: the mapping is never selected, so the frames come
+        back still obfuscated. See KNOWN_WRONG.
         """
         self.upload()
         self.assertMatchesGolden(
-            "proguard_uploaded_mapping", self.process([self.payload("proguard")])
+            "proguard_uploaded_mapping",
+            self.process([proguard_event("proguard", [ILLEGAL_ARGUMENT])]),
         )
 
     def test_deobfuscation_and_source_context(self):
         """What the ProGuard resolver and JVM source context produce once the
-        mapping is selected. The mapping is given a ``kind`` so the DIF query
-        keeps it (see test_uploaded_mapping)."""
+        mapping is selected (see select_mapping).
+
+        Pins current bugs: line numbers stay obfuscated, the inlined outer
+        frame is dropped, abs_path keeps the obfuscated file, and a blank
+        source line is dropped as context. See KNOWN_WRONG.
+        """
         self.upload()
-        mapping = DebugInformationFile.objects.get(data__symbol_type="proguard")
-        mapping.data["kind"] = "mapping"
-        mapping.save(update_fields=["data"])
+        self.select_mapping()
         self.assertMatchesGolden(
             "proguard_deobfuscation",
-            self.process([self.payload("proguard-selected")]),
+            self.process([proguard_event("proguard-selected", [ILLEGAL_ARGUMENT])]),
         )
+
+    def test_chained_exceptions(self):
+        """A wrapped exception and its cause, both obfuscated.
+
+        Pins a current bug: only the first exception is deobfuscated. See
+        KNOWN_WRONG.
+        """
+        self.upload()
+        self.select_mapping()
+        wrapper = {
+            "type": "RuntimeException",
+            "value": "click handler failed",
+            "module": "java.lang",
+            "stacktrace": {"frames": proguard_frames()[:2]},
+        }
+        self.assertMatchesGolden(
+            "proguard_chained_exceptions",
+            self.process(
+                [proguard_event("proguard-chained", [ILLEGAL_ARGUMENT, wrapper])]
+            ),
+        )
+
+
+class KnownWrongTests(SimpleTestCase):
+    def test_known_wrong_entries_match_the_goldens(self):
+        """Every KNOWN_WRONG entry still describes its golden. When a fix
+        regenerates a golden, this fails until the entry is removed."""
+        for entry in KNOWN_WRONG:
+            with self.subTest(golden=entry.golden, path=entry.path):
+                value = json.loads((GOLDENS / f"{entry.golden}.json").read_text())
+                for step in entry.path:
+                    if step is len:
+                        value = len(value)
+                    elif isinstance(value, dict):
+                        value = value.get(step)
+                    else:
+                        value = value[step]
+                self.assertEqual(value, entry.current)
+                self.assertNotEqual(entry.current, entry.expected)
+
+    def test_uploaded_mapping_output_differs_from_selected_mapping(self):
+        """Once uploaded mappings are selected, these two goldens must match."""
+        uploaded = json.loads((GOLDENS / "proguard_uploaded_mapping.json").read_text())
+        selected = json.loads((GOLDENS / "proguard_deobfuscation.json").read_text())
+        self.assertNotEqual(uploaded, selected)

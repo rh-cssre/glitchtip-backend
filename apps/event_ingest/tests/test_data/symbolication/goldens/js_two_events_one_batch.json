@@ -1,0 +1,110 @@
+[
+  {
+    "culprit": "average(assets/app.3f9a1c)",
+    "exception": {
+      "values": [
+        {
+          "raw_stacktrace": {
+            "frames": [
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 260,
+                "filename": "/assets/app.3f9a1c.min.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              }
+            ]
+          },
+          "stacktrace": {
+            "frames": [
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 3,
+                "context_line": "  return divide(total, values.length);",
+                "filename": "../src/math.js",
+                "function": "average",
+                "in_app": true,
+                "lineno": 10,
+                "module": "assets/app.3f9a1c",
+                "post_context": [
+                  "}"
+                ],
+                "pre_context": [
+                  "  return numerator / denominator;",
+                  "}",
+                  "",
+                  "export function average(values) {",
+                  "  const total = values.reduce((sum, value) => sum + value, 0);"
+                ]
+              }
+            ]
+          },
+          "type": "RangeError",
+          "value": "Cannot divide 3 by zero"
+        }
+      ]
+    },
+    "metadata": {
+      "filename": "../src/math.js",
+      "function": "average",
+      "type": "RangeError",
+      "value": "Cannot divide 3 by zero"
+    },
+    "title": "RangeError: Cannot divide 3 by zero"
+  },
+  {
+    "culprit": "average(assets/app.3f9a1c)",
+    "exception": {
+      "values": [
+        {
+          "raw_stacktrace": {
+            "frames": [
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 260,
+                "filename": "/assets/app.3f9a1c.min.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              }
+            ]
+          },
+          "stacktrace": {
+            "frames": [
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 3,
+                "context_line": "  return divide(total, values.length);",
+                "filename": "../src/math.js",
+                "function": "average",
+                "in_app": true,
+                "lineno": 10,
+                "module": "assets/app.3f9a1c",
+                "post_context": [
+                  "}"
+                ],
+                "pre_context": [
+                  "  return numerator / denominator;",
+                  "}",
+                  "",
+                  "export function average(values) {",
+                  "  const total = values.reduce((sum, value) => sum + value, 0);"
+                ]
+              }
+            ]
+          },
+          "type": "RangeError",
+          "value": "Cannot divide 3 by zero"
+        }
+      ]
+    },
+    "metadata": {
+      "filename": "../src/math.js",
+      "function": "average",
+      "type": "RangeError",
+      "value": "Cannot divide 3 by zero"
+    },
+    "title": "RangeError: Cannot divide 3 by zero"
+  }
+]
