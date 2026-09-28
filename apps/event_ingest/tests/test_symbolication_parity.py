@@ -115,10 +115,6 @@ RETURN_ADDRESS = (
     "caller frames report a return address, the instruction after the call; "
     "it is looked up as is instead of minus one, so the line after the call"
 )
-PDB_AGE = (
-    "the stored PDB debug id keeps its age suffix, NativeDebugImage drops it, "
-    "so the debug_id filter never matches"
-)
 IMAGE_BASE = (
     "the image base estimate anchors on the first frame and page-aligned "
     "offsets, and writes a wrong symbol rather than none"
@@ -186,13 +182,6 @@ KNOWN_WRONG: list[KnownWrong] = [
     ),
     KnownWrong(
         "native_pdb_no_debug_meta", frame(0, 0, 2, "lineno"), 31, 29, RETURN_ADDRESS
-    ),
-    KnownWrong(
-        "native_pdb_debug_meta",
-        frame(0, 0, 3, "function"),
-        None,
-        "app::crash_here(int*)",
-        PDB_AGE,
     ),
     KnownWrong(
         "native_elf_no_debug_meta",
@@ -739,8 +728,7 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
         self.assertMatchesGolden("native_macho_debug_meta", self.process([payload]))
 
     def test_pdb_with_debug_meta(self):
-        """Pins a current bug: the stored debug id keeps the PDB age and the
-        event's loses it, so the PDB is never found. See KNOWN_WRONG."""
+        """The PDB is found by its debug id, age included."""
         self.upload("crash.pdb", "dbg", PDB_DEBUG_ID)
         payload = native_event(
             "pdb-debug-meta",

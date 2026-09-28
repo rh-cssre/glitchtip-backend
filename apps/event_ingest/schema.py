@@ -131,12 +131,14 @@ def _uuid_or_none(v):
 
 
 def _normalize_native_debug_id(v):
-    if v is None or isinstance(v, uuid.UUID):
+    """The debug id in its canonical form, keeping a non-zero appendix (the
+    PDB age), since that is part of how a debug file is identified."""
+    if v is None:
         return v
     try:
-        return uuid.UUID("-".join(normalize_debug_id(str(v)).split("-")[:5]))
-    except Exception:
-        return v
+        return normalize_debug_id(str(v))
+    except Exception as err:
+        raise ValueError(f"invalid debug_id {v!r}") from err
 
 
 # Important, for some reason using Schema will cause the DebugImage union not to work
@@ -155,9 +157,7 @@ class JvmDebugImage(BaseModel):
 # Important, for some reason using Schema will cause the DebugImage union not to work
 class NativeDebugImage(BaseModel):
     type: Literal["macho", "elf", "pe", "pe_dotnet", "wasm"]
-    debug_id: Annotated[
-        uuid.UUID | None, BeforeValidator(_normalize_native_debug_id)
-    ] = None
+    debug_id: Annotated[str | None, BeforeValidator(_normalize_native_debug_id)] = None
     debug_checksum: str | None = None
     image_addr: str | None = None
     image_size: int | None = None

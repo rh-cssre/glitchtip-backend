@@ -1474,13 +1474,19 @@ class NormalizeDebugIdTestCase(GlitchTestCase):
 
     def test_native_debug_image_accepts_breakpad_format(self):
         """33-char Breakpad-style debug_id (32 hex + appendix) should validate,
-        regardless of the appendix/age value."""
+        and keep a non-zero appendix: for a PDB it is the age, part of the
+        identity that uploaded debug files are stored under."""
         base = "114f8cb943bc5bf52c409cabe92c0924"
-        for appendix in ["0", "1", "9", "a", "f"]:
-            breakpad_id = base + appendix
-            image = NativeDebugImage(type="wasm", debug_id=breakpad_id)
-            self.assertIsNotNone(image.debug_id)
-            self.assertEqual(len(str(image.debug_id).replace("-", "")), 32)
+        dashed = "114f8cb9-43bc-5bf5-2c40-9cabe92c0924"
+        for appendix, expected in [
+            ("0", dashed),
+            ("1", f"{dashed}-1"),
+            ("9", f"{dashed}-9"),
+            ("a", f"{dashed}-a"),
+            ("f", f"{dashed}-f"),
+        ]:
+            image = NativeDebugImage(type="wasm", debug_id=base + appendix)
+            self.assertEqual(image.debug_id, expected)
 
     def test_native_debug_image_still_rejects_garbage(self):
         """Genuinely invalid debug_id should still fail validation as before."""
