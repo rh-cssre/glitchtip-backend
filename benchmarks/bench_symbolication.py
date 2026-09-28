@@ -288,7 +288,8 @@ def run_child(scenario: str, events: int) -> dict:
     rss_steady = read_status_kib("VmRSS")
     reset_peak_rss()
     timings = []
-    with measure_symbolication() as cost:
+    # Warm: keep the caches the first event loaded.
+    with measure_symbolication(cold=False) as cost:
         for _ in range(events):
             start = time.perf_counter()
             process_one()
