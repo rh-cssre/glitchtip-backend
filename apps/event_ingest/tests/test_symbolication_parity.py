@@ -139,15 +139,6 @@ KNOWN_WRONG: list[KnownWrong] = [
         False,
         "the tslib frame is a node_modules source but keeps the SDK's in_app",
     ),
-    # Native
-    # ProGuard
-    KnownWrong(
-        "proguard_deobfuscation",
-        frame(0, 0, 1, "abs_path"),
-        "SourceFile",
-        "MainActivity.kt",
-        "abs_path keeps the obfuscated file name when filename is remapped",
-    ),
 ]
 
 
@@ -770,9 +761,6 @@ class ProguardSymbolicationGoldenTests(SymbolicationGoldenTestCase):
 
         The inlined call (Validator.requirePositive inside
         UserRepository.loadUser) comes back as both frames.
-
-        Pins a current bug: abs_path keeps the obfuscated file. See
-        KNOWN_WRONG.
         """
         self.upload()
         self.assertMatchesGolden(

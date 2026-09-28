@@ -16,7 +16,7 @@
                 "module": "android.view.View"
               },
               {
-                "abs_path": "SourceFile",
+                "abs_path": "MainActivity.kt",
                 "context_line": "        val name = repository.loadUser(-1)",
                 "filename": "MainActivity.kt",
                 "function": "onSubmit",
@@ -37,7 +37,7 @@
                 ]
               },
               {
-                "abs_path": "SourceFile",
+                "abs_path": "UserRepository.kt",
                 "context_line": "        Validator.requirePositive(id)",
                 "filename": "UserRepository.kt",
                 "function": "loadUser",
@@ -59,7 +59,7 @@
                 ]
               },
               {
-                "abs_path": "SourceFile",
+                "abs_path": "Validator.kt",
                 "context_line": "            throw IllegalArgumentException(\"value must be positive: $value\")",
                 "filename": "Validator.kt",
                 "function": "requirePositive",

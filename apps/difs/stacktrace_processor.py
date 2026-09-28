@@ -336,6 +336,10 @@ class StacktraceProcessor:
                     remapped = copy.copy(frame)
                     remapped["resolved"] = True
                     remapped["filename"] = remapped_frame.file
+                    # abs_path defaults to the filename the SDK sent (often
+                    # the obfuscated "SourceFile"); follow the remapped one.
+                    if frame.get("abs_path") in (None, frame.get("filename")):
+                        remapped["abs_path"] = remapped_frame.file
                     remapped["lineno"] = remapped_frame.line
                     remapped["function"] = remapped_frame.method
                     remapped["module"] = remapped_frame.class_name
