@@ -506,12 +506,9 @@ class JavascriptBundleSelectionTests(SimpleTestCase):
         app, _, bundles = self.bundles(decoy_first=False)
         self.assertEqual(self.find(bundles), (app.file, app.sourcemap_file))
 
-    def test_earlier_file_name_match_beats_a_debug_id_match(self):
-        """Pins a current bug: matching stops at the first bundle that
-        matches either way, so the decoy wins when it comes first. Intended:
-        a debug-id match anywhere wins."""
-        _, decoy, bundles = self.bundles(decoy_first=True)
-        self.assertEqual(self.find(bundles), (decoy.file, decoy.sourcemap_file))
+    def test_debug_id_match_beats_an_earlier_file_name_match(self):
+        app, _, bundles = self.bundles(decoy_first=True)
+        self.assertEqual(self.find(bundles), (app.file, app.sourcemap_file))
 
 
 def native_event(
