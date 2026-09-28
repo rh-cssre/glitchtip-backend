@@ -1,6 +1,6 @@
 [
   {
-    "culprit": null,
+    "culprit": "?(/assets/orphan.min.js)",
     "exception": {
       "values": [
         {
@@ -28,6 +28,12 @@
           "value": "x is undefined"
         }
       ]
+    },
+    "metadata": {
+      "filename": "/assets/orphan.min.js",
+      "function": "?",
+      "type": "TypeError",
+      "value": "x is undefined"
     },
     "title": "TypeError: x is undefined"
   }

@@ -1,6 +1,6 @@
 [
   {
-    "culprit": null,
+    "culprit": "com.example.app.data.Validator in requirePositive",
     "exception": {
       "values": [
         {
@@ -49,6 +49,12 @@
           "value": "value must be positive: -1"
         }
       ]
+    },
+    "metadata": {
+      "filename": "Validator.kt",
+      "function": "requirePositive",
+      "type": "IllegalArgumentException",
+      "value": "value must be positive: -1"
     },
     "title": "IllegalArgumentException: value must be positive: -1"
   }

@@ -1,6 +1,6 @@
 [
   {
-    "culprit": null,
+    "culprit": "app::crash_here(int*)",
     "exception": {
       "values": [
         {
@@ -87,6 +87,12 @@
           "value": "Segfault"
         }
       ]
+    },
+    "metadata": {
+      "filename": "/src/native/crash.cpp",
+      "function": "app::crash_here",
+      "type": "SIGSEGV",
+      "value": "Segfault"
     },
     "title": "SIGSEGV: Segfault"
   }

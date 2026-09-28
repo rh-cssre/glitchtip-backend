@@ -1,6 +1,6 @@
 [
   {
-    "culprit": null,
+    "culprit": "computeTotal_159_99(assets/large)",
     "exception": {
       "values": [
         {
@@ -106,6 +106,12 @@
           "value": "negative input"
         }
       ]
+    },
+    "metadata": {
+      "filename": "webpack:///./src/generated/module_159.js",
+      "function": "computeTotal_159_99",
+      "type": "Error",
+      "value": "negative input"
     },
     "title": "Error: negative input"
   }

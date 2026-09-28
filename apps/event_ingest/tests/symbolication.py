@@ -444,9 +444,11 @@ def make_large_bundle(modules: int = 160, functions: int = 100) -> GeneratedBund
 
 def golden_view(issue_event) -> dict:
     """The parts of a stored event that symbolication decides."""
-    data = issue_event.data
     return {
         "title": issue_event.issue.title,
-        "culprit": issue_event.issue.culprit,
-        "exception": data.get("exception"),
+        # The culprit is derived from the symbolicated frames and stored on
+        # the event's transaction field.
+        "culprit": issue_event.transaction,
+        "metadata": issue_event.issue.metadata,
+        "exception": issue_event.data.get("exception"),
     }

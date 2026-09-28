@@ -1,6 +1,6 @@
 [
   {
-    "culprit": null,
+    "culprit": "?(/dist/other.js)",
     "exception": {
       "values": [
         {
@@ -155,6 +155,12 @@
           "value": "The error"
         }
       ]
+    },
+    "metadata": {
+      "filename": "/dist/other.js",
+      "function": "?",
+      "type": "Error",
+      "value": "The error"
     },
     "title": "Error: The error"
   }

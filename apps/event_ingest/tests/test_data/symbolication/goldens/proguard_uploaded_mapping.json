@@ -1,6 +1,6 @@
 [
   {
-    "culprit": null,
+    "culprit": "a.a.b in a",
     "exception": {
       "values": [
         {
@@ -37,6 +37,12 @@
           "value": "value must be positive: -1"
         }
       ]
+    },
+    "metadata": {
+      "filename": "SourceFile",
+      "function": "a",
+      "type": "IllegalArgumentException",
+      "value": "value must be positive: -1"
     },
     "title": "IllegalArgumentException: value must be positive: -1"
   }

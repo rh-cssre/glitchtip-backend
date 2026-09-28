@@ -1,6 +1,6 @@
 [
   {
-    "culprit": null,
+    "culprit": "?",
     "exception": {
       "values": [
         {
@@ -29,6 +29,11 @@
           "value": "Segfault"
         }
       ]
+    },
+    "metadata": {
+      "function": "__libc_start_main",
+      "type": "SIGSEGV",
+      "value": "Segfault"
     },
     "title": "SIGSEGV: Segfault"
   }

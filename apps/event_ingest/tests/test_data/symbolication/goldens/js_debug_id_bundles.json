@@ -1,6 +1,6 @@
 [
   {
-    "culprit": null,
+    "culprit": "divide(assets/app)",
     "exception": {
       "values": [
         {
@@ -273,6 +273,12 @@
           "value": "Cannot divide 3 by zero"
         }
       ]
+    },
+    "metadata": {
+      "filename": "../src/math.js",
+      "function": "divide",
+      "type": "RangeError",
+      "value": "Cannot divide 3 by zero"
     },
     "title": "RangeError: Cannot divide 3 by zero"
   }
