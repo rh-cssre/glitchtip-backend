@@ -24,9 +24,8 @@ ORG_NOT_FOUND = "Organization not found."
 async def resolve_org_id(segment: str) -> int:
     """The org id a path segment names: all digits is an id, anything else a slug.
 
-    Gives us the performance win of not having to resolve org_id from org_slug when
-    ID is passed in. A miss is ``NO_ORG_ID``-> 200 [] rather than a 404 for
-    consistency.
+    An id costs no query; a slug costs one lookup. A miss is ``NO_ORG_ID``, so
+    the gate treats it like any org the caller isn't in.
     """
     # isdigit() alone accepts non-ASCII digits such as "²", which int() rejects.
     if segment.isascii() and segment.isdigit():
