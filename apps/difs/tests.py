@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from asgiref.sync import async_to_sync
+from django.core.cache import cache
 from django.core.files import File as DjangoFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
@@ -17,6 +18,7 @@ from model_bakery import baker
 from pydantic import ValidationError
 
 from apps.difs.api import _PROGUARD_SNIFF_BYTES, extract_proguard_metadata
+from apps.difs.models import DebugInformationFile
 from apps.difs.stacktrace_processor import (
     MAX_BASE_PROBES,
     MAX_SCORED_ADDRS,
@@ -34,6 +36,13 @@ from apps.difs.tasks import (
     resolve_event_stacktraces,
 )
 from apps.event_ingest.schema import ErrorIssueEventSchema, NativeDebugImage
+from apps.event_ingest.tests.symbolication import (
+    ELF_DEBUG_ID,
+    IN_MEMORY_STORAGE,
+    NATIVE_FIXTURES,
+    PROGUARD_FIXTURES,
+    store_blob,
+)
 from apps.files.models import File, FileBlob
 from glitchtip.test_utils import generators  # noqa: F401
 from glitchtip.test_utils.test_case import GlitchTestCase, GlitchTipTransactionTestCase
@@ -135,6 +144,8 @@ class DifsAssembleAPITestCase(GlitchTestCase):
         }
 
     def setUp(self):
+        # Assemble outcomes are remembered in the cache, per checksum.
+        cache.clear()
         self.client.force_login(self.user)
         self.async_client.force_login(self.user)
 
@@ -1728,3 +1739,78 @@ class NormalizeDebugIdTestCase(GlitchTestCase):
         """Genuinely invalid debug_id should still fail validation as before."""
         with self.assertRaises(ValidationError):
             NativeDebugImage(type="wasm", debug_id="not-a-debug-id-at-all")
+
+
+@IN_MEMORY_STORAGE
+class ChunkedDifAssembleTestCase(GlitchTipTransactionTestCase):
+    """Upload tools send ProGuard mappings, like native debug files, as
+    chunks followed by an assemble request."""
+
+    MAPPING_UUID = "20fce343-c2d0-3343-9688-e32c516c7297"
+
+    def setUp(self):
+        cache.clear()
+        self.create_logged_in_user()
+        self.url = reverse(
+            "api:difs_assemble_api", args=[self.organization.slug, self.project.slug]
+        )
+
+    def assemble(self, content: bytes, name: str, debug_id=None):
+        blob = store_blob(name, content)
+        entry = {"name": name, "chunks": [blob.checksum]}
+        if debug_id:
+            entry["debug_id"] = debug_id
+        response = self.client.post(
+            self.url, {blob.checksum: entry}, content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200)
+        return blob.checksum, response.json()[blob.checksum]
+
+    def test_a_proguard_mapping_is_stored_like_a_dsyms_upload(self):
+        mapping = (PROGUARD_FIXTURES / "mapping.txt").read_bytes()
+        _, first = self.assemble(mapping, "mapping.txt", self.MAPPING_UUID)
+        self.assertEqual(first["state"], "created")
+        dif = DebugInformationFile.objects.get(project=self.project)
+        self.assertEqual(
+            dif.data,
+            {
+                "arch": "any",
+                "debug_id": self.MAPPING_UUID,
+                "symbol_type": "proguard",
+                "features": ["mapping"],
+            },
+        )
+        # The upload tool's next poll sees it done.
+        _, again = self.assemble(mapping, "mapping.txt", self.MAPPING_UUID)
+        self.assertEqual(again["state"], "ok")
+
+    def test_the_uuid_can_come_from_the_file_name(self):
+        mapping = (PROGUARD_FIXTURES / "mapping.txt").read_bytes()
+        self.assemble(mapping, f"proguard/{self.MAPPING_UUID}.txt")
+        dif = DebugInformationFile.objects.get(project=self.project)
+        self.assertEqual(dif.data["debug_id"], self.MAPPING_UUID)
+
+    def test_an_unsupported_file_is_reported_as_an_error(self):
+        """Not a debug file nor a mapping: the next poll reports an error,
+        so the upload tool does not claim success."""
+        content = b"not a debug file at all"
+        _, first = self.assemble(content, "junk.bin", self.MAPPING_UUID)
+        self.assertEqual(first["state"], "created")
+        self.assertFalse(DebugInformationFile.objects.exists())
+        _, again = self.assemble(content, "junk.bin", self.MAPPING_UUID)
+        self.assertEqual(again["state"], "error")
+        self.assertIn("not a supported debug file", again["detail"])
+
+    def test_a_mapping_without_a_uuid_is_an_error(self):
+        mapping = (PROGUARD_FIXTURES / "mapping.txt").read_bytes()
+        self.assemble(mapping, "mapping.txt")
+        _, again = self.assemble(mapping, "mapping.txt")
+        self.assertEqual(again["state"], "error")
+
+    def test_native_debug_files_still_assemble(self):
+        elf = (NATIVE_FIXTURES / "crash.elf").read_bytes()
+        _, first = self.assemble(elf, "crash.elf", ELF_DEBUG_ID)
+        self.assertEqual(first["state"], "created")
+        dif = DebugInformationFile.objects.get(project=self.project)
+        self.assertEqual(dif.data["symbol_type"], "native")
+        self.assertEqual(dif.data["debug_id"], ELF_DEBUG_ID)

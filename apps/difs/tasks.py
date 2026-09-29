@@ -11,6 +11,11 @@ from django.tasks import task
 from gt_rust.symbolic import Archive, normalize_debug_id, parse_addr
 
 from apps.difs.models import DebugInformationFile
+from apps.difs.proguard import (
+    _PROGUARD_SNIFF_BYTES,
+    extract_proguard_id,
+    extract_proguard_metadata,
+)
 from apps.difs.stacktrace_processor import ResolvedStacktrace, StacktraceProcessor
 from apps.event_ingest.schema import (
     ErrorIssueEventSchema,
@@ -18,6 +23,7 @@ from apps.event_ingest.schema import (
     NativeDebugImage,
     ProguardDebugImage,
 )
+from apps.files.assemble import AssembleTask, ChunkFileState, set_assemble_status
 from apps.files.models import File, FileBlob
 from apps.projects.models import Project
 from apps.shared.schema.exception import StackTraceFrame
@@ -41,6 +47,7 @@ class UnsupportedFile(Exception):
 DIF_STATE_CREATED = "created"
 DIF_STATE_OK = "ok"
 DIF_STATE_NOT_FOUND = "not_found"
+DIF_STATE_ERROR = "error"
 
 
 @task
@@ -54,12 +61,29 @@ async def difs_assemble(project_id, name, checksum, chunks, debug_id):
                 name, checksum, chunks
             )
 
-        await sync_to_async(difs_create_difs)(project, name, file)
+        await sync_to_async(difs_create_difs)(project, name, file, debug_id)
 
     except ChecksumMismatched:
         getLogger().error("difs_assemble: Checksum mismatched: %s", name)
+        await _assemble_failed(project_id, checksum, "checksum mismatch")
+    except UnsupportedFile:
+        getLogger().warning("difs_assemble: unsupported debug file: %s", name)
+        await _assemble_failed(
+            project_id,
+            checksum,
+            "not a supported debug file (or a ProGuard mapping without its uuid)",
+        )
     except Exception as err:
-        getLogger().error("difs_assemble: %s", err)
+        getLogger().error("difs_assemble: %s", type(err).__name__)
+        await _assemble_failed(project_id, checksum, "assemble failed")
+
+
+async def _assemble_failed(project_id, checksum, detail: str):
+    """Record the failure, so the upload tool's next assemble poll reports
+    an error instead of the upload quietly never appearing."""
+    await sync_to_async(set_assemble_status)(
+        AssembleTask.DIF, project_id, checksum, ChunkFileState.ERROR, detail=detail
+    )
 
 
 def _extract_jvm_debug_ids(event: ErrorIssueEventSchema) -> list[str]:
@@ -381,7 +405,7 @@ def difs_extract_metadata_from_file(file):
                 else Archive.from_bytes(source)
             )
         except Exception as err:
-            getLogger().error("Extract metadata error: %s", err)
+            getLogger().info("Extract metadata error: %s", type(err).__name__)
             raise UnsupportedFile() from err
         else:
             return [
@@ -400,8 +424,43 @@ def difs_extract_metadata_from_file(file):
             ]
 
 
-def difs_create_difs(project, name, file):
-    metadatalist = difs_extract_metadata_from_file(file)
+def _proguard_mapping_metadata(file, name: str, debug_id: str | None):
+    """The DIF data for a ProGuard mapping uploaded by chunks, as the
+    dsyms upload stores it, or None if ``file`` is not a mapping or its
+    uuid is unknown (upload tools send it as the debug id)."""
+    with file.blob.blob.open("rb") as stored:
+        head = stored.read(_PROGUARD_SNIFF_BYTES)
+    if extract_proguard_metadata(head) is None:
+        return None
+    mapping_uuid = debug_id or extract_proguard_id(name)
+    if not mapping_uuid:
+        return None
+    try:
+        mapping_uuid = normalize_debug_id(mapping_uuid)
+    except Exception:
+        return None
+    return {
+        "arch": "any",
+        "debug_id": mapping_uuid,
+        "symbol_type": "proguard",
+        "features": ["mapping"],
+    }
+
+
+def difs_create_difs(project, name, file, debug_id=None):
+    try:
+        metadatalist = difs_extract_metadata_from_file(file)
+    except UnsupportedFile:
+        proguard = _proguard_mapping_metadata(file, name, debug_id)
+        if proguard is None:
+            raise
+        if not DebugInformationFile.objects.filter(
+            project_id=project.id, file=file
+        ).exists():
+            DebugInformationFile.objects.create(
+                project=project, name=name, file=file, data=proguard
+            )
+        return
     for metadata in metadatalist:
         dif = DebugInformationFile.objects.filter(
             project_id=project.id, file=file

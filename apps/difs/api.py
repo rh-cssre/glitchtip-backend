@@ -1,8 +1,6 @@
 """Port of sentry.api.endpoints.debug_files.DifAssembleEndpoint"""
 
-import codecs
 import io
-import re
 import tempfile
 import zipfile
 from hashlib import sha1
@@ -18,6 +16,7 @@ from ninja.errors import HttpError
 from ninja.files import UploadedFile
 from ninja.pagination import paginate
 
+from apps.files.assemble import AssembleTask, ChunkFileState, get_assemble_status
 from apps.files.models import File, FileBlob
 from apps.organizations_ext.models import Organization
 from apps.projects.models import Project
@@ -26,8 +25,19 @@ from glitchtip.api.decorators import optional_slash
 from glitchtip.api.permissions import has_permission
 
 from .models import DebugInformationFile
+from .proguard import (  # noqa: F401 (re-exported for callers and tests)
+    _PROGUARD_SNIFF_BYTES,
+    extract_proguard_id,
+    extract_proguard_metadata,
+)
 from .schema import AssemblePayload, DebugFileSchema
-from .tasks import DIF_STATE_CREATED, DIF_STATE_NOT_FOUND, DIF_STATE_OK, difs_assemble
+from .tasks import (
+    DIF_STATE_CREATED,
+    DIF_STATE_ERROR,
+    DIF_STATE_NOT_FOUND,
+    DIF_STATE_OK,
+    difs_assemble,
+)
 
 MAX_UPLOAD_BLOB_SIZE = 32 * 1024 * 1024  # 32MB
 
@@ -93,6 +103,20 @@ async def difs_assemble_api(
             }
             continue
 
+        # All chunks are here, but an earlier assemble of this file failed
+        # (not a debug file we can read, say): report it, rather than
+        # queueing it again and again.
+        status = await sync_to_async(get_assemble_status)(
+            AssembleTask.DIF, project.id, checksum
+        )
+        if status is not None and status[0] == ChunkFileState.ERROR:
+            responses[checksum] = {
+                "state": DIF_STATE_ERROR,
+                "missingChunks": [],
+                "detail": status[1],
+            }
+            continue
+
         responses[checksum] = {"state": DIF_STATE_CREATED, "missingChunks": []}
         await difs_assemble.aenqueue(project.id, name, checksum, chunks, debug_id)
 
@@ -114,56 +138,6 @@ async def project_reprocessing(
     Not implemented. It is a dummy API to keep `sentry-cli upload-dif` happy
     """
     return
-
-
-def extract_proguard_id(name: str):
-    match = re.search("proguard/([-a-fA-F0-9]+).txt", name)
-    if match is None:
-        return
-    return match.group(1)
-
-
-# A ProGuard/R8 mapping file's class records always look like
-# `originalClassName -> obfuscatedClassName:` at column 0; member records
-# (fields/methods) are indented under a class record and never appear before
-# one. So the first non-comment, non-blank line of a real mapping is always
-# a class record — checking just that line is enough to tell a mapping file
-# apart from arbitrary text, without parsing the rest of the file.
-_PROGUARD_CLASS_RECORD_RE = re.compile(r"^\S+ -> \S+:$")
-
-# Real mapping files put the first class record within the first few header
-# comment lines, so a small prefix is always enough to find it. Bounding the
-# sniff avoids decoding the whole file to `str`, which for a mapping in the
-# tens of MBs would itself allocate a comparable amount of RAM just to look
-# at the first line.
-_PROGUARD_SNIFF_BYTES = 64 * 1024
-
-
-def extract_proguard_metadata(content: bytes):
-    """Cheaply sniff-check that this looks like a ProGuard mapping file.
-
-    This intentionally avoids ProguardMapper.open(), which eagerly builds a
-    full in-memory class/method index over the entire file just to answer
-    yes/no here — for a mapping file in the tens of MBs that index build can
-    itself use several hundred MB of RAM, which is wasted work since nothing
-    below actually uses the parsed mapper. Deobfuscation uses a ProguardCache
-    built from the mapping the first time an event needs it (apps.symbolication).
-    """
-    head = content[:_PROGUARD_SNIFF_BYTES].removeprefix(codecs.BOM_UTF8)
-
-    for line in head.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith(b"#"):
-            continue
-        try:
-            decoded = stripped.decode("utf-8")
-        except UnicodeDecodeError:
-            return None
-        if _PROGUARD_CLASS_RECORD_RE.match(decoded) is None:
-            return None
-        break
-
-    return {"arch": "any", "feature": "mapping"}
 
 
 async def create_dif_from_read_only_file(proguard_file, project, proguard_id, filename):
