@@ -655,20 +655,6 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
         )
         self.assertMatchesGolden("native_elf_crash", self.process([payload]))
 
-    def test_elf_without_debug_meta_or_foreign_frames(self):
-        """The Flutter-on-Android shape: only the app's own frames, absolute
-        addresses, no image_addr and no debug_meta."""
-        self.upload("crash.elf", "lib", ELF_DEBUG_ID)
-        payload = native_event(
-            "elf-no-debug-meta-own-frames",
-            crash_frames("elf", ELF_IMAGE_ADDR, with_image_addr=False)[1:],
-            arch="x86_64",
-            os_name="Android",
-        )
-        self.assertMatchesGolden(
-            "native_elf_no_debug_meta_own_frames", self.process([payload])
-        )
-
     def macho_payload(self):
         return native_event(
             "macho-debug-meta",

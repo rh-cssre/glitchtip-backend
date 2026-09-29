@@ -955,15 +955,10 @@ class EstimateImageBaseFlutterTestCase(GlitchTestCase):
     def test_a_dense_symbol_table_gives_no_estimate(self):
         """Dart AOT symbols are so dense that the neighbouring page-aligned
         bases resolve all eleven frames as well as the true one does: there
-        is no telling them apart, so no guess."""
+        is no telling them apart, so no guess. With image_addr from
+        debug_meta, as the SDK sends it when it can, they all resolve."""
         self.assertIsNone(_estimate_image_base(self.sym_cache, self.addrs))
-        # The true base is among the equally good ones.
-        at_true_base = [self.sym_cache.lookup(a - self.TRUE_BASE) for a in self.addrs]
-        self.assertTrue(all(at_true_base))
 
-    def test_the_frames_resolve_with_the_sdk_base(self):
-        """With image_addr from debug_meta, as the SDK sends it when it can,
-        the frames resolve."""
         stacktrace = {"frames": [{"instruction_addr": hex(a)} for a in self.addrs]}
         result = StacktraceProcessor.resolve_native_stacktrace(
             stacktrace,

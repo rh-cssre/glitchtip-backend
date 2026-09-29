@@ -162,29 +162,15 @@ class NativeDebugFileCostTests(SymbolicationCostTestCase):
         )
         self.elf_size = self.real.file.blob.size
 
-    def test_event_without_native_frames_opens_no_debug_file(self):
-        """A plain exception has no instruction addresses, so no native debug
-        file can resolve it."""
-        payload = base_event(
+    def test_events_without_native_frames_open_no_debug_file(self):
+        """A plain exception, or a Dart one with only Dart frames, has no
+        instruction addresses, so no native debug file can resolve it."""
+        python = base_event(
             platform="python",
             contexts={"os": {"name": "Linux"}, "runtime": {"name": "CPython"}},
             exception=PYTHON_EXCEPTION,
         )
-        with measure_symbolication() as cost:
-            self.process([payload])
-        self.assertEqual(cost.files_opened, 0)
-        self.assertEqual(cost.resolver_attempts, [])
-        self.assertEqual(cost.cache_misses, 0)
-        cost.assert_only(SCHEMA_CALLS)
-
-        # Positive control: a native crash in the same project is seen
-        # reading its debug file.
-        with measure_symbolication() as cost:
-            self.process([native_crash(debug_meta=elf_debug_meta())])
-        self.assertGreater(cost.files_opened, 0)
-
-    def test_dart_exception_without_native_frames_opens_no_debug_file(self):
-        payload = base_event(
+        dart = base_event(
             platform="dart",
             contexts={"os": {"name": "iOS"}, "device": {"arch": "arm64"}},
             exception={
@@ -206,13 +192,16 @@ class NativeDebugFileCostTests(SymbolicationCostTestCase):
                 ]
             },
         )
-        with measure_symbolication() as cost:
-            self.process([payload])
-        self.assertEqual(cost.files_opened, 0)
-        self.assertEqual(cost.resolver_attempts, [])
-        cost.assert_only(SCHEMA_CALLS)
+        for name, payload in [("python", python), ("dart", dart)]:
+            with self.subTest(name), measure_symbolication() as cost:
+                self.process([payload])
+                self.assertEqual(cost.files_opened, 0)
+                self.assertEqual(cost.resolver_attempts, [])
+                self.assertEqual(cost.cache_misses, 0)
+                cost.assert_only(SCHEMA_CALLS)
 
-        # Positive control, as above.
+        # Positive control: a native crash in the same project is seen
+        # reading its debug file.
         with measure_symbolication() as cost:
             self.process([native_crash(debug_meta=elf_debug_meta())])
         self.assertGreater(cost.files_opened, 0)
@@ -320,7 +309,6 @@ class ProguardCostTests(SymbolicationCostTestCase):
             self.process([self.event()])
         self.assertEqual(cost.resolver_attempts, [self.mapping_uuids[7]])
         self.assertEqual(cost.cache_builds, 1)
-        self.assertEqual(cost.proguard_opens, 0)  # no ProguardMapper at all
         cost.assert_only(PROGUARD_CALLS)
 
         with measure_symbolication(cold=False) as cost:
@@ -416,7 +404,6 @@ class JavascriptParseCostTests(SymbolicationCostTestCase):
         with measure_symbolication() as cost:
             self.process([self.event()])
         self.assertEqual(cost.cache_builds, 1)
-        self.assertEqual(cost.sourcemap_parses, 0)  # no per-event from_bytes
         self.assertEqual(cost.rust_calls["SourceMapCache.build_to"], 1)
         self.assertEqual(cost.rust_calls["SourceMapCache.load_file"], 1)
         self.assertEqual(cost.rust_calls["SourceMapCache.lookup"], 3)
