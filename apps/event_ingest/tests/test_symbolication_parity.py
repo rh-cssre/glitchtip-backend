@@ -15,7 +15,9 @@ output, regenerate the goldens and review the diff:
         python manage.py test apps.event_ingest.tests.test_symbolication_parity
 
 In update mode each golden test writes its file and then skips; it refuses
-to run when ``CI`` is set.
+to run when ``CI`` is set. Some goldens are shared by tests whose paths must
+agree (the ELF crash found with or without debug_meta, say); update mode
+fails if two tests would write different output to one golden.
 """
 
 import contextlib
@@ -72,6 +74,8 @@ from .symbolication import (
 from .utils import EventIngestTestCase, run_async_closing
 
 UPDATE_GOLDENS = os.environ.get("UPDATE_SYMBOLICATION_GOLDENS") == "1"
+# In update mode: what this run wrote to each golden, by name.
+_UPDATED_GOLDENS: dict[str, list] = {}
 
 EXISTING_TEST_DATA = JS_FIXTURES.parent.parent
 
@@ -173,6 +177,12 @@ class SymbolicationGoldenTestCase(EventIngestTestCase):
         if UPDATE_GOLDENS:
             if os.environ.get("CI"):
                 self.fail("Refusing to update symbolication goldens in CI.")
+            written = _UPDATED_GOLDENS.setdefault(name, actual)
+            if written != actual:
+                self.fail(
+                    f"Tests sharing the golden {name} no longer agree; "
+                    "give them separate goldens if that is intended."
+                )
             GOLDENS.mkdir(exist_ok=True)
             path.write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n")
             self.skipTest("golden updated")
@@ -566,6 +576,9 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
         }
 
     def test_elf_with_debug_meta(self):
+        """The ELF crash, found through debug_meta. Found without it, or
+        with a symbols-only copy uploaded too, it must come out exactly the
+        same, so those tests share this golden."""
         self.upload("crash.elf", "lib", ELF_DEBUG_ID)
         payload = native_event(
             "elf-debug-meta",
@@ -574,7 +587,7 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
             os_name="Linux",
             images=[self.elf_image()],
         )
-        self.assertMatchesGolden("native_elf_debug_meta", self.process([payload]))
+        self.assertMatchesGolden("native_elf_crash", self.process([payload]))
 
     def test_android_native_frames_already_adjusted(self):
         """An Android event with native frames is resolved with the native
@@ -610,8 +623,9 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
 
     def test_elf_with_and_without_debug_info(self):
         """Two uploads for one debug id, the full ELF and a copy with its
-        DWARF stripped (uploaded later, so tried first). The result with
-        source context is kept."""
+        DWARF stripped, uploaded later. The full ELF is the one used: of a
+        debug id's uploads, the newest with debug info is chosen over a
+        newer symbols-only one, before any frame is resolved."""
         self.upload("crash.elf", "lib", ELF_DEBUG_ID)
         upload_native_dif(
             self.project,
@@ -627,9 +641,7 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
             os_name="Linux",
             images=[self.elf_image()],
         )
-        self.assertMatchesGolden(
-            "native_elf_debug_and_stripped", self.process([payload])
-        )
+        self.assertMatchesGolden("native_elf_crash", self.process([payload]))
 
     def test_elf_without_debug_meta(self):
         """No debug_meta and no image_addr: the image base is estimated, even
@@ -641,7 +653,7 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
             arch="x86_64",
             os_name="Linux",
         )
-        self.assertMatchesGolden("native_elf_no_debug_meta", self.process([payload]))
+        self.assertMatchesGolden("native_elf_crash", self.process([payload]))
 
     def test_elf_without_debug_meta_or_foreign_frames(self):
         """The Flutter-on-Android shape: only the app's own frames, absolute
