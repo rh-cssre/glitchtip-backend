@@ -71,6 +71,25 @@ def native_crash() -> dict:
     }
 
 
+@contextlib.contextmanager
+def counted_waits():
+    """The delays the store sleeps for while polling a build, in order;
+    the sleeps still happen. Counting them keeps budget assertions off the
+    wall clock, which also counts database round trips."""
+    waits = []
+
+    class CountingAsyncio:
+        def __getattr__(self, name):
+            return getattr(asyncio, name)
+
+        async def sleep(self, delay, *args, **kwargs):
+            waits.append(delay)
+            return await asyncio.sleep(delay, *args, **kwargs)
+
+    with mock.patch.object(store, "asyncio", CountingAsyncio()):
+        yield waits
+
+
 def lift_log_disable(test):
     """settings.py disables WARNING-and-below while testing; lift it."""
     previous = logging.root.manager.disable
@@ -453,20 +472,27 @@ class LookupTests(CacheTestCase):
             for source in sources_:
                 await store.get_cache(source, context)
 
-        started = time.monotonic()
-        with mock.patch.object(store, "_enqueue", mock.AsyncMock()):
+        with (
+            mock.patch.object(store, "_enqueue", mock.AsyncMock()),
+            counted_waits() as waits,
+        ):
             run_async_closing(lookups)
-        self.assertLess(time.monotonic() - started, 0.45)
+        # All three waited, within one budget between them; a budget per
+        # cache would sleep up to three times as long.
+        self.assertGreater(len(waits), 0)
+        self.assertLessEqual(sum(waits), 0.2 + 1e-6)
 
     @override_settings(GLITCHTIP_SYMBOLICATION_BUILD_WAIT_SECONDS=0.2)
     def test_a_key_given_up_on_is_not_waited_for_again(self):
         dif = self.upload_elf()
         with mock.patch.object(store, "_enqueue", mock.AsyncMock()):
-            self.assertIsNone(self.get(self.source_for(dif)))
+            with counted_waits() as waits:
+                self.assertIsNone(self.get(self.source_for(dif)))
+            self.assertGreater(len(waits), 0)
             # The rest of the process: a quick look, no wait.
-            started = time.monotonic()
-            self.assertIsNone(self.get(self.source_for(dif)))
-            self.assertLess(time.monotonic() - started, 0.1)
+            with counted_waits() as waits:
+                self.assertIsNone(self.get(self.source_for(dif)))
+            self.assertEqual(waits, [])
         # Once built, that quick look finds it.
         self.build(SymbolicationCache.objects.get().id)
         self.assertIsNotNone(self.get(self.source_for(dif)))
@@ -486,14 +512,14 @@ class LookupTests(CacheTestCase):
         self.assertFalse(SymbolicationCache.objects.exists())
         self.assertEqual(cost.cache_misses, 0)
 
-    @override_settings(GLITCHTIP_SYMBOLICATION_MAX_PENDING_PER_ORG=1)
+    @override_settings(
+        GLITCHTIP_SYMBOLICATION_MAX_PENDING_PER_ORG=1,
+        GLITCHTIP_SYMBOLICATION_BUILD_WAIT_SECONDS=0,
+    )
     def test_one_organization_cannot_fill_the_build_queue(self):
         blobs = [store_blob(f"f{index}", f"x{index}".encode()) for index in range(2)]
         context = store.LookupContext.for_event(organization_id=self.organization.id)
-        with (
-            override_settings(GLITCHTIP_SYMBOLICATION_BUILD_WAIT_SECONDS=0),
-            mock.patch.object(store, "_enqueue", mock.AsyncMock()) as enqueue,
-        ):
+        with mock.patch.object(store, "_enqueue", mock.AsyncMock()) as enqueue:
             for blob in blobs:
                 self.get(
                     store.CacheSource(
