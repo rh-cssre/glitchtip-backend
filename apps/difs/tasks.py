@@ -461,13 +461,17 @@ def difs_create_difs(project, name, file, debug_id=None):
                 project=project, name=name, file=file, data=proguard
             )
         return
-    for metadata in metadatalist:
-        dif = DebugInformationFile.objects.filter(
+    # One row per object: a universal (fat) Mach-O holds one per
+    # architecture, each with its own debug id.
+    existing = set(
+        DebugInformationFile.objects.filter(
             project_id=project.id, file=file
-        ).first()
-
-        if dif is not None:
+        ).values_list("data__debug_id", flat=True)
+    )
+    for metadata in metadatalist:
+        if metadata["debug_id"] in existing:
             continue
+        existing.add(metadata["debug_id"])
 
         code_id = metadata["code_id"]
         debug_id = metadata["debug_id"]

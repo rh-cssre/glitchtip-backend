@@ -8,6 +8,9 @@
 #   native/crash.elf           g++ -g, x86_64 ELF with its own DWARF
 #   native/crash.stripped.elf  the same ELF after objcopy --strip-debug
 #   native/crash.macho.dwarf   clang + ld64.lld + dsymutil, arm64 dSYM companion
+#   native/crash.fat.macho.dwarf  the universal dSYM companion of that arm64
+#                              image lipo'd with an x86_64 build: one file,
+#                              two slices, two debug ids
 #   native/crash.pdb           clang-cl + lld-link /DEBUG /Brepro, x86_64 PDB
 #   native/symbols.json        per image: function starts, and the addresses a
 #                              real crash reports (return addresses from

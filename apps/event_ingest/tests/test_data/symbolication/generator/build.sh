@@ -24,6 +24,19 @@ ld64.lld -arch arm64 -platform_version macos 11.0 11.0 -e _main \
     -o crash.macho crash.macho.o
 dsymutil crash.macho -o crash.macho.dSYM
 
+# A universal (fat) dSYM companion: the arm64 one above and one of an
+# x86_64 build of the same source, one DWARF slice per architecture, as
+# dsymutil writes for a universal binary (which it does by running lipo,
+# so it is done here with llvm-lipo directly).
+clang++ --target=x86_64-apple-macos11 -g -O0 -fno-exceptions -fno-rtti \
+    -c crash.cpp -o crash.macho.x86_64.o
+ld64.lld -arch x86_64 -platform_version macos 11.0 11.0 -e _main \
+    -o crash.macho.x86_64 crash.macho.x86_64.o
+dsymutil crash.macho.x86_64 -o crash.macho.x86_64.dSYM
+llvm-lipo -create crash.macho.dSYM/Contents/Resources/DWARF/crash.macho \
+    crash.macho.x86_64.dSYM/Contents/Resources/DWARF/crash.macho.x86_64 \
+    -output crash.fat.macho.dwarf
+
 # PE (x86_64) with a PDB. /Brepro makes the PDB GUID a content hash, so a
 # rebuild from the same source reproduces the same debug id.
 clang --driver-mode=cl --target=x86_64-pc-windows-msvc /Z7 /Od /GS- /GR- /EHs-c- \
@@ -34,6 +47,7 @@ lld-link /DEBUG:FULL /PDB:crash.pdb /NODEFAULTLIB /ENTRY:main \
 cp crash.elf "$OUT/native/crash.elf"
 cp crash.macho.dSYM/Contents/Resources/DWARF/crash.macho "$OUT/native/crash.macho.dwarf"
 cp crash.pdb "$OUT/native/crash.pdb"
+cp crash.fat.macho.dwarf "$OUT/native/crash.fat.macho.dwarf"
 # The same ELF with its DWARF stripped: same build id, symbols only. A
 # project that uploads both has two debug files for one debug id.
 objcopy --strip-debug crash.elf crash.stripped.elf

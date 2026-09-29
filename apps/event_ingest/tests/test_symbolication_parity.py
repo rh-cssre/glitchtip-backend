@@ -27,6 +27,7 @@ from django.test import SimpleTestCase
 from django.utils import timezone
 
 from apps.difs.models import DebugInformationFile
+from apps.difs.tasks import difs_create_difs, difs_create_file_from_chunks
 from apps.files.models import File
 from apps.issue_events.models import IssueEvent
 from apps.shared.schema.exception import StackTraceFrame
@@ -46,6 +47,7 @@ from .symbolication import (
     JVM_BUNDLE_DEBUG_ID,
     MACHO_DEBUG_ID,
     MACHO_IMAGE_ADDR,
+    MACHO_X86_64_DEBUG_ID,
     NATIVE_FIXTURES,
     PDB_DEBUG_ID,
     PE_IMAGE_ADDR,
@@ -58,6 +60,7 @@ from .symbolication import (
     make_large_bundle,
     make_source_bundle,
     release_bundle,
+    store_blob,
     upload_artifact_bundle,
     upload_crash_sources,
     upload_native_dif,
@@ -626,10 +629,8 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
             "native_elf_no_debug_meta_own_frames", self.process([payload])
         )
 
-    def test_macho_with_debug_meta(self):
-        """A dSYM, with image_addr on every frame as the Apple SDKs send."""
-        self.upload("crash.macho.dwarf", "dbg", MACHO_DEBUG_ID)
-        payload = native_event(
+    def macho_payload(self):
+        return native_event(
             "macho-debug-meta",
             crash_frames("macho", MACHO_IMAGE_ADDR, with_image_addr=True),
             arch="arm64",
@@ -645,7 +646,33 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
                 }
             ],
         )
-        self.assertMatchesGolden("native_macho_debug_meta", self.process([payload]))
+
+    def test_macho_with_debug_meta(self):
+        """A dSYM, with image_addr on every frame as the Apple SDKs send."""
+        self.upload("crash.macho.dwarf", "dbg", MACHO_DEBUG_ID)
+        self.assertMatchesGolden(
+            "native_macho_debug_meta", self.process([self.macho_payload()])
+        )
+
+    def test_macho_from_a_universal_dsym(self):
+        """A universal dSYM holds one slice per architecture, each with its
+        own debug id: each gets a debug file, so the arm64 slice (the second
+        in the file) resolves exactly as the thin arm64 dSYM does."""
+        name = "crash.fat.macho.dwarf"
+        blob = store_blob(name, (NATIVE_FIXTURES / name).read_bytes())
+        file = difs_create_file_from_chunks(name, blob.checksum, [blob.checksum])
+        difs_create_difs(self.project, name, file)
+        self.assertEqual(
+            sorted(
+                (dif.data["arch"], dif.data["debug_id"])
+                for dif in DebugInformationFile.objects.filter(file=file)
+            ),
+            [("arm64", MACHO_DEBUG_ID), ("x86_64", MACHO_X86_64_DEBUG_ID)],
+        )
+        upload_crash_sources(self.project, MACHO_DEBUG_ID)
+        self.assertMatchesGolden(
+            "native_macho_debug_meta", self.process([self.macho_payload()])
+        )
 
     def test_pdb_with_debug_meta(self):
         """The PDB is found by its debug id, age included."""
