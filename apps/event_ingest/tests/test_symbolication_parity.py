@@ -18,13 +18,16 @@ In update mode each golden test writes its file and then skips; it refuses
 to run when ``CI`` is set.
 """
 
+import contextlib
 import json
 import os
 import uuid
 from typing import NamedTuple
+from unittest import mock
 
 from django.test import SimpleTestCase
 from django.utils import timezone
+from gt_rust.symbolic import SymCache
 
 from apps.difs.models import DebugInformationFile
 from apps.difs.tasks import difs_create_difs, difs_create_file_from_chunks
@@ -528,6 +531,20 @@ def crash_frames(fmt: str, base: int, with_image_addr: bool) -> list[dict]:
     return frames
 
 
+@contextlib.contextmanager
+def recorded_symcache_lookups():
+    """The addresses looked up in any SymCache, in order."""
+    lookups = []
+    real_lookup = SymCache.lookup
+
+    def recording_lookup(cache, addr):
+        lookups.append(addr)
+        return real_lookup(cache, addr)
+
+    with mock.patch.object(SymCache, "lookup", recording_lookup):
+        yield lookups
+
+
 class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
     def upload(self, filename: str, kind: str, debug_id: str):
         upload_native_dif(
@@ -559,11 +576,16 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
         )
         self.assertMatchesGolden("native_elf_debug_meta", self.process([payload]))
 
-    def test_elf_with_addresses_already_adjusted(self):
-        """sentry-native built with libunwindstack sends frames already moved
-        back from their return addresses, and says so with
-        instruction_addr_adjustment "none". They are looked up as sent: no
-        second adjustment."""
+    def test_android_native_frames_already_adjusted(self):
+        """An Android event with native frames is resolved with the native
+        debug file's SymCache, not as a ProGuard event.
+
+        Its SDK (sentry-native built with libunwindstack) sent the caller
+        frames already moved back from their return addresses, and said so
+        with instruction_addr_adjustment "none": every address is looked up
+        exactly as sent. The output alone cannot show that, since one more
+        byte back is still on the call's line, so the lookups are checked.
+        """
         self.upload("crash.elf", "lib", ELF_DEBUG_ID)
         frames = crash_frames("elf", ELF_IMAGE_ADDR, with_image_addr=False)
         for frame in frames[1:-1]:  # the callers, already adjusted
@@ -578,7 +600,13 @@ class NativeSymbolicationGoldenTests(SymbolicationGoldenTestCase):
         payload["exception"]["values"][0]["stacktrace"][
             "instruction_addr_adjustment"
         ] = "none"
-        self.assertMatchesGolden("native_elf_adjustment_none", self.process([payload]))
+        with recorded_symcache_lookups() as lookups:
+            events = self.process([payload])
+        self.assertEqual(
+            lookups,
+            [int(frame["instruction_addr"], 16) - ELF_IMAGE_ADDR for frame in frames],
+        )
+        self.assertMatchesGolden("native_elf_adjustment_none", events)
 
     def test_elf_with_and_without_debug_info(self):
         """Two uploads for one debug id, the full ELF and a copy with its
