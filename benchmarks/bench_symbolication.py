@@ -324,7 +324,7 @@ def run_child(
         "steady_peak_growth_mib": (peak - rss_steady) / 1024,
         "files_opened_per_event": cost.files_opened / events,
         "mib_read_per_event": cost.bytes_read / events / 2**20,
-        "sourcemap_parses_per_event": cost.sourcemap_parses / events,
+        "cache_builds_per_event": cost.cache_builds / events,
         "resolver_attempts_per_event": len(cost.resolver_attempts) / events,
     }
 
@@ -420,7 +420,7 @@ def print_table(results: list[dict]):
         ("steady +MiB", 12, "{:.1f}", "steady_peak_growth_mib"),
         ("files/ev", 9, "{:.1f}", "files_opened_per_event"),
         ("MiB read/ev", 12, "{:.2f}", "mib_read_per_event"),
-        ("parses/ev", 10, "{:.1f}", "sourcemap_parses_per_event"),
+        ("builds/ev", 10, "{:.2f}", "cache_builds_per_event"),
         ("difs tried/ev", 14, "{:.1f}", "resolver_attempts_per_event"),
     ]
 

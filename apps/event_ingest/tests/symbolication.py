@@ -2,11 +2,10 @@
 
 * ``measure_symbolication``, a context manager that records what
   symbolication costs: which stored files it opens (at ``Storage.open``, and
-  reopens of an open ``FieldFile``), how many bytes it reads and writes,
-  every call into ``gt_rust.symbolic``, which debug files the native and
-  ProGuard resolvers try, and the symbolication cache's hits, misses, loads
-  and builds. ``cold=True`` (the default) first empties the process caches
-  registered in ``CACHE_RESET_HOOKS``.
+  reopens of an open ``FieldFile``), how many bytes it reads, how many
+  files it writes, every call into ``gt_rust.symbolic``, which debug files
+  the native and ProGuard resolvers try, and the symbolication cache's
+  hits, misses, loads and builds. ``cold=True`` (the default) first empties the process caches.
 * ``IN_MEMORY_STORAGE``, which the tests apply so fixtures never touch the
   repository's uploads/ directory.
 * Upload helpers that store fixtures through the same code the upload APIs
@@ -89,11 +88,6 @@ IN_MEMORY_STORAGE = override_settings(
     }
 )
 
-# Called by ``measure_symbolication(cold=True)`` before measuring, so a run
-# starts with every symbolication cache empty. A cache layer adds a function
-# here that empties it; with none registered, cold and warm are the same.
-CACHE_RESET_HOOKS: list = [symbolication_store.clear_process_caches]
-
 
 @dataclass
 class SymbolicationCost:
@@ -102,23 +96,16 @@ class SymbolicationCost:
     # Storage names of every file opened for reading, in order, repeats kept.
     # A reopen of an already-open stored file counts as an open.
     opened: list[str] = field(default_factory=list)
-    # Opens per storage class, e.g. {"InMemoryStorage": 3}.
-    opened_by_storage: Counter = field(default_factory=Counter)
-    # Names of stored files reopened through an existing FieldFile.
-    reopens: list[str] = field(default_factory=list)
     # Bytes actually read through those opens, and the largest single read.
     bytes_read: int = 0
     largest_read: int = 0
     # Stored size of every file at open time: an upper bound on bytes_read
     # that does not depend on how the caller reads.
     bytes_opened: int = 0
-    # Files written to storage while measuring, and their bytes.
+    # Files written to storage while measuring.
     files_written: int = 0
-    bytes_written: int = 0
-    # Calls into gt_rust.symbolic by qualified name, e.g.
-    # "SourceMapCache.from_bytes", and the bytes passed in as arguments.
+    # Calls into gt_rust.symbolic by qualified name, e.g. "SymCache.lookup".
     rust_calls: Counter = field(default_factory=Counter)
-    rust_bytes: Counter = field(default_factory=Counter)
     # One entry per debug file the native/ProGuard resolver was run against:
     # the debug id recorded on that file.
     resolver_attempts: list[str | None] = field(default_factory=list)
@@ -146,37 +133,6 @@ class SymbolicationCost:
     @property
     def files_opened(self) -> int:
         return len(self.opened)
-
-    @property
-    def distinct_files_opened(self) -> int:
-        return len(set(self.opened))
-
-    @property
-    def sourcemap_parses(self) -> int:
-        return self.rust_calls["SourceMapCache.from_bytes"]
-
-    @property
-    def sourcemap_parse_bytes(self) -> int:
-        return self.rust_bytes["SourceMapCache.from_bytes"]
-
-    @property
-    def archive_opens(self) -> int:
-        return self.rust_calls["Archive.open"] + self.rust_calls["Archive.from_bytes"]
-
-    @property
-    def symcache_builds(self) -> int:
-        return (
-            self.rust_calls["SymCache.from_object"]
-            + self.rust_calls["SymCache.from_bytes"]
-            + self.rust_calls["Object.make_symcache"]
-        )
-
-    @property
-    def proguard_opens(self) -> int:
-        return (
-            self.rust_calls["ProguardMapper.open"]
-            + self.rust_calls["ProguardMapper.from_bytes"]
-        )
 
     def assert_only(self, allowed: set[str]):
         """Fail if any gt_rust.symbolic entry point outside ``allowed`` ran.
@@ -259,19 +215,13 @@ class _CountingReader:
         )
 
 
-def _is_bytes(value) -> bool:
-    return isinstance(value, (bytes, bytearray, memoryview))
-
-
 def _rust_patches(cost: SymbolicationCost):
     """Patches wrapping every public callable of gt_rust.symbolic."""
 
     def counted(name, func):
         def wrapper(*args, **kwargs):
-            size = sum(len(arg) for arg in args if _is_bytes(arg))
             with cost._lock:
                 cost.rust_calls[name] += 1
-                cost.rust_bytes[name] += size
             return func(*args, **kwargs)
 
         return wrapper
@@ -311,12 +261,10 @@ def measure_symbolication(cold: bool = True):
     storage, so that is recorded as an open too. Every public callable of
     ``gt_rust.symbolic`` is counted in ``rust_calls``.
 
-    ``cold`` empties any registered symbolication cache first (see
-    ``CACHE_RESET_HOOKS``).
+    ``cold`` empties the process's symbolication caches first.
     """
     if cold:
-        for reset in CACHE_RESET_HOOKS:
-            reset()
+        symbolication_store.clear_process_caches()
 
     cost = SymbolicationCost()
     original_open = Storage.open
@@ -328,11 +276,10 @@ def measure_symbolication(cold: bool = True):
         cost.record(bytes_opened=storage.size(name))
         with cost._lock:
             cost.opened.append(name)
-            cost.opened_by_storage[type(storage).__name__] += 1
         return DjangoFile(_CountingReader(stored, cost), name=name)
 
     def counting_save(storage, name, content, max_length=None):
-        cost.record(files_written=1, bytes_written=content.size or 0)
+        cost.record(files_written=1)
         return original_save(storage, name, content, max_length=max_length)
 
     def counting_fieldfile_open(field_file, mode="rb"):
@@ -343,8 +290,6 @@ def measure_symbolication(cold: bool = True):
             cost.record(bytes_opened=field_file.storage.size(field_file.name))
             with cost._lock:
                 cost.opened.append(field_file.name)
-                cost.reopens.append(field_file.name)
-                cost.opened_by_storage[type(field_file.storage).__name__] += 1
         result = original_fieldfile_open(field_file, mode)
         stream = field_file._file.file
         if not isinstance(stream, _CountingReader):
