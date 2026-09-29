@@ -1,15 +1,18 @@
 import codecs
 import contextlib
+import gzip
 import json
 import tempfile
 import zipfile
 from hashlib import sha1
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from asgiref.sync import async_to_sync
 from django.core.files import File as DjangoFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from gt_rust.symbolic import SymCache
 from model_bakery import baker
 from pydantic import ValidationError
 
@@ -878,6 +881,53 @@ class EstimateImageBaseAmbiguityTestCase(GlitchTestCase):
 
         # One anchor's candidates, not all four anchors'.
         self.assertLess(len(sym_cache.lookups), 2 * (0x500000 // 0x1000))
+
+
+class EstimateImageBaseFlutterTestCase(GlitchTestCase):
+    """A real Flutter (Dart AOT) crash, sent without debug_meta."""
+
+    FIXTURES = (
+        Path(__file__).parent.parent
+        / "event_ingest/tests/test_data/symbolication/flutter"
+    )
+    TRUE_BASE = 0x75FE1EC1A000
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        with tempfile.NamedTemporaryFile(suffix=".symbols") as symbols:
+            symbols.write(
+                gzip.decompress(
+                    (cls.FIXTURES / "app.android-x64.symbols.gz").read_bytes()
+                )
+            )
+            symbols.flush()
+            cls.sym_cache = SymCache.load(SymCache.build(symbols.name), verify=True)
+        cls.addrs = json.loads((cls.FIXTURES / "stack_addrs.json").read_text())
+
+    def test_a_dense_symbol_table_gives_no_estimate(self):
+        """Dart AOT symbols are so dense that the neighbouring page-aligned
+        bases resolve all eleven frames as well as the true one does: there
+        is no telling them apart, so no guess."""
+        self.assertIsNone(_estimate_image_base(self.sym_cache, self.addrs))
+        # The true base is among the equally good ones.
+        at_true_base = [self.sym_cache.lookup(a - self.TRUE_BASE) for a in self.addrs]
+        self.assertTrue(all(at_true_base))
+
+    def test_the_frames_resolve_with_the_sdk_base(self):
+        """With image_addr from debug_meta, as the SDK sends it when it can,
+        the frames resolve."""
+        stacktrace = {"frames": [{"instruction_addr": hex(a)} for a in self.addrs]}
+        result = StacktraceProcessor.resolve_native_stacktrace(
+            stacktrace,
+            self.sym_cache,
+            arch="x86_64",
+            image_addr_from_meta=hex(self.TRUE_BASE),
+        )
+        self.assertEqual(result.score, len(self.addrs))
+        self.assertIn(
+            "_Timer._handleMessage", [frame["function"] for frame in result.frames]
+        )
 
 
 class NativeSymbolicationTestCase(GlitchTestCase):

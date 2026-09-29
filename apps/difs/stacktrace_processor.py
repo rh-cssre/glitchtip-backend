@@ -237,46 +237,47 @@ def _estimate_image_base(sym_cache, instruction_addrs) -> int | None:
     instruction_addr but no image_addr / debug_meta. Images are loaded at a
     page boundary, so the base is one of the page boundaries a little below
     the frames. Candidates come from several frames, since the first may be
-    in another image (libc, say), and the search stops after the first frame
-    whose candidates reach the threshold.
+    in another image (libc, say); the search stops after the first frame
+    whose candidates include a plausible one.
 
-    A candidate is scored by how many different functions the sampled frames
-    resolve to, then by how many resolve at all. Counting functions matters:
-    below an image, every address can resolve to its last symbol, and in a
-    dense symbol table wrong bases resolve every frame to something; either
-    way the frames pile onto few functions. Returns None unless one base,
-    and only one, has the best score, resolving at least two functions and
-    half of the sample: no symbols beat wrong ones.
+    A candidate is plausible if it resolves at least two frames and half of
+    the sample, onto at least two different functions (below an image,
+    every address can resolve to its last symbol, so frames piling onto one
+    function prove nothing). The plausible candidate that resolves the most
+    frames is the estimate, but only if no other resolves as many. In a
+    dense symbol table (Dart AOT code, for one) nearly every page-aligned
+    base resolves every frame to some function, and nothing in the frames
+    tells the true base from its neighbours; guessing would attach wrong
+    symbols, so then there is no estimate and the frames stay unresolved.
     """
     sample = instruction_addrs[:MAX_SCORED_ADDRS]
     if len(sample) < 2:
         return None
     threshold = max(2, (len(sample) + 1) // 2)
-    scores: dict[int, tuple[int, int]] = {}
-    best_base, best_score, tied = None, (0, 0), False
+    seen: set[int] = set()
+    best_base, best_resolved, tied = None, 0, False
     for probe in list(dict.fromkeys(sample))[:MAX_BASE_PROBES]:
         page = probe - probe % PAGE_SIZE
         for distance in range(0, MAX_BASE_DISTANCE, PAGE_SIZE):
             candidate_base = page - distance
             if candidate_base < 0:
                 break
-            if candidate_base in scores:
+            if candidate_base in seen:
                 continue
+            seen.add(candidate_base)
             # SymCache.lookup returns a (possibly empty) list of SourceLocation.
             if not sym_cache.lookup(probe - candidate_base):
                 continue
-            score = _score_base(sym_cache, sample, candidate_base)
-            scores[candidate_base] = score
-            if score > best_score:
-                best_base, best_score, tied = candidate_base, score, False
-            elif score == best_score:
+            functions, resolved = _score_base(sym_cache, sample, candidate_base)
+            if functions < 2 or resolved < threshold:
+                continue
+            if resolved > best_resolved:
+                best_base, best_resolved, tied = candidate_base, resolved, False
+            elif resolved == best_resolved:
                 tied = True
-        if best_score[1] >= threshold:
+        if best_base is not None:
             break
-    functions, resolved = best_score
-    if tied or functions < 2 or resolved < threshold:
-        return None
-    return best_base
+    return None if tied else best_base
 
 
 # Default for resolve_native_stacktrace's estimated_base: estimate inline.

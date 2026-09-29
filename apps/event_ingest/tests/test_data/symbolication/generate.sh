@@ -19,6 +19,13 @@
 #                              ones will not reproduce the files
 #   proguard/                  a hand-written R8 mapping and the Kotlin sources
 #                              it describes (not generated)
+#   flutter/                   not generated here: the gzipped Dart AOT
+#                              debug symbols (--split-debug-info) of a small
+#                              Flutter test app built for x86_64 Android, and
+#                              the absolute return addresses of one of its
+#                              crashes (no debug_meta, loaded at
+#                              0x75fe1ec1a000). A dense symbol table, where
+#                              image base estimation must refuse.
 # The native images are built from generator/native/crash.cpp, which the
 # tests also read for source context: edit it only together with a rebuild.
 # Every source was written for these tests. The release-bundle tests also use
