@@ -530,28 +530,41 @@ class LookupTests(CacheTestCase):
         self.assertIsNotNone(event)
 
     def test_cancelling_one_waiter_leaves_the_shared_load_running(self):
+        """Two events wait on one load still queued on the load lane, and
+        one is cancelled. Unshielded, that would cancel the queued load
+        itself, and the other event with it."""
         dif = self.upload_elf()
         self.assertIsNotNone(self.get(self.source_for(dif)))
         store.clear_process_caches()
+        # Occupy every thread of the lane, so the load stays queued.
         release = threading.Event()
-        real = store._load_from_tiers
-
-        def gated(*args):
-            release.wait(5)
-            return real(*args)
+        self.addCleanup(release.set)
+        for _ in range(sources.load_lane._threads):
+            sources.load_lane.submit(release.wait, 10)
+        key = (
+            CacheKind.SYMCACHE,
+            store.format_tag(CacheKind.SYMCACHE),
+            self.source_for(dif).cache_key,
+        )
 
         async def scenario():
             first = asyncio.create_task(store.get_cache(self.source_for(dif)))
             second = asyncio.create_task(store.get_cache(self.source_for(dif)))
-            await asyncio.sleep(0.05)
+            # Both are waiting once the queued load has both their callbacks
+            # (the leader also adds one to forget the load when it is done).
+            while (
+                key not in store._loads_in_flight
+                or len(store._loads_in_flight[key]._done_callbacks) < 3
+            ):
+                await asyncio.sleep(0.01)
+            self.assertFalse(store._loads_in_flight[key].running())
             first.cancel()
-            release.set()
             with contextlib.suppress(asyncio.CancelledError):
                 await first
+            release.set()
             return await second
 
-        with mock.patch.object(store, "_load_from_tiers", gated):
-            self.assertIsNotNone(run_async_closing(scenario))
+        self.assertIsNotNone(run_async_closing(scenario))
 
     def test_a_load_that_finishes_at_once_does_not_deadlock(self):
         """The load can be done before its completion callback is added;
