@@ -1862,7 +1862,8 @@ class ChunkedDifAssembleTestCase(GlitchTipTransactionTestCase):
         )
 
     def assemble(self, content: bytes, name: str, debug_id=None):
-        blob = store_blob(name, content)
+        # Uploaded as one chunk; the chunk upload does not know its name.
+        blob = store_blob("chunk", content)
         entry = {"name": name, "chunks": [blob.checksum]}
         if debug_id:
             entry["debug_id"] = debug_id
@@ -1891,10 +1892,14 @@ class ChunkedDifAssembleTestCase(GlitchTipTransactionTestCase):
         self.assertEqual(again["state"], "ok")
 
     def test_the_uuid_can_come_from_the_file_name(self):
+        """sentry-cli names the upload /proguard/<uuid>.txt, leading slash
+        included, and may send no debug_id."""
         mapping = (PROGUARD_FIXTURES / "mapping.txt").read_bytes()
-        self.assemble(mapping, f"proguard/{self.MAPPING_UUID}.txt")
+        _, first = self.assemble(mapping, f"/proguard/{self.MAPPING_UUID}.txt")
+        self.assertEqual(first["state"], "created")
         dif = DebugInformationFile.objects.get(project=self.project)
         self.assertEqual(dif.data["debug_id"], self.MAPPING_UUID)
+        self.assertEqual(dif.data["symbol_type"], "proguard")
 
     def test_an_unsupported_file_is_reported_as_an_error(self):
         """Not a debug file nor a mapping: the next poll reports an error,
