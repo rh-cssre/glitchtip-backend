@@ -1653,6 +1653,79 @@ class DifTypeFilteringTestCase(GlitchTipTransactionTestCase):
             self.assertEqual(source.source_blob_id, native.file.blob_id)
 
 
+class _LocatingSymCache:
+    """A SymCache stand-in resolving every address to one function, with or
+    without a source file."""
+
+    arch = "x86_64"
+
+    def __init__(self, full_path):
+        self.full_path = full_path
+
+    def lookup(self, addr):
+        location = MagicMock()
+        location.symbol = "crash_here"
+        location.full_path = self.full_path
+        location.line = 7 if self.full_path else 0
+        return [location]
+
+
+class ResultRankingTestCase(GlitchTipTransactionTestCase):
+    def setUp(self):
+        self.create_logged_in_user()
+
+    def test_equal_scores_go_to_the_result_with_source_files(self):
+        """Two debug files resolve every frame; the one that also names
+        source files wins, though the other (newer) is tried first."""
+        with_sources = baker.make(
+            "difs.DebugInformationFile",
+            project=self.project,
+            file__blob=baker.make("files.FileBlob"),
+            data={"kind": "dbg", "symbol_type": "native", "debug_id": "a" * 32},
+        )
+        symbols_only = baker.make(
+            "difs.DebugInformationFile",
+            project=self.project,
+            file__blob=baker.make("files.FileBlob"),
+            data={"kind": "lib", "symbol_type": "native", "debug_id": "b" * 32},
+        )
+        caches = {
+            with_sources.file.blob_id: _LocatingSymCache("/src/crash.cpp"),
+            symbols_only.file.blob_id: _LocatingSymCache(None),
+        }
+        event = ErrorIssueEventSchema(
+            platform="native",
+            exception={
+                "values": [
+                    {
+                        "type": "SIGSEGV",
+                        "value": "Segfault",
+                        "stacktrace": {
+                            "frames": [
+                                {"instruction_addr": "0x1165", "image_addr": "0x0"},
+                                {"instruction_addr": "0x118c", "image_addr": "0x0"},
+                            ]
+                        },
+                    }
+                ]
+            },
+            contexts={"os": {"name": "Linux"}, "device": {"arch": "x86_64"}},
+        )
+
+        with patch(
+            "apps.difs.tasks.get_cache",
+            new=AsyncMock(
+                side_effect=lambda source, context: caches[source.source_blob_id]
+            ),
+        ) as mock_get_cache:
+            async_to_sync(resolve_event_stacktraces)(event, self.project.id)
+
+        tried = [call.args[0].source_blob_id for call in mock_get_cache.call_args_list]
+        self.assertEqual(tried, [symbols_only.file.blob_id, with_sources.file.blob_id])
+        frames = event.exception.values[0].stacktrace.frames
+        self.assertEqual([frame.filename for frame in frames], ["/src/crash.cpp"] * 2)
+
+
 class NormalizeDebugIdTestCase(GlitchTestCase):
     """Test that normalize_debug_id is applied at all boundaries."""
 
