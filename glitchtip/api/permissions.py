@@ -14,9 +14,9 @@ from glitchtip.base_models import OrgScopedModel
 
 from .authentication import AuthHttpRequest
 
-# Organization.id is an int4 AutoField. A larger id can't exist, and would
-# reach Postgres as an out-of-range error rather than a miss.
+# Organization.id is an int4 AutoField, this is the upper bound.
 MAX_ORG_ID = 2**31 - 1
+NO_ORG_ID = 0
 
 ORG_NOT_FOUND = "Organization not found."
 
@@ -24,25 +24,20 @@ ORG_NOT_FOUND = "Organization not found."
 async def resolve_org_id(segment: str) -> int:
     """The org id a path segment names: all digits is an id, anything else a slug.
 
-    Unambiguous because slugs can't be all digits (``organization_slug_not_all_digits``).
-    An id is trusted as-is; the gate proves it exists. A slug costs one lookup,
-    and is resolved here rather than as a subquery so the data query filters on
-    a literal and Postgres can prune partitions when planning.
+    Gives us the performance win of not having to resolve org_id from org_slug when
+    ID is passed in. A miss is ``NO_ORG_ID``-> 200 [] rather than a 404 for
+    consistency.
     """
     # isdigit() alone accepts non-ASCII digits such as "²", which int() rejects.
     if segment.isascii() and segment.isdigit():
         org_id = int(segment)
-        if org_id <= MAX_ORG_ID:
-            return org_id
-    else:
-        org_id = await (
-            Organization.objects.filter(slug=segment, is_deleted=False)
-            .values_list("id", flat=True)
-            .afirst()
-        )
-        if org_id is not None:
-            return org_id
-    raise HttpError(404, ORG_NOT_FOUND)
+        return org_id if org_id <= MAX_ORG_ID else NO_ORG_ID
+    org_id = await (
+        Organization.objects.filter(slug=segment, is_deleted=False)
+        .values_list("id", flat=True)
+        .afirst()
+    )
+    return NO_ORG_ID if org_id is None else org_id
 
 
 @dataclass(frozen=True)

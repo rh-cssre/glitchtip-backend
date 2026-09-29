@@ -14,7 +14,6 @@ from django.test import SimpleTestCase, TestCase
 from django.test.utils import isolate_apps
 from django.urls import reverse
 from model_bakery import baker
-from ninja.errors import HttpError
 from ninja.pagination import paginate
 
 from apps.alerts.models import AlertRecipient, ProjectAlert
@@ -22,6 +21,7 @@ from apps.organizations_ext.constants import OrganizationUserRole
 from apps.organizations_ext.models import Organization, OrganizationUser
 from apps.projects.models import Project
 from glitchtip.api.permissions import (
+    NO_ORG_ID,
     OrgScope,
     _resolve_roles,
     org_scoped,
@@ -456,9 +456,7 @@ class OrgScopedGateTestCase(TestCase):
         # The route's slug converter already refuses "²", so this pins the
         # guard for callers that don't come through a route: str.isdigit()
         # accepts it and int() then raises.
-        with self.assertRaises(HttpError) as ctx:
-            await resolve_org_id("²")
-        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(await resolve_org_id("²"), NO_ORG_ID)
 
     # Token scopes
 
@@ -511,11 +509,11 @@ class OrgScopedGateTestCase(TestCase):
         # Token lookup, the page, the alertrecipient prefetch. By id, the gate
         # adds none of its own: the membership check is a subquery inside the
         # page query, which is the whole point of folding it in. A slug costs
-        # one lookup ahead of the page, and one naming no org stops there.
+        # one lookup ahead of the page.
         cases = [
             (self.org.id, 3, 200),
             ("orga", 4, 200),
-            ("no-such-org", 2, 404),
+            ("no-such-org", 3, 200),
         ]
         for segment, queries, status in cases:
             with self.subTest(segment=segment), self.assertNumQueries(queries):
@@ -524,8 +522,10 @@ class OrgScopedGateTestCase(TestCase):
 
     def test_an_empty_list_is_not_explained(self):
         # A non-member sees the same empty page an entitled caller with no
-        # alerts would.
+        # alerts would, whether or not the org exists.
         self.client.force_login(self.outsider)
-        res = self.client.get(self.list_url())
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.json(), [])
+        for segment in ("orga", "no-such-org"):
+            with self.subTest(segment=segment):
+                res = self.client.get(self.list_url(org_slug=segment))
+                self.assertEqual(res.status_code, 200)
+                self.assertEqual(res.json(), [])
