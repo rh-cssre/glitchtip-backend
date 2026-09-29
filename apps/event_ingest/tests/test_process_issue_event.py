@@ -17,6 +17,7 @@ from django.utils import timezone
 from gt_rust.symbolic import Archive, normalize_debug_id
 from model_bakery import baker
 
+from apps.difs.stacktrace_processor import bundle_member_name
 from apps.difs.tasks import resolve_event_stacktraces
 from apps.event_ingest.tests.utils import generate_event
 from apps.files.models import FileBlob
@@ -730,7 +731,7 @@ struct ContentView: View {
 
         manifest = {
             "files": {
-                f"files{file_path}": {
+                bundle_member_name(file_path): {
                     "type": "source",
                     "path": file_path,
                 }
@@ -744,7 +745,7 @@ struct ContentView: View {
         in_memory_buffer = tempfile.NamedTemporaryFile(delete=False)
         with zipfile.ZipFile(in_memory_buffer, mode="w") as zipf:
             zipf.writestr("manifest.json", json.dumps(manifest))
-            zipf.writestr(f"files{file_path}", source_code)
+            zipf.writestr(bundle_member_name(file_path), source_code)
 
         in_memory_buffer.seek(0)
         content = in_memory_buffer.read()

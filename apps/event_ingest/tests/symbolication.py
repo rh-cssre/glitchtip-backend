@@ -43,7 +43,7 @@ from gt_rust import symbolic
 
 from apps.difs.api import create_dif_from_read_only_file
 from apps.difs.models import DebugInformationFile
-from apps.difs.stacktrace_processor import StacktraceProcessor
+from apps.difs.stacktrace_processor import StacktraceProcessor, bundle_member_name
 from apps.difs.tasks import difs_create_difs, difs_create_file_from_chunks
 from apps.files.assemble import assemble_artifacts
 from apps.files.models import FileBlob
@@ -580,13 +580,18 @@ def make_source_bundle(debug_id: str, sources: dict[str, str], arch="any") -> by
     """Build a source bundle in the format ``symbolic`` reads.
 
     That is an 8-byte header (``SYSB`` and a little-endian format version)
-    followed by a zip of a manifest plus ``files/<path>`` entries. ``sources``
-    maps the path recorded in the debug info (or the JVM bundle path) to the
-    file's text. Entries carry a fixed timestamp so the bundle's bytes, and
-    therefore its checksum, do not depend on when it was built.
+    followed by a zip of a manifest plus one entry per file, named the way
+    symbolic's SourceBundleWriter names it (see ``bundle_member_name``).
+    ``sources`` maps the path recorded in the debug info (or the JVM bundle
+    path) to the file's text. Entries carry a fixed timestamp so the
+    bundle's bytes, and therefore its checksum, do not depend on when it was
+    built.
     """
     manifest = {
-        "files": {f"files{path}": {"type": "source", "path": path} for path in sources},
+        "files": {
+            bundle_member_name(path): {"type": "source", "path": path}
+            for path in sources
+        },
         "debug_id": debug_id,
         "arch": arch,
         "object_name": "fixture",
@@ -595,7 +600,7 @@ def make_source_bundle(debug_id: str, sources: dict[str, str], arch="any") -> by
     buffer.write(b"SYSB" + (2).to_bytes(4, "little"))
     with zipfile.ZipFile(buffer, mode="w") as zf:
         for entry_name, text in [("manifest.json", json.dumps(manifest))] + [
-            (f"files{path}", text) for path, text in sources.items()
+            (bundle_member_name(path), text) for path, text in sources.items()
         ]:
             info = zipfile.ZipInfo(entry_name, date_time=(2020, 1, 1, 0, 0, 0))
             zf.writestr(info, text)

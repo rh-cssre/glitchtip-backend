@@ -25,6 +25,7 @@ from apps.difs.stacktrace_processor import (
     StacktraceProcessor,
     _estimate_image_base,
     adjusted_frame_indexes,
+    bundle_member_name,
     digest_symbol,
     find_source_bundle,
     jvm_module_to_path,
@@ -487,7 +488,7 @@ class IOSSymbolicationTestCase(GlitchTipTransactionTestCase):
     ):
         manifest = {
             "files": {
-                f"files{file_path}": {
+                bundle_member_name(file_path): {
                     "type": "source",
                     "path": file_path,
                 }
@@ -501,7 +502,7 @@ class IOSSymbolicationTestCase(GlitchTipTransactionTestCase):
         in_memory_buffer = tempfile.NamedTemporaryFile(delete=False)
         with zipfile.ZipFile(in_memory_buffer, mode="w") as zipf:
             zipf.writestr("manifest.json", json.dumps(manifest))
-            zipf.writestr(f"files{file_path}", source_code)
+            zipf.writestr(bundle_member_name(file_path), source_code)
 
         in_memory_buffer.seek(0)
         content = in_memory_buffer.read()
@@ -592,6 +593,20 @@ struct ContentView: View {
         self.assertEqual(lines[2], "struct ContentView: View {")
         self.assertEqual(lines[4], '        Text("Hello")')
 
+    def test_read_source_files_finds_a_windows_path(self):
+        """A PDB records C:\\ paths; the bundle writer stores them with the
+        drive colon and backslashes folded into "/"."""
+        path = "C:\\src\\app\\crash.cpp"
+        dif = self.create_source_bundle(
+            "93ec5160-1d69-3227-8410-c2687fce4ea2",
+            "int main() {\n  crash();\n}\n",
+            path,
+        )
+
+        lines = async_to_sync(read_source_files)(dif, [path]).get(path)
+
+        self.assertEqual(lines, ["int main() {", "  crash();", "}"])
+
     def test_read_source_files_skips_a_missing_file(self):
         debug_id = "93ec5160-1d69-3227-8410-c2687fce4ea2"
         dif = self.create_source_bundle(debug_id, "test code")
@@ -601,6 +616,22 @@ struct ContentView: View {
         )
 
         self.assertIsNone(lines)
+
+
+class BundleMemberNameTestCase(GlitchTestCase):
+    def test_names_files_as_the_bundle_writer_does(self):
+        """The examples symbolic's own SourceBundleWriter tests pin."""
+        for path, member in [
+            ("foo", "files/foo"),
+            ("foo/bar", "files/foo/bar"),
+            ("/foo/bar", "files/foo/bar"),
+            ("C:/foo/bar", "files/C/foo/bar"),
+            ("\\foo\\bar", "files/foo/bar"),
+            ("\\\\UNC\\foo\\bar", "files/UNC/foo/bar"),
+            ("/_/_/com/example/MyClass.jvm", "files/_/_/com/example/MyClass.jvm"),
+        ]:
+            with self.subTest(path=path):
+                self.assertEqual(bundle_member_name(path), member)
 
 
 class JvmSourceContextTestCase(GlitchTipTransactionTestCase):

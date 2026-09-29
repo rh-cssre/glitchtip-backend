@@ -1,5 +1,6 @@
 import copy
 import logging
+import re
 
 from django.conf import settings
 from gt_rust.symbolic import demangle, normalize_debug_id, parse_addr
@@ -158,14 +159,28 @@ async def find_source_bundle(project_id, debug_id):
         return None
 
 
+# How symbolic's SourceBundleWriter names a source file in the bundle: every
+# run of path separators, with a drive or scheme colon before it, becomes one
+# "/", and a leading "/" is dropped: C:\src\crash.cpp is stored as
+# files/C/src/crash.cpp, and /src/crash.cpp as files/src/crash.cpp.
+_BUNDLE_PATH_SEPARATORS = re.compile(r":?[/\\]+")
+
+
+def bundle_member_name(path: str) -> str:
+    """The zip member a source bundle stores the file at ``path`` under."""
+    return "files/" + _BUNDLE_PATH_SEPARATORS.sub("/", path).removeprefix("/")
+
+
 async def read_source_files(source_bundle, file_paths) -> dict[str, list[str]]:
     """
     Source lines of ``file_paths`` from a source bundle, keyed by path; paths
-    the bundle lacks are left out. Source bundles store files with a
-    'files/' prefix. The zip is read in place, on its own bounded lane since
+    the bundle lacks are left out. See bundle_member_name for where a path
+    is stored. The zip is read in place, on its own bounded lane since
     storage has no async API, and at most MAX_SOURCE_PATHS paths are read.
     """
-    members = {f"files{path}": path for path in sorted(file_paths)[:MAX_SOURCE_PATHS]}
+    members = {
+        bundle_member_name(path): path for path in sorted(file_paths)[:MAX_SOURCE_PATHS]
+    }
     try:
         lines = await bundle_lane.run(
             read_bundle_members,
