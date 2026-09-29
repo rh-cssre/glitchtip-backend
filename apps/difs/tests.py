@@ -45,6 +45,7 @@ from apps.event_ingest.tests.symbolication import (
     store_blob,
 )
 from apps.files.models import File, FileBlob
+from apps.symbolication.models import CacheKind
 from glitchtip.test_utils import generators  # noqa: F401
 from glitchtip.test_utils.test_case import GlitchTestCase, GlitchTipTransactionTestCase
 
@@ -1608,7 +1609,7 @@ class DifTypeFilteringTestCase(GlitchTipTransactionTestCase):
             file__blob=baker.make("files.FileBlob"),
             data={"kind": "debug", "symbol_type": "proguard", "debug_id": "aaa"},
         )
-        baker.make(
+        native = baker.make(
             "difs.DebugInformationFile",
             project=self.project,
             file__blob=baker.make("files.FileBlob"),
@@ -1645,8 +1646,11 @@ class DifTypeFilteringTestCase(GlitchTipTransactionTestCase):
             "apps.difs.tasks.get_cache", new=AsyncMock(return_value=None)
         ) as mock_get_cache:
             async_to_sync(resolve_event_stacktraces)(event, self.project.id)
-            # Should try the native DIF (1 call), not the proguard one
-            self.assertEqual(mock_get_cache.call_count, 1)
+            # Only the native DIF, as a SymCache: not the ProGuard mapping.
+            [call] = mock_get_cache.call_args_list
+            source = call.args[0]
+            self.assertEqual(source.kind, CacheKind.SYMCACHE)
+            self.assertEqual(source.source_blob_id, native.file.blob_id)
 
 
 class NormalizeDebugIdTestCase(GlitchTestCase):
