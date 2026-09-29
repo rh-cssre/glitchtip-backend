@@ -22,6 +22,7 @@ from glitchtip.memory_trim import malloc_trim
 from .models import CacheKind, CacheState, SymbolicationCache
 from .sources import blob_input, load_lane
 from .store import (
+    BUILD_HEARTBEAT,
     LOADERS,
     MAX_ATTEMPTS,
     STALE_BUILD,
@@ -33,9 +34,7 @@ from .store import (
 
 logger = logging.getLogger(__name__)
 
-# How often a running build refreshes its row's ``updated``, so a long but
-# healthy build is never mistaken for a dead one (store.STALE_BUILD).
-HEARTBEAT_SECONDS = 60
+HEARTBEAT_SECONDS = BUILD_HEARTBEAT.total_seconds()
 
 _executor: ThreadPoolExecutor | None = None
 _executor_lock = threading.Lock()

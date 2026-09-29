@@ -68,9 +68,13 @@ STORAGE_PREFIX = "uploads/symbolcache"
 # A PENDING row whose build task has not started by then was probably lost
 # (e.g. a queue flush); the next event to see it queues the build again.
 REQUEUE_AFTER = timedelta(seconds=60)
-# A BUILDING claim older than this belongs to a worker that died. Builds
-# refresh ``updated`` well within it (see tasks.HEARTBEAT_SECONDS).
-STALE_BUILD = timedelta(minutes=10)
+# A running build refreshes its row's ``updated`` this often, so a long but
+# healthy build is never mistaken for a dead one.
+BUILD_HEARTBEAT = timedelta(seconds=60)
+# A BUILDING claim not refreshed for three heartbeats belongs to a worker
+# that died (a pod killed mid-build, say); the next build task or event
+# takes it over.
+STALE_BUILD = 3 * BUILD_HEARTBEAT
 # A build that failed transiently is retried this often, at most
 # MAX_ATTEMPTS times in all; one that failed on its input is not.
 RETRY_FAILED_AFTER = timedelta(hours=1)

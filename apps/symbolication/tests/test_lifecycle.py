@@ -291,6 +291,29 @@ class BuildTests(CacheTestCase):
             self.build(row.id)
         self.assertEqual(SymbolicationCache.objects.get().state, CacheState.FAILED)
 
+    def test_a_killed_build_is_taken_over_within_minutes(self):
+        """A pod killed mid-build leaves its row BUILDING with no heartbeat;
+        three missed heartbeats later the next event takes it over."""
+        dif = self.upload_elf()
+        row = self.row_for(dif, state=CacheState.BUILDING, attempts=1)
+        self.assertLessEqual(store.STALE_BUILD, store.BUILD_HEARTBEAT * 3)
+        SymbolicationCache.objects.filter(id=row.id).update(
+            updated=timezone.now() - store.BUILD_HEARTBEAT * 3 - timedelta(seconds=5)
+        )
+        self.assertIsNotNone(self.get(self.source_for(dif)))
+        self.assertEqual(SymbolicationCache.objects.get().state, CacheState.READY)
+
+    def test_a_build_still_heartbeating_is_not_taken_over(self):
+        dif = self.upload_elf()
+        row = self.row_for(dif, state=CacheState.BUILDING, attempts=1)
+        SymbolicationCache.objects.filter(id=row.id).update(
+            updated=timezone.now() - store.BUILD_HEARTBEAT
+        )
+        with measure_symbolication() as cost:
+            self.build(row.id)
+        self.assertEqual(cost.cache_builds, 0)
+        self.assertEqual(SymbolicationCache.objects.get().state, CacheState.BUILDING)
+
     def test_memory_is_returned_after_each_build(self):
         row = self.row_for(self.upload_elf())
         with mock.patch.object(tasks, "malloc_trim") as trim:
