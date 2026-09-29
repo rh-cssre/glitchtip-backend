@@ -33,6 +33,7 @@ from apps.difs.stacktrace_processor import (
 )
 from apps.difs.tasks import (
     ChecksumMismatched,
+    difs_create_difs,
     difs_create_file_from_chunks,
     resolve_event_stacktraces,
 )
@@ -1919,3 +1920,84 @@ class ChunkedDifAssembleTestCase(GlitchTipTransactionTestCase):
         dif = DebugInformationFile.objects.get(project=self.project)
         self.assertEqual(dif.data["symbol_type"], "native")
         self.assertEqual(dif.data["debug_id"], ELF_DEBUG_ID)
+
+
+# Breakpad symbol files, as sentry-native and crashpad tooling upload them.
+# The module id is the debug id's 32 hex digits followed by its age.
+BREAKPAD_ID = "0A1B2C3D4E5F60718293A4B5C6D7E8F9"
+BREAKPAD_UUID = "0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9"
+BREAKPAD_RECORDS = (
+    "FILE 0 /src/breakpad/crash.cpp\n"
+    "FUNC 1000 30 0 crash_here\n"
+    "1000 10 21 0\n"
+    "1010 20 23 0\n"
+    "FUNC 1040 20 0 main\n"
+    "1040 20 38 0\n"
+)
+BREAKPAD_BASE = 0x5555_5555_0000
+
+
+@IN_MEMORY_STORAGE
+class BreakpadSymbolicationTestCase(GlitchTipTransactionTestCase):
+    def setUp(self):
+        self.create_logged_in_user()
+
+    def upload(self, content: str):
+        name = "crash.sym"
+        blob = store_blob(name, content.encode())
+        file = difs_create_file_from_chunks(name, blob.checksum, [blob.checksum])
+        difs_create_difs(self.project, name, file)
+        return DebugInformationFile.objects.get(file=file)
+
+    def resolve(self, image: dict, os_name: str):
+        event = ErrorIssueEventSchema(
+            platform="native",
+            exception={
+                "values": [
+                    {
+                        "type": "SIGSEGV",
+                        "value": "Segfault",
+                        "stacktrace": {
+                            "frames": [
+                                {"instruction_addr": hex(BREAKPAD_BASE + 0x1041)},
+                                {"instruction_addr": hex(BREAKPAD_BASE + 0x1012)},
+                            ]
+                        },
+                    }
+                ]
+            },
+            contexts={"os": {"name": os_name}, "device": {"arch": "x86_64"}},
+            debug_meta={"images": [{**image, "image_addr": hex(BREAKPAD_BASE)}]},
+        )
+        async_to_sync(resolve_event_stacktraces)(event, self.project.id)
+        return [
+            (frame.function, frame.filename, frame.lineno)
+            for frame in event.exception.values[0].stacktrace.frames
+        ]
+
+    RESOLVED = [
+        ("main", "/src/breakpad/crash.cpp", 38),
+        ("crash_here", "/src/breakpad/crash.cpp", 23),
+    ]
+
+    def test_a_linux_sym_resolves_by_either_form_of_its_id(self):
+        dif = self.upload(
+            f"MODULE Linux x86_64 {BREAKPAD_ID}0 crash\n" + BREAKPAD_RECORDS
+        )
+        self.assertEqual(dif.data["debug_id"], BREAKPAD_UUID)
+        for debug_id in [BREAKPAD_UUID, f"{BREAKPAD_ID}0"]:
+            with self.subTest(debug_id=debug_id):
+                self.assertEqual(
+                    self.resolve({"type": "elf", "debug_id": debug_id}, "Linux"),
+                    self.RESOLVED,
+                )
+
+    def test_a_windows_sym_keeps_its_pdb_age(self):
+        dif = self.upload(
+            f"MODULE windows x86_64 {BREAKPAD_ID}2 crash.pdb\n" + BREAKPAD_RECORDS
+        )
+        self.assertEqual(dif.data["debug_id"], f"{BREAKPAD_UUID}-2")
+        for debug_id in [f"{BREAKPAD_UUID}-2", f"{BREAKPAD_ID}2"]:
+            with self.subTest(debug_id=debug_id):
+                image = {"type": "pe", "debug_id": debug_id, "debug_file": "crash.pdb"}
+                self.assertEqual(self.resolve(image, "Windows"), self.RESOLVED)
