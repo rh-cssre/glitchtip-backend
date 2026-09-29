@@ -452,6 +452,16 @@ class OrgScopedGateTestCase(TestCase):
                 self.assertEqual(res.json()["detail"], "Organization not found.")
         self.assertTrue(ProjectAlert.objects.filter(id=alert.id).exists())
 
+    # Soft deletes
+
+    def test_a_soft_deleted_project_hides_its_alerts(self):
+        Project.objects.filter(pk=self.project.pk).update(is_deleted=True)
+        res = self.client.get(self.list_url())
+        self.assertEqual(res.json(), [])
+        res = self.client.delete(self.delete_url())
+        self.assertEqual(res.status_code, 404)
+        self.assertTrue(ProjectAlert.objects.filter(id=self.alert.id).exists())
+
     async def test_non_ascii_digits_are_a_slug_not_an_id(self):
         # The route's slug converter already refuses "²", so this pins the
         # guard for callers that don't come through a route: str.isdigit()

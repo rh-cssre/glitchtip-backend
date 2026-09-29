@@ -59,7 +59,9 @@ async def list_project_alerts(
     project_slug: str,
 ):
     # The slug alone is not unique across orgs; qs is already this org's.
-    return qs.filter(project__slug=project_slug).prefetch_related("alertrecipient_set")
+    return qs.filter(
+        project__slug=project_slug, project__is_deleted=False
+    ).prefetch_related("alertrecipient_set")
 
 
 @router.post(
@@ -161,7 +163,9 @@ async def delete_project_alert(
     project_slug: str,
     alert_id: int,
 ):
-    result, _ = await qs.filter(project__slug=project_slug, id=alert_id).adelete()
+    result, _ = await qs.filter(
+        project__slug=project_slug, project__is_deleted=False, id=alert_id
+    ).adelete()
     if result:
         return Status(204, None)
     raise Http404
