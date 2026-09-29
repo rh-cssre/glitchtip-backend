@@ -12,6 +12,7 @@ from django.test import override_settings
 from django.utils import timezone
 
 from apps.difs.models import DebugInformationFile
+from apps.issue_events.models import IssueEvent
 from apps.symbolication.models import CacheState, SymbolicationCache
 from apps.symbolication.sources import COPY_CHUNK
 from apps.symbolication.store import MAX_ATTEMPTS
@@ -24,6 +25,7 @@ from .symbolication import (
     ELF_IMAGE_ADDR,
     IN_MEMORY_STORAGE,
     JS_FIXTURES,
+    MACHO_DEBUG_ID,
     NATIVE_FIXTURES,
     PROGUARD_FIXTURES,
     crash_frame_offsets,
@@ -31,6 +33,7 @@ from .symbolication import (
     make_large_bundle,
     measure_symbolication,
     upload_artifact_bundle,
+    upload_copies,
     upload_crash_sources,
     upload_native_dif,
     upload_native_project,
@@ -242,6 +245,43 @@ class NativeDebugFileCostTests(SymbolicationCostTestCase):
         cost.assert_only(
             NATIVE_CALLS - {"SymCache.build_to", "SymCache.load", "SymCache.load_file"}
         )
+
+
+@override_settings(GLITCHTIP_SYMBOLICATION_FALLBACK_CANDIDATES=FALLBACK_CANDIDATES)
+class NativeFallbackBoundaryTests(SymbolicationCostTestCase):
+    """Without debug_meta only the newest few debug ids are tried. So once
+    that many newer builds are uploaded, a crash in an older build stays
+    unsymbolicated, though its debug file is there: the price of bounding
+    what such an event can cost. An event with debug_meta is unaffected."""
+
+    def crash_frames_after(self, newer_builds: int) -> list[dict]:
+        elf = (NATIVE_FIXTURES / "crash.elf").read_bytes()
+        upload_native_dif(self.project, "crash.elf", elf, "lib", ELF_DEBUG_ID)
+        # Newer builds that cannot resolve this crash: another architecture.
+        macho = (NATIVE_FIXTURES / "crash.macho.dwarf").read_bytes()
+        newer = upload_native_dif(
+            self.project, "crash.macho.dwarf", macho, "dbg", MACHO_DEBUG_ID
+        )
+        upload_copies(
+            self.project,
+            newer,
+            macho,
+            [str(uuid.UUID(int=index + 1)) for index in range(newer_builds - 1)],
+        )
+        payload = native_crash(
+            contexts={"os": {"name": "Linux"}, "device": {"arch": "x86_64"}}
+        )
+        self.process([payload])
+        event = IssueEvent.objects.get_event(payload["event_id"])
+        return event.data["exception"]["values"][0]["stacktrace"]["frames"]
+
+    def test_found_while_among_the_newest(self):
+        frames = self.crash_frames_after(FALLBACK_CANDIDATES - 1)
+        self.assertTrue(all(frame.get("filename") for frame in frames))
+
+    def test_not_found_behind_as_many_newer_builds(self):
+        frames = self.crash_frames_after(FALLBACK_CANDIDATES)
+        self.assertFalse(any(frame.get("filename") for frame in frames))
 
 
 class NativeSourceContextCostTests(SymbolicationCostTestCase):
