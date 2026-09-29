@@ -28,7 +28,12 @@
 #                              the absolute return addresses of one of its
 #                              crashes (no debug_meta, loaded at
 #                              0x75fe1ec1a000). A dense symbol table, where
-#                              image base estimation must refuse.
+#                              image base estimation must refuse. The
+#                              symbols went through `objcopy --strip-debug`
+#                              and `gzip -9n`: that drops the DWARF but keeps
+#                              the whole symbol table, which is all the
+#                              estimate reads. Do not prune the symbol table;
+#                              a partial one changes the answer.
 # The native images are built from generator/native/crash.cpp, which the
 # tests also read for source context: edit it only together with a rebuild.
 # Every source was written for these tests. The release-bundle tests also use
