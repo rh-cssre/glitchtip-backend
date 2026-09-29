@@ -36,7 +36,11 @@ from apps.difs.tasks import (
     difs_create_file_from_chunks,
     resolve_event_stacktraces,
 )
-from apps.event_ingest.schema import ErrorIssueEventSchema, NativeDebugImage
+from apps.event_ingest.schema import (
+    DebugMeta,
+    ErrorIssueEventSchema,
+    NativeDebugImage,
+)
 from apps.event_ingest.tests.symbolication import (
     ELF_DEBUG_ID,
     IN_MEMORY_STORAGE,
@@ -1834,8 +1838,6 @@ class NormalizeDebugIdTestCase(GlitchTestCase):
             self.assertEqual(image.debug_id, expected)
 
     def test_a_malformed_known_image_is_not_reported_as_unknown(self):
-        from apps.event_ingest.schema import DebugMeta
-
         with patch("apps.event_ingest.schema.logger") as logger:
             DebugMeta.model_validate(
                 {"images": [{"type": "elf", "debug_id": "garbage"}, {"type": "new"}]}
