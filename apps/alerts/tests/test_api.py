@@ -5,6 +5,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from apps.organizations_ext.constants import OrganizationUserRole
+from apps.projects.models import Project
 from glitchtip.test_utils.aiohttp_mock import basic_auth_credentials
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
@@ -312,6 +313,18 @@ class AlertAPITestCase(GlitchTipTestCaseMixin, TestCase):
         res = await self.async_client.delete(url, content_type="application/json")
         self.assertEqual(res.status_code, 204)
         self.assertEqual(await ProjectAlert.objects.acount(), 0)
+
+    async def test_alerts_of_a_soft_deleted_project_are_unreachable(self):
+        alert = await baker.amake("alerts.ProjectAlert", project=self.project)
+        await Project.objects.filter(pk=self.project.pk).aupdate(is_deleted=True)
+        args = [self.organization.slug, self.project.slug]
+        res = await self.async_client.get(reverse("api:list_project_alerts", args=args))
+        self.assertEqual(res.json(), [])
+        res = await self.async_client.delete(
+            reverse("api:delete_project_alert", args=[*args, alert.pk])
+        )
+        self.assertEqual(res.status_code, 404)
+        self.assertTrue(await ProjectAlert.objects.filter(pk=alert.pk).aexists())
 
     @mock.patch("aiohttp.ClientSession")
     async def test_test_project_alert(self, MockSession):

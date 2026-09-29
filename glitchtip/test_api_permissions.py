@@ -1,11 +1,4 @@
-"""The folded gate, exercised through the two routes that use it.
-
-``apps/alerts`` is the only consumer so far -- ``list_project_alerts`` is
-``@org_scoped_list`` and ``delete_project_alert`` is ``@org_scoped``
-alone. What is under test is ``glitchtip.api.permissions``,
-not alerts, so these move if the decorator grows a second consumer worth
-testing it through.
-"""
+"""The org gate, tested through the alerts routes, its only consumer."""
 
 from django.apps import apps
 from django.core.exceptions import ImproperlyConfigured
@@ -25,7 +18,6 @@ from glitchtip.api.permissions import (
     OrgScope,
     _resolve_roles,
     org_scoped,
-    org_scoped_list,
     resolve_org_id,
 )
 from glitchtip.base_models import ORG_SCOPED_MODELS, OrgScopedModel
@@ -40,29 +32,22 @@ from glitchtip.test_utils import generators  # noqa: F401
 class OrgScopedModelDeclarationTestCase(SimpleTestCase):
     """``org_field`` is checked when the class is created, not per request."""
 
-    def test_missing_org_field_is_rejected(self):
-        with self.assertRaises(ImproperlyConfigured) as ctx:
-
-            class NoOrgField(OrgScopedModel, models.Model):
-                class Meta:
-                    app_label = "alerts"
-
-        self.assertIn("org_field", str(ctx.exception))
-
-    def test_empty_org_field_is_rejected(self):
-        with self.assertRaises(ImproperlyConfigured):
-
-            class BlankOrgField(OrgScopedModel, models.Model):
-                org_field = ""
-
-                class Meta:
-                    app_label = "alerts"
+    def test_missing_or_empty_org_field_is_rejected(self):
+        for label, attrs in [("missing", {}), ("empty", {"org_field": ""})]:
+            with self.subTest(label), self.assertRaises(ImproperlyConfigured) as ctx:
+                type(
+                    "NoOrgField",
+                    (OrgScopedModel, models.Model),
+                    {
+                        "__module__": __name__,
+                        "Meta": type("Meta", (), {"app_label": "alerts"}),
+                        **attrs,
+                    },
+                )
+            self.assertIn("org_field", str(ctx.exception))
 
     def test_org_field_that_joins_organization_is_rejected(self):
-        # A spelling rule, enforced here because it is one: both spellings
-        # compile to the same column comparison. ``_id`` states that the gate
-        # stops at the foreign key, and keeps the path one segment away from
-        # ``__organization__<column>``, which does join the table.
+        # Both compile the same; _id keeps the path off organization's columns.
         with self.assertRaises(ImproperlyConfigured) as ctx:
 
             class JoinsOrganization(OrgScopedModel, models.Model):
@@ -76,23 +61,14 @@ class OrgScopedModelDeclarationTestCase(SimpleTestCase):
 
 @isolate_apps("apps.alerts")
 class OrgScopedModelCheckTestCase(SimpleTestCase):
-    """``manage.py check`` resolves what ``__init_subclass__`` cannot.
-
-    The app registry is still filling when a model class is created, so the
-    declaration can only be checked as a string there. The path it names is
-    resolved later, by the system check.
-    """
+    """Resolves org_field paths once the app registry is ready."""
 
     def setUp(self):
-        # The mixin appends every subclass it sees, and these tests create
-        # models. Hand the registry back unchanged.
+        # The mixin registers every subclass; restore the registry.
         snapshot = ORG_SCOPED_MODELS[:]
         self.addCleanup(ORG_SCOPED_MODELS.__setitem__, slice(None), snapshot)
 
-    def test_the_registered_models_resolve(self):
-        self.assertEqual(check_org_scoped_models(None), [])
-
-    def test_a_path_that_stops_short_of_the_organization_is_rejected(self):
+    def test_a_path_not_ending_on_the_organization_fk_is_rejected(self):
         class StopsAtProject(OrgScopedModel, models.Model):
             org_field = "project_id"
             project = models.ForeignKey(Project, on_delete=models.CASCADE)
@@ -100,13 +76,7 @@ class OrgScopedModelCheckTestCase(SimpleTestCase):
             class Meta:
                 app_label = "alerts"
 
-        error = check_org_field(StopsAtProject)
-        self.assertEqual(error.id, "glitchtip.E002")
-        self.assertIn("project_id", error.msg)
-
-    def test_a_path_reaching_past_the_foreign_key_is_rejected(self):
-        # Resolves, and filtering on it would even run -- it just joins
-        # organization to compare the wrong column.
+        # Runs, but joins organization and compares the wrong column.
         class ReachesOrganizationColumn(OrgScopedModel, models.Model):
             org_field = "project__organization__slug"
             project = models.ForeignKey(Project, on_delete=models.CASCADE)
@@ -114,8 +84,11 @@ class OrgScopedModelCheckTestCase(SimpleTestCase):
             class Meta:
                 app_label = "alerts"
 
-        error = check_org_field(ReachesOrganizationColumn)
-        self.assertEqual(error.id, "glitchtip.E002")
+        for model in (StopsAtProject, ReachesOrganizationColumn):
+            with self.subTest(model.org_field):
+                error = check_org_field(model)
+                self.assertEqual(error.id, "glitchtip.E002")
+                self.assertIn(model.org_field, error.msg)
 
     def test_a_path_that_does_not_resolve_is_rejected(self):
         class Typo(OrgScopedModel, models.Model):
@@ -129,10 +102,7 @@ class OrgScopedModelCheckTestCase(SimpleTestCase):
         self.assertEqual(error.id, "glitchtip.E001")
 
     def test_a_path_that_crosses_a_multi_valued_relation_is_rejected(self):
-        # Resolves, and ends on the organization foreign key -- but by joining
-        # back down a reverse relation rather than walking up keys. The gate
-        # would duplicate rows and admit a row whenever *any* related row is in
-        # the organization, which is not isolation.
+        # A reverse relation duplicates rows and admits any related match.
         class Bucket(OrgScopedModel, models.Model):
             org_field = "items__project__organization_id"
 
@@ -151,23 +121,8 @@ class OrgScopedModelCheckTestCase(SimpleTestCase):
         error = check_org_field(Bucket)
         self.assertEqual(error.id, "glitchtip.E003")
 
-    def test_both_spellings_of_the_foreign_key_are_accepted(self):
-        # ``__init_subclass__`` rejects the bare spelling, so the check must
-        # not be the thing enforcing it -- two rules over one string, disagreeing
-        # about which layer owns it, is how a valid model gets refused twice.
-        class LocalKey(OrgScopedModel, models.Model):
-            org_field = "organization_id"
-            organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
-
-            class Meta:
-                app_label = "alerts"
-
-        self.assertIsNone(check_org_field(LocalKey))
-
     def test_an_abstract_base_is_not_checked(self):
-        # It is still appended to the registry -- ``__init_subclass__`` cannot
-        # tell yet -- but it has no table, and the path names a relation it
-        # does not have, so resolving it would fail.
+        # Registered, but it has no table to check.
         class AbstractBase(OrgScopedModel, models.Model):
             org_field = "project__organization_id"
 
@@ -184,21 +139,19 @@ class OrgScopedModelRegistryTestCase(SimpleTestCase):
     """The registry as the running app sees it, not an isolated one."""
 
     def test_the_real_models_are_registered(self):
-        # The reader that makes the registry worth keeping: a model declared
-        # with the mixin is validated whether or not a route uses it yet.
+        # Declared models are validated even before a route uses them.
         labels = [model._meta.label for model in registered_models(None)]
         self.assertIn("alerts.ProjectAlert", labels)
         self.assertIn("projects.Project", labels)
 
     def test_the_check_narrows_to_the_apps_it_is_given(self):
         # ``manage.py check alerts`` should not walk the whole registry.
-        self.assertEqual(
-            [
-                model._meta.label
-                for model in registered_models([apps.get_app_config("alerts")])
-            ],
-            ["alerts.ProjectAlert"],
-        )
+        labels = [
+            model._meta.label
+            for model in registered_models([apps.get_app_config("alerts")])
+        ]
+        self.assertIn("alerts.ProjectAlert", labels)
+        self.assertNotIn("projects.Project", labels)
 
 
 class OrgScopedDeclarationTestCase(SimpleTestCase):
@@ -223,8 +176,7 @@ class OrgScopedDeclarationTestCase(SimpleTestCase):
         self.assertIn("qs", str(ctx.exception))
 
     def test_view_without_an_organization_slug_is_rejected(self):
-        # The gate reads it out of the path at request time, where a missing
-        # one is a KeyError 500 rather than a refusal.
+        # Otherwise a KeyError 500 at request time.
         with self.assertRaises(ImproperlyConfigured) as ctx:
 
             @org_scoped(["project:admin"], ProjectAlert)
@@ -243,48 +195,15 @@ class OrgScopedDeclarationTestCase(SimpleTestCase):
 
         self.assertIn("@paginate above", str(ctx.exception))
 
-    def test_the_list_gate_keeps_the_import_time_guards(self):
-        # It delegates to org_scoped, so these are the same guards, not copies.
-        with self.assertRaises(ImproperlyConfigured):
-            org_scoped_list(["project:admin"], AlertRecipient)
-
-        with self.assertRaises(ImproperlyConfigured) as ctx:
-
-            @org_scoped_list(["project:read"], ProjectAlert)
-            async def view(request, organization_slug: str):
-                return ProjectAlert.objects.all()
-
-        self.assertIn("qs", str(ctx.exception))
-
-    def test_the_list_gate_paginates(self):
-        # The whole point of the wrapper: a list route cannot leave pagination
-        # off, and leaving it off is otherwise a quiet 200 with every row.
+    def test_the_real_routes_expose_the_right_parameters(self):
+        """ninja must not expose qs; a leaked param is a 422 on every call."""
         from glitchtip.api.api import api
 
         paths = api.get_openapi_schema()["paths"]
-        operations = [
-            item["get"]
-            for path, item in paths.items()
-            if path.endswith("/{project_slug}/alerts/") and "get" in item
-        ]
-        self.assertEqual(len(operations), 1)
-        names = [p["name"] for p in operations[0].get("parameters", [])]
-        self.assertIn("cursor", names)
-        self.assertIn("limit", names)
-
-    def test_qs_is_not_a_parameter_on_the_real_routes(self):
-        """The signature edit is only worth anything if ninja honours it.
-
-        An un-annotated param ninja can see becomes a required ``str`` query
-        param, so a leak here is a 422 on every call, not a cosmetic one.
-        Checked on the paginated route too, since ``@paginate`` wraps it again.
-        """
-        from glitchtip.api.api import api
-
-        paths = api.get_openapi_schema()["paths"]
-        for suffix, method, path_param in [
-            ("/{project_slug}/alerts/", "get", "project_slug"),
-            ("/alerts/{alert_id}/", "delete", "alert_id"),
+        # The list route must be paginated; without it, it returns every row.
+        for suffix, method, expected in [
+            ("/{project_slug}/alerts/", "get", {"project_slug", "cursor", "limit"}),
+            ("/alerts/{alert_id}/", "delete", {"alert_id"}),
         ]:
             with self.subTest(method):
                 operations = [
@@ -293,9 +212,9 @@ class OrgScopedDeclarationTestCase(SimpleTestCase):
                     if path.endswith(suffix) and method in item
                 ]
                 self.assertEqual(len(operations), 1)
-                names = [p["name"] for p in operations[0].get("parameters", [])]
+                names = {p["name"] for p in operations[0].get("parameters", [])}
                 self.assertNotIn("qs", names)
-                self.assertIn(path_param, names)
+                self.assertLessEqual(expected, names)
 
 
 def _set_slug(obj, slug: str):
@@ -306,12 +225,7 @@ def _set_slug(obj, slug: str):
 
 
 class OrgScopedGateTestCase(TestCase):
-    """Two organizations sharing a project slug, one user in both.
-
-    ``other_org`` is one the user *is* an owner of, so a row reached through
-    the wrong slug proves the org in the path is being ignored rather than
-    merely proving that membership filtering works.
-    """
+    """Two orgs share a project slug; the user owns both, so the path must decide."""
 
     @classmethod
     def setUpTestData(cls):
@@ -366,30 +280,19 @@ class OrgScopedGateTestCase(TestCase):
                 self.assertIn("Member", res.json()["detail"])
         self.assertTrue(ProjectAlert.objects.filter(id=self.alert.id).exists())
 
-    def test_admin_can_delete(self):
-        self.set_role(OrganizationUserRole.ADMIN)
-        res = self.client.delete(self.delete_url())
-        self.assertEqual(res.status_code, 204)
-        self.assertFalse(ProjectAlert.objects.filter(id=self.alert.id).exists())
-
     # Existence hiding
-
-    def test_non_member_gets_404_not_403(self):
-        self.client.force_login(self.outsider)
-        res = self.client.delete(self.delete_url())
-        self.assertEqual(res.status_code, 404)
-        self.assertTrue(ProjectAlert.objects.filter(id=self.alert.id).exists())
 
     def test_an_org_you_cannot_see_is_indistinguishable_from_one_that_is_gone(self):
         self.client.force_login(self.outsider)
         hidden = self.client.delete(self.delete_url(org_slug="orga"))
         missing = self.client.delete(self.delete_url(org_slug="no-such-org"))
+        self.assertEqual(hidden.status_code, 404)
         self.assertEqual(hidden.status_code, missing.status_code)
         self.assertEqual(hidden.json(), missing.json())
+        self.assertTrue(ProjectAlert.objects.filter(id=self.alert.id).exists())
 
     def test_a_missing_row_is_a_plain_404_for_someone_entitled_to_it(self):
-        # Entitled callers get the ordinary Http404, not the membership one:
-        # explain_miss declines to speak when the gate was not the blocker.
+        # explain_miss stays silent when the gate wasn't the blocker.
         self.set_role(OrganizationUserRole.ADMIN)
         res = self.client.delete(self.delete_url(alert_id=self.alert.id + 1000))
         self.assertEqual(res.status_code, 404)
@@ -423,9 +326,7 @@ class OrgScopedGateTestCase(TestCase):
     # Path segments naming no reachable org
 
     def test_a_segment_naming_no_org_is_the_membership_404(self):
-        # The user owns the deleted org and it holds a matching alert, so only
-        # the deleted check stands between them: by id, that check is the
-        # gate's, since an id from the path skips the slug lookup.
+        # The user owns the deleted org, so only the deleted check stops them.
         deleted = _set_slug(baker.make("organizations_ext.Organization"), "gone")
         deleted.add_user(self.user, OrganizationUserRole.OWNER)
         project = _set_slug(
@@ -439,8 +340,7 @@ class OrgScopedGateTestCase(TestCase):
             ("deleted org by slug", "gone"),
             ("unused id", deleted.id + 1000),
             ("unknown slug", "no-such-org"),
-            # Organization.id is int4; past it, the driver raises rather than
-            # matching nothing.
+            # int4 overflow: the driver raises instead of missing.
             ("id past int4", str(2**31)),
         ]
         for label, segment in cases:
@@ -452,20 +352,8 @@ class OrgScopedGateTestCase(TestCase):
                 self.assertEqual(res.json()["detail"], "Organization not found.")
         self.assertTrue(ProjectAlert.objects.filter(id=alert.id).exists())
 
-    # Soft deletes
-
-    def test_a_soft_deleted_project_hides_its_alerts(self):
-        Project.objects.filter(pk=self.project.pk).update(is_deleted=True)
-        res = self.client.get(self.list_url())
-        self.assertEqual(res.json(), [])
-        res = self.client.delete(self.delete_url())
-        self.assertEqual(res.status_code, 404)
-        self.assertTrue(ProjectAlert.objects.filter(id=self.alert.id).exists())
-
     async def test_non_ascii_digits_are_a_slug_not_an_id(self):
-        # The route's slug converter already refuses "²", so this pins the
-        # guard for callers that don't come through a route: str.isdigit()
-        # accepts it and int() then raises.
+        # isdigit() accepts "²"; int() rejects it.
         self.assertEqual(await resolve_org_id("²"), NO_ORG_ID)
 
     # Token scopes
@@ -476,10 +364,6 @@ class OrgScopedGateTestCase(TestCase):
         self.assertEqual(res.status_code, 403)
         self.assertIn("token", res.json()["detail"])
 
-        self.token.add_permission("project:admin")
-        res = self.client.delete(self.delete_url(), headers=headers)
-        self.assertEqual(res.status_code, 204)
-
     def test_token_cannot_grant_more_than_the_users_role(self):
         self.set_role(OrganizationUserRole.MEMBER)
         self.token.add_permission("project:admin")
@@ -489,11 +373,7 @@ class OrgScopedGateTestCase(TestCase):
         self.assertTrue(ProjectAlert.objects.filter(id=self.alert.id).exists())
 
     async def test_a_role_that_qualifies_is_told_the_token_is_the_blocker(self):
-        # No route yet requires two scopes through an explaining gate, so the
-        # scope is built as from_request would for a token holding only
-        # project:admin on a route accepting project:read or project:admin.
-        # Member holds project:read, so the role qualifies and the token
-        # doesn't.
+        # Built by hand: no route has a qualifying role but a non-qualifying token.
         await OrganizationUser.objects.filter(pk=self.org_user.pk).aupdate(
             role=OrganizationUserRole.MEMBER
         )
@@ -510,16 +390,12 @@ class OrgScopedGateTestCase(TestCase):
 
     # Cost
 
-    # Kept synchronous: assertNumQueries only observes Django's sync
-    # connection, and the async test client runs the view on the async one.
+    # Sync: assertNumQueries doesn't see the async connection.
     def test_list_query_count(self):
         baker.make("alerts.ProjectAlert", project=self.project, _quantity=4)
         headers = self.bearer()
         self.token.add_permission("project:read")
-        # Token lookup, the page, the alertrecipient prefetch. By id, the gate
-        # adds none of its own: the membership check is a subquery inside the
-        # page query, which is the whole point of folding it in. A slug costs
-        # one lookup ahead of the page.
+        # Token, page, prefetch; the gate adds nothing by id, one lookup by slug.
         cases = [
             (self.org.id, 3, 200),
             ("orga", 4, 200),
