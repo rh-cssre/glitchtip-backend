@@ -786,11 +786,11 @@ ILLEGAL_ARGUMENT = {
 
 
 class ProguardSymbolicationGoldenTests(SymbolicationGoldenTestCase):
-    def upload(self):
+    def upload(self, mapping_uuid=PROGUARD_UUID):
         upload_proguard_mapping(
             self.project,
             (PROGUARD_FIXTURES / "mapping.txt").read_bytes(),
-            PROGUARD_UUID,
+            mapping_uuid,
         )
         self.assertTrue(
             DebugInformationFile.objects.filter(
@@ -815,13 +815,35 @@ class ProguardSymbolicationGoldenTests(SymbolicationGoldenTestCase):
         """A mapping and JVM source bundle as the upload API stores them.
 
         The inlined call (Validator.requirePositive inside
-        UserRepository.loadUser) comes back as both frames.
+        UserRepository.loadUser) comes back as both frames. The events
+        naming no mapping, or naming it in upper case, share this golden.
         """
         self.upload()
         self.assertMatchesGolden(
             "proguard_deobfuscation",
             self.process([proguard_event("proguard", [ILLEGAL_ARGUMENT])]),
         )
+
+    def test_without_a_proguard_image(self):
+        """An event naming no mapping is deobfuscated with the newest ones
+        the project has."""
+        self.upload()
+        payload = proguard_event("proguard-no-image", [ILLEGAL_ARGUMENT])
+        payload["debug_meta"]["images"] = [
+            image
+            for image in payload["debug_meta"]["images"]
+            if image["type"] != "proguard"
+        ]
+        self.assertMatchesGolden("proguard_deobfuscation", self.process([payload]))
+
+    def test_an_upper_case_mapping_uuid(self):
+        """The uuid is matched however the upload tool or SDK cases it."""
+        self.upload(PROGUARD_UUID.upper())
+        payload = proguard_event("proguard-upper-case", [ILLEGAL_ARGUMENT])
+        for image in payload["debug_meta"]["images"]:
+            if image["type"] == "proguard":
+                image["uuid"] = PROGUARD_UUID.upper()
+        self.assertMatchesGolden("proguard_deobfuscation", self.process([payload]))
 
     def test_chained_exceptions(self):
         """A wrapped exception and its cause, both obfuscated: both are
