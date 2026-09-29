@@ -58,8 +58,8 @@ SCENARIOS = [
     "no_native_frames",
     "proguard",
 ]
-# The many-debug-files scenarios use the shape the cost tests use: 50 debug
-# ids, each uploaded 4 times.
+# The many-debug-files scenarios use a bigger project than the cost tests (10
+# debug ids, each uploaded 3 times): 50 debug ids, each uploaded 4 times.
 DISTINCT_DEBUG_IDS = 50
 UPLOADS_PER_DEBUG_ID = 4
 PROGUARD_MAPPINGS = 20
