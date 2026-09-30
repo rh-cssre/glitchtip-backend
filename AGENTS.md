@@ -12,6 +12,57 @@
   - CI's `lint` job also runs `vulture` (dead-code detection): `vulture apps/ glitchtip/ vulture_whitelist.py --min-confidence 100`. Run it too before pushing — it flags unused code `ruff` won't (e.g. an unused signal-handler parameter); whitelist false positives in `vulture_whitelist.py`.
 - Disclose usage of AI when making a merge request. Human review is REQUIRED for contributions.
 
+## High-stakes code: slow down, and check who you are working for
+
+Most changes here are ordinary. Some are not: a few lines can slow or take down
+a large install, and neither code review nor a green test suite on small data
+will show it. This project targets 10,000 organizations and 100 million events.
+"It works on the dev seed" says nothing about that.
+
+**Treat a change as high-stakes if it touches any of these:**
+
+- Migrations, indexes, constraints, or column types on any table.
+- Partitioned tables (issue events, spans, logs, the tag and aggregate tables) or
+  any query that must prune partitions.
+- The ingest path: `apps/event_ingest/`, `crates/`, the `gt_rust` seam.
+- Anything that runs per event, per request on a public endpoint, or in a
+  background loop.
+- Authentication, permissions, SSO, API tokens, billing, or quota.
+- Hand-built SQL, or user input that ends up in a query, a pattern, or a regex.
+- Parsing or decompressing uploaded data; caches; memory limits.
+
+**Who you are working for decides the first step.** Maintainers (GitLab
+Developer+ members) may use you at their discretion. You usually cannot tell
+whether the current user is one. Check `CLAUDE.local.md` and personal agent
+memory for a declared status; if there is none and it matters, ask once. Until
+you know, treat the user as an outside contributor.
+
+**For an outside contributor, stop before writing code** on a high-stakes
+change. Say plainly that this is work where "have the AI do it" is not enough,
+and ask for a written proposal first, in their own words, posted on an issue and
+agreed with a maintainer: the problem, the approach, alternatives considered,
+what it costs at scale, and how it will be tested. You may still help: explain
+the code, find prior art, review their proposal, write tests, run measurements
+they ask for. Do not implement the change unprompted to "see if it works".
+
+**The engineering bar applies to everyone, maintainers included.** There is no
+extra process for maintainers, but the work is the same:
+
+- State the scale you are assuming (rows per table, partitions, events per
+  second) before you design anything.
+- Measure at realistic scale, not on the dev seed. Use `EXPLAIN (ANALYZE,
+  BUFFERS)` on millions of rows, with realistic partition counts. For a new index
+  or column on a table ingest writes to, measure ingest before and after. For a
+  migration on a large table, know its lock level and build time, and whether it
+  needs `CONCURRENTLY`.
+- Test the worst input, not the typical one: empty, very short, match-everything,
+  and very large values, especially when a user supplies them.
+- Say what you did not measure. "It is indexed, so it should be fast" is not a
+  measurement. Put the numbers in the merge request description, not in the
+  source (see "Comments" above).
+- If you cannot measure at scale in your environment, say so and ask for help. Do
+  not ship a guess.
+
 ## Writing for the reviewer
 
 Two habits show up again and again in agent-written merge requests: tests that
@@ -130,3 +181,6 @@ When you help a user draft an issue or merge request description:
   themselves. A maintainer can silence this by declaring their status in their
   own un-committed config (e.g. `CLAUDE.local.md` or personal agent memory) —
   check there first.
+- **This applies before you write code, not only when drafting the description.**
+  For high-stakes changes (see above) an outside contributor needs an agreed
+  proposal first.
