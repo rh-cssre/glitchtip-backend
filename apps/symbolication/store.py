@@ -35,7 +35,7 @@ import tempfile
 import threading
 import time
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import timedelta
 
 from django.conf import settings
@@ -95,6 +95,9 @@ OVERSIZED_MB = 64
 OVERSIZED_TTL_SECONDS = 10.0
 # Total wait, over all its caches, before an event is stored unsymbolicated.
 BUILD_WAIT_SECONDS = 5.0
+# Total time one ingest batch may spend waiting for builds, over all its
+# events, so a batch full of new artifacts does not stall once per event.
+BATCH_BUILD_WAIT_SECONDS = 5.0
 # How long the process skips waiting for a cache an event gave up on.
 UNAVAILABLE_SECONDS = 60.0
 # Builds one organization may have outstanding before it queues no more.
@@ -142,25 +145,61 @@ def source_digest(checksum: str) -> bytes | None:
         return None
 
 
-@dataclass
-class LookupContext:
-    """One event's lookups: its remaining wait budget, the organization it
-    belongs to, and the keys its batch has already given up on."""
+class BatchLookup:
+    """What the events of one ingest batch share: the keys the batch has
+    given up on, and its wait budget. The budget is spent only while some
+    event of the batch is waiting for a build, so time spent on everything
+    else does not use it up."""
 
-    deadline: float
-    organization_id: int | None = None
-    unavailable: set = field(default_factory=set)
-
-    @classmethod
-    def for_event(cls, organization_id=None, batch_unavailable=None):
-        return cls(
-            deadline=time.monotonic() + BUILD_WAIT_SECONDS,
-            organization_id=organization_id,
-            unavailable=batch_unavailable if batch_unavailable is not None else set(),
-        )
+    def __init__(self):
+        self.unavailable: set = set()
+        self._spent = 0.0
+        self._waiting = 0
+        self._since = 0.0
 
     def remaining(self) -> float:
-        return max(0.0, self.deadline - time.monotonic())
+        spent = self._spent
+        if self._waiting:
+            spent += time.monotonic() - self._since
+        return max(0.0, BATCH_BUILD_WAIT_SECONDS - spent)
+
+    @contextlib.contextmanager
+    def waiting(self):
+        if not self._waiting:
+            self._since = time.monotonic()
+        self._waiting += 1
+        try:
+            yield
+        finally:
+            self._waiting -= 1
+            if not self._waiting:
+                self._spent += time.monotonic() - self._since
+
+
+@dataclass
+class LookupContext:
+    """One event's lookups: its own wait budget, its batch (whose budget
+    also bounds the wait), and the organization it belongs to."""
+
+    deadline: float
+    batch: BatchLookup
+    organization_id: int | None = None
+
+    @classmethod
+    def for_event(cls, organization_id=None, batch: BatchLookup | None = None):
+        return cls(
+            deadline=time.monotonic() + BUILD_WAIT_SECONDS,
+            batch=batch if batch is not None else BatchLookup(),
+            organization_id=organization_id,
+        )
+
+    @property
+    def unavailable(self) -> set:
+        return self.batch.unavailable
+
+    def remaining(self) -> float:
+        own = max(0.0, self.deadline - time.monotonic())
+        return min(own, self.batch.remaining())
 
 
 # --- Observers ---------------------------------------------------------------
@@ -734,21 +773,18 @@ async def _wait_until_settled(row, context: LookupContext, wait: bool):
     """Poll ``row`` until it is READY or FAILED, within the event's budget.
     Returns the last row seen (None if it vanished)."""
     delay = 0.02
-    while (
-        wait
-        and row is not None
-        and row.state
-        not in (
-            CacheState.READY,
-            CacheState.FAILED,
-        )
-    ):
-        remaining = context.remaining()
-        if remaining <= 0:
-            break
-        await asyncio.sleep(min(delay, remaining))
-        delay = min(delay * 2, 0.5)
-        row = await SymbolicationCache.objects.filter(id=row.id).afirst()
+    with context.batch.waiting():
+        while (
+            wait
+            and row is not None
+            and row.state not in (CacheState.READY, CacheState.FAILED)
+        ):
+            remaining = context.remaining()
+            if remaining <= 0:
+                break
+            await asyncio.sleep(min(delay, remaining))
+            delay = min(delay * 2, 0.5)
+            row = await SymbolicationCache.objects.filter(id=row.id).afirst()
     return row
 
 

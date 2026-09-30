@@ -39,7 +39,7 @@ from apps.shared.raw_sql import (
     is_unique_violation,
 )
 from apps.sourcecode.models import DebugSymbolBundle
-from apps.symbolication.store import LookupContext
+from apps.symbolication.store import BatchLookup, LookupContext
 from glitchtip.cold_storage import is_duckdb_available
 from glitchtip.partition_manager import UUID7Helper
 from sentry.culprit import generate_culprit
@@ -860,15 +860,15 @@ async def process_issue_events(
 
     # Collected/calculated event data while processing
     processing_events: list[ProcessingEvent] = []
-    # Symbolication caches this batch has given up on, so no later event of
-    # the batch waits for them again.
-    batch_unavailable: set = set()
+    # The batch's wait budget for symbolication caches, and the caches it
+    # has given up on, so no later event of the batch waits for them again.
+    batch_lookup = BatchLookup()
     for ingest_event in messages:
         event = ingest_event.payload
-        # Each event gets its own wait budget for symbolication caches.
+        # Each event also has its own wait budget, within the batch's.
         context = LookupContext.for_event(
             organization_id=ingest_event.organization_id,
-            batch_unavailable=batch_unavailable,
+            batch=batch_lookup,
         )
         hydrate_stacktrace(event)
         event.contexts = generate_contexts(event)

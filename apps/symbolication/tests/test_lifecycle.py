@@ -27,6 +27,7 @@ from apps.event_ingest.tests.symbolication import (
     crash_frame_offsets,
     measure_symbolication,
     store_blob,
+    upload_copies,
     upload_native_dif,
 )
 from apps.event_ingest.tests.utils import EventIngestTestCase, run_async_closing
@@ -497,16 +498,81 @@ class LookupTests(CacheTestCase):
         self.build(SymbolicationCache.objects.get().id)
         self.assertIsNotNone(self.get(self.source_for(dif)))
 
+    def native_crashes_for_new_debug_files(self, count: int) -> list[dict]:
+        """One event per debug file, each for a debug file never built: a
+        copy of the ELF under its own debug id."""
+        real = self.upload_elf()
+        debug_ids = [str(uuid.UUID(int=index + 1)) for index in range(count - 1)]
+        upload_copies(
+            self.project,
+            real,
+            (NATIVE_FIXTURES / "crash.elf").read_bytes(),
+            debug_ids,
+        )
+        payloads = []
+        for debug_id in [ELF_DEBUG_ID, *debug_ids]:
+            payload = native_crash()
+            payload["debug_meta"]["images"][0]["debug_id"] = debug_id
+            payloads.append(payload)
+        return payloads
+
+    @mock.patch.object(store, "BUILD_WAIT_SECONDS", 1.0)
+    @mock.patch.object(store, "BATCH_BUILD_WAIT_SECONDS", 0.3)
+    def test_a_batch_shares_one_wait_budget_over_its_events(self):
+        """Four events, each needing a different cache still building: each
+        would wait its own 1 s, but the batch waits 0.3 s in all. Every
+        cache still has its build queued."""
+        payloads = self.native_crashes_for_new_debug_files(4)
+        with (
+            mock.patch.object(store, "_enqueue", mock.AsyncMock()) as enqueue,
+            counted_waits() as waits,
+        ):
+            events = self.process(*payloads)
+        self.assertGreater(sum(waits), 0)
+        self.assertLessEqual(sum(waits), 0.3 + 1e-6)
+        self.assertEqual(enqueue.await_count, 4)
+        self.assertEqual(
+            SymbolicationCache.objects.filter(state=CacheState.PENDING).count(), 4
+        )
+        self.assertFalse(any(self.resolved(event) for event in events))
+
+    @mock.patch.object(store, "BUILD_WAIT_SECONDS", 1.0)
+    @mock.patch.object(store, "BATCH_BUILD_WAIT_SECONDS", 0.3)
+    def test_a_build_done_in_time_leaves_the_rest_of_the_batch_budget(self):
+        """The first event's cache builds at once and it is symbolicated;
+        the next event, whose cache stays building, still waits out what is
+        left of the batch budget."""
+        first, second = self.native_crashes_for_new_debug_files(2)
+        real_enqueue = store._enqueue
+
+        async def build_only_the_first(row_id, organization_id):
+            row = await SymbolicationCache.objects.aget(id=row_id)
+            if ELF_DEBUG_ID in row.cache_key:
+                await real_enqueue(row_id, organization_id)
+
+        with (
+            mock.patch.object(store, "_enqueue", build_only_the_first),
+            counted_waits() as waits,
+        ):
+            events = self.process(first, second)
+        self.assertEqual([self.resolved(event) for event in events], [True, False])
+        # The first event hardly used the batch budget, so the second
+        # waited out most of it. (The batch budget runs only while waiting,
+        # so a slow runner does not shrink it.)
+        self.assertGreater(sum(waits), 0.1)
+        self.assertLessEqual(sum(waits), 0.3 + 1e-6)
+
     def test_the_batch_does_not_ask_again_for_a_key_it_gave_up_on(self):
         dif = self.upload_elf()
-        unavailable = {
+        batch = store.BatchLookup()
+        batch.unavailable.add(
             (
                 CacheKind.SYMCACHE,
                 store.format_tag(CacheKind.SYMCACHE),
                 self.source_for(dif).cache_key,
             )
-        }
-        context = store.LookupContext.for_event(batch_unavailable=unavailable)
+        )
+        context = store.LookupContext.for_event(batch=batch)
         with measure_symbolication() as cost:
             self.assertIsNone(self.get(self.source_for(dif), context))
         self.assertFalse(SymbolicationCache.objects.exists())
