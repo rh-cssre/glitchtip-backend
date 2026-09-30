@@ -25,6 +25,7 @@ from .store import (
     BUILD_HEARTBEAT,
     LOADERS,
     MAX_ATTEMPTS,
+    MB,
     STALE_BUILD,
     _delete_stored,
     _notify,
@@ -40,6 +41,23 @@ _executor: ThreadPoolExecutor | None = None
 _executor_lock = threading.Lock()
 
 
+# Cache builds at once per process.
+BUILD_CONCURRENCY = 1
+
+# Peak build memory per input byte, as measured; each input cap is the
+# build memory budget over its ratio. At the default 700 MB budget the caps
+# are 64 MB (sourcemap and minified file together), 384 MB (native debug
+# file) and 50 MB (ProGuard mapping).
+SOURCEMAP_PEAK_RATIO = 10.9
+SYMCACHE_PEAK_RATIO = 1.82
+PROGUARD_PEAK_RATIO = 14
+
+
+def input_cap(ratio: float) -> int:
+    """The largest input, in bytes, whose build fits the memory budget."""
+    return int(settings.GLITCHTIP_SYMBOLICATION_BUILD_MEMORY_MB / ratio) * MB
+
+
 class InputTooLarge(Exception):
     """A build input is over its size cap."""
 
@@ -51,7 +69,7 @@ def _build_executor() -> ThreadPoolExecutor:
     with _executor_lock:
         if _executor is None:
             _executor = ThreadPoolExecutor(
-                max_workers=settings.GLITCHTIP_SYMBOLICATION_BUILD_CONCURRENCY,
+                max_workers=BUILD_CONCURRENCY,
                 thread_name_prefix="symbolication-build",
             )
         return _executor
@@ -59,15 +77,14 @@ def _build_executor() -> ThreadPoolExecutor:
 
 def _check_input_size(row: SymbolicationCache):
     """Refuse inputs whose build would need too much memory."""
-    mb = 1024 * 1024
     if row.kind == CacheKind.SOURCEMAP:
         size = (row.source_blob.size or 0) + (row.secondary_blob.size or 0)
-        cap = settings.GLITCHTIP_SYMBOLICATION_MAX_SOURCEMAP_MB * mb
+        cap = input_cap(SOURCEMAP_PEAK_RATIO)
     elif row.kind == CacheKind.SYMCACHE:
         size = row.source_blob.size or 0
-        cap = settings.GLITCHTIP_SYMBOLICATION_MAX_SYMCACHE_MB * mb
+        cap = input_cap(SYMCACHE_PEAK_RATIO)
     else:
-        return  # gt_rust applies GLITCHTIP_PROGUARD_MAX_MAPPING_MB itself
+        return  # gt_rust applies the ProGuard cap itself
     if size > cap:
         raise InputTooLarge(f"input is {size} bytes, cap is {cap}")
 
@@ -86,7 +103,7 @@ def _build_args(row: SymbolicationCache, source, sourcemap) -> tuple[tuple, dict
         }
     return (source,), {
         "source_digest": digest,
-        "max_mapping_bytes": settings.GLITCHTIP_PROGUARD_MAX_MAPPING_MB * 1024 * 1024,
+        "max_mapping_bytes": input_cap(PROGUARD_PEAK_RATIO),
     }
 
 
@@ -201,8 +218,9 @@ async def build_cache(cache_id: int, organization_id: int | None = None):
         return
     except (CacheTooLargeError, InputTooLarge) as err:
         logger.warning(
-            "Symbolication cache %s input is over its size cap; events using "
-            "it are stored unsymbolicated: %s",
+            "Symbolication cache %s input is over its size cap (derived from "
+            "GLITCHTIP_SYMBOLICATION_BUILD_MEMORY_MB); events using it are "
+            "stored unsymbolicated: %s",
             cache_id,
             err,
         )

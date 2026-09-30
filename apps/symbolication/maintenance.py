@@ -21,6 +21,8 @@ TIME_BUDGET_SECONDS = 60
 # both run, and whichever runs maintenance must not delete the other's
 # caches.
 STALE_FORMAT_GRACE = timedelta(days=1)
+# Failed builds are forgotten after this, so they can be tried again.
+FAILED_EXPIRY_DAYS = 7
 
 
 def _unusable(now) -> Q:
@@ -36,8 +38,7 @@ def _unusable(now) -> Q:
         # cause since removed (a raised cap, an outage) is tried again.
         | Q(
             state=CacheState.FAILED,
-            updated__lt=now
-            - timedelta(days=settings.GLITCHTIP_SYMBOLICATION_FAILED_EXPIRY_DAYS),
+            updated__lt=now - timedelta(days=FAILED_EXPIRY_DAYS),
         )
     )
 

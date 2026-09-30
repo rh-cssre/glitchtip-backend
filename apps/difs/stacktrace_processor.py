@@ -2,11 +2,11 @@ import copy
 import logging
 import re
 
-from django.conf import settings
 from gt_rust.symbolic import demangle, normalize_debug_id, parse_addr
 
 from apps.difs.models import DebugInformationFile
 from apps.symbolication.sources import (
+    LOAD_TIMEOUT_SECONDS,
     MAX_SOURCE_PATHS,
     bundle_lane,
     load_lane,
@@ -186,7 +186,7 @@ async def read_source_files(source_bundle, file_paths) -> dict[str, list[str]]:
             read_bundle_members,
             source_bundle.file.blob,
             list(members),
-            timeout=settings.GLITCHTIP_SYMBOLICATION_LOAD_TIMEOUT_SECONDS,
+            timeout=LOAD_TIMEOUT_SECONDS,
         )
     except Exception as e:
         getLogger().error(f"read_source_files: Error extracting source: {type(e)}")

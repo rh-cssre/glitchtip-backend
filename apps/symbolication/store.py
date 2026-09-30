@@ -8,13 +8,13 @@ goes, cheapest first:
    small short-lived budget. Both drain to empty when idle;
 2. the cache stored in the default file storage, the source of truth:
    memory-mapped in place when that storage is a node-local filesystem;
-3. the optional node-local disk tier (``GLITCHTIP_SYMBOLICATION_DISK_CACHE_DIR``),
+3. the optional node-local disk tier (GLITCHTIP_SYMBOLICATION_DISK_CACHE_DIR),
    whose files are memory-mapped;
 4. otherwise the stored cache is downloaded, once per process however many
    events want it at once, to a temporary file and mapped from there;
 5. a build, queued on the ``symbolication`` task queue.
 
-An event waits for builds up to ``GLITCHTIP_SYMBOLICATION_BUILD_WAIT_SECONDS``
+An event waits for builds up to ``BUILD_WAIT_SECONDS``
 in total and is otherwise stored unsymbolicated; events never parse an
 upload themselves. A cache an event gave up on is not waited for again for
 the rest of its batch, nor, for a while, by the rest of the process.
@@ -53,7 +53,13 @@ from gt_rust.symbolic import (
 )
 
 from .models import CacheKind, CacheState, SymbolicationCache
-from .sources import COPY_CHUNK, is_node_local, load_lane, local_path
+from .sources import (
+    COPY_CHUNK,
+    LOAD_TIMEOUT_SECONDS,
+    is_node_local,
+    load_lane,
+    local_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -79,8 +85,20 @@ STALE_BUILD = 3 * BUILD_HEARTBEAT
 # MAX_ATTEMPTS times in all; one that failed on its input is not.
 RETRY_FAILED_AFTER = timedelta(hours=1)
 MAX_ATTEMPTS = 3
+MB = 1024 * 1024
 # Loaded caches kept at most, memory-mapped ones included.
 MAX_LOADED_ENTRIES = 512
+# Seconds an unused cache stays in the RAM tier.
+RAM_CACHE_IDLE_SECONDS = 600
+# Budget and TTL for caches too big for the RAM tier.
+OVERSIZED_MB = 64
+OVERSIZED_TTL_SECONDS = 10.0
+# Total wait, over all its caches, before an event is stored unsymbolicated.
+BUILD_WAIT_SECONDS = 5.0
+# How long the process skips waiting for a cache an event gave up on.
+UNAVAILABLE_SECONDS = 60.0
+# Builds one organization may have outstanding before it queues no more.
+MAX_PENDING_PER_ORG = 20
 
 
 @functools.cache
@@ -136,8 +154,7 @@ class LookupContext:
     @classmethod
     def for_event(cls, organization_id=None, batch_unavailable=None):
         return cls(
-            deadline=time.monotonic()
-            + settings.GLITCHTIP_SYMBOLICATION_BUILD_WAIT_SECONDS,
+            deadline=time.monotonic() + BUILD_WAIT_SECONDS,
             organization_id=organization_id,
             unavailable=batch_unavailable if batch_unavailable is not None else set(),
         )
@@ -261,17 +278,9 @@ class LoadedCaches:
             self._schedule_sweep()
 
 
-def _mb(name):
-    return lambda: getattr(settings, name) * 1024 * 1024
-
-
-def _seconds(name):
-    return lambda: getattr(settings, name)
-
-
 memory_tier = LoadedCaches(
-    capacity=_mb("GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB"),
-    idle=_seconds("GLITCHTIP_SYMBOLICATION_RAM_CACHE_IDLE_SECONDS"),
+    capacity=lambda: settings.GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB * MB,
+    idle=lambda: RAM_CACHE_IDLE_SECONDS,
     # One cache may take a quarter, so one huge bundle cannot flush the rest.
     entry_limit=lambda capacity: capacity // 4,
 )
@@ -279,8 +288,8 @@ memory_tier = LoadedCaches(
 # so a run of events on one large artifact (or two in one event) shares a
 # copy instead of loading it from storage every time.
 oversized_tier = LoadedCaches(
-    capacity=_mb("GLITCHTIP_SYMBOLICATION_OVERSIZED_MB"),
-    idle=_seconds("GLITCHTIP_SYMBOLICATION_OVERSIZED_TTL_SECONDS"),
+    capacity=lambda: OVERSIZED_MB * MB,
+    idle=lambda: OVERSIZED_TTL_SECONDS,
     entry_limit=lambda capacity: capacity,
     admit_one_oversized=True,
 )
@@ -288,7 +297,7 @@ oversized_tier = LoadedCaches(
 
 class NegativeCache:
     """Keys an event recently gave up on, so the process does not wait for
-    them again for GLITCHTIP_SYMBOLICATION_UNAVAILABLE_SECONDS. A key that
+    them again for UNAVAILABLE_SECONDS. A key that
     was still building is re-checked without waiting; a failed one is
     skipped outright."""
 
@@ -308,7 +317,7 @@ class NegativeCache:
             return reason
 
     def put(self, key, reason: str):
-        seconds = settings.GLITCHTIP_SYMBOLICATION_UNAVAILABLE_SECONDS
+        seconds = UNAVAILABLE_SECONDS
         if seconds <= 0:
             return
         with self._lock:
@@ -333,7 +342,7 @@ class DiskTier:
 
     Files are published whole (written to a temporary file, then renamed), so
     a reader never sees a partial file, and evicted oldest-used first once
-    the tier's subtree exceeds ``GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB``.
+    the tier's subtree exceeds GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB.
     The directory must belong to this process's user and not be writable by
     group or others, since its files are then trusted. A directory that is
     missing and cannot be created, or is not safe, is logged once and the
@@ -469,7 +478,7 @@ class DiskTier:
 
     def evict(self, directory: str):
         """Keep the tier's own subtree under its cap, oldest-used first."""
-        cap = settings.GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB * 1024 * 1024
+        cap = settings.GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB * MB
         root = os.path.join(directory, STORAGE_PREFIX)
         young = time.time() - 60
         with self._lock:
@@ -605,7 +614,7 @@ async def _load_ready(row: SymbolicationCache, source: CacheSource, key):
     # others wait on.
     cache, tier, mapped = await asyncio.wait_for(
         asyncio.shield(asyncio.wrap_future(future)),
-        settings.GLITCHTIP_SYMBOLICATION_LOAD_TIMEOUT_SECONDS,
+        LOAD_TIMEOUT_SECONDS,
     )
     _notify(tier if leader else "shared_load")
     return cache, mapped
@@ -663,13 +672,12 @@ async def _request_build(source: CacheSource, organization_id: int | None):
                 row = await SymbolicationCache.objects.aget(id=row.id)
         return row
 
-    cap = settings.GLITCHTIP_SYMBOLICATION_MAX_PENDING_PER_ORG
-    if organization_id is not None and cap > 0:
+    if organization_id is not None and MAX_PENDING_PER_ORG > 0:
         outstanding = await SymbolicationCache.objects.filter(
             requested_by_organization_id=organization_id,
             state__in=[CacheState.PENDING, CacheState.BUILDING],
         ).acount()
-        if outstanding >= cap:
+        if outstanding >= MAX_PENDING_PER_ORG:
             return None
     try:
         row = await SymbolicationCache.objects.acreate(

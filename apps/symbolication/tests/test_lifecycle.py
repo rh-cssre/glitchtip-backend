@@ -255,7 +255,7 @@ class BuildTests(CacheTestCase):
         self.assertIsNotNone(self.get(self.source_for(self.upload_elf())))
         self.assertEqual(SymbolicationCache.objects.get().state, CacheState.READY)
 
-    @override_settings(GLITCHTIP_SYMBOLICATION_MAX_SYMCACHE_MB=0)
+    @override_settings(GLITCHTIP_SYMBOLICATION_BUILD_MEMORY_MB=0)
     def test_inputs_over_the_size_cap_are_refused_for_good(self):
         row = self.row_for(self.upload_elf())
         with mock.patch.object(tasks, "_build") as build:
@@ -452,13 +452,13 @@ class LookupTests(CacheTestCase):
             )
 
         with (
-            override_settings(GLITCHTIP_SYMBOLICATION_BUILD_WAIT_SECONDS=0.05),
+            mock.patch.object(store, "BUILD_WAIT_SECONDS", 0.05),
             mock.patch.object(store, "_enqueue", mock.AsyncMock()) as enqueue,
         ):
             run_async_closing(many)
         self.assertEqual(enqueue.await_count, 1)
 
-    @override_settings(GLITCHTIP_SYMBOLICATION_BUILD_WAIT_SECONDS=0.2)
+    @mock.patch.object(store, "BUILD_WAIT_SECONDS", 0.2)
     def test_an_event_shares_one_wait_budget_over_its_caches(self):
         sources_ = []
         for index in range(3):
@@ -482,7 +482,7 @@ class LookupTests(CacheTestCase):
         self.assertGreater(len(waits), 0)
         self.assertLessEqual(sum(waits), 0.2 + 1e-6)
 
-    @override_settings(GLITCHTIP_SYMBOLICATION_BUILD_WAIT_SECONDS=0.2)
+    @mock.patch.object(store, "BUILD_WAIT_SECONDS", 0.2)
     def test_a_key_given_up_on_is_not_waited_for_again(self):
         dif = self.upload_elf()
         with mock.patch.object(store, "_enqueue", mock.AsyncMock()):
@@ -512,10 +512,8 @@ class LookupTests(CacheTestCase):
         self.assertFalse(SymbolicationCache.objects.exists())
         self.assertEqual(cost.cache_misses, 0)
 
-    @override_settings(
-        GLITCHTIP_SYMBOLICATION_MAX_PENDING_PER_ORG=1,
-        GLITCHTIP_SYMBOLICATION_BUILD_WAIT_SECONDS=0,
-    )
+    @mock.patch.object(store, "MAX_PENDING_PER_ORG", 1)
+    @mock.patch.object(store, "BUILD_WAIT_SECONDS", 0)
     def test_one_organization_cannot_fill_the_build_queue(self):
         blobs = [store_blob(f"f{index}", f"x{index}".encode()) for index in range(2)]
         context = store.LookupContext.for_event(organization_id=self.organization.id)
@@ -647,10 +645,8 @@ class LookupTests(CacheTestCase):
         self.assertEqual(cost.cache_storage_loads, 1)
         self.assertEqual(cost.cache_shared_loads, 4)
 
-    @override_settings(
-        GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB=0,
-        GLITCHTIP_SYMBOLICATION_OVERSIZED_TTL_SECONDS=60,
-    )
+    @override_settings(GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB=0)
+    @mock.patch.object(store, "OVERSIZED_TTL_SECONDS", 60)
     def test_a_cache_too_big_for_memory_is_kept_briefly_for_reuse(self):
         dif = self.upload_elf()
         self.get(self.source_for(dif))

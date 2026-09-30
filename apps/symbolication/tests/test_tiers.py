@@ -11,6 +11,7 @@ import zipfile
 from unittest import mock
 
 from asgiref.sync import async_to_sync
+from django.conf import settings
 from django.test import SimpleTestCase, override_settings
 
 from apps.symbolication import sources, store
@@ -25,15 +26,13 @@ class FakeCache:
 MB = 1024 * 1024
 
 
-@override_settings(
-    GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB=1,
-    GLITCHTIP_SYMBOLICATION_RAM_CACHE_IDLE_SECONDS=600,
-)
+@override_settings(GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB=1)
+@mock.patch.object(store, "RAM_CACHE_IDLE_SECONDS", 600)
 class MemoryTierTests(SimpleTestCase):
     def setUp(self):
         self.tier = store.LoadedCaches(
-            capacity=store._mb("GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB"),
-            idle=store._seconds("GLITCHTIP_SYMBOLICATION_RAM_CACHE_IDLE_SECONDS"),
+            capacity=lambda: settings.GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB * MB,
+            idle=lambda: store.RAM_CACHE_IDLE_SECONDS,
             entry_limit=lambda capacity: capacity // 4,
         )
         self.addCleanup(self.tier.clear)
@@ -77,7 +76,7 @@ class MemoryTierTests(SimpleTestCase):
     def test_drains_to_empty_when_idle(self):
         self.tier.put("a", FakeCache(10), mapped=False)
         self.assertIsNotNone(self.tier._timer)
-        with override_settings(GLITCHTIP_SYMBOLICATION_RAM_CACHE_IDLE_SECONDS=0):
+        with mock.patch.object(store, "RAM_CACHE_IDLE_SECONDS", 0):
             self.tier.sweep()
         self.assertEqual(len(self.tier), 0)
         self.assertEqual(self.tier.nbytes, 0)
@@ -85,15 +84,13 @@ class MemoryTierTests(SimpleTestCase):
         self.assertIsNone(self.tier._timer)
 
 
-@override_settings(
-    GLITCHTIP_SYMBOLICATION_OVERSIZED_MB=64,
-    GLITCHTIP_SYMBOLICATION_OVERSIZED_TTL_SECONDS=60,
-)
+@mock.patch.object(store, "OVERSIZED_MB", 64)
+@mock.patch.object(store, "OVERSIZED_TTL_SECONDS", 60)
 class OversizedTierTests(SimpleTestCase):
     def setUp(self):
         self.tier = store.LoadedCaches(
-            capacity=store._mb("GLITCHTIP_SYMBOLICATION_OVERSIZED_MB"),
-            idle=store._seconds("GLITCHTIP_SYMBOLICATION_OVERSIZED_TTL_SECONDS"),
+            capacity=lambda: store.OVERSIZED_MB * MB,
+            idle=lambda: store.OVERSIZED_TTL_SECONDS,
             entry_limit=lambda capacity: capacity,
             admit_one_oversized=True,
         )
@@ -115,23 +112,23 @@ class OversizedTierTests(SimpleTestCase):
 
     def test_expires_after_its_ttl(self):
         self.tier.put("a", FakeCache(MB), mapped=False)
-        with override_settings(GLITCHTIP_SYMBOLICATION_OVERSIZED_TTL_SECONDS=0.01):
+        with mock.patch.object(store, "OVERSIZED_TTL_SECONDS", 0.01):
             time.sleep(0.02)
             self.tier.sweep()
         self.assertEqual(len(self.tier), 0)
 
-    @override_settings(GLITCHTIP_SYMBOLICATION_OVERSIZED_TTL_SECONDS=0)
     def test_zero_ttl_disables_it(self):
-        self.assertFalse(self.tier.put("a", FakeCache(MB), mapped=False))
+        with mock.patch.object(store, "OVERSIZED_TTL_SECONDS", 0):
+            self.assertFalse(self.tier.put("a", FakeCache(MB), mapped=False))
 
 
 class NegativeCacheTests(SimpleTestCase):
     def test_remembers_then_forgets(self):
         cache = store.NegativeCache()
-        with override_settings(GLITCHTIP_SYMBOLICATION_UNAVAILABLE_SECONDS=60):
+        with mock.patch.object(store, "UNAVAILABLE_SECONDS", 60):
             cache.put("k", "failed")
         self.assertEqual(cache.get("k"), "failed")
-        with override_settings(GLITCHTIP_SYMBOLICATION_UNAVAILABLE_SECONDS=0.01):
+        with mock.patch.object(store, "UNAVAILABLE_SECONDS", 0.01):
             cache.put("k", "pending")
         time.sleep(0.02)
         self.assertIsNone(cache.get("k"))

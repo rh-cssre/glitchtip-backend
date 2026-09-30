@@ -4,7 +4,6 @@ import tempfile
 from hashlib import sha1
 
 from asgiref.sync import sync_to_async
-from django.conf import settings
 from django.core.files import File as DjangoFile
 from django.db.models import Q
 from django.tasks import task
@@ -138,6 +137,10 @@ def _update_source_context_on_event(event: ErrorIssueEventSchema, event_json: di
 FALLBACK_SCAN_ROWS = 200
 # Exceptions of one event symbolicated at most.
 MAX_EXCEPTIONS = 10
+# Debug files tried for one event at most, even when it names more.
+MAX_CANDIDATES = 5
+# Newest distinct debug ids tried for an event that names none.
+FALLBACK_CANDIDATES = 3
 _32BIT_ARCHS = frozenset({"arm", "x86", "mips", "ppc"})
 
 
@@ -173,21 +176,21 @@ def _has_debug_info(dif: DebugInformationFile) -> bool:
 
 async def _candidate_difs(queryset, debug_ids: list[str], accept) -> list:
     """The debug files to try: one per debug id, newest first, at most
-    GLITCHTIP_SYMBOLICATION_MAX_CANDIDATES however many ids the event names.
+    MAX_CANDIDATES however many ids the event names.
 
     With debug ids (from the event), every id's newest upload that carries
     debug info wins over a newer symbols-only one. Without them, the newest
-    GLITCHTIP_SYMBOLICATION_FALLBACK_CANDIDATES distinct debug ids are tried,
+    FALLBACK_CANDIDATES distinct debug ids are tried,
     reading a bounded number of rows. ``accept`` filters out debug files that
     cannot match the event (e.g. 32-bit files for a 64-bit crash).
     """
     queryset = queryset.select_related("file__blob").order_by("-created")
-    cap = settings.GLITCHTIP_SYMBOLICATION_MAX_CANDIDATES
+    cap = MAX_CANDIDATES
     if debug_ids:
         limit = min(len(debug_ids), cap)
         queryset = queryset.filter(data__debug_id__in=debug_ids)[:FALLBACK_SCAN_ROWS]
     else:
-        limit = min(settings.GLITCHTIP_SYMBOLICATION_FALLBACK_CANDIDATES, cap)
+        limit = min(FALLBACK_CANDIDATES, cap)
         queryset = queryset[:FALLBACK_SCAN_ROWS]
     if limit <= 0:
         return []

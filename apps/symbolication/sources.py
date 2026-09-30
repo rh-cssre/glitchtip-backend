@@ -60,6 +60,9 @@ class _Lane:
         return await asyncio.wait_for(future, timeout)
 
 
+# Longest wait for one stored cache load or source bundle read.
+LOAD_TIMEOUT_SECONDS = 10.0
+
 # Loading stored caches, and CPU work too slow for the event loop.
 load_lane = _Lane("symbolication-read", 2)
 # Reading source-bundle members for source context.

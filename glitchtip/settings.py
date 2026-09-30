@@ -230,101 +230,23 @@ GLITCHTIP_UPTIME_RETENTION_DAYS = env.int(
 GLITCHTIP_FILE_RETENTION_DAYS = env.int(
     "GLITCHTIP_FILE_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
 )
-# Symbolication caches. Each uploaded sourcemap, native debug file and
-# ProGuard mapping is processed once, on the first event that needs it, into
-# a compact lookup cache kept in the default file storage. Events then load
-# that cache instead of re-parsing the upload. See apps/symbolication.
+# Symbolication caches (apps/symbolication). Internal knobs, deliberately
+# undocumented: the defaults suit every install.
 #
-# These GLITCHTIP_SYMBOLICATION_* settings (and GLITCHTIP_PROGUARD_MAX_MAPPING_MB)
-# are internal tuning and testing knobs, deliberately left out of the user
-# documentation: the defaults are meant to be right for every install.
-#
-# In-process LRU of loaded caches, in MB. 0 disables it (every event then
-# loads the cache from the disk tier or file storage).
+# In-process LRU of loaded caches, in MB; 0 disables it.
 GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB = env.int(
     "GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB", default=32
 )
-# Seconds an unused cache stays in the RAM tier. It drains to empty when idle.
-GLITCHTIP_SYMBOLICATION_RAM_CACHE_IDLE_SECONDS = env.int(
-    "GLITCHTIP_SYMBOLICATION_RAM_CACHE_IDLE_SECONDS", default=600
-)
-# Loaded caches too big for the RAM tier (over a quarter of it) are kept in
-# a second, short-lived budget of this many MB, dropped after the TTL without
-# use. It always admits at least one cache, however big. 0 TTL disables it.
-GLITCHTIP_SYMBOLICATION_OVERSIZED_MB = env.int(
-    "GLITCHTIP_SYMBOLICATION_OVERSIZED_MB", default=64
-)
-GLITCHTIP_SYMBOLICATION_OVERSIZED_TTL_SECONDS = env.float(
-    "GLITCHTIP_SYMBOLICATION_OVERSIZED_TTL_SECONDS", default=10.0
-)
-# Optional node-local directory to keep caches in (memory-mapped on load),
-# e.g. a Kubernetes emptyDir. Empty disables the tier. A missing or
-# read-only directory is logged once and the tier is skipped.
+# Optional node-local directory for memory-mapped copies; empty disables it.
 GLITCHTIP_SYMBOLICATION_DISK_CACHE_DIR = env.str(
     "GLITCHTIP_SYMBOLICATION_DISK_CACHE_DIR", default=""
 )
 GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB = env.int(
     "GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB", default=1024
 )
-# How long, in total over all its caches, one event waits for caches to be
-# built before it is stored unsymbolicated. The builds carry on, so later
-# events find the caches.
-GLITCHTIP_SYMBOLICATION_BUILD_WAIT_SECONDS = env.float(
-    "GLITCHTIP_SYMBOLICATION_BUILD_WAIT_SECONDS", default=5.0
-)
-# After an event gives up on a cache (still building, or failed), later
-# events do not wait for it again for this many seconds.
-GLITCHTIP_SYMBOLICATION_UNAVAILABLE_SECONDS = env.float(
-    "GLITCHTIP_SYMBOLICATION_UNAVAILABLE_SECONDS", default=60.0
-)
-# Longest wait for loading one stored cache (or reading one source bundle).
-GLITCHTIP_SYMBOLICATION_LOAD_TIMEOUT_SECONDS = env.float(
-    "GLITCHTIP_SYMBOLICATION_LOAD_TIMEOUT_SECONDS", default=10.0
-)
-# Concurrent cache builds per worker process. Builds of large inputs are
-# memory heavy; keep this low.
-GLITCHTIP_SYMBOLICATION_BUILD_CONCURRENCY = max(
-    1, env.int("GLITCHTIP_SYMBOLICATION_BUILD_CONCURRENCY", default=1)
-)
-# Builds one organization may have queued or running at once. Beyond it, its
-# events go unsymbolicated rather than queue more, so one tenant cannot fill
-# the build queue.
-GLITCHTIP_SYMBOLICATION_MAX_PENDING_PER_ORG = env.int(
-    "GLITCHTIP_SYMBOLICATION_MAX_PENDING_PER_ORG", default=20
-)
-# Largest inputs built into caches, in MB. Sourcemap builds peak at about 11
-# times the minified file plus its sourcemap, native symcache builds at about
-# twice the debug file, so both defaults stay near 700 MB at worst.
-GLITCHTIP_SYMBOLICATION_MAX_SOURCEMAP_MB = env.int(
-    "GLITCHTIP_SYMBOLICATION_MAX_SOURCEMAP_MB", default=64
-)
-GLITCHTIP_SYMBOLICATION_MAX_SYMCACHE_MB = env.int(
-    "GLITCHTIP_SYMBOLICATION_MAX_SYMCACHE_MB", default=384
-)
-# Failed builds are forgotten after this many days, so a raised cap or a
-# cleared transient cause lets them be built again.
-GLITCHTIP_SYMBOLICATION_FAILED_EXPIRY_DAYS = env.int(
-    "GLITCHTIP_SYMBOLICATION_FAILED_EXPIRY_DAYS", default=7
-)
-# When a native event carries no debug id (no debug_meta), or an Android
-# event no ProGuard uuid, try at most this many of the project's newest
-# distinct debug ids (native: filtered by architecture). Debug files have no
-# release, so there is no same-release preference. 0 disables the fallback.
-GLITCHTIP_SYMBOLICATION_FALLBACK_CANDIDATES = env.int(
-    "GLITCHTIP_SYMBOLICATION_FALLBACK_CANDIDATES", default=3
-)
-# Most debug files (native) or mappings (ProGuard) tried for one event, even
-# when the event names more.
-GLITCHTIP_SYMBOLICATION_MAX_CANDIDATES = env.int(
-    "GLITCHTIP_SYMBOLICATION_MAX_CANDIDATES", default=5
-)
-# ProGuard mappings larger than this (MB) are not processed. Building a
-# mapping's cache peaks at about 9 times the mapping's size in memory (up to
-# about 22 times for dense mappings), so the default's worst case is about
-# 450 MB, up to 1.1 GB, on one build worker thread. Events whose mapping is
-# over the cap are stored obfuscated, and the refusal is logged once.
-GLITCHTIP_PROGUARD_MAX_MAPPING_MB = env.int(
-    "GLITCHTIP_PROGUARD_MAX_MAPPING_MB", default=50
+# Peak memory one cache build may use; each kind's input cap derives from it.
+GLITCHTIP_SYMBOLICATION_BUILD_MEMORY_MB = env.int(
+    "GLITCHTIP_SYMBOLICATION_BUILD_MEMORY_MB", default=700
 )
 GLITCHTIP_LOG_RETENTION_DAYS = env.int(
     "GLITCHTIP_LOG_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
@@ -1254,10 +1176,9 @@ VTASKS_QUEUES = {
             "timeout": 2.0,
         },
     },
-    # Symbolication cache builds: few at a time, since each can take a lot of
-    # memory; events never build caches themselves.
+    # Symbolication cache builds, one at a time: each can take a lot of memory.
     "symbolication": {
-        "worker_concurrency": GLITCHTIP_SYMBOLICATION_BUILD_CONCURRENCY,
+        "worker_concurrency": 1,
     },
 }
 
@@ -1406,8 +1327,8 @@ GS_PROJECT_ID = env("GS_PROJECT_ID")
 # django-storages keeps a whole object in memory when it is opened, unless
 # these cap the in-memory part (beyond it, the object spools to a temporary
 # file). Uploads and symbolication caches can be tens of MB.
-AWS_S3_MAX_MEMORY_SIZE = env.int("AWS_S3_MAX_MEMORY_SIZE", default=4 * 1024 * 1024)
-GS_MAX_MEMORY_SIZE = env.int("GS_MAX_MEMORY_SIZE", default=4 * 1024 * 1024)
+AWS_S3_MAX_MEMORY_SIZE = 4 * 1024 * 1024
+GS_MAX_MEMORY_SIZE = 4 * 1024 * 1024
 
 if AWS_S3_ENDPOINT_URL or "s3" in str(STORAGES["default"]["BACKEND"]).lower():
     # One download thread per transfer, not boto3's pool of ten: downloads

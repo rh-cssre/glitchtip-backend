@@ -7,10 +7,12 @@ load it from the in-process RAM tier without touching storage.
 """
 
 import uuid
+from unittest import mock
 
 from django.test import override_settings
 from django.utils import timezone
 
+from apps.difs import tasks as difs_tasks
 from apps.difs.models import DebugInformationFile
 from apps.issue_events.models import IssueEvent
 from apps.symbolication.models import CacheState, SymbolicationCache
@@ -153,7 +155,7 @@ PYTHON_EXCEPTION = {
 }
 
 
-@override_settings(GLITCHTIP_SYMBOLICATION_FALLBACK_CANDIDATES=FALLBACK_CANDIDATES)
+@mock.patch.object(difs_tasks, "FALLBACK_CANDIDATES", FALLBACK_CANDIDATES)
 class NativeDebugFileCostTests(SymbolicationCostTestCase):
     """A project with 30 native debug files, 3 uploads for each of 10 debug
     ids. One debug id is the real ELF fixture's."""
@@ -247,7 +249,7 @@ class NativeDebugFileCostTests(SymbolicationCostTestCase):
         )
 
 
-@override_settings(GLITCHTIP_SYMBOLICATION_FALLBACK_CANDIDATES=FALLBACK_CANDIDATES)
+@mock.patch.object(difs_tasks, "FALLBACK_CANDIDATES", FALLBACK_CANDIDATES)
 class NativeFallbackBoundaryTests(SymbolicationCostTestCase):
     """Without debug_meta only the newest few debug ids are tried. So once
     that many newer builds are uploaded, a crash in an older build stays
@@ -357,9 +359,9 @@ class ProguardCostTests(SymbolicationCostTestCase):
 
 
 class ProguardSizeCapTests(SymbolicationCostTestCase):
-    @override_settings(GLITCHTIP_PROGUARD_MAX_MAPPING_MB=0)
+    @override_settings(GLITCHTIP_SYMBOLICATION_BUILD_MEMORY_MB=0)
     def test_a_mapping_over_the_cap_is_never_built(self):
-        """Over GLITCHTIP_PROGUARD_MAX_MAPPING_MB the build is refused before
+        """Over the ProGuard input cap the build is refused before
         it allocates: the row is marked failed for good, and events are
         stored still obfuscated."""
         mapping_uuid = str(uuid.uuid4())
