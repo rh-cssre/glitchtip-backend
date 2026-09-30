@@ -26,11 +26,10 @@ class SymbolicationCache(models.Model):
     ``storage_name``. When a source FileBlob is deleted its column goes NULL,
     and maintenance deletes the row and its stored cache.
 
-    Columns are ordered for alignment: 8-byte, then 4-, then 2-byte, then
-    variable length.
+    Columns are ordered for alignment: 8-byte (the implicit bigint id
+    first), then 4-, then 2-byte, then variable length.
     """
 
-    id = models.BigAutoField(primary_key=True)
     created = models.DateTimeField(auto_now_add=True)
     # When the state last changed; a stale BUILDING claim can be taken over.
     updated = models.DateTimeField(auto_now=True)
@@ -55,7 +54,8 @@ class SymbolicationCache(models.Model):
     # The organization whose event asked for the build, to bound how many
     # builds one organization can have outstanding. Not a foreign key: the
     # cache is shared by content, and outlives the organization.
-    requested_by_organization_id = models.BigIntegerField(null=True, blank=True)
+    # An int4, as Organization's own id is.
+    requested_by_organization_id = models.IntegerField(null=True, blank=True)
     size = models.PositiveIntegerField(default=0)
     kind = models.PositiveSmallIntegerField(choices=CacheKind.choices)
     state = models.PositiveSmallIntegerField(

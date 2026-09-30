@@ -12,11 +12,20 @@ class Migration(migrations.Migration):
     operations = [
         migrations.CreateModel(
             name="SymbolicationCache",
-            # Column order is chosen for alignment: 8-byte columns, then 4-,
-            # then 2-byte, then variable length. Keep the foreign keys here
-            # rather than at the end, where makemigrations puts them.
+            # Column order is chosen for alignment: 8-byte columns (id, the
+            # implicit bigint pk, first), then 4-, then 2-byte, then variable
+            # length. Keep the foreign keys here rather than at the end,
+            # where makemigrations puts them.
             fields=[
-                ("id", models.BigAutoField(primary_key=True, serialize=False)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
                 ("created", models.DateTimeField(auto_now_add=True)),
                 ("updated", models.DateTimeField(auto_now=True)),
                 (
@@ -40,7 +49,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "requested_by_organization_id",
-                    models.BigIntegerField(blank=True, null=True),
+                    models.IntegerField(blank=True, null=True),
                 ),
                 ("size", models.PositiveIntegerField(default=0)),
                 (
