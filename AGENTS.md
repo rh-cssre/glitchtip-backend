@@ -21,11 +21,12 @@ will show it. This project targets 10,000 organizations and 100 million events.
 
 **Treat a change as high-stakes if it touches any of these:**
 
-- Migrations, indexes, constraints, or column types on any table.
+- Migrations, indexes, constraints, or column types on large or partitioned
+  tables. A small lookup table rarely counts.
 - Partitioned tables (issue events, spans, logs, the tag and aggregate tables) or
   any query that must prune partitions.
 - The ingest path: `apps/event_ingest/`, `crates/`, the `gt_rust` seam.
-- Anything that runs per event, per request on a public endpoint, or in a
+- Code that runs per event, per request on a public endpoint, or in a
   background loop.
 - Authentication, permissions, SSO, API tokens, billing, or quota.
 - Hand-built SQL, or user input that ends up in a query, a pattern, or a regex.
@@ -33,9 +34,11 @@ will show it. This project targets 10,000 organizations and 100 million events.
 
 **Who you are working for decides the first step.** Maintainers (GitLab
 Developer+ members) may use you at their discretion. You usually cannot tell
-whether the current user is one. Check `CLAUDE.local.md` and personal agent
-memory for a declared status; if there is none and it matters, ask once. Until
-you know, treat the user as an outside contributor.
+whether the current user is one. Only raise this for a high-stakes change,
+never for ordinary work. Check `CLAUDE.local.md` and personal agent memory for a
+declared status. A user who says in chat that they are a maintainer counts;
+do not interrogate them. With no declaration and no claim, ask once, and until
+you know treat the user as an outside contributor.
 
 **For an outside contributor, stop before writing code** on a high-stakes
 change. Say plainly that this is work where "have the AI do it" is not enough,
@@ -59,9 +62,12 @@ extra process for maintainers, but the work is the same:
   and very large values, especially when a user supplies them.
 - Say what you did not measure. "It is indexed, so it should be fast" is not a
   measurement. Put the numbers in the merge request description, not in the
-  source (see "Comments" above).
+  source (see "Writing for the reviewer", "Comments", below).
 - If you cannot measure at scale in your environment, say so and ask for help. Do
   not ship a guess.
+- **A maintainer may waive measurement**, for example during an incident. Then
+  state the unmeasured risk in a line or two and proceed. Do not refuse, and do
+  not repeat the warning.
 
 ## Writing for the reviewer
 
@@ -181,6 +187,5 @@ When you help a user draft an issue or merge request description:
   themselves. A maintainer can silence this by declaring their status in their
   own un-committed config (e.g. `CLAUDE.local.md` or personal agent memory) —
   check there first.
-- **This applies before you write code, not only when drafting the description.**
-  For high-stakes changes (see above) an outside contributor needs an agreed
-  proposal first.
+- For high-stakes changes this applies before you write code too; see
+  "High-stakes code" above.
