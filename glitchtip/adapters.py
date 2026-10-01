@@ -32,9 +32,8 @@ class CustomSocialAccountAdapter(AsyncDefaultSocialAccountAdapter):
         )
 
     def open_http_session(self):
-        # Match the outbound-HTTP behavior the sync stack got from `requests`
-        # (which trusts proxy env vars by default) and stamp our User-Agent.
-        # Social-auth calls override the generic 30s session timeout with
+        # The project-wide session config (User-Agent, PROXY_ENV proxy trust)
+        # applies here too. Social-auth calls override the generic 30s timeout with
         # allauth's own REQUESTS_TIMEOUT, the same bound the sync `requests`
         # path used. Organization-managed OIDC providers make these URLs
         # partially user-controlled -- not just the issuer an org manager
@@ -53,11 +52,13 @@ class CustomSocialAccountAdapter(AsyncDefaultSocialAccountAdapter):
 
     def get_requests_session(self):
         # Only upstream's sync views still reach this: those allauth_async has
-        # not twinned, today just headless token login (provider/token), which
-        # fetches the IdP's discovery document and JWKS. `requests` has no
-        # connect-time address check, so with blocking on, refuse rather than
-        # let that path skip the guard open_http_session applies. allauth
-        # turns the RequestException into an "invalid_token" response.
+        # not twinned. Today that is id_token login -- headless provider/token
+        # (any provider) and Google One Tap (accounts/google/login/token/) --
+        # which fetches the IdP's discovery document and JWKS. `requests` has
+        # no connect-time address check, so with blocking on, refuse rather
+        # than let those paths skip the guard open_http_session applies. Both
+        # views turn the RequestException into an "invalid token" response;
+        # GlitchTip's frontend uses the redirect flow, not id_token login.
         if settings.SOCIAL_AUTH_BLOCK_PRIVATE_IPS:
             import requests
 

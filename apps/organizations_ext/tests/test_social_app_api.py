@@ -14,7 +14,6 @@ from apps.organizations_ext.social_app_api import validate_server_url
 from apps.stripe.constants import SubscriptionStatus
 from apps.users.utils import aorg_social_app_exists
 from glitchtip.adapters import CustomSocialAccountAdapter
-from glitchtip.ssrf_protection import ValidatingConnector
 
 VALID_PAYLOAD = {
     "name": "Corp Okta",
@@ -482,24 +481,25 @@ class SocialAuthSSRFTestCase(TestCase):
             settings={"server_url": "https://idp.example.com"},
         )
 
-    async def _session_connector(self):
+    async def _session_resolves(self, host):
+        # Behavioral rather than inspecting the connector: does the session
+        # social auth opens refuse an internal IP literal?
         session = CustomSocialAccountAdapter().open_http_session()
         try:
-            return session.connector
+            return await session.connector._resolve_host(host, 443)
         finally:
             await session.close()
 
     @override_settings(SOCIAL_AUTH_BLOCK_PRIVATE_IPS=True)
     async def test_session_blocks_private_when_enabled(self):
-        connector = await self._session_connector()
-        self.assertIsInstance(connector, ValidatingConnector)
-        self.assertFalse(connector._allow_private)
+        with self.assertRaises(OSError):
+            await self._session_resolves("169.254.169.254")
 
     @override_settings(SOCIAL_AUTH_BLOCK_PRIVATE_IPS=False)
     async def test_session_allows_private_when_disabled(self):
         # Single-org self-host installs keep intranet IdPs working.
-        connector = await self._session_connector()
-        self.assertTrue(connector._allow_private)
+        result = await self._session_resolves("10.0.0.5")
+        self.assertEqual(result[0]["host"], "10.0.0.5")
 
     def _token_login(self):
         return self.client.post(

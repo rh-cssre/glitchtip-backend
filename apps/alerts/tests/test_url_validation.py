@@ -35,6 +35,15 @@ class IsIPBlockedTests(SimpleTestCase):
         self.assertTrue(is_ip_blocked("::ffff:10.0.0.1"))
         self.assertFalse(is_ip_blocked("::ffff:8.8.8.8"))
 
+    def test_ipv4_embedding_ipv6_judged_as_ipv4(self):
+        # NAT64 well-known prefix, IPv4-compatible and SIIT forms. Python counts
+        # these as global, but behind NAT64 they reach the embedded address.
+        self.assertTrue(is_ip_blocked("64:ff9b::a9fe:a9fe"))
+        self.assertTrue(is_ip_blocked("64:ff9b::7f00:1"))
+        self.assertTrue(is_ip_blocked("::a9fe:a9fe"))
+        self.assertTrue(is_ip_blocked("::ffff:0:7f00:1"))
+        self.assertFalse(is_ip_blocked("64:ff9b::808:808"))
+
     def test_unspecified_and_multicast_blocked(self):
         self.assertTrue(is_ip_blocked("0.0.0.0"))
         self.assertTrue(is_ip_blocked("224.0.0.1"))
