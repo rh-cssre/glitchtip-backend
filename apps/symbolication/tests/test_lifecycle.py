@@ -852,6 +852,79 @@ class DiskTierIntegrationTests(CacheTestCase):
             self.assertEqual(len(logs.records), 1)
 
 
+class ContainerMemoryTests(CacheTestCase):
+    """A build's memory budget is lowered to fit a small container."""
+
+    def setUp(self):
+        super().setUp()
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.v2 = os.path.join(directory.name, "memory.max")
+        self.v1 = os.path.join(directory.name, "memory.limit_in_bytes")
+        patch = mock.patch.object(
+            tasks, "CGROUP_MEMORY_LIMIT_FILES", (self.v2, self.v1)
+        )
+        patch.start()
+        self.addCleanup(patch.stop)
+        tasks._reported_budgets.clear()
+        self.addCleanup(tasks._reported_budgets.clear)
+
+    def limit(self, path, value: str):
+        with open(path, "w") as limit_file:
+            limit_file.write(value + "\n")
+
+    def test_a_512_mib_pod_lowers_the_budget_and_the_caps(self):
+        self.limit(self.v2, str(512 * 1024 * 1024))
+        lift_log_disable(self)
+        with self.assertLogs("apps.symbolication.tasks", "INFO") as logs:
+            self.assertEqual(tasks.build_memory_mb(), 204)
+            self.assertEqual(tasks.build_memory_mb(), 204)
+        self.assertEqual(len(logs.records), 1)
+        self.assertIn("204 MB", logs.output[0])
+        self.assertEqual(
+            [
+                tasks.input_cap(ratio) // store.MB
+                for ratio in (
+                    tasks.SOURCEMAP_PEAK_RATIO,
+                    tasks.SYMCACHE_PEAK_RATIO,
+                    tasks.PROGUARD_PEAK_RATIO,
+                )
+            ],
+            [18, 112, 14],
+        )
+
+    def test_a_large_or_unknown_limit_keeps_the_setting(self):
+        for name, path, value in [
+            ("large", self.v2, str(64 * 1024**3)),
+            ("v2 unlimited", self.v2, "max"),
+            ("v1 unlimited", self.v1, str(9223372036854771712)),
+            ("unreadable", self.v2, "garbage"),
+        ]:
+            with self.subTest(name):
+                for stale in (self.v2, self.v1):
+                    with contextlib.suppress(FileNotFoundError):
+                        os.remove(stale)
+                self.limit(path, value)
+                self.assertEqual(tasks.build_memory_mb(), 700)
+        os.remove(self.v2)
+        self.assertEqual(tasks.build_memory_mb(), 700)  # no cgroup at all
+
+    def test_a_cgroup_v1_limit_counts_too(self):
+        self.limit(self.v1, str(1024 * 1024 * 1024))
+        self.assertEqual(tasks.build_memory_mb(), 409)
+
+    def test_an_input_too_big_for_the_pod_is_refused_cleanly(self):
+        """In a tiny container even the fixture is over its cap: the build
+        is refused for good and the event is stored unsymbolicated."""
+        self.upload_elf()
+        self.limit(self.v2, str(1024 * 1024))
+        [event] = self.process(native_crash())
+        self.assertFalse(self.resolved(event))
+        row = SymbolicationCache.objects.get()
+        self.assertEqual(row.state, CacheState.FAILED)
+        self.assertEqual(row.attempts, store.MAX_ATTEMPTS)
+
+
 class DiskTierSafetyTests(CacheTestCase):
     """Whatever the disk tier's size, a cache loads, is built once, and is
     never sent back to be rebuilt in a loop."""

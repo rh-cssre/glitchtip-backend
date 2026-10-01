@@ -54,9 +54,64 @@ SYMCACHE_PEAK_RATIO = 1.82
 PROGUARD_PEAK_RATIO = 14
 
 
+# A build may use at most this share of the container's memory limit, so a
+# small pod (the Helm chart's default is 512 MiB) is not OOM-killed by one.
+CONTAINER_MEMORY_SHARE = 0.4
+# cgroup v2, then v1. v1 reports "no limit" as a huge number.
+CGROUP_MEMORY_LIMIT_FILES = (
+    "/sys/fs/cgroup/memory.max",
+    "/sys/fs/cgroup/memory/memory.limit_in_bytes",
+)
+_NO_LIMIT = 1 << 60
+_reported_budgets: set[int] = set()
+
+
+def container_memory_limit() -> int | None:
+    """The container's memory limit in bytes, or None when there is none or
+    it cannot be read."""
+    for path in CGROUP_MEMORY_LIMIT_FILES:
+        try:
+            with open(path) as limit_file:
+                raw = limit_file.read().strip()
+        except OSError:
+            continue
+        if raw == "max":
+            return None
+        try:
+            limit = int(raw)
+        except ValueError:
+            return None
+        return limit if 0 < limit < _NO_LIMIT else None
+    return None
+
+
+def build_memory_mb() -> int:
+    """The build memory budget: the setting, lowered to a share of the
+    container's memory limit when that is smaller. Logged once when lowered."""
+    budget = settings.GLITCHTIP_SYMBOLICATION_BUILD_MEMORY_MB
+    limit = container_memory_limit()
+    if limit is None:
+        return budget
+    share = int(limit * CONTAINER_MEMORY_SHARE) // MB
+    if share >= budget:
+        return budget
+    if share not in _reported_budgets:
+        _reported_budgets.add(share)
+        logger.info(
+            "Symbolication cache builds may use %d MB, %d%% of this "
+            "container's %d MB memory limit (GLITCHTIP_SYMBOLICATION_"
+            "BUILD_MEMORY_MB is %d). Larger uploads are not symbolicated.",
+            share,
+            round(CONTAINER_MEMORY_SHARE * 100),
+            limit // MB,
+            budget,
+        )
+    return share
+
+
 def input_cap(ratio: float) -> int:
     """The largest input, in bytes, whose build fits the memory budget."""
-    return int(settings.GLITCHTIP_SYMBOLICATION_BUILD_MEMORY_MB / ratio) * MB
+    return int(build_memory_mb() / ratio) * MB
 
 
 class InputTooLarge(Exception):
@@ -222,8 +277,8 @@ async def build_cache(cache_id: int, organization_id: int | None = None):
     except (CacheTooLargeError, InputTooLarge) as err:
         logger.warning(
             "Symbolication cache %s input is over its size cap (derived from "
-            "GLITCHTIP_SYMBOLICATION_BUILD_MEMORY_MB); events using it are "
-            "stored unsymbolicated: %s",
+            "GLITCHTIP_SYMBOLICATION_BUILD_MEMORY_MB and the container's "
+            "memory limit); events using it are stored unsymbolicated: %s",
             cache_id,
             err,
         )
