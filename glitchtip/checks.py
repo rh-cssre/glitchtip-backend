@@ -84,10 +84,37 @@ def check_org_field(model: type[Model]) -> Error | None:
     return None
 
 
+def check_undeleted_through(model: type[Model]) -> Error | None:
+    """Confirm each ``undeleted_through`` path reaches a soft-deletable parent.
+
+    ``OrgScope.apply`` filters ``<path>__is_deleted``, so a typo would fail on
+    the first gated request instead of here.
+    """
+    for path in model.undeleted_through:
+        try:
+            Query(model).names_to_path(
+                [*path.split(LOOKUP_SEP), "is_deleted"],
+                model._meta,
+                allow_many=False,
+                fail_on_missing=True,
+            )
+        except (FieldError, MultiJoin) as err:
+            return Error(
+                f"{model._meta.label}.undeleted_through has {path!r}, which is "
+                f"not a forward foreign key path to a soft-deletable model: {err}",
+                hint="Each path must follow forward foreign keys to a model "
+                "with an is_deleted field, such as 'project'.",
+                obj=model,
+                id="glitchtip.E004",
+            )
+    return None
+
+
 @register(Tags.models)
 def check_org_scoped_models(app_configs, **kwargs) -> list[Error]:
     return [
         error
         for model in registered_models(app_configs)
-        if (error := check_org_field(model))
+        for check in (check_org_field, check_undeleted_through)
+        if (error := check(model))
     ]

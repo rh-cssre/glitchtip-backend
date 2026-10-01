@@ -29,6 +29,9 @@ async def resolve_org_id(segment: str) -> int:
     """
     # isdigit() alone accepts non-ASCII digits such as "²", which int() rejects.
     if segment.isascii() and segment.isdigit():
+        # One spelling per id: a leading zero (or "0" itself) names no org.
+        if segment[0] == "0" or len(segment) > len(str(MAX_ORG_ID)):
+            return NO_ORG_ID
         org_id = int(segment)
         return org_id if org_id <= MAX_ORG_ID else NO_ORG_ID
     org_id = await (
@@ -92,7 +95,8 @@ class OrgScope:
                 "an OrgScopedModel, so the gate cannot isolate it. Declare "
                 "org_field on it via OrgScopedModel."
             )
-        return qs.filter(self.gate(), **{model.org_field: self.org_id})
+        live = {f"{path}__is_deleted": False for path in model.undeleted_through}
+        return qs.filter(self.gate(), **{model.org_field: self.org_id}, **live)
 
     async def explain_miss(self) -> HttpError | None:
         membership_role = await (
@@ -206,11 +210,23 @@ def org_scoped(scopes: list[Scopes], model: type[OrgScopedModel]):
 
 
 def org_scoped_list(scopes: list[Scopes], model: type[OrgScopedModel]):
-    """``org_scoped`` with pagination folded in for list routes."""
+    """``org_scoped`` with pagination folded in for list routes.
+
+    ``paginate`` evaluates whatever the view returns, not ``qs``, so the
+    returned queryset is gated again; a view returning ``Model.objects``
+    still can't leak another org's rows.
+    """
     gate = org_scoped(scopes, model)
 
     def decorator(view):
-        return paginate(gate(view))
+        @wraps(view)  # org_scoped reads qs/organization_slug off this signature
+        async def regated(request: OrgScopedHttpRequest, **kwargs):
+            result = await view(request, **kwargs)
+            if not isinstance(result, QuerySet):
+                raise TypeError(f"{view.__qualname__} must return a QuerySet")
+            return request.org_scope.apply(result)
+
+        return paginate(gate(regated))
 
     return decorator
 

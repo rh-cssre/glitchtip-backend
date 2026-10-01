@@ -18,6 +18,7 @@ class ProjectAlert(OrgScopedModel, CreatedModel):
     """
 
     org_field = "project__organization_id"
+    undeleted_through = ("project",)
 
     name = models.CharField(max_length=255, blank=True)
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)

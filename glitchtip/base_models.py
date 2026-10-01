@@ -16,6 +16,8 @@ class OrgScopedModel:
     """
 
     org_field: str
+    # FK paths to soft-deleted parents; a row under a deleted one is hidden.
+    undeleted_through: tuple[str, ...] = ()
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)

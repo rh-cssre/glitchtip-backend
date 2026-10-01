@@ -1,5 +1,8 @@
 """The org gate, tested through the alerts routes, its only consumer."""
 
+from types import SimpleNamespace
+
+from asgiref.sync import async_to_sync
 from django.apps import apps
 from django.core.exceptions import ImproperlyConfigured
 from django.db import models
@@ -18,12 +21,14 @@ from glitchtip.api.permissions import (
     OrgScope,
     _resolve_roles,
     org_scoped,
+    org_scoped_list,
     resolve_org_id,
 )
 from glitchtip.base_models import ORG_SCOPED_MODELS, OrgScopedModel
 from glitchtip.checks import (
     check_org_field,
     check_org_scoped_models,
+    check_undeleted_through,
     registered_models,
 )
 from glitchtip.test_utils import generators  # noqa: F401
@@ -120,6 +125,19 @@ class OrgScopedModelCheckTestCase(SimpleTestCase):
 
         error = check_org_field(Bucket)
         self.assertEqual(error.id, "glitchtip.E003")
+
+    def test_an_undeleted_through_path_without_is_deleted_is_rejected(self):
+        class NoSoftDelete(OrgScopedModel, models.Model):
+            org_field = "project__organization_id"
+            undeleted_through = ("project__platform",)
+            project = models.ForeignKey(Project, on_delete=models.CASCADE)
+
+            class Meta:
+                app_label = "alerts"
+
+        error = check_undeleted_through(NoSoftDelete)
+        self.assertEqual(error.id, "glitchtip.E004")
+        self.assertIn("project__platform", error.msg)
 
     def test_an_abstract_base_is_not_checked(self):
         # Registered, but it has no table to check.
@@ -323,6 +341,33 @@ class OrgScopedGateTestCase(TestCase):
                 self.assertEqual(res.status_code, 200)
                 self.assertEqual([row["id"] for row in res.json()], [alert.id])
 
+    def test_list_gates_the_queryset_the_view_returns(self):
+        # A view that ignores qs must still only see the path's org.
+        @org_scoped_list(["project:read"], ProjectAlert)
+        async def leaky(request, qs, organization_slug: str):
+            return ProjectAlert.objects.all()
+
+        request = SimpleNamespace(
+            auth=SimpleNamespace(auth_type="session", user_id=self.user.id)
+        )
+
+        async def run():
+            # paginate's @wraps leaves the gated view on __wrapped__.
+            result = await leaky.__wrapped__(request, organization_slug="orga")
+            return [alert.id async for alert in result]
+
+        self.assertEqual(async_to_sync(run)(), [self.alert.id])
+
+    def test_an_alert_under_a_deleted_project_is_unreachable(self):
+        self.set_role(OrganizationUserRole.ADMIN)
+        Project.objects.filter(pk=self.project.pk).update(is_deleted=True)
+        res = self.client.get(self.list_url())
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json(), [])
+        res = self.client.delete(self.delete_url())
+        self.assertEqual(res.status_code, 404)
+        self.assertTrue(ProjectAlert.objects.filter(id=self.alert.id).exists())
+
     # Path segments naming no reachable org
 
     def test_a_segment_naming_no_org_is_the_membership_404(self):
@@ -340,8 +385,12 @@ class OrgScopedGateTestCase(TestCase):
             ("deleted org by slug", "gone"),
             ("unused id", deleted.id + 1000),
             ("unknown slug", "no-such-org"),
-            # int4 overflow: the driver raises instead of missing.
+            # Past int4: refused before any query.
             ("id past int4", str(2**31)),
+            # The user owns self.org, so only the leading zero stops them.
+            ("leading zero", f"0{self.org.id}"),
+            # int() refuses strings past 4300 digits.
+            ("huge id", "1" * 5000),
         ]
         for label, segment in cases:
             with self.subTest(label):
