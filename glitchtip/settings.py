@@ -230,23 +230,46 @@ GLITCHTIP_UPTIME_RETENTION_DAYS = env.int(
 GLITCHTIP_FILE_RETENTION_DAYS = env.int(
     "GLITCHTIP_FILE_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
 )
+
+
+def _megabytes_setting(name: str, default: int) -> int:
+    """A whole number of MB, 0 or more. Anything else (blank, "1.5", a
+    negative number) warns and falls back to the default, so a typo never
+    stops the server from starting."""
+    raw = env.str(name, default="").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+        if value < 0:
+            raise ValueError
+    except ValueError:
+        warnings.warn(
+            f"{name}={raw!r} is not a whole number of MB; using {default}.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return default
+    return value
+
+
 # Symbolication caches (apps/symbolication). Internal knobs, deliberately
 # undocumented: the defaults suit every install.
 #
 # In-process LRU of loaded caches, in MB; 0 disables it.
-GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB = env.int(
-    "GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB", default=32
+GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB = _megabytes_setting(
+    "GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB", 32
 )
 # Optional node-local directory for memory-mapped copies; empty disables it.
 GLITCHTIP_SYMBOLICATION_DISK_CACHE_DIR = env.str(
     "GLITCHTIP_SYMBOLICATION_DISK_CACHE_DIR", default=""
 )
-GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB = env.int(
-    "GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB", default=1024
+GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB = _megabytes_setting(
+    "GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB", 1024
 )
 # Peak memory one cache build may use; each kind's input cap derives from it.
-GLITCHTIP_SYMBOLICATION_BUILD_MEMORY_MB = env.int(
-    "GLITCHTIP_SYMBOLICATION_BUILD_MEMORY_MB", default=700
+GLITCHTIP_SYMBOLICATION_BUILD_MEMORY_MB = _megabytes_setting(
+    "GLITCHTIP_SYMBOLICATION_BUILD_MEMORY_MB", 700
 )
 GLITCHTIP_LOG_RETENTION_DAYS = env.int(
     "GLITCHTIP_LOG_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
