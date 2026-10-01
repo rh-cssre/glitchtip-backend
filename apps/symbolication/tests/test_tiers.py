@@ -3,6 +3,7 @@
 import asyncio
 import errno
 import io
+import logging
 import os
 import tempfile
 import threading
@@ -140,6 +141,10 @@ class DiskTierTests(SimpleTestCase):
         self.addCleanup(self.directory.cleanup)
         os.chmod(self.directory.name, 0o700)
         self.tier = store.DiskTier()
+        # Small files and a small tier keep these tests fast.
+        patch = mock.patch.object(store.DiskTier, "MIN_CAP_MB", 1)
+        patch.start()
+        self.addCleanup(patch.stop)
         override = override_settings(
             GLITCHTIP_SYMBOLICATION_DISK_CACHE_DIR=self.directory.name,
             GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB=1,
@@ -205,6 +210,23 @@ class DiskTierTests(SimpleTestCase):
         self.publish("a", 500_000)
         self.assertTrue(os.path.exists(foreign))
         self.assertTrue(os.path.exists(in_progress))
+
+    def test_a_tier_too_small_is_off_and_said_once(self):
+        # settings.py disables WARNING-and-below while testing; lift it.
+        previous = logging.root.manager.disable
+        logging.disable(logging.NOTSET)
+        self.addCleanup(logging.disable, previous)
+        for cap_mb in (0, -5):
+            with (
+                self.subTest(cap_mb=cap_mb),
+                override_settings(GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB=cap_mb),
+                self.assertLogs("apps.symbolication.store", "WARNING") as logs,
+            ):
+                for _ in range(3):
+                    self.assertIsNone(self.tier.directory())
+                    self.assertIsNone(self.publish("a", 10))
+                self.assertEqual(len(logs.records), 1)
+        self.assertEqual(self.files(), [])
 
     def test_refuses_a_directory_writable_by_others(self):
         os.chmod(self.directory.name, 0o777)

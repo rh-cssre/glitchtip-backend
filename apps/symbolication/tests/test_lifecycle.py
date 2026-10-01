@@ -862,6 +862,9 @@ class DiskTierSafetyTests(CacheTestCase):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.directory = directory.name
+        patch = mock.patch.object(store.DiskTier, "MIN_CAP_MB", 0)
+        patch.start()
+        self.addCleanup(patch.stop)
         override = override_settings(
             GLITCHTIP_SYMBOLICATION_DISK_CACHE_DIR=self.directory,
             GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB=1,

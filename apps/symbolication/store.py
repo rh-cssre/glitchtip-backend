@@ -393,6 +393,8 @@ class DiskTier:
     # A cache over this share of the cap is not kept: publishing it would
     # evict most of the tier, and one over the cap would be evicted at once.
     MAX_ENTRY_SHARE = 0.5
+    # A tier smaller than this would hold nothing worth keeping: it is off.
+    MIN_CAP_MB = 16
 
     def __init__(self):
         # Whether each configured directory is usable, decided once.
@@ -411,15 +413,26 @@ class DiskTier:
         directory = settings.GLITCHTIP_SYMBOLICATION_DISK_CACHE_DIR
         if not directory:
             return None
-        usable = self._checked.get(directory)
+        cap = self._cap()
+        usable = self._checked.get((directory, cap))
         if usable is None:
-            usable = self._check(directory)
-            self._checked[directory] = usable
+            usable = self._check_cap(cap) and self._check(directory)
+            self._checked[(directory, cap)] = usable
         if not usable:
             return None
         if self._paused_until.get(directory, 0) > time.monotonic():
             return None
         return directory
+
+    def _check_cap(self, cap: int) -> bool:
+        if cap < self.MIN_CAP_MB * MB:
+            logger.warning(
+                "GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB is below %d; the "
+                "symbolication disk cache is off.",
+                self.MIN_CAP_MB,
+            )
+            return False
+        return True
 
     @staticmethod
     def _check(directory: str) -> bool:
