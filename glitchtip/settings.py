@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/dev/ref/settings/
 import logging
 import os
 import sys
+import tempfile
 import warnings
 from datetime import timedelta
 
@@ -1347,11 +1348,29 @@ AZURE_URL_EXPIRATION_SECS = env("AZURE_URL_EXPIRATION_SECS")
 GS_BUCKET_NAME = env("GS_BUCKET_NAME")
 GS_PROJECT_ID = env("GS_PROJECT_ID")
 
-# django-storages keeps a whole object in memory when it is opened, unless
-# these cap the in-memory part (beyond it, the object spools to a temporary
-# file). Uploads and symbolication caches can be tens of MB.
-AWS_S3_MAX_MEMORY_SIZE = 4 * 1024 * 1024
-GS_MAX_MEMORY_SIZE = 4 * 1024 * 1024
+
+def _storage_spool_bytes() -> int:
+    """How much of an opened S3 or GCS object django-storages keeps in
+    memory before spooling the rest to a temporary file: 4 MB, since
+    uploads and symbolication caches can be tens of MB. Without a writable
+    temporary directory (a read-only root) spooling would fail every large
+    read, so then 0: django-storages' default, all in memory."""
+    try:
+        with tempfile.NamedTemporaryFile():
+            pass
+    except OSError:
+        warnings.warn(
+            "No writable temporary directory: objects read from S3 or GCS "
+            "storage are kept in memory whole. Mount one (or set TMPDIR) to "
+            "spool large objects to disk instead.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return 0
+    return 4 * 1024 * 1024
+
+
+AWS_S3_MAX_MEMORY_SIZE = GS_MAX_MEMORY_SIZE = _storage_spool_bytes()
 
 if AWS_S3_ENDPOINT_URL or "s3" in str(STORAGES["default"]["BACKEND"]).lower():
     # One download thread per transfer, not boto3's pool of ten: downloads

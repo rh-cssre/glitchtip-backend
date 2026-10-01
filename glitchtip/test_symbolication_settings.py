@@ -3,7 +3,8 @@ from unittest import mock
 
 from django.test import SimpleTestCase
 
-from glitchtip.settings import _megabytes_setting
+from glitchtip import settings as settings_module
+from glitchtip.settings import _megabytes_setting, _storage_spool_bytes
 
 NAME = "GLITCHTIP_SYMBOLICATION_TEST_MB"
 
@@ -33,3 +34,20 @@ class MegabytesSettingTests(SimpleTestCase):
                 self.assertWarnsRegex(RuntimeWarning, NAME),
             ):
                 self.assertEqual(self.parse(raw), 700)
+
+
+class StorageSpoolTests(SimpleTestCase):
+    def test_spools_past_4_mb_with_a_temporary_directory(self):
+        self.assertEqual(_storage_spool_bytes(), 4 * 1024 * 1024)
+
+    def test_keeps_objects_in_memory_without_one(self):
+        """A read-only root: spooling would fail every large read."""
+        with (
+            mock.patch.object(
+                settings_module.tempfile,
+                "NamedTemporaryFile",
+                side_effect=OSError(30, "Read-only file system"),
+            ),
+            self.assertWarnsRegex(RuntimeWarning, "temporary directory"),
+        ):
+            self.assertEqual(_storage_spool_bytes(), 0)
