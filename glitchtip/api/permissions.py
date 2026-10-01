@@ -10,7 +10,7 @@ from ninja.pagination import paginate
 
 from apps.organizations_ext.constants import ROLES, Scopes
 from apps.organizations_ext.models import Organization, OrganizationUser
-from glitchtip.base_models import OrgScopedModel
+from glitchtip.base_models import OrgScopedModel, SoftDeleteModel
 
 from .authentication import AuthHttpRequest
 
@@ -96,6 +96,10 @@ class OrgScope:
                 "org_field on it via OrgScopedModel."
             )
         live = {f"{path}__is_deleted": False for path in model.undeleted_through}
+        if issubclass(model, SoftDeleteModel):
+            # Here, not in a manager: a list view's returned queryset is
+            # gated again, and it may not have come from undeleted_objects.
+            live["is_deleted"] = False
         return qs.filter(self.gate(), **{model.org_field: self.org_id}, **live)
 
     async def explain_miss(self) -> HttpError | None:
@@ -159,8 +163,6 @@ def org_scoped(scopes: list[Scopes], model: type[OrgScopedModel]):
             "so the gate cannot isolate it. Declare org_field on it via "
             "OrgScopedModel."
         )
-    # A SoftDeleteModel's default manager can include deleted rows (Issue's does).
-    manager = getattr(model, "undeleted_objects", model._default_manager)
 
     def decorator(view):
         if getattr(view, "_ninja_is_paginated", False):
@@ -186,7 +188,7 @@ def org_scoped(scopes: list[Scopes], model: type[OrgScopedModel]):
         @wraps(view)  # ninja reads the signature for path params
         async def gated(request, **kwargs):
             scope = await OrgScope.from_request(request, required, roles, kwargs)
-            qs = scope.apply(manager.all())
+            qs = scope.apply(model._default_manager.all())
             try:
                 return await view(request, qs=qs, **kwargs)
             except Http404:

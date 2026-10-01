@@ -51,6 +51,24 @@ class OrgScopedModelDeclarationTestCase(SimpleTestCase):
                 )
             self.assertIn("org_field", str(ctx.exception))
 
+    def test_undeleted_through_that_is_not_a_tuple_of_paths_is_rejected(self):
+        for value in ["project", ["project"], ("",)]:
+            with (
+                self.subTest(value=value),
+                self.assertRaises(ImproperlyConfigured) as ctx,
+            ):
+                type(
+                    "BadThrough",
+                    (OrgScopedModel, models.Model),
+                    {
+                        "__module__": __name__,
+                        "Meta": type("Meta", (), {"app_label": "alerts"}),
+                        "org_field": "project__organization_id",
+                        "undeleted_through": value,
+                    },
+                )
+            self.assertIn("undeleted_through", str(ctx.exception))
+
     def test_org_field_that_joins_organization_is_rejected(self):
         # Both compile the same; _id keeps the path off organization's columns.
         with self.assertRaises(ImproperlyConfigured) as ctx:
@@ -342,21 +360,33 @@ class OrgScopedGateTestCase(TestCase):
                 self.assertEqual([row["id"] for row in res.json()], [alert.id])
 
     def test_list_gates_the_queryset_the_view_returns(self):
-        # A view that ignores qs must still only see the path's org.
+        # A view that ignores qs must still only see the path org's live rows.
+        baker.make("projects.Project", organization=self.org, is_deleted=True)
+
         @org_scoped_list(["project:read"], ProjectAlert)
-        async def leaky(request, qs, organization_slug: str):
+        async def leaky_alerts(request, qs, organization_slug: str):
             return ProjectAlert.objects.all()
+
+        @org_scoped_list(["project:read"], Project)
+        async def leaky_projects(request, qs, organization_slug: str):
+            return Project.objects.all()
 
         request = SimpleNamespace(
             auth=SimpleNamespace(auth_type="session", user_id=self.user.id)
         )
 
-        async def run():
+        async def run(view):
             # paginate's @wraps leaves the gated view on __wrapped__.
-            result = await leaky.__wrapped__(request, organization_slug="orga")
-            return [alert.id async for alert in result]
+            result = await view.__wrapped__(request, organization_slug="orga")
+            return [row.id async for row in result]
 
-        self.assertEqual(async_to_sync(run)(), [self.alert.id])
+        cases = [
+            (leaky_alerts, [self.alert.id]),
+            (leaky_projects, [self.project.id]),
+        ]
+        for view, expected in cases:
+            with self.subTest(view.__name__):
+                self.assertEqual(async_to_sync(run)(view), expected)
 
     def test_an_alert_under_a_deleted_project_is_unreachable(self):
         self.set_role(OrganizationUserRole.ADMIN)
