@@ -277,6 +277,9 @@ class OrganizationThrottleCheckTestCase(TestCase):
         self.organization.refresh_from_db()
         self.assertEqual(self.organization.event_throttle_rate, 10)  # 15 > 10
 
+    # Frozen so the period starts on the 31st: month arithmetic clamps there,
+    # and cycles must be counted from the period start, not chained.
+    @freeze_time("2026-10-01 15:50:00")
     def test_update_subscription_cycles(self):
         """Verify that annual plans roll over their virtual month cycle"""
         self.price.interval = "year"
@@ -303,7 +306,7 @@ class OrganizationThrottleCheckTestCase(TestCase):
         self.subscription.refresh_from_db()
         # Should have advanced to month 3 (covering now)
         expected_start = period_start + relativedelta(months=2)
-        expected_end = expected_start + relativedelta(months=1)
+        expected_end = period_start + relativedelta(months=3)
         self.assertEqual(self.subscription.subscription_cycle_start, expected_start)
         self.assertEqual(self.subscription.subscription_cycle_end, expected_end)
         self.assertLessEqual(self.subscription.subscription_cycle_start, now)
