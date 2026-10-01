@@ -229,7 +229,7 @@
                     "code_file": "/usr/bin/test_app",
                     "code_id": null,
                     "debug_checksum": null,
-                    "debug_id": "01020304-0506-0708-090a-0b0c0d0e0f10",
+                    "debug_id": "01020304-0506-0708-090a-0b0c0d0e0f10-1",
                     "image_addr": "0x400000",
                     "image_size": 65536,
                     "type": "elf"
@@ -285,6 +285,7 @@
                           "vars": null
                         }
                       ],
+                      "instruction_addr_adjustment": null,
                       "registers": null
                     },
                     "thread_id": null,
@@ -351,6 +352,7 @@
                           "vars": null
                         }
                       ],
+                      "instruction_addr_adjustment": null,
                       "registers": null
                     }
                   }
@@ -512,6 +514,7 @@
                           "vars": null
                         }
                       ],
+                      "instruction_addr_adjustment": null,
                       "registers": null
                     },
                     "thread_id": null,
@@ -661,6 +664,7 @@
                           "vars": null
                         }
                       ],
+                      "instruction_addr_adjustment": null,
                       "registers": null
                     },
                     "thread_id": null,
@@ -810,6 +814,7 @@
                           "vars": null
                         }
                       ],
+                      "instruction_addr_adjustment": null,
                       "registers": null
                     },
                     "thread_id": null,

@@ -7,3 +7,5 @@ env
 */test_data
 */*/test_data
 **/.git
+uploads/*
+!uploads/.gitignore

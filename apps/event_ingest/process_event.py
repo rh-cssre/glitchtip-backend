@@ -19,7 +19,7 @@ from psycopg.types.json import Jsonb
 from user_agents import parse
 
 from apps.alerts.constants import ISSUE_IDS_KEY
-from apps.difs.tasks import event_difs_resolve_stacktrace
+from apps.difs.tasks import resolve_event_stacktraces
 from apps.issue_events.constants import MAX_TAG_LENGTH, EventStatus, LogLevel
 from apps.issue_events.models import IssueEvent, IssueEventType
 from apps.performance.histogram import (
@@ -39,6 +39,7 @@ from apps.shared.raw_sql import (
     is_unique_violation,
 )
 from apps.sourcecode.models import DebugSymbolBundle
+from apps.symbolication.store import BatchLookup, LookupContext
 from glitchtip.cold_storage import is_duckdb_available
 from glitchtip.partition_manager import UUID7Helper
 from sentry.culprit import generate_culprit
@@ -840,7 +841,7 @@ async def process_issue_events(
             )
             | Q(debug_id__in={image.debug_id for image in sourcemap_images})
         )
-        .select_related("file", "sourcemap_file", "release")
+        .select_related("file__blob", "sourcemap_file__blob", "release")
     )
     # Materialize once — iterated multiple times below
     debug_files = [df async for df in debug_files_qs]
@@ -859,8 +860,16 @@ async def process_issue_events(
 
     # Collected/calculated event data while processing
     processing_events: list[ProcessingEvent] = []
+    # The batch's wait budget for symbolication caches, and the caches it
+    # has given up on, so no later event of the batch waits for them again.
+    batch_lookup = BatchLookup()
     for ingest_event in messages:
         event = ingest_event.payload
+        # Each event also has its own wait budget, within the batch's.
+        context = LookupContext.for_event(
+            organization_id=ingest_event.organization_id,
+            batch=batch_lookup,
+        )
         hydrate_stacktrace(event)
         event.contexts = generate_contexts(event)
         event_tags = generate_tags(event)
@@ -878,34 +887,36 @@ async def process_issue_events(
             None,
         )
         if event.platform in ("javascript", "node"):
-            event_debug_files = [
-                debug_file
-                for debug_file in debug_files
-                if debug_file.organization_id == ingest_event.organization_id
-            ]
-
-            # Assign code_file to file headers
-            if event.debug_meta:
-                for sourcemap_image in [
-                    image
-                    for image in event.debug_meta.images
-                    if isinstance(image, SourceMapImage)
-                ]:
-                    for debug_file in event_debug_files:
-                        if sourcemap_image.debug_id == debug_file.debug_id:
-                            debug_file.data["code_file"] = sourcemap_image.code_file
-
+            # This event's own bundles: those its debug_meta names by debug
+            # id, and its release's. The batch-wide list is never modified,
+            # so one event's debug_meta cannot leak into another's lookups.
+            event_debug_ids = {
+                image.debug_id
+                for image in (event.debug_meta.images if event.debug_meta else [])
+                if isinstance(image, SourceMapImage)
+            }
             processor = JavascriptEventProcessor(
                 release_id,
                 event,
                 [
                     debug_file
-                    for debug_file in event_debug_files
-                    if debug_file.release_id == release_id
-                    or debug_file.data.get("code_file")
+                    for debug_file in debug_files
+                    if debug_file.organization_id == ingest_event.organization_id
+                    and (
+                        (release_id is not None and debug_file.release_id == release_id)
+                        or debug_file.debug_id in event_debug_ids
+                    )
                 ],
+                context,
             )
-            await sync_to_async(processor.transform)()
+            try:
+                await processor.transform()
+            except Exception as err:
+                # Symbolication must never fail ingest.
+                logger.warning(
+                    "JavaScript symbolication failed (%s); storing the event as sent.",
+                    type(err).__name__,
+                )
         elif isinstance(event, ErrorIssueEventSchema) and event.exception:
             # Projects may not appear in projects_with_data (which is built
             # from release/environment joins), so check has_difs from the
@@ -928,9 +939,16 @@ async def process_issue_events(
                 )
                 _has_difs = exists_rows[0][0]
             if _has_difs:
-                await sync_to_async(event_difs_resolve_stacktrace)(
-                    event, ingest_event.project_id
-                )
+                try:
+                    await resolve_event_stacktraces(
+                        event, ingest_event.project_id, context
+                    )
+                except Exception as err:
+                    # Symbolication must never fail ingest.
+                    logger.warning(
+                        "Native symbolication failed (%s); storing the event as sent.",
+                        type(err).__name__,
+                    )
 
         event_data = event.model_dump(
             mode="json",

@@ -172,6 +172,9 @@ e2e:
 lint:
   image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.14-$BASE_LAYER
   script:
+    # The lockfile must match pyproject.toml: `uv sync --frozen` (as the
+    # image build runs it) would otherwise quietly install a stale lock.
+    - uv lock --check
     # Install linters from the lockfile via `lint` dependency group
     - uv sync --only-group lint --frozen --no-install-project
     - uv run --no-sync ruff check glitchtip/ apps/

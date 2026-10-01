@@ -7,6 +7,7 @@ import zipfile
 from hashlib import sha1
 from unittest import mock
 
+from asgiref.sync import async_to_sync
 from django.core.files import File as DjangoFile
 from django.db.utils import IntegrityError
 from django.tasks import task_backends
@@ -16,7 +17,8 @@ from django.utils import timezone
 from gt_rust.symbolic import Archive, normalize_debug_id
 from model_bakery import baker
 
-from apps.difs.tasks import event_difs_resolve_stacktrace
+from apps.difs.stacktrace_processor import bundle_member_name
+from apps.difs.tasks import resolve_event_stacktraces
 from apps.event_ingest.tests.utils import generate_event
 from apps.files.models import FileBlob
 from apps.issue_events.constants import EventStatus, LogLevel
@@ -729,7 +731,7 @@ struct ContentView: View {
 
         manifest = {
             "files": {
-                f"files{file_path}": {
+                bundle_member_name(file_path): {
                     "type": "source",
                     "path": file_path,
                 }
@@ -743,7 +745,7 @@ struct ContentView: View {
         in_memory_buffer = tempfile.NamedTemporaryFile(delete=False)
         with zipfile.ZipFile(in_memory_buffer, mode="w") as zipf:
             zipf.writestr("manifest.json", json.dumps(manifest))
-            zipf.writestr(f"files{file_path}", source_code)
+            zipf.writestr(bundle_member_name(file_path), source_code)
 
         in_memory_buffer.seek(0)
         content = in_memory_buffer.read()
@@ -833,11 +835,11 @@ struct ContentView: View {
 
     def test_jvm_event_with_source_context(self):
         """
-        Test that event_difs_resolve_stacktrace adds source context to JVM frames.
+        Test that resolve_event_stacktraces adds source context to JVM frames.
         Calls the DIF resolver directly to test the JVM source context wiring
         without depending on the pipeline's has_difs gating logic.
         """
-        from apps.difs.tasks import event_difs_resolve_stacktrace
+        from apps.difs.tasks import resolve_event_stacktraces
 
         debug_id = "b1c2d3e4-f5a6-7890-abcd-ef1234567890"
 
@@ -913,7 +915,7 @@ struct ContentView: View {
         event_schema = ErrorIssueEventSchema(**payload)
 
         # Call the DIF resolver directly
-        event_difs_resolve_stacktrace(event_schema, self.project.id)
+        async_to_sync(resolve_event_stacktraces)(event_schema, self.project.id)
 
         # Verify source context was added to the frame
         frame = event_schema.exception.values[0].stacktrace.frames[0]
@@ -1663,7 +1665,7 @@ class IssueEventIosContextTestCase(EventIngestTestCase):
         payload = self.get_json_data("events/test_data/ios_event/event.json")
         event_schema = ErrorIssueEventSchema(**payload)
 
-        event_difs_resolve_stacktrace(event_schema, self.project.id)
+        async_to_sync(resolve_event_stacktraces)(event_schema, self.project.id)
 
         has_pre_context_and_post_context = False
 

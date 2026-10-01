@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import logging
 import re
@@ -8,6 +9,8 @@ from urllib.parse import urlsplit
 from gt_rust.symbolic import SourceMapCache
 
 from apps.sourcecode.models import DebugSymbolBundle
+from apps.symbolication.models import CacheKind
+from apps.symbolication.store import CacheSource, LookupContext, get_cache
 
 if TYPE_CHECKING:
     from apps.shared.schema.exception import EventException, StackTraceFrame
@@ -70,14 +73,16 @@ class JavascriptEventProcessor:
         release_id: int,
         data: "IssueEventSchema",
         debug_bundles: list[DebugSymbolBundle],
+        context: LookupContext | None = None,
     ):
         self.release_id = release_id
         self.data = data
         self.debug_bundles = debug_bundles
+        self.context = context
         # Parsed sourcemaps memoized for the lifetime of this processor, i.e.
         # for one event. A new processor is created per event, so this never
         # outlives the event and needs no eviction or staleness handling.
-        self._sourcemap_caches: dict[tuple[int, int], SourceMapCache] = {}
+        self._sourcemap_caches: dict[tuple[int, int], SourceMapCache | None] = {}
 
     def get_stacktrace_exceptions(self) -> list["EventException"]:
         data = self.data
@@ -97,30 +102,35 @@ class JavascriptEventProcessor:
             if frame is not None and frame.lineno is not None
         ]
 
-    def get_sourcemap_cache(self, minified_source, map_file) -> SourceMapCache:
-        # SourceMapCache.from_bytes() parses the whole minified source and
-        # sourcemap, which is costly for large bundles. A single event's frames
-        # mostly share one bundle, so memoize per (minified file id, sourcemap
-        # file id) pair to parse each bundle at most once per event rather than
-        # once per frame.
+    async def get_sourcemap_cache(self, minified_source, map_file):
+        """The stored lookup cache for this minified file and sourcemap, or
+        None while it is unavailable. Memoized for the event, so frames that
+        share a bundle ask the cache store once."""
         key = (minified_source.id, map_file.id)
-        cache = self._sourcemap_caches.get(key)
-        if cache is None:
-            minified_source.blob.blob.seek(0)
-            map_file.blob.blob.seek(0)
-            cache = SourceMapCache.from_bytes(
-                minified_source.blob.blob.read(),
-                map_file.blob.blob.read(),
+        if key in self._sourcemap_caches:
+            return self._sourcemap_caches[key]
+        cache = None
+        if minified_source.blob_id and map_file.blob_id:
+            cache = await get_cache(
+                CacheSource(
+                    kind=CacheKind.SOURCEMAP,
+                    cache_key=f"{minified_source.blob.checksum}:{map_file.blob.checksum}",
+                    source_blob_id=minified_source.blob_id,
+                    secondary_blob_id=map_file.blob_id,
+                ),
+                self.context,
             )
-            self._sourcemap_caches[key] = cache
+        self._sourcemap_caches[key] = cache
         return cache
 
-    def lookup_token(self, frame, map_file, minified_source):
+    async def lookup_token(self, frame, map_file, minified_source):
         # Required to determine source
         if not frame.abs_path or not frame.lineno or not frame.colno:
             return None
 
-        cache = self.get_sourcemap_cache(minified_source, map_file)
+        cache = await self.get_sourcemap_cache(minified_source, map_file)
+        if cache is None:
+            return None
         # Both positions are 1-based, as the SDK sends them; the lookup
         # converts to 0-based itself.
         return cache.lookup(
@@ -166,7 +176,7 @@ class JavascriptEventProcessor:
             elif filename.startswith("./"):
                 in_app = True
             # We want to explicitly generate a webpack module name
-            frame["module"] = generate_module(filename)
+            frame.module = generate_module(filename)
         elif "/node_modules/" in abs_path:
             in_app = False
 
@@ -186,10 +196,10 @@ class JavascriptEventProcessor:
 
         # Source context — built into SourceMapCacheToken
         if token.context_line is not None:
-            frame.context_line = token.context_line.rstrip("\n")
-            frame.pre_context = [line.rstrip("\n") for line in token.pre_context]
+            frame.context_line = token.context_line.rstrip("\r\n")
+            frame.pre_context = [line.rstrip("\r\n") for line in token.pre_context]
             frame.post_context = [
-                line.rstrip("\n") for line in token.post_context if line != ""
+                line.rstrip("\r\n") for line in token.post_context if line != ""
             ]
 
     def build_debug_id_map(self) -> dict[str, str]:
@@ -204,26 +214,25 @@ class JavascriptEventProcessor:
     def find_source_files(self, frame, debug_id_map):
         minified_filename = frame.abs_path.split("/")[-1] if frame.abs_path else ""
         debug_id = debug_id_map.get(minified_filename)
+        # A debug id identifies the bundle exactly: it wins over any file name
+        # match, wherever the bundles fall in the list. One uploaded without
+        # its sourcemap cannot be used, though, so then fall back to names.
+        if debug_id:
+            for debug_bundle in self.debug_bundles:
+                if (
+                    debug_bundle.debug_id
+                    and debug_bundle.sourcemap_file
+                    and str(debug_id) == str(debug_bundle.debug_id)
+                ):
+                    return debug_bundle.file, debug_bundle.sourcemap_file
+
+        # Fallback to matching by filename
         for debug_bundle in self.debug_bundles:
-            # Match by debug_id if both have it
-            if (
-                debug_id
-                and debug_bundle.debug_id
-                and str(debug_id) == str(debug_bundle.debug_id)
-            ):
-                return debug_bundle.file, debug_bundle.sourcemap_file
-
-            # Fallback to matching by filename
-            file_name = debug_bundle.file.name
-            code_file = debug_bundle.data.get("code_file")
-            if code_file:  # Get name, not full path
-                code_file = code_file.split("/")[-1]
-
-            if minified_filename in [file_name, code_file]:
+            if minified_filename == debug_bundle.file.name:
                 return debug_bundle.file, debug_bundle.sourcemap_file
         return None
 
-    def remap_exception(self, exception: "EventException", debug_id_map):
+    async def remap_exception(self, exception: "EventException", debug_id_map):
         raw_stacktrace = None
         for frame in self.get_valid_frames(exception):
             source_files = self.find_source_files(frame, debug_id_map)
@@ -234,7 +243,7 @@ class JavascriptEventProcessor:
             if not map_file:
                 continue
 
-            token = self.lookup_token(frame, map_file, minified_source)
+            token = await self.lookup_token(frame, map_file, minified_source)
             if token is None:
                 continue
 
@@ -247,12 +256,24 @@ class JavascriptEventProcessor:
         if raw_stacktrace is not None:
             exception.raw_stacktrace = raw_stacktrace
 
-    def transform(self):
+    async def transform(self):
         exceptions = self.get_stacktrace_exceptions()
         if not exceptions or not self.debug_bundles:
             return
 
         # Map minified filenames to debug_ids from debug_meta
         debug_id_map = self.build_debug_id_map()
+        # Load every bundle the event's frames need at once, so their waits
+        # overlap instead of adding up.
+        needed = {}
         for exception in exceptions:
-            self.remap_exception(exception, debug_id_map)
+            for frame in self.get_valid_frames(exception):
+                source_files = self.find_source_files(frame, debug_id_map)
+                if source_files is not None and source_files[1]:
+                    minified_source, map_file = source_files
+                    needed[(minified_source.id, map_file.id)] = source_files
+        await asyncio.gather(
+            *(self.get_sourcemap_cache(*files) for files in needed.values())
+        )
+        for exception in exceptions:
+            await self.remap_exception(exception, debug_id_map)

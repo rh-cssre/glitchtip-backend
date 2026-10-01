@@ -103,6 +103,9 @@ class StackTraceFrame(LaxIngestSchema):
 class StackTrace(LaxIngestSchema):
     frames: list[StackTraceFrame]
     registers: dict[str, str] | None = None
+    # How far the SDK already moved frame addresses back from return
+    # addresses: "auto", "all", "all_but_first" or "none".
+    instruction_addr_adjustment: str | None = None
 
 
 class EventException(LaxIngestSchema):

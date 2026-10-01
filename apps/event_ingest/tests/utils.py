@@ -12,6 +12,7 @@ from django.utils import timezone
 from model_bakery import baker
 
 from apps.organizations_ext.constants import OrganizationUserRole
+from apps.symbolication.store import clear_process_caches
 from glitchtip.async_db import recycle_async_connections
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
@@ -318,6 +319,8 @@ class EventIngestTestCase(GlitchTipTestCaseMixin, TransactionTestCase):
             if hasattr(backend, "pending_batches"):
                 backend.pending_batches.clear()
 
+        # Loaded symbolication caches outlive a test's database rows.
+        clear_process_caches()
         self.create_project()
         self.params = f"?sentry_key={self.projectkey.public_key}"
 
