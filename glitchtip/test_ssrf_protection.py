@@ -5,13 +5,17 @@ validation is steered to an internal address via an HTTP redirect or DNS
 rebinding. See :mod:`glitchtip.ssrf_protection`.
 """
 
+import json
 import os
 import socket
 import subprocess
 import sys
+import unittest
 from unittest import mock
 
+import aiohttp
 from asgiref.sync import async_to_sync
+from django.conf import settings
 from django.test import SimpleTestCase
 
 from glitchtip.ssrf_protection import (
@@ -19,6 +23,7 @@ from glitchtip.ssrf_protection import (
     ValidatingResolver,
     request_with_validated_redirects,
     resolve_validated_ip,
+    session_kwargs,
 )
 from glitchtip.test_utils.dns import resolves_to
 
@@ -235,10 +240,19 @@ class ResolveValidatedIPTests(SimpleTestCase):
             self._run("no-such-host.invalid")
 
 
-# Boots the app and loads the modules a running process imports soon after
-# (the API and the scheduled tasks), then reports whether aiohttp came with it.
+class SessionKwargsTests(SimpleTestCase):
+    def test_default_timeout_and_override(self):
+        # The 30s default lives in session_kwargs, not AIOHTTP_CONFIG; dropping
+        # it would silently give every session aiohttp's 5-minute default.
+        self.assertEqual(session_kwargs()["timeout"].total, settings.AIOHTTP_TIMEOUT)
+        override = aiohttp.ClientTimeout(total=3)
+        self.assertIs(session_kwargs(timeout=override)["timeout"], override)
+
+
+# Boots the app with self-monitoring on, loads what a running process imports
+# soon after, and reports whether aiohttp came along at each of two points.
 _AIOHTTP_PROBE = """\
-import importlib, sys, django
+import importlib, json, sys, django
 django.setup()
 for mod in (
     "glitchtip.asgi",
@@ -249,19 +263,44 @@ for mod in (
     "apps.stripe.views",
 ):
     importlib.import_module(mod)
-print("aiohttp" in sys.modules)
+stages = {"modules": "aiohttp" in sys.modules}
+from django.urls import get_resolver
+get_resolver().url_patterns
+from allauth.account.adapter import get_adapter
+get_adapter()
+stages["urlconf"] = "aiohttp" in sys.modules
+print(json.dumps(stages))
 """
 
 
 class AiohttpLazyImportTests(SimpleTestCase):
-    def test_startup_does_not_import_aiohttp(self):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         result = subprocess.run(
             [sys.executable, "-c", _AIOHTTP_PROBE],
             capture_output=True,
             text=True,
-            env={**os.environ, "DJANGO_SETTINGS_MODULE": "glitchtip.settings"},
+            cwd=settings.BASE_DIR,
+            # A DSN makes settings initialise sentry_sdk, which imports every
+            # auto-enabling integration it discovers, aiohttp's among them.
+            env={
+                **os.environ,
+                "DJANGO_SETTINGS_MODULE": "glitchtip.settings",
+                "SENTRY_DSN": "http://key@sentry.invalid/1",
+            },
             timeout=60,
             check=False,
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip().splitlines()[-1], "False")
+        assert result.returncode == 0, result.stderr
+        cls.stages = json.loads(result.stdout.strip().splitlines()[-1])
+
+    def test_startup_does_not_import_aiohttp(self):
+        self.assertFalse(self.stages["modules"])
+
+    # django-allauth-async imports aiohttp at module level once the URLconf and
+    # adapter load, which the first request does. Drop this decorator when it
+    # imports lazily; the unexpected success is the reminder.
+    @unittest.expectedFailure
+    def test_first_request_does_not_import_aiohttp(self):
+        self.assertFalse(self.stages["urlconf"])

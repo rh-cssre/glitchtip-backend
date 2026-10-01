@@ -25,10 +25,9 @@ resolver; callers that do (uptime monitoring of URLs that 301 http->https) use
 :func:`request_with_validated_redirects`.
 
 Importing this module imports aiohttp, which costs several MiB per process. An
-install that never makes an outbound request shouldn't pay that, so modules
-loaded at startup (alert webhooks, the uptime and Stripe tasks, the importer
-API, the allauth adapter) import this module and aiohttp inside the function
-that sends the request, not at module level.
+install that never makes an outbound request shouldn't pay that, so code that
+runs at startup imports this module and aiohttp inside the function that sends
+the request, not at module level.
 """
 
 import asyncio
