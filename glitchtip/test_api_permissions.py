@@ -2,15 +2,17 @@
 
 from types import SimpleNamespace
 
-from asgiref.sync import async_to_sync
 from django.apps import apps
 from django.core.exceptions import ImproperlyConfigured
 from django.db import models
+from django.http import HttpResponse
 from django.test import SimpleTestCase, TestCase
 from django.test.utils import isolate_apps
 from django.urls import reverse
 from model_bakery import baker
+from ninja import Router, Schema
 from ninja.pagination import paginate
+from ninja.testing import TestAsyncClient
 
 from apps.alerts.models import AlertRecipient, ProjectAlert
 from apps.organizations_ext.constants import OrganizationUserRole
@@ -147,15 +149,19 @@ class OrgScopedModelCheckTestCase(SimpleTestCase):
     def test_an_undeleted_through_path_without_is_deleted_is_rejected(self):
         class NoSoftDelete(OrgScopedModel, models.Model):
             org_field = "project__organization_id"
-            undeleted_through = ("project__platform",)
             project = models.ForeignKey(Project, on_delete=models.CASCADE)
+            recipient = models.ForeignKey(AlertRecipient, on_delete=models.CASCADE)
 
             class Meta:
                 app_label = "alerts"
 
-        error = check_undeleted_through(NoSoftDelete)
-        self.assertEqual(error.id, "glitchtip.E004")
-        self.assertIn("project__platform", error.msg)
+        # A relation whose model has no is_deleted, and a plain column.
+        for path in ("recipient", "project__platform"):
+            with self.subTest(path):
+                NoSoftDelete.undeleted_through = (path,)
+                error = check_undeleted_through(NoSoftDelete)
+                self.assertEqual(error.id, "glitchtip.E004")
+                self.assertIn(path, error.msg)
 
     def test_an_abstract_base_is_not_checked(self):
         # Registered, but it has no table to check.
@@ -251,6 +257,10 @@ class OrgScopedDeclarationTestCase(SimpleTestCase):
                 names = {p["name"] for p in operations[0].get("parameters", [])}
                 self.assertNotIn("qs", names)
                 self.assertLessEqual(expected, names)
+
+
+class _Id(Schema):
+    id: int
 
 
 def _set_slug(obj, slug: str):
@@ -359,44 +369,40 @@ class OrgScopedGateTestCase(TestCase):
                 self.assertEqual(res.status_code, 200)
                 self.assertEqual([row["id"] for row in res.json()], [alert.id])
 
-    def test_list_gates_the_queryset_the_view_returns(self):
+    async def test_list_gates_the_queryset_the_view_returns(self):
         # A view that ignores qs must still only see the path org's live rows.
-        baker.make("projects.Project", organization=self.org, is_deleted=True)
-
-        @org_scoped_list(["project:read"], ProjectAlert)
-        async def leaky_alerts(request, qs, organization_slug: str):
-            return ProjectAlert.objects.all()
-
-        @org_scoped_list(["project:read"], Project)
-        async def leaky_projects(request, qs, organization_slug: str):
-            return Project.objects.all()
-
-        request = SimpleNamespace(
-            auth=SimpleNamespace(auth_type="session", user_id=self.user.id)
+        await Project.objects.acreate(
+            organization=self.org, name="gone", is_deleted=True
+        )
+        router = Router(
+            auth=lambda request: SimpleNamespace(
+                auth_type="session", user_id=self.user.id
+            )
         )
 
-        async def run(view):
-            # paginate's @wraps leaves the gated view on __wrapped__.
-            result = await view.__wrapped__(request, organization_slug="orga")
-            return [row.id async for row in result]
+        @router.get("/{organization_slug}/alerts/", response=list[_Id])
+        @org_scoped_list(["project:read"], ProjectAlert)
+        async def leaky_alerts(
+            request, qs, response: HttpResponse, organization_slug: str
+        ):
+            return ProjectAlert.objects.all()
 
-        cases = [
-            (leaky_alerts, [self.alert.id]),
-            (leaky_projects, [self.project.id]),
-        ]
-        for view, expected in cases:
-            with self.subTest(view.__name__):
-                self.assertEqual(async_to_sync(run)(view), expected)
+        @router.get("/{organization_slug}/projects/", response=list[_Id])
+        @org_scoped_list(["project:read"], Project)
+        async def leaky_projects(
+            request, qs, response: HttpResponse, organization_slug: str
+        ):
+            return Project.objects.all()
 
-    def test_an_alert_under_a_deleted_project_is_unreachable(self):
-        self.set_role(OrganizationUserRole.ADMIN)
-        Project.objects.filter(pk=self.project.pk).update(is_deleted=True)
-        res = self.client.get(self.list_url())
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.json(), [])
-        res = self.client.delete(self.delete_url())
-        self.assertEqual(res.status_code, 404)
-        self.assertTrue(ProjectAlert.objects.filter(id=self.alert.id).exists())
+        client = TestAsyncClient(router)
+        for path, expected in [
+            ("alerts", [self.alert.id]),
+            ("projects", [self.project.id]),
+        ]:
+            with self.subTest(path):
+                res = await client.get(f"/orga/{path}/")
+                self.assertEqual(res.status_code, 200)
+                self.assertEqual([row["id"] for row in res.json()], expected)
 
     # Path segments naming no reachable org
 

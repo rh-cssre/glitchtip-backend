@@ -151,7 +151,8 @@ def _resolve_roles(scopes: list[Scopes]) -> tuple[frozenset[Scopes], tuple[int, 
 def org_scoped(scopes: list[Scopes], model: type[OrgScopedModel]):
     """Hand the view ``qs``: the undeleted rows of ``model`` the caller may reach.
 
-    Only ``qs`` is gated; ``Model.objects`` in the view is not.
+    Only ``qs`` is gated; ``Model.objects`` in the view is not. (On list
+    routes, ``org_scoped_list`` also gates the queryset the view returns.)
 
     ``organization_slug`` may carry the org's id or its slug (see
     ``resolve_org_id``); the name predates ids.
