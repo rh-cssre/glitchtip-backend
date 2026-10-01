@@ -6,7 +6,6 @@ from apps.organizations_ext.models import Organization
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.permissions import has_permission
 
-from .importer import GlitchTipImporter
 from .schema import ImportIn
 
 router = Router()
@@ -15,6 +14,10 @@ router = Router()
 @router.post("import/")
 @has_permission(["org:admin"])
 async def importer(request: AuthHttpRequest, payload: ImportIn):
+    # Imported here so loading the API doesn't import aiohttp; see
+    # glitchtip.ssrf_protection.
+    from .importer import GlitchTipImporter
+
     organization = await aget_object_or_404(
         Organization,
         slug=payload.organization_slug,

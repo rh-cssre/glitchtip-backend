@@ -14,7 +14,6 @@ import sys
 import warnings
 from datetime import timedelta
 
-import aiohttp
 import environ
 from corsheaders.defaults import default_headers
 from django.conf import global_settings
@@ -598,13 +597,14 @@ DEBUG_TOOLBAR_PANELS = [
 
 # Should GlitchTip trust and use proxy settings from environment variables (HTTP_PROXY, HTTPS_PROXY, NO_PROXY)
 PROXY_ENV = env.bool("PROXY_ENV", False)
+# Seconds. Session-level default for every outbound aiohttp request that doesn't
+# set its own. aiohttp's built-in default is 5 minutes — long enough for a hung
+# upstream to tie up a worker — so cap it at a sane 30s. Call sites needing a
+# different bound pass a per-request timeout, which overrides this: uptime
+# checks use the per-monitor value and Stripe uses STRIPE_TIMEOUT. A number, not
+# an aiohttp.ClientTimeout, so loading settings doesn't import aiohttp.
+AIOHTTP_TIMEOUT = 30
 AIOHTTP_CONFIG = {
-    # Session-level default for every outbound aiohttp request that doesn't set
-    # its own. aiohttp's built-in default is 5 minutes — long enough for a hung
-    # upstream to tie up a worker — so cap it at a sane 30s. Call sites needing
-    # a different bound pass a per-request timeout, which overrides this: uptime
-    # checks use the per-monitor value and Stripe uses STRIPE_TIMEOUT.
-    "timeout": aiohttp.ClientTimeout(total=30),
     "headers": {"User-Agent": "GlitchTip/" + GLITCHTIP_VERSION},
     "trust_env": PROXY_ENV,
     "max_field_size": 16380,  # 2x default

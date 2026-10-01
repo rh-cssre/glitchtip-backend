@@ -5,7 +5,10 @@ validation is steered to an internal address via an HTTP redirect or DNS
 rebinding. See :mod:`glitchtip.ssrf_protection`.
 """
 
+import os
 import socket
+import subprocess
+import sys
 from unittest import mock
 
 from asgiref.sync import async_to_sync
@@ -230,3 +233,35 @@ class ResolveValidatedIPTests(SimpleTestCase):
             self.assertRaises(BlockedRedirectError),
         ):
             self._run("no-such-host.invalid")
+
+
+# Boots the app and loads the modules a running process imports soon after
+# (the API and the scheduled tasks), then reports whether aiohttp came with it.
+_AIOHTTP_PROBE = """\
+import importlib, sys, django
+django.setup()
+for mod in (
+    "glitchtip.asgi",
+    "glitchtip.api.api",
+    "apps.alerts.tasks",
+    "apps.organizations_ext.tasks",
+    "apps.uptime.tasks",
+    "apps.stripe.views",
+):
+    importlib.import_module(mod)
+print("aiohttp" in sys.modules)
+"""
+
+
+class AiohttpLazyImportTests(SimpleTestCase):
+    def test_startup_does_not_import_aiohttp(self):
+        result = subprocess.run(
+            [sys.executable, "-c", _AIOHTTP_PROBE],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "DJANGO_SETTINGS_MODULE": "glitchtip.settings"},
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip().splitlines()[-1], "False")

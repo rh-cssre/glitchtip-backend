@@ -1,7 +1,7 @@
+import functools
 import ipaddress
 import socket
 
-import aiohttp
 from allauth.account.internal.flows.login import record_authentication
 from allauth.socialaccount import app_settings as socialaccount_app_settings
 from allauth_async.account.adapter import AsyncDefaultAccountAdapter
@@ -20,61 +20,85 @@ from apps.users.utils import (
 from glitchtip.email import GlitchTipEmail
 
 
-class PublicOnlyResolver(aiohttp.abc.AbstractResolver):
+@functools.cache
+def _public_only_classes():
+    """Define PublicOnlyResolver and PublicOnlyConnector on first use.
+
+    They subclass aiohttp types, and allauth loads this module on the first
+    auth request whether or not social login is configured. Defining them here
+    keeps aiohttp out of the process until a social-auth session is opened (see
+    glitchtip.ssrf_protection). Module ``__getattr__`` below still exposes them
+    under their usual names.
     """
-    DNS resolver that refuses to yield private/internal addresses.
+    import aiohttp
 
-    Organization-managed OIDC providers make social-auth URLs partially
-    user-controlled — not just the issuer an org manager types, but every
-    endpoint listed in the discovery document it serves. Filtering at
-    resolution time (rather than validating URL strings) is what also defeats
-    DNS tricks such as rebinding a public hostname to 169.254.169.254.
-    """
+    class PublicOnlyResolver(aiohttp.abc.AbstractResolver):
+        """
+        DNS resolver that refuses to yield private/internal addresses.
 
-    def __init__(self):
-        self._resolver = aiohttp.DefaultResolver()
+        Organization-managed OIDC providers make social-auth URLs partially
+        user-controlled — not just the issuer an org manager types, but every
+        endpoint listed in the discovery document it serves. Filtering at
+        resolution time (rather than validating URL strings) is what also
+        defeats DNS tricks such as rebinding a public hostname to
+        169.254.169.254.
+        """
 
-    async def resolve(self, host, port=0, family=socket.AF_INET):
-        infos = await self._resolver.resolve(host, port, family)
-        for info in infos:
-            if not ipaddress.ip_address(info["host"]).is_global:
-                raise aiohttp.ClientConnectionError(
-                    f"Refusing to connect to non-public address for {host}"
-                )
-        return infos
+        def __init__(self):
+            self._resolver = aiohttp.DefaultResolver()
 
-    async def close(self):
-        await self._resolver.close()
+        async def resolve(self, host, port=0, family=socket.AF_INET):
+            infos = await self._resolver.resolve(host, port, family)
+            for info in infos:
+                if not ipaddress.ip_address(info["host"]).is_global:
+                    raise aiohttp.ClientConnectionError(
+                        f"Refusing to connect to non-public address for {host}"
+                    )
+            return infos
+
+        async def close(self):
+            await self._resolver.close()
+
+    class PublicOnlyConnector(aiohttp.TCPConnector):
+        """
+        TCPConnector that refuses private/internal destinations.
+
+        The resolver alone is not enough: TCPConnector._resolve_host
+        short-circuits IP-literal hosts without ever consulting the resolver,
+        so a discovery document (or redirect) pointing at
+        https://169.254.169.254/ would connect. Literal IPs are checked here;
+        hostnames still resolve through PublicOnlyResolver, which validates
+        every resolved address.
+        """
+
+        def __init__(self, **kwargs):
+            super().__init__(resolver=PublicOnlyResolver(), **kwargs)
+            # TCPConnector treats a passed-in resolver as externally owned and
+            # never closes it; this one is ours, so close it with the connector.
+            self._resolver_owner = True
+
+        async def _resolve_host(self, host, port, traces=None):
+            try:
+                ip = ipaddress.ip_address(host)
+            except ValueError:
+                pass  # Hostname: PublicOnlyResolver vets the resolved addresses
+            else:
+                if not ip.is_global:
+                    raise aiohttp.ClientConnectionError(
+                        f"Refusing to connect to non-public address {host}"
+                    )
+            return await super()._resolve_host(host, port, traces)
+
+    return {
+        "PublicOnlyResolver": PublicOnlyResolver,
+        "PublicOnlyConnector": PublicOnlyConnector,
+    }
 
 
-class PublicOnlyConnector(aiohttp.TCPConnector):
-    """
-    TCPConnector that refuses private/internal destinations.
-
-    The resolver alone is not enough: TCPConnector._resolve_host short-circuits
-    IP-literal hosts without ever consulting the resolver, so a discovery
-    document (or redirect) pointing at https://169.254.169.254/ would connect.
-    Literal IPs are checked here; hostnames still resolve through
-    PublicOnlyResolver, which validates every resolved address.
-    """
-
-    def __init__(self, **kwargs):
-        super().__init__(resolver=PublicOnlyResolver(), **kwargs)
-        # TCPConnector treats a passed-in resolver as externally owned and
-        # never closes it; this one is ours, so close it with the connector.
-        self._resolver_owner = True
-
-    async def _resolve_host(self, host, port, traces=None):
-        try:
-            ip = ipaddress.ip_address(host)
-        except ValueError:
-            pass  # Hostname: PublicOnlyResolver vets the resolved addresses
-        else:
-            if not ip.is_global:
-                raise aiohttp.ClientConnectionError(
-                    f"Refusing to connect to non-public address {host}"
-                )
-        return await super()._resolve_host(host, port, traces)
+def __getattr__(name):
+    if name in ("PublicOnlyResolver", "PublicOnlyConnector"):
+        return _public_only_classes()[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 class CustomSocialAccountAdapter(AsyncDefaultSocialAccountAdapter):
@@ -95,18 +119,20 @@ class CustomSocialAccountAdapter(AsyncDefaultSocialAccountAdapter):
     def open_http_session(self):
         # Match the outbound-HTTP behavior the sync stack got from `requests`
         # (which trusts proxy env vars by default) and stamp our User-Agent.
-        # AIOHTTP_CONFIG carries a generic 30s session timeout; social-auth
-        # calls override it with allauth's own REQUESTS_TIMEOUT, the same bound
-        # the sync `requests` path used. Spread the shared config first so this
-        # timeout wins the key rather than colliding with it.
-        kwargs = {
-            **settings.AIOHTTP_CONFIG,
-            "timeout": aiohttp.ClientTimeout(
+        # Social-auth calls override the generic 30s session timeout with
+        # allauth's own REQUESTS_TIMEOUT, the same bound the sync `requests`
+        # path used.
+        import aiohttp
+
+        from glitchtip.ssrf_protection import session_kwargs
+
+        kwargs = session_kwargs(
+            timeout=aiohttp.ClientTimeout(
                 total=socialaccount_app_settings.REQUESTS_TIMEOUT
             ),
-        }
+        )
         if settings.SOCIAL_AUTH_BLOCK_PRIVATE_IPS:
-            kwargs["connector"] = PublicOnlyConnector()
+            kwargs["connector"] = _public_only_classes()["PublicOnlyConnector"]()
         return aiohttp.ClientSession(**kwargs)
 
 

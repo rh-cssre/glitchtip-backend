@@ -6,7 +6,6 @@ from collections.abc import AsyncGenerator
 from decimal import Decimal
 from typing import Any
 
-import aiohttp
 from django.conf import settings
 from pydantic import BaseModel
 
@@ -48,9 +47,9 @@ BASE_RETRY_DELAY = 0.5
 # Stripe calls run inline in worker tasks (the throttle sweep reports overage
 # per org sequentially, webhook handling fetches related objects), so bound them
 # tighter than the global 30s default: a slow Stripe response must not stall a
-# sweep. Per-request, so it overrides AIOHTTP_CONFIG's session default. This is
-# per attempt; _stripe_request retries up to MAX_RETRIES on 429/5xx.
-STRIPE_TIMEOUT = aiohttp.ClientTimeout(total=10)
+# sweep. Seconds, per attempt; _stripe_request retries up to MAX_RETRIES on
+# 429/5xx.
+STRIPE_TIMEOUT = 10
 
 type AIOTupleParams = list[tuple[str, str]]
 type AIODictParams = dict[str, int | str | list[int | str]]
@@ -77,12 +76,17 @@ async def _stripe_request(
     retries on 429 and 5xx. Each attempt opens its own ``ClientSession`` to avoid
     reusing a connection that may have been poisoned by the prior failure.
     """
+    # Imported here so loading this module doesn't import aiohttp; see
+    # glitchtip.ssrf_protection.
+    import aiohttp
+
+    from glitchtip.ssrf_protection import session_kwargs
+
+    timeout = aiohttp.ClientTimeout(total=STRIPE_TIMEOUT)
     for attempt in range(max_retries + 1):
         async with (
-            aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session,
-            session.request(
-                method, url, headers=HEADERS, timeout=STRIPE_TIMEOUT, **kwargs
-            ) as response,
+            aiohttp.ClientSession(**session_kwargs(timeout=timeout)) as session,
+            session.request(method, url, headers=HEADERS, **kwargs) as response,
         ):
             if response.status == 200:
                 return await response.text()

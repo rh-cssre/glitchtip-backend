@@ -23,6 +23,12 @@ Callers that never legitimately need to follow a cross-host redirect (webhook
 delivery) can instead just pass ``allow_redirects=False`` and rely on the
 resolver; callers that do (uptime monitoring of URLs that 301 http->https) use
 :func:`request_with_validated_redirects`.
+
+Importing this module imports aiohttp, which costs several MiB per process. An
+install that never makes an outbound request shouldn't pay that, so modules
+loaded at startup (alert webhooks, the uptime and Stripe tasks, the importer
+API, the allauth adapter) import this module and aiohttp inside the function
+that sends the request, not at module level.
 """
 
 import asyncio
@@ -130,16 +136,24 @@ class ValidatingResolver(AbstractResolver):
             await self._resolver.close()
 
 
+def session_kwargs(**overrides) -> dict:
+    """``ClientSession`` keyword arguments: ``AIOHTTP_CONFIG`` plus the default
+    ``AIOHTTP_TIMEOUT``, with ``overrides`` taking precedence."""
+    return {
+        "timeout": aiohttp.ClientTimeout(total=settings.AIOHTTP_TIMEOUT),
+        **settings.AIOHTTP_CONFIG,
+        **overrides,
+    }
+
+
 def safe_session(allow_private: bool = False, **kwargs) -> aiohttp.ClientSession:
     """A ClientSession whose connector refuses to dial internal addresses.
 
-    Merges the project-wide ``AIOHTTP_CONFIG`` (timeout, user-agent, etc.) and
+    Uses the project-wide :func:`session_kwargs` (timeout, user-agent, etc.) and
     owns a fresh connector per session so its lifecycle matches the session's.
     """
     connector = aiohttp.TCPConnector(resolver=ValidatingResolver(allow_private))
-    return aiohttp.ClientSession(
-        connector=connector, **{**settings.AIOHTTP_CONFIG, **kwargs}
-    )
+    return aiohttp.ClientSession(connector=connector, **session_kwargs(**kwargs))
 
 
 async def request_with_validated_redirects(

@@ -13,10 +13,10 @@ from ninja.errors import ValidationError
 from pydantic import ConfigDict, model_validator
 
 from glitchtip.schema import CamelSchema
+from glitchtip.url_validation import is_ip_blocked
 
 from .constants import HTTP_MONITOR_TYPES, MonitorType
 from .models import Monitor, MonitorCheck, StatusPage
-from .utils import is_ip_blocked
 
 
 class MonitorCheckSchema(CamelSchema, ModelSchema):

@@ -20,7 +20,6 @@ from glitchtip.ssrf_protection import (
     resolve_validated_ip,
     safe_session,
 )
-from glitchtip.url_validation import is_ip_blocked  # re-exported for uptime.schema
 
 from .constants import MonitorCheckReason, MonitorType
 from .models import MonitorCheck
@@ -33,7 +32,6 @@ __all__ = [
     "PAYLOAD_SAVE_LIMIT",
     "fetch",
     "fetch_all",
-    "is_ip_blocked",
     "process_response",
 ]
 

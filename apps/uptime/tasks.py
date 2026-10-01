@@ -17,11 +17,9 @@ from apps.alerts.constants import RecipientType
 from apps.alerts.models import AlertRecipient
 from apps.shared.raw_sql import execute_unnest
 from glitchtip.partition_manager import UUID7Helper
-from glitchtip.ssrf_protection import safe_session
 
 from .email import MonitorEmail
 from .models import Monitor, MonitorCheck, MonitorType
-from .utils import fetch
 from .webhooks import send_uptime_as_webhook
 
 logger = logging.getLogger(__name__)
@@ -195,6 +193,12 @@ async def save_monitor_checks(results, now):
 
 
 async def run_checks(monitors, now):
+    # Imported here so loading this module doesn't import aiohttp; see
+    # glitchtip.ssrf_protection.
+    from glitchtip.ssrf_protection import safe_session
+
+    from .utils import fetch
+
     async with safe_session(settings.GLITCHTIP_UPTIME_ALLOW_PRIVATE_IPS) as session:
         tasks = [asyncio.create_task(fetch(session, m)) for m in monitors]
         pending = tasks

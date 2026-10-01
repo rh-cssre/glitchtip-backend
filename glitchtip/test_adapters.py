@@ -2,11 +2,12 @@
 
 CustomSocialAccountAdapter.open_http_session builds the aiohttp session used
 for every outbound social-auth request (OAuth token exchange, userinfo). It
-merges the project-wide AIOHTTP_CONFIG (User-Agent, proxy trust, max field
-size) with allauth's own per-call REQUESTS_TIMEOUT. AIOHTTP_CONFIG already
-carries a `timeout` key, so the two timeout sources must be merged, not passed
-as separate kwargs -- otherwise ClientSession() raises TypeError ("got multiple
-values for keyword argument 'timeout'") and every Google login callback 500s.
+merges the project-wide session config (User-Agent, proxy trust, max field
+size) with allauth's own per-call REQUESTS_TIMEOUT. The project-wide config
+already carries a `timeout`, so the two timeout sources must be merged, not
+passed as separate kwargs -- otherwise ClientSession() raises TypeError ("got
+multiple values for keyword argument 'timeout'") and every Google login
+callback 500s.
 """
 
 import asyncio
@@ -39,7 +40,7 @@ class OpenHttpSessionTestCase(SimpleTestCase):
         self.assertEqual(total, socialaccount_app_settings.REQUESTS_TIMEOUT)
 
     def test_open_http_session_keeps_project_config(self):
-        # AIOHTTP_CONFIG's non-timeout entries (e.g. the User-Agent) still apply.
+        # The project-wide non-timeout entries (e.g. the User-Agent) still apply.
         _, headers = self._open_and_close()
         self.assertTrue(headers.get("User-Agent", "").startswith("GlitchTip/"))
 
