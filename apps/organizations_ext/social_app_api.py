@@ -22,6 +22,7 @@ from ninja.errors import HttpError
 
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.permissions import has_permission
+from glitchtip.url_validation import is_ip_blocked
 
 from .constants import OrganizationUserRole
 from .models import Organization, OrganizationSocialApp
@@ -76,7 +77,7 @@ def validate_server_url(url: str) -> str:
         if "." not in hostname or hostname.endswith((".localhost", ".internal")):
             raise HttpError(400, "Server URL must be a public hostname")
     else:
-        if not ip.is_global:
+        if is_ip_blocked(str(ip)):
             raise HttpError(400, "Server URL must be a public address")
     return url
 

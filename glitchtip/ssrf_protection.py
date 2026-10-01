@@ -32,17 +32,17 @@ the request, not at module level.
 
 import asyncio
 import contextlib
-import ipaddress
 import logging
 import socket
 
 import aiohttp
 from aiohttp.abc import AbstractResolver
+from aiohttp.helpers import proxies_from_env
 from aiohttp.resolver import ThreadedResolver
 from django.conf import settings
 from yarl import URL
 
-from glitchtip.url_validation import check_url_safe, is_ip_blocked
+from glitchtip.url_validation import check_url_safe, is_ip_blocked, is_ip_literal
 
 logger = logging.getLogger(__name__)
 
@@ -58,16 +58,9 @@ def _address_blocked(ip_str: str) -> bool:
     try:
         return is_ip_blocked(ip_str)
     except ValueError:
-        # Not an IP literal (shouldn't happen for a resolver result); be safe.
-        return False
-
-
-def _is_ip_literal(host: str) -> bool:
-    try:
-        ipaddress.ip_address(host)
+        # Not an IP literal (shouldn't happen for a resolver result): refuse
+        # what we can't judge.
         return True
-    except ValueError:
-        return False
 
 
 async def resolve_validated_ip(host: str, allow_private: bool = False) -> str:
@@ -79,7 +72,7 @@ async def resolve_validated_ip(host: str, allow_private: bool = False) -> str:
     see the same address. Raises BlockedRedirectError if the host cannot be
     resolved or resolves only to blocked addresses.
     """
-    if _is_ip_literal(host):
+    if is_ip_literal(host):
         if allow_private or not _address_blocked(host):
             return host
         raise BlockedRedirectError(f"blocked internal address: {host}")
@@ -102,10 +95,14 @@ class ValidatingResolver(AbstractResolver):
     aiohttp dials whatever this returns, so filtering here pins the safety check
     to the address actually connected to and eliminates the DNS-rebinding window
     between a pre-flight ``getaddrinfo`` and the real connect.
+
+    ``exempt`` holds ``(host, port)`` pairs that are always allowed: the
+    configured outbound proxy, which is often on a private network.
     """
 
-    def __init__(self, allow_private: bool = False):
+    def __init__(self, allow_private: bool = False, exempt: frozenset = frozenset()):
         self._allow_private = allow_private
+        self._exempt = exempt
         # Created lazily: ThreadedResolver binds to the running loop, which does
         # not exist yet when a connector is built outside an async context.
         self._resolver: ThreadedResolver | None = None
@@ -119,7 +116,7 @@ class ValidatingResolver(AbstractResolver):
         self, host: str, port: int = 0, family: int = socket.AF_INET
     ) -> list[dict]:
         hosts = await self._inner().resolve(host, port, family)
-        if self._allow_private:
+        if self._allow_private or (host, port) in self._exempt:
             return hosts
         allowed = [h for h in hosts if not _address_blocked(h["host"])]
         if not allowed:
@@ -133,6 +130,50 @@ class ValidatingResolver(AbstractResolver):
     async def close(self) -> None:
         if self._resolver is not None:
             await self._resolver.close()
+
+
+class ValidatingConnector(aiohttp.TCPConnector):
+    """TCPConnector that refuses to dial private/internal addresses.
+
+    Hostnames are vetted by :class:`ValidatingResolver`. IP-literal hosts never
+    reach a resolver -- ``TCPConnector._resolve_host`` short-circuits them -- so
+    a URL, redirect, or OIDC discovery document naming
+    ``https://169.254.169.254/`` is refused here instead.
+
+    Through a proxy (``trust_env`` with ``HTTP(S)_PROXY`` set) the connector
+    only ever dials the proxy, so it vets the proxy, not the target; ``exempt``
+    lets that proxy through. The target is then the proxy's egress policy to
+    enforce -- callers that pre-validate (``check_url_safe``, as webhooks and
+    uptime do) still check it, but without the connect-time rebinding guarantee.
+    """
+
+    def __init__(
+        self, allow_private: bool = False, exempt: frozenset = frozenset(), **kwargs
+    ):
+        super().__init__(resolver=ValidatingResolver(allow_private, exempt), **kwargs)
+        self._allow_private = allow_private
+        self._exempt = exempt
+        # TCPConnector treats a passed-in resolver as externally owned and
+        # never closes it; this one is ours, so close it with the connector.
+        self._resolver_owner = True
+
+    async def _resolve_host(self, host, port, traces=None):
+        if (
+            not self._allow_private
+            and (host, port) not in self._exempt
+            and is_ip_literal(host)
+            and _address_blocked(host)
+        ):
+            logger.warning("blocked outbound connection to internal address %r", host)
+            raise OSError(f"URL host {host!r} is a private/internal address")
+        return await super()._resolve_host(host, port, traces)
+
+
+def _env_proxy_addresses() -> frozenset:
+    """``(host, port)`` of each proxy aiohttp takes from the environment."""
+    return frozenset(
+        (info.proxy.host, info.proxy.port) for info in proxies_from_env().values()
+    )
 
 
 def session_kwargs(**overrides) -> dict:
@@ -151,8 +192,10 @@ def safe_session(allow_private: bool = False, **kwargs) -> aiohttp.ClientSession
     Uses the project-wide :func:`session_kwargs` (timeout, user-agent, etc.) and
     owns a fresh connector per session so its lifecycle matches the session's.
     """
-    connector = aiohttp.TCPConnector(resolver=ValidatingResolver(allow_private))
-    return aiohttp.ClientSession(connector=connector, **session_kwargs(**kwargs))
+    kwargs = session_kwargs(**kwargs)
+    exempt = _env_proxy_addresses() if kwargs.get("trust_env") else frozenset()
+    connector = ValidatingConnector(allow_private, exempt)
+    return aiohttp.ClientSession(connector=connector, **kwargs)
 
 
 async def request_with_validated_redirects(

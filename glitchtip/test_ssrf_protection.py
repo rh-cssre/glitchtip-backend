@@ -5,6 +5,7 @@ validation is steered to an internal address via an HTTP redirect or DNS
 rebinding. See :mod:`glitchtip.ssrf_protection`.
 """
 
+import asyncio
 import json
 import os
 import socket
@@ -20,9 +21,11 @@ from django.test import SimpleTestCase
 
 from glitchtip.ssrf_protection import (
     BlockedRedirectError,
+    ValidatingConnector,
     ValidatingResolver,
     request_with_validated_redirects,
     resolve_validated_ip,
+    safe_session,
     session_kwargs,
 )
 from glitchtip.test_utils.dns import resolves_to
@@ -86,6 +89,103 @@ class ValidatingResolverTests(SimpleTestCase):
         resolver._resolver = FakeInnerResolver([_addr("10.0.0.1")])
         result = self._resolve(resolver)
         self.assertEqual(result[0]["host"], "10.0.0.1")
+
+
+class ValidatingConnectorTests(SimpleTestCase):
+    def _resolve(self, host, port=443, **connector_kwargs):
+        async def run():
+            connector = ValidatingConnector(**connector_kwargs)
+            try:
+                return await connector._resolve_host(host, port)
+            finally:
+                await connector.close()
+
+        return async_to_sync(run)()
+
+    def test_rejects_internal_ip_literals(self):
+        # TCPConnector never consults the resolver for IP-literal hosts, so the
+        # connector itself must reject them (e.g. an OIDC discovery document
+        # pointing its token_endpoint at cloud metadata).
+        for host in ["169.254.169.254", "127.0.0.1", "10.0.0.5", "::1"]:
+            with self.assertRaises(OSError, msg=host):
+                self._resolve(host)
+
+    def test_public_ip_literal_passes(self):
+        self.assertEqual(self._resolve("93.184.216.34")[0]["host"], "93.184.216.34")
+
+    def test_allow_private_passes_internal_literal(self):
+        result = self._resolve("10.0.0.5", allow_private=True)
+        self.assertEqual(result[0]["host"], "10.0.0.5")
+
+    def test_exempt_address_passes_only_on_its_port(self):
+        exempt = frozenset({("10.0.0.1", 3128)})
+        self.assertEqual(
+            self._resolve("10.0.0.1", 3128, exempt=exempt)[0]["port"], 3128
+        )
+        with self.assertRaises(OSError):
+            self._resolve("10.0.0.1", 22, exempt=exempt)
+
+
+class SafeSessionTests(SimpleTestCase):
+    """Drive real requests at a local listener: a refused connection must not
+    reach the socket at all."""
+
+    def _get(self, url_template, *, resolve_to=None, **session_kwargs):
+        connections = 0
+
+        async def handle(reader, writer):
+            nonlocal connections
+            connections += 1
+            writer.write(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")
+            await writer.drain()
+            writer.close()
+
+        async def run():
+            server = await asyncio.start_server(handle, "127.0.0.1", 0)
+            port = server.sockets[0].getsockname()[1]
+            try:
+                async with (
+                    safe_session(**session_kwargs) as session,
+                    session.get(url_template.format(port=port)) as res,
+                ):
+                    return res.status
+            finally:
+                server.close()
+                await server.wait_closed()
+
+        try:
+            if resolve_to:
+                with resolves_to(resolve_to):
+                    return async_to_sync(run)(), connections
+            return async_to_sync(run)(), connections
+        except aiohttp.ClientError as exc:
+            return exc, connections
+
+    def test_listener_reachable_when_private_allowed(self):
+        # Control: proves the listener works, so the refusals below are real.
+        result, connections = self._get("http://127.0.0.1:{port}/", allow_private=True)
+        self.assertEqual((result, connections), (204, 1))
+
+    def test_ip_literal_refused_before_connect(self):
+        result, connections = self._get("http://127.0.0.1:{port}/")
+        self.assertIsInstance(result, aiohttp.ClientConnectorError)
+        self.assertEqual(connections, 0)
+
+    def test_hostname_resolving_internal_refused_before_connect(self):
+        result, connections = self._get(
+            "http://rebind.example:{port}/", resolve_to="127.0.0.1"
+        )
+        self.assertIsInstance(result, aiohttp.ClientConnectorError)
+        self.assertEqual(connections, 0)
+
+    def test_env_proxy_exempt_with_trust_env(self):
+        async def run(**kwargs):
+            async with safe_session(**kwargs) as session:
+                return session.connector._exempt
+
+        with mock.patch.dict(os.environ, {"HTTP_PROXY": "http://10.0.0.1:3128"}):
+            self.assertIn(("10.0.0.1", 3128), async_to_sync(run)(trust_env=True))
+            self.assertEqual(async_to_sync(run)(trust_env=False), frozenset())
 
 
 class FakeResponse:

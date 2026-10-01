@@ -7,9 +7,13 @@ behavior; the configured-email path stays covered by the existing per-app mail
 tests (which run with EMAIL_ENABLED defaulting True under TESTING).
 """
 
+import os
+import subprocess
+import sys
+
 from allauth.account.models import EmailAddress
 from django.core import mail
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, modify_settings, override_settings
 from django.urls import reverse
 from model_bakery import baker
 
@@ -111,3 +115,55 @@ class FirstRunDisabledEmailTestCase(TestCase):
         # No 500 from a failed send, and nothing actually goes out.
         self.assertNotEqual(res.status_code, 500)
         self.assertEqual(len(mail.outbox), 0)
+
+
+_ANYMAIL_PROBE = """\
+import sys, django
+from django.conf import settings
+django.setup()
+print("anymail" in settings.INSTALLED_APPS, "anymail" in sys.modules)
+"""
+
+
+class AnymailOptionalTestCase(SimpleTestCase):
+    """Anymail's app is installed only when it is the mail transport, so the
+    common SMTP / no-email install doesn't import it. (Anymail imports
+    `requests`; that saves memory once nothing else imports it at startup.)"""
+
+    def _probe(self, **env):
+        # A minimal env, not the parent's: an EMAIL_BACKEND or EMAIL_URL set
+        # for the test run must not decide the answer.
+        env = {
+            "DJANGO_SETTINGS_MODULE": "glitchtip.settings",
+            "SECRET_KEY": "test-secret-key",
+            "DATABASE_URL": os.environ.get(
+                "DATABASE_URL", "postgres://postgres:postgres@localhost/glitchtip"
+            ),
+            **env,
+        }
+        result = subprocess.run(
+            [sys.executable, "-c", _ANYMAIL_PROBE],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout.strip().splitlines()[-1]
+
+    def test_not_loaded_without_anymail_backend(self):
+        self.assertEqual(self._probe(), "False False")
+
+    def test_installed_with_anymail_backend(self):
+        self.assertEqual(
+            self._probe(EMAIL_BACKEND="anymail.backends.test.EmailBackend"),
+            "True True",
+        )
+
+    @modify_settings(INSTALLED_APPS={"remove": "anymail"})
+    @override_settings(EMAIL_BACKEND="anymail.backends.test.EmailBackend")
+    def test_anymail_backend_sends_without_app_installed(self):
+        self.assertEqual(
+            mail.send_mail("subject", "body", None, ["someone@example.com"]), 1
+        )

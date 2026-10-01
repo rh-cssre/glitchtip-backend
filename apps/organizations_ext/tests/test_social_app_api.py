@@ -1,7 +1,7 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
-import aiohttp
+import requests
 from allauth.socialaccount.models import SocialApp
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -13,11 +13,7 @@ from apps.organizations_ext.models import OrganizationSocialApp
 from apps.organizations_ext.social_app_api import validate_server_url
 from apps.stripe.constants import SubscriptionStatus
 from apps.users.utils import aorg_social_app_exists
-from glitchtip.adapters import (
-    CustomSocialAccountAdapter,
-    PublicOnlyConnector,
-    PublicOnlyResolver,
-)
+from glitchtip.adapters import CustomSocialAccountAdapter
 
 VALID_PAYLOAD = {
     "name": "Corp Okta",
@@ -466,36 +462,73 @@ class ValidateServerUrlTestCase(TestCase):
             validate_server_url("https://169.254.169.254/latest")
 
 
-class PublicOnlyHttpTestCase(TestCase):
-    """The connection-time SSRF guard for org-supplied IdP URLs."""
+class SocialAuthSSRFTestCase(TestCase):
+    """Connection-time SSRF guard for org-supplied IdP URLs.
 
-    async def test_connector_rejects_private_ip_literals(self):
-        # TCPConnector never consults the resolver for IP-literal hosts, so
-        # the connector itself must reject them (e.g. a discovery document
-        # pointing its token_endpoint at cloud metadata).
-        connector = PublicOnlyConnector()
+    The guard itself (ValidatingConnector) is covered in
+    glitchtip.test_ssrf_protection; these check social auth is wired to it.
+    """
+
+    TOKEN_URL = "/_allauth/browser/v1/auth/provider/token"
+
+    @classmethod
+    def setUpTestData(cls):
+        baker.make(
+            "socialaccount.socialapp",
+            provider="openid_connect",
+            provider_id="org-oidc",
+            client_id="org-client",
+            settings={"server_url": "https://idp.example.com"},
+        )
+
+    async def _session_resolves(self, host):
+        # Behavioral rather than inspecting the connector: does the session
+        # social auth opens refuse an internal IP literal?
+        session = CustomSocialAccountAdapter().open_http_session()
         try:
-            for host in ["169.254.169.254", "127.0.0.1", "10.0.0.5", "::1"]:
-                with self.assertRaises(aiohttp.ClientConnectionError, msg=host):
-                    await connector._resolve_host(host, 443)
+            return await session.connector._resolve_host(host, 443)
         finally:
-            await connector.close()
+            await session.close()
 
-    async def test_resolver_rejects_private_resolution(self):
-        # A public hostname resolving (or rebinding) to a private address
-        resolver = PublicOnlyResolver()
-        resolver._resolver = AsyncMock()
-        resolver._resolver.resolve.return_value = [
-            {"hostname": "evil.example.com", "host": "169.254.169.254", "port": 443}
-        ]
-        with self.assertRaises(aiohttp.ClientConnectionError):
-            await resolver.resolve("evil.example.com", 443)
+    @override_settings(SOCIAL_AUTH_BLOCK_PRIVATE_IPS=True)
+    async def test_session_blocks_private_when_enabled(self):
+        with self.assertRaises(OSError):
+            await self._session_resolves("169.254.169.254")
 
-    async def test_resolver_allows_public_resolution(self):
-        resolver = PublicOnlyResolver()
-        resolver._resolver = AsyncMock()
-        resolver._resolver.resolve.return_value = [
-            {"hostname": "idp.example.com", "host": "93.184.216.34", "port": 443}
-        ]
-        infos = await resolver.resolve("idp.example.com", 443)
-        self.assertEqual(infos[0]["host"], "93.184.216.34")
+    @override_settings(SOCIAL_AUTH_BLOCK_PRIVATE_IPS=False)
+    async def test_session_allows_private_when_disabled(self):
+        # Single-org self-host installs keep intranet IdPs working.
+        result = await self._session_resolves("10.0.0.5")
+        self.assertEqual(result[0]["host"], "10.0.0.5")
+
+    def _token_login(self):
+        return self.client.post(
+            self.TOKEN_URL,
+            {
+                "provider": "org-oidc",
+                "process": "login",
+                "token": {"client_id": "org-client", "id_token": "a.b.c"},
+            },
+            content_type="application/json",
+        )
+
+    @override_settings(SOCIAL_AUTH_BLOCK_PRIVATE_IPS=True)
+    def test_token_login_makes_no_unguarded_request(self):
+        # Token login is served by allauth's sync view, which fetches the IdP's
+        # discovery document with `requests` -- outside the aiohttp guard.
+        with patch("requests.Session.request") as request:
+            res = self._token_login()
+        self.assertEqual(res.status_code, 400)
+        request.assert_not_called()
+
+    @override_settings(SOCIAL_AUTH_BLOCK_PRIVATE_IPS=False)
+    def test_token_login_unchanged_when_blocking_disabled(self):
+        # Proves the test above exercises the fetch: without blocking, the
+        # sync path does reach `requests`.
+        with patch(
+            "requests.Session.request",
+            side_effect=requests.ConnectionError("no network in tests"),
+        ) as request:
+            res = self._token_login()
+        self.assertEqual(res.status_code, 400)
+        request.assert_called()

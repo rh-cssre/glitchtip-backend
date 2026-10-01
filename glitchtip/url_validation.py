@@ -18,20 +18,32 @@ from urllib.parse import urlparse
 
 BLOCKED_IP_MESSAGE = "URLs targeting private or internal IPs are not allowed"
 
+# IPv6 ranges that carry an IPv4 address in their low 32 bits and can deliver
+# to it: IPv4-mapped, IPv4-compatible, SIIT, and the NAT64 well-known prefix
+# (on an IPv6-only host behind NAT64, 64:ff9b::a9fe:a9fe reaches
+# 169.254.169.254). Python counts some of these as global, so they are judged
+# by the embedded IPv4 address instead.
+_IPV4_EMBEDDING_NETWORKS = tuple(
+    ipaddress.ip_network(net)
+    for net in ("::ffff:0:0/96", "::/96", "::ffff:0:0:0/96", "64:ff9b::/96")
+)
+
 
 def is_ip_blocked(ip_str: str) -> bool:
-    """Return True if `ip_str` is private, loopback, link-local, reserved, or multicast.
+    """Return True unless `ip_str` is a globally routable unicast address.
+
+    Blocks private, loopback, link-local, reserved and multicast addresses, and
+    everything else IANA marks not globally reachable -- notably the 100.64/10
+    carrier-grade NAT range, which ``is_private`` misses but which hosts some
+    cloud metadata services. IPv6 forms embedding an IPv4 address
+    (``::ffff:10.0.0.1``, NAT64 ``64:ff9b::a00:1``) are judged by that address.
 
     Raises ValueError if `ip_str` is not a valid IP address literal.
     """
     ip = ipaddress.ip_address(ip_str)
-    return (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_reserved
-        or ip.is_multicast
-    )
+    if ip.version == 6 and any(ip in net for net in _IPV4_EMBEDDING_NETWORKS):
+        ip = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+    return not ip.is_global or ip.is_multicast
 
 
 def _parse_hostname(url: str) -> str | None:
@@ -41,7 +53,7 @@ def _parse_hostname(url: str) -> str | None:
     return url.split(":")[0] or None
 
 
-def _is_ip_literal(hostname: str) -> bool:
+def is_ip_literal(hostname: str) -> bool:
     try:
         ipaddress.ip_address(hostname)
         return True
@@ -62,7 +74,7 @@ async def check_url_safe(url: str, allow_private: bool = False) -> bool:
     if not hostname:
         return False
 
-    if _is_ip_literal(hostname):
+    if is_ip_literal(hostname):
         return not is_ip_blocked(hostname)
 
     try:
@@ -89,7 +101,7 @@ def validate_public_url(url: str, allow_private: bool = False) -> None:
     if not hostname:
         raise ValueError("URL has no hostname")
 
-    if _is_ip_literal(hostname):
+    if is_ip_literal(hostname):
         if is_ip_blocked(hostname):
             raise ValueError(BLOCKED_IP_MESSAGE)
         return
