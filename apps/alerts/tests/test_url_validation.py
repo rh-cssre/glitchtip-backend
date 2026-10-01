@@ -206,7 +206,7 @@ class WebhookRuntimeGuardTests(SimpleTestCase):
     def test_send_webhook_blocked_url_does_not_call_aiohttp(self):
         from apps.alerts.webhooks import send_webhook
 
-        with mock.patch("apps.alerts.webhooks.aiohttp.ClientSession") as mock_cs:
+        with mock.patch("aiohttp.ClientSession") as mock_cs:
             result = async_to_sync(send_webhook)("http://127.0.0.1:6379/", "msg")
         self.assertIsNone(result)
         mock_cs.assert_not_called()
@@ -214,7 +214,7 @@ class WebhookRuntimeGuardTests(SimpleTestCase):
     def test_send_discord_blocked_url_does_not_call_aiohttp(self):
         from apps.alerts.webhooks import send_discord_webhook
 
-        with mock.patch("apps.alerts.webhooks.aiohttp.ClientSession") as mock_cs:
+        with mock.patch("aiohttp.ClientSession") as mock_cs:
             result = async_to_sync(send_discord_webhook)(
                 "http://169.254.169.254/", "msg", []
             )
@@ -234,7 +234,7 @@ class WebhookRuntimeGuardTests(SimpleTestCase):
         mock_session.__aexit__ = mock.AsyncMock(return_value=False)
 
         with mock.patch(
-            "apps.alerts.webhooks.safe_session",
+            "glitchtip.ssrf_protection.safe_session",
             mock.MagicMock(return_value=mock_session),
         ):
             async_to_sync(send_webhook)("http://127.0.0.1/", "msg")
@@ -254,7 +254,7 @@ class WebhookRuntimeGuardTests(SimpleTestCase):
         mock_session.__aexit__ = mock.AsyncMock(return_value=False)
 
         with mock.patch(
-            "apps.alerts.webhooks.safe_session",
+            "glitchtip.ssrf_protection.safe_session",
             mock.MagicMock(return_value=mock_session),
         ):
             # 8.8.8.8 is public, so _is_url_allowed passes without DNS.

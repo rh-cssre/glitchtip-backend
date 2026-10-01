@@ -15,7 +15,6 @@ import tempfile
 import warnings
 from datetime import timedelta
 
-import aiohttp
 import environ
 from corsheaders.defaults import default_headers
 from django.conf import global_settings
@@ -582,28 +581,20 @@ if SENTRY_DSN:
 
     SENTRY_SERVICE_NAME = env.str("SENTRY_SERVICE_NAME", "glitchtip")
 
-    # Disable auto-discovered integrations that add overhead without value:
-    # - ModulesIntegration: serializes all ~2600 sys.modules on every error event
-    # - Starlette: auto-detected but GlitchTip uses Django, not Starlette
-    # - AioHttp: instruments aiohttp server; we only use aiohttp as an HTTP client
-    # - MCP: instruments MCP server calls; minimal value vs overhead
+    # Only the integrations listed below run. Auto-discovery is off because the
+    # SDK imports every auto-enabling integration module before it consults
+    # disabled_integrations, so each one (aiohttp, starlette, boto3, httpx, ...)
+    # costs its import in every process whether or not it is disabled. Add an
+    # integration here by name when GlitchTip itself uses the library.
+    # ModulesIntegration is a default (not auto-enabled) integration and has to
+    # be disabled explicitly: it serializes all ~2600 sys.modules on every error.
     _disabled_integrations = [ModulesIntegration()]
-    _optional_disable = [
-        ("sentry_sdk.integrations.starlette", "StarletteIntegration"),
-        ("sentry_sdk.integrations.aiohttp", "AioHttpIntegration"),
-        ("sentry_sdk.integrations.mcp", "MCPIntegration"),
-    ]
-    for _mod_path, _cls_name in _optional_disable:
-        try:
-            _mod = __import__(_mod_path, fromlist=[_cls_name])
-            _disabled_integrations.append(getattr(_mod, _cls_name)())
-        except Exception:
-            pass
 
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         transport=InternalTransport if _is_self_referencing else None,
         integrations=[DjangoIntegration(), AsyncioIntegration()],
+        auto_enabling_integrations=False,
         disabled_integrations=_disabled_integrations,
         before_send=before_send,
         release=release,
@@ -640,13 +631,15 @@ DEBUG_TOOLBAR_PANELS = [
 
 # Should GlitchTip trust and use proxy settings from environment variables (HTTP_PROXY, HTTPS_PROXY, NO_PROXY)
 PROXY_ENV = env.bool("PROXY_ENV", False)
+# Seconds. Session-level default for every outbound aiohttp request that doesn't
+# set its own. aiohttp's built-in default is 5 minutes — long enough for a hung
+# upstream to tie up a worker — so cap it at a sane 30s. Call sites needing a
+# different bound pass their own timeout, per request or through
+# ``session_kwargs(timeout=...)``, which overrides this: uptime checks use the
+# per-monitor value and Stripe uses STRIPE_TIMEOUT. A number, not an
+# aiohttp.ClientTimeout, so loading settings doesn't import aiohttp.
+AIOHTTP_TIMEOUT = 30
 AIOHTTP_CONFIG = {
-    # Session-level default for every outbound aiohttp request that doesn't set
-    # its own. aiohttp's built-in default is 5 minutes — long enough for a hung
-    # upstream to tie up a worker — so cap it at a sane 30s. Call sites needing
-    # a different bound pass a per-request timeout, which overrides this: uptime
-    # checks use the per-monitor value and Stripe uses STRIPE_TIMEOUT.
-    "timeout": aiohttp.ClientTimeout(total=30),
     "headers": {"User-Agent": "GlitchTip/" + GLITCHTIP_VERSION},
     "trust_env": PROXY_ENV,
     "max_field_size": 16380,  # 2x default
