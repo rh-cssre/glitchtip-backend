@@ -9,6 +9,7 @@ import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.core.files.base import ContentFile, File
 from django.core.files.storage import default_storage
@@ -20,7 +21,7 @@ from gt_rust.symbolic import CacheTooLargeError, SymbolicError
 from glitchtip.memory_trim import malloc_trim
 
 from .models import CacheKind, CacheState, SymbolicationCache
-from .sources import blob_input, load_lane
+from .sources import blob_input
 from .store import (
     BUILD_HEARTBEAT,
     LOADERS,
@@ -245,10 +246,10 @@ async def build_cache(cache_id: int, organization_id: int | None = None):
     if not await _finish(row, CacheState.READY, storage_name=stored, size=size):
         # The row moved on while this build ran (deleted by maintenance, or
         # taken over): its bytes would be orphaned.
-        await load_lane.run(_delete_stored, stored)
+        await sync_to_async(_delete_stored)(stored)
     elif row.storage_name and row.storage_name != stored:
         # A rebuild: the previous build's bytes are no longer referenced.
-        await load_lane.run(_delete_stored, row.storage_name)
+        await sync_to_async(_delete_stored)(row.storage_name)
 
 
 async def _fail_transient(row: SymbolicationCache, err: Exception):

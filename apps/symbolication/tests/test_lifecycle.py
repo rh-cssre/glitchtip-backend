@@ -864,6 +864,22 @@ class MaintenanceTests(CacheTestCase):
         self.assertFalse(SymbolicationCache.objects.exists())
         self.assertFalse(default_storage.exists(row.storage_name))
 
+    def test_cleanup_leaves_the_event_load_lane_alone(self):
+        """Maintenance deletes run on its own task thread: the load lane's
+        few threads are for events waiting on cache loads."""
+        dif = self.upload_elf()
+        self.get(self.source_for(dif))
+        row = SymbolicationCache.objects.get()
+        FileBlob.objects.filter(id=row.source_blob_id).delete()
+        refuse = mock.Mock(side_effect=AssertionError("maintenance used the load lane"))
+        with (
+            mock.patch.object(sources.load_lane, "run", refuse),
+            mock.patch.object(sources.load_lane, "submit", refuse),
+        ):
+            self.cleanup()
+        refuse.assert_not_called()
+        self.assertFalse(default_storage.exists(row.storage_name))
+
     def test_fileblob_deletes_null_the_link_in_the_database(self):
         """DB_SET_NULL: a raw delete, as code unaware of this model does,
         still works and unlinks the cache."""

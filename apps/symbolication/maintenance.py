@@ -2,12 +2,12 @@ import logging
 import time
 from datetime import timedelta
 
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.db.models import Q
 from django.utils import timezone
 
 from .models import CacheKind, CacheState, SymbolicationCache
-from .sources import load_lane
 from .store import _delete_stored, format_tag
 
 logger = logging.getLogger(__name__)
@@ -84,8 +84,8 @@ async def cleanup_symbolication_caches():
         deleted += count
         # Rows first, then their bytes: a failure between the two leaks only
         # unreferenced storage, never a row pointing at missing bytes.
-        await load_lane.run(
-            _delete_all_stored, [row.storage_name for row in rows if row.storage_name]
+        await sync_to_async(_delete_all_stored)(
+            [row.storage_name for row in rows if row.storage_name]
         )
     if deleted:
         logger.info("Deleted %d symbolication caches", deleted)
