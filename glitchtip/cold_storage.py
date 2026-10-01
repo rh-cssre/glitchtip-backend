@@ -36,8 +36,8 @@ from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.core.files.storage import storages
+from django.core.signals import setting_changed
 from django.db import connection, connections
-from django.test.signals import setting_changed
 from django.utils import timezone
 from psycopg.sql import SQL, Identifier
 
