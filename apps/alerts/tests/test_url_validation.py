@@ -25,6 +25,30 @@ class IsIPBlockedTests(SimpleTestCase):
         # Cloud instance metadata endpoint — the canonical SSRF target.
         self.assertTrue(is_ip_blocked("169.254.169.254"))
 
+    def test_carrier_grade_nat_blocked(self):
+        # 100.64/10 is not is_private, but it is not globally routable either,
+        # and some clouds serve instance metadata from it (100.100.100.200).
+        self.assertTrue(is_ip_blocked("100.100.100.200"))
+
+    def test_ipv4_mapped_ipv6_judged_as_ipv4(self):
+        self.assertTrue(is_ip_blocked("::ffff:169.254.169.254"))
+        self.assertTrue(is_ip_blocked("::ffff:10.0.0.1"))
+        self.assertFalse(is_ip_blocked("::ffff:8.8.8.8"))
+
+    def test_ipv4_embedding_ipv6_judged_as_ipv4(self):
+        # NAT64 well-known prefix, IPv4-compatible and SIIT forms. Python counts
+        # these as global, but behind NAT64 they reach the embedded address.
+        self.assertTrue(is_ip_blocked("64:ff9b::a9fe:a9fe"))
+        self.assertTrue(is_ip_blocked("64:ff9b::7f00:1"))
+        self.assertTrue(is_ip_blocked("::a9fe:a9fe"))
+        self.assertTrue(is_ip_blocked("::ffff:0:7f00:1"))
+        self.assertFalse(is_ip_blocked("64:ff9b::808:808"))
+
+    def test_unspecified_and_multicast_blocked(self):
+        self.assertTrue(is_ip_blocked("0.0.0.0"))
+        self.assertTrue(is_ip_blocked("224.0.0.1"))
+        self.assertTrue(is_ip_blocked("ff02::1"))
+
     def test_public_ip_allowed(self):
         self.assertFalse(is_ip_blocked("8.8.8.8"))
         self.assertFalse(is_ip_blocked("2606:4700:4700::1111"))
@@ -206,7 +230,7 @@ class WebhookRuntimeGuardTests(SimpleTestCase):
     def test_send_webhook_blocked_url_does_not_call_aiohttp(self):
         from apps.alerts.webhooks import send_webhook
 
-        with mock.patch("apps.alerts.webhooks.aiohttp.ClientSession") as mock_cs:
+        with mock.patch("aiohttp.ClientSession") as mock_cs:
             result = async_to_sync(send_webhook)("http://127.0.0.1:6379/", "msg")
         self.assertIsNone(result)
         mock_cs.assert_not_called()
@@ -214,7 +238,7 @@ class WebhookRuntimeGuardTests(SimpleTestCase):
     def test_send_discord_blocked_url_does_not_call_aiohttp(self):
         from apps.alerts.webhooks import send_discord_webhook
 
-        with mock.patch("apps.alerts.webhooks.aiohttp.ClientSession") as mock_cs:
+        with mock.patch("aiohttp.ClientSession") as mock_cs:
             result = async_to_sync(send_discord_webhook)(
                 "http://169.254.169.254/", "msg", []
             )
@@ -234,7 +258,7 @@ class WebhookRuntimeGuardTests(SimpleTestCase):
         mock_session.__aexit__ = mock.AsyncMock(return_value=False)
 
         with mock.patch(
-            "apps.alerts.webhooks.safe_session",
+            "glitchtip.ssrf_protection.safe_session",
             mock.MagicMock(return_value=mock_session),
         ):
             async_to_sync(send_webhook)("http://127.0.0.1/", "msg")
@@ -254,7 +278,7 @@ class WebhookRuntimeGuardTests(SimpleTestCase):
         mock_session.__aexit__ = mock.AsyncMock(return_value=False)
 
         with mock.patch(
-            "apps.alerts.webhooks.safe_session",
+            "glitchtip.ssrf_protection.safe_session",
             mock.MagicMock(return_value=mock_session),
         ):
             # 8.8.8.8 is public, so _is_url_allowed passes without DNS.

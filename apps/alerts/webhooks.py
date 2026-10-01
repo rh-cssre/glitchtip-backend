@@ -2,10 +2,8 @@ import logging
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING
 
-import aiohttp
 from django.conf import settings
 
-from glitchtip.ssrf_protection import safe_session
 from glitchtip.url_validation import check_url_safe
 
 from .constants import RecipientType
@@ -48,6 +46,12 @@ async def _post(url: str, **kwargs):
     """
     if not await _is_url_allowed(url):
         return None
+    # Imported here so loading this module doesn't import aiohttp; see
+    # glitchtip.ssrf_protection.
+    import aiohttp
+
+    from glitchtip.ssrf_protection import safe_session
+
     kwargs.setdefault("timeout", aiohttp.ClientTimeout(total=10))
     try:
         async with (
@@ -487,6 +491,8 @@ async def send_issue_as_teams_webhook(
 
 async def send_zulip_message(server_url, bot_email, api_key, channel, topic, content):
     """Send a message to a Zulip channel via the native API."""
+    import aiohttp
+
     url = f"{server_url.rstrip('/')}/api/v1/messages"
     data = {"type": "channel", "to": channel, "topic": topic, "content": content}
     # aiohttp deprecated BasicAuth (and the `auth` parameter) in 3.14; the

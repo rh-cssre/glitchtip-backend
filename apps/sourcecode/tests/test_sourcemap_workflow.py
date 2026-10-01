@@ -10,10 +10,12 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.http.response import HttpResponse
 from django.tasks import task_backends
 from django.urls import reverse
+from gt_rust.symbolic import SourceMapCache
 
 from apps.event_ingest.tests.utils import generate_event, list_to_envelope
 from apps.files.models import File, FileBlob
 from apps.issue_events.models import Issue
+from apps.symbolication.store import clear_process_caches
 from glitchtip.test_utils.test_case import GlitchTipTransactionTestCase
 
 debug_id = str(uuid.uuid4())
@@ -39,6 +41,13 @@ class SourceCodeTestCase(GlitchTipTransactionTestCase):
         # Project (matters for the envelope URL below). The default
         # ``create_logged_in_user`` then creates a second project, which
         # would mismatch self.projectkey — bypass it.
+        # Loaded symbolication caches outlive a test's database rows, and so
+        # do ingest batches another test enqueued but never flushed: flushing
+        # them here would run them against projects that no longer exist.
+        clear_process_caches()
+        backend = task_backends["default"]
+        if hasattr(backend, "pending_batches"):
+            backend.pending_batches.clear()
         self.create_project()
         from model_bakery import baker
 
@@ -178,13 +187,12 @@ class SourceCodeTestCase(GlitchTipTransactionTestCase):
         )
 
     def test_sourcemap_parsed_once_per_event(self):
-        """A bundle is parsed once per event, not once per stack frame.
+        """A bundle's cache is built once, not once per stack frame.
 
-        Rebuilding SourceMapCache per frame made ingest of a single event with
-        a large sourcemap and many frames take minutes and peg the worker at
-        100% CPU. All frames sharing a bundle must share one parsed cache.
+        Rebuilding the sourcemap cache per frame made ingest of a single event
+        with a large sourcemap and many frames take minutes and peg the worker
+        at 100% CPU. All frames sharing a bundle must share one cache.
         """
-        from apps.event_ingest import javascript_event_processor as jsproc
 
         chunk_upload_url = reverse(
             "api:get_chunk_upload_info", args=[self.organization.slug]
@@ -248,17 +256,15 @@ class SourceCodeTestCase(GlitchTipTransactionTestCase):
         )
 
         with patch.object(
-            jsproc.SourceMapCache,
-            "from_bytes",
-            wraps=jsproc.SourceMapCache.from_bytes,
-        ) as mock_from_bytes:
+            SourceMapCache, "build_to", wraps=SourceMapCache.build_to
+        ) as mock_build:
             self.client.post(
                 envelope_url, list_to_envelope(data), content_type="application/json"
             )
             task_backends["default"].flush_batches()
 
-        # Parsed once for the file pair, not once per frame.
-        self.assertEqual(mock_from_bytes.call_count, 1)
+        # Built once for the file pair, not once per frame.
+        self.assertEqual(mock_build.call_count, 1)
 
         # Symbolication still works: every frame is remapped from the cache.
         event = Issue.objects.get().issueevent_set.first()

@@ -11,10 +11,10 @@ https://docs.djangoproject.com/en/dev/ref/settings/
 import logging
 import os
 import sys
+import tempfile
 import warnings
 from datetime import timedelta
 
-import aiohttp
 import environ
 from corsheaders.defaults import default_headers
 from django.conf import global_settings
@@ -229,6 +229,47 @@ GLITCHTIP_UPTIME_RETENTION_DAYS = env.int(
 )
 GLITCHTIP_FILE_RETENTION_DAYS = env.int(
     "GLITCHTIP_FILE_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
+)
+
+
+def _megabytes_setting(name: str, default: int) -> int:
+    """A whole number of MB, 0 or more. Anything else (blank, "1.5", a
+    negative number) warns and falls back to the default, so a typo never
+    stops the server from starting."""
+    raw = env.str(name, default="").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+        if value < 0:
+            raise ValueError
+    except ValueError:
+        warnings.warn(
+            f"{name}={raw!r} is not a whole number of MB; using {default}.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return default
+    return value
+
+
+# Symbolication caches (apps/symbolication). Internal knobs, deliberately
+# undocumented: the defaults suit every install.
+#
+# In-process LRU of loaded caches, in MB; 0 disables it.
+GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB = _megabytes_setting(
+    "GLITCHTIP_SYMBOLICATION_RAM_CACHE_MB", 32
+)
+# Optional node-local directory for memory-mapped copies; empty disables it.
+GLITCHTIP_SYMBOLICATION_DISK_CACHE_DIR = env.str(
+    "GLITCHTIP_SYMBOLICATION_DISK_CACHE_DIR", default=""
+)
+GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB = _megabytes_setting(
+    "GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB", 1024
+)
+# Peak memory one cache build may use; each kind's input cap derives from it.
+GLITCHTIP_SYMBOLICATION_BUILD_MEMORY_MB = _megabytes_setting(
+    "GLITCHTIP_SYMBOLICATION_BUILD_MEMORY_MB", 700
 )
 GLITCHTIP_LOG_RETENTION_DAYS = env.int(
     "GLITCHTIP_LOG_RETENTION_DAYS", default=GLITCHTIP_RETENTION_DAYS
@@ -540,28 +581,20 @@ if SENTRY_DSN:
 
     SENTRY_SERVICE_NAME = env.str("SENTRY_SERVICE_NAME", "glitchtip")
 
-    # Disable auto-discovered integrations that add overhead without value:
-    # - ModulesIntegration: serializes all ~2600 sys.modules on every error event
-    # - Starlette: auto-detected but GlitchTip uses Django, not Starlette
-    # - AioHttp: instruments aiohttp server; we only use aiohttp as an HTTP client
-    # - MCP: instruments MCP server calls; minimal value vs overhead
+    # Only the integrations listed below run. Auto-discovery is off because the
+    # SDK imports every auto-enabling integration module before it consults
+    # disabled_integrations, so each one (aiohttp, starlette, boto3, httpx, ...)
+    # costs its import in every process whether or not it is disabled. Add an
+    # integration here by name when GlitchTip itself uses the library.
+    # ModulesIntegration is a default (not auto-enabled) integration and has to
+    # be disabled explicitly: it serializes all ~2600 sys.modules on every error.
     _disabled_integrations = [ModulesIntegration()]
-    _optional_disable = [
-        ("sentry_sdk.integrations.starlette", "StarletteIntegration"),
-        ("sentry_sdk.integrations.aiohttp", "AioHttpIntegration"),
-        ("sentry_sdk.integrations.mcp", "MCPIntegration"),
-    ]
-    for _mod_path, _cls_name in _optional_disable:
-        try:
-            _mod = __import__(_mod_path, fromlist=[_cls_name])
-            _disabled_integrations.append(getattr(_mod, _cls_name)())
-        except Exception:
-            pass
 
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         transport=InternalTransport if _is_self_referencing else None,
         integrations=[DjangoIntegration(), AsyncioIntegration()],
+        auto_enabling_integrations=False,
         disabled_integrations=_disabled_integrations,
         before_send=before_send,
         release=release,
@@ -598,13 +631,15 @@ DEBUG_TOOLBAR_PANELS = [
 
 # Should GlitchTip trust and use proxy settings from environment variables (HTTP_PROXY, HTTPS_PROXY, NO_PROXY)
 PROXY_ENV = env.bool("PROXY_ENV", False)
+# Seconds. Session-level default for every outbound aiohttp request that doesn't
+# set its own. aiohttp's built-in default is 5 minutes — long enough for a hung
+# upstream to tie up a worker — so cap it at a sane 30s. Call sites needing a
+# different bound pass their own timeout, per request or through
+# ``session_kwargs(timeout=...)``, which overrides this: uptime checks use the
+# per-monitor value and Stripe uses STRIPE_TIMEOUT. A number, not an
+# aiohttp.ClientTimeout, so loading settings doesn't import aiohttp.
+AIOHTTP_TIMEOUT = 30
 AIOHTTP_CONFIG = {
-    # Session-level default for every outbound aiohttp request that doesn't set
-    # its own. aiohttp's built-in default is 5 minutes — long enough for a hung
-    # upstream to tie up a worker — so cap it at a sane 30s. Call sites needing
-    # a different bound pass a per-request timeout, which overrides this: uptime
-    # checks use the per-monitor value and Stripe uses STRIPE_TIMEOUT.
-    "timeout": aiohttp.ClientTimeout(total=30),
     "headers": {"User-Agent": "GlitchTip/" + GLITCHTIP_VERSION},
     "trust_env": PROXY_ENV,
     "max_field_size": 16380,  # 2x default
@@ -639,7 +674,6 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.nextcloud",
     "allauth.socialaccount.providers.openid_connect",
     "allauth.socialaccount.providers.okta",
-    "anymail",
     "corsheaders",
     "django_extensions",
 ]
@@ -662,6 +696,7 @@ INSTALLED_APPS += [
     "apps.stripe",
     "apps.sourcecode",
     "apps.difs",
+    "apps.symbolication",
     "apps.api_tokens",
     "apps.files",
     "apps.issue_events",
@@ -1129,9 +1164,13 @@ if GLITCHTIP_ENABLE_UPTIME:
         "schedule": UPTIME_CHECK_INTERVAL,
     }
 
+# Non-batch queues tasks may be sent to (batch queues in VTASKS_QUEUES are
+# added by django-vtasks).
+TASK_QUEUE_NAMES = ["default", "symbolication"]
 TASKS = {
     "default": {
         "BACKEND": "django_vtasks.backends.db.DatabaseTaskBackend",
+        "QUEUES": TASK_QUEUE_NAMES,
     }
 }
 
@@ -1152,6 +1191,10 @@ VTASKS_QUEUES = {
             "count": env.int("VTASKS_INGEST_BATCH_COUNT", 25),
             "timeout": 2.0,
         },
+    },
+    # Symbolication cache builds, one at a time: each can take a lot of memory.
+    "symbolication": {
+        "worker_concurrency": 1,
     },
 }
 
@@ -1189,6 +1232,7 @@ if VALKEY_URL:
         "default": {
             "BACKEND": "django_vtasks.backends.valkey.ValkeyTaskBackend",
             "OPTIONS": {"cache_alias": "default"},
+            "QUEUES": TASK_QUEUE_NAMES,
         }
     }
     SESSION_ENGINE = "django.contrib.sessions.backends.cache"
@@ -1296,6 +1340,37 @@ AZURE_URL_EXPIRATION_SECS = env("AZURE_URL_EXPIRATION_SECS")
 GS_BUCKET_NAME = env("GS_BUCKET_NAME")
 GS_PROJECT_ID = env("GS_PROJECT_ID")
 
+
+def _storage_spool_bytes() -> int:
+    """How much of an opened S3 or GCS object django-storages keeps in
+    memory before spooling the rest to a temporary file: 4 MB, since
+    uploads and symbolication caches can be tens of MB. Without a writable
+    temporary directory (a read-only root) spooling would fail every large
+    read, so then 0: django-storages' default, all in memory."""
+    try:
+        with tempfile.NamedTemporaryFile():
+            pass
+    except OSError:
+        warnings.warn(
+            "No writable temporary directory: objects read from S3 or GCS "
+            "storage are kept in memory whole. Mount one (or set TMPDIR) to "
+            "spool large objects to disk instead.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return 0
+    return 4 * 1024 * 1024
+
+
+AWS_S3_MAX_MEMORY_SIZE = GS_MAX_MEMORY_SIZE = _storage_spool_bytes()
+
+if AWS_S3_ENDPOINT_URL or "s3" in str(STORAGES["default"]["BACKEND"]).lower():
+    # One download thread per transfer, not boto3's pool of ten: downloads
+    # happen from worker threads already, and each extra thread costs a
+    # malloc arena.
+    from boto3.s3.transfer import TransferConfig
+
+    AWS_S3_TRANSFER_CONFIG = TransferConfig(use_threads=False)
 if AWS_S3_ENDPOINT_URL:
     MEDIA_URL = env.str("MEDIA_URL", f"https://{AWS_S3_ENDPOINT_URL}/{AWS_LOCATION}/")
     STORAGES["default"] = {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage"}
@@ -1345,6 +1420,11 @@ if os.getenv(
 ):  # Careful, this will override most EMAIL_*** settings. Set them all individually, or use EMAIL_URL to set them all at once, but don't do both.
     EMAIL_CONFIG = env.email_url("EMAIL_URL")
     vars().update(EMAIL_CONFIG)
+# Anymail's app only registers system checks, and loading it imports `requests`
+# (several MiB per process), so install it only when it is the mail transport.
+# Its backends import fine without the app installed.
+if EMAIL_BACKEND.startswith("anymail."):
+    INSTALLED_APPS.append("anymail")
 EMAIL_INVITE_THROTTLE_COUNT = env.int("EMAIL_THROTTLE_COUNT", 50)
 EMAIL_INVITE_THROTTLE_INTERVAL = env.int("EMAIL_THROTTLE_INTERVAL", 300)  # 5 minutes
 EMAIL_INVITE_REQUIRE_VERIFICATION = env.bool("EMAIL_INVITE_REQUIRE_VERIFICATION", False)
@@ -1508,6 +1588,7 @@ if TESTING:
     TASKS = {
         "default": {
             "BACKEND": "django_vtasks.backends.immediate.ImmediateBackend",
+            "QUEUES": TASK_QUEUE_NAMES,
         }
     }
     SESSION_ENGINE = "django.contrib.sessions.backends.cache"

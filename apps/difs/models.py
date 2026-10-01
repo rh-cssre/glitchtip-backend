@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models.fields.json import KeyTransform
 
 from glitchtip.base_models import CreatedModel
 
@@ -14,7 +15,16 @@ class DebugInformationFile(CreatedModel):
     data = models.JSONField(null=True, blank=True)
 
     class Meta:
-        indexes = [models.Index(fields=["project", "file"])]
+        indexes = [
+            models.Index(fields=["project", "file"]),
+            # Symbolication looks debug files up by project and debug id
+            # (data->'debug_id', matching the data__debug_id lookups).
+            models.Index(
+                models.F("project"),
+                KeyTransform("debug_id", "data"),
+                name="difs_project_debug_id",
+            ),
+        ]
 
     def is_proguard_mapping(self):
         try:

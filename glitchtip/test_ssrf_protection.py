@@ -5,17 +5,28 @@ validation is steered to an internal address via an HTTP redirect or DNS
 rebinding. See :mod:`glitchtip.ssrf_protection`.
 """
 
+import asyncio
+import json
+import os
 import socket
+import subprocess
+import sys
+import unittest
 from unittest import mock
 
+import aiohttp
 from asgiref.sync import async_to_sync
+from django.conf import settings
 from django.test import SimpleTestCase
 
 from glitchtip.ssrf_protection import (
     BlockedRedirectError,
+    ValidatingConnector,
     ValidatingResolver,
     request_with_validated_redirects,
     resolve_validated_ip,
+    safe_session,
+    session_kwargs,
 )
 from glitchtip.test_utils.dns import resolves_to
 
@@ -78,6 +89,103 @@ class ValidatingResolverTests(SimpleTestCase):
         resolver._resolver = FakeInnerResolver([_addr("10.0.0.1")])
         result = self._resolve(resolver)
         self.assertEqual(result[0]["host"], "10.0.0.1")
+
+
+class ValidatingConnectorTests(SimpleTestCase):
+    def _resolve(self, host, port=443, **connector_kwargs):
+        async def run():
+            connector = ValidatingConnector(**connector_kwargs)
+            try:
+                return await connector._resolve_host(host, port)
+            finally:
+                await connector.close()
+
+        return async_to_sync(run)()
+
+    def test_rejects_internal_ip_literals(self):
+        # TCPConnector never consults the resolver for IP-literal hosts, so the
+        # connector itself must reject them (e.g. an OIDC discovery document
+        # pointing its token_endpoint at cloud metadata).
+        for host in ["169.254.169.254", "127.0.0.1", "10.0.0.5", "::1"]:
+            with self.assertRaises(OSError, msg=host):
+                self._resolve(host)
+
+    def test_public_ip_literal_passes(self):
+        self.assertEqual(self._resolve("93.184.216.34")[0]["host"], "93.184.216.34")
+
+    def test_allow_private_passes_internal_literal(self):
+        result = self._resolve("10.0.0.5", allow_private=True)
+        self.assertEqual(result[0]["host"], "10.0.0.5")
+
+    def test_exempt_address_passes_only_on_its_port(self):
+        exempt = frozenset({("10.0.0.1", 3128)})
+        self.assertEqual(
+            self._resolve("10.0.0.1", 3128, exempt=exempt)[0]["port"], 3128
+        )
+        with self.assertRaises(OSError):
+            self._resolve("10.0.0.1", 22, exempt=exempt)
+
+
+class SafeSessionTests(SimpleTestCase):
+    """Drive real requests at a local listener: a refused connection must not
+    reach the socket at all."""
+
+    def _get(self, url_template, *, resolve_to=None, **session_kwargs):
+        connections = 0
+
+        async def handle(reader, writer):
+            nonlocal connections
+            connections += 1
+            writer.write(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")
+            await writer.drain()
+            writer.close()
+
+        async def run():
+            server = await asyncio.start_server(handle, "127.0.0.1", 0)
+            port = server.sockets[0].getsockname()[1]
+            try:
+                async with (
+                    safe_session(**session_kwargs) as session,
+                    session.get(url_template.format(port=port)) as res,
+                ):
+                    return res.status
+            finally:
+                server.close()
+                await server.wait_closed()
+
+        try:
+            if resolve_to:
+                with resolves_to(resolve_to):
+                    return async_to_sync(run)(), connections
+            return async_to_sync(run)(), connections
+        except aiohttp.ClientError as exc:
+            return exc, connections
+
+    def test_listener_reachable_when_private_allowed(self):
+        # Control: proves the listener works, so the refusals below are real.
+        result, connections = self._get("http://127.0.0.1:{port}/", allow_private=True)
+        self.assertEqual((result, connections), (204, 1))
+
+    def test_ip_literal_refused_before_connect(self):
+        result, connections = self._get("http://127.0.0.1:{port}/")
+        self.assertIsInstance(result, aiohttp.ClientConnectorError)
+        self.assertEqual(connections, 0)
+
+    def test_hostname_resolving_internal_refused_before_connect(self):
+        result, connections = self._get(
+            "http://rebind.example:{port}/", resolve_to="127.0.0.1"
+        )
+        self.assertIsInstance(result, aiohttp.ClientConnectorError)
+        self.assertEqual(connections, 0)
+
+    def test_env_proxy_exempt_with_trust_env(self):
+        async def run(**kwargs):
+            async with safe_session(**kwargs) as session:
+                return session.connector._exempt
+
+        with mock.patch.dict(os.environ, {"HTTP_PROXY": "http://10.0.0.1:3128"}):
+            self.assertIn(("10.0.0.1", 3128), async_to_sync(run)(trust_env=True))
+            self.assertEqual(async_to_sync(run)(trust_env=False), frozenset())
 
 
 class FakeResponse:
@@ -230,3 +338,69 @@ class ResolveValidatedIPTests(SimpleTestCase):
             self.assertRaises(BlockedRedirectError),
         ):
             self._run("no-such-host.invalid")
+
+
+class SessionKwargsTests(SimpleTestCase):
+    def test_default_timeout_and_override(self):
+        # The 30s default lives in session_kwargs, not AIOHTTP_CONFIG; dropping
+        # it would silently give every session aiohttp's 5-minute default.
+        self.assertEqual(session_kwargs()["timeout"].total, settings.AIOHTTP_TIMEOUT)
+        override = aiohttp.ClientTimeout(total=3)
+        self.assertIs(session_kwargs(timeout=override)["timeout"], override)
+
+
+# Boots the app with self-monitoring on, loads what a running process imports
+# soon after, and reports whether aiohttp came along at each of two points.
+_AIOHTTP_PROBE = """\
+import importlib, json, sys, django
+django.setup()
+for mod in (
+    "glitchtip.asgi",
+    "glitchtip.api.api",
+    "apps.alerts.tasks",
+    "apps.organizations_ext.tasks",
+    "apps.uptime.tasks",
+    "apps.stripe.views",
+):
+    importlib.import_module(mod)
+stages = {"modules": "aiohttp" in sys.modules}
+from django.urls import get_resolver
+get_resolver().url_patterns
+from allauth.account.adapter import get_adapter
+get_adapter()
+stages["urlconf"] = "aiohttp" in sys.modules
+print(json.dumps(stages))
+"""
+
+
+class AiohttpLazyImportTests(SimpleTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        result = subprocess.run(
+            [sys.executable, "-c", _AIOHTTP_PROBE],
+            capture_output=True,
+            text=True,
+            cwd=settings.BASE_DIR,
+            # A DSN makes settings initialise sentry_sdk, which imports every
+            # auto-enabling integration it discovers, aiohttp's among them.
+            env={
+                **os.environ,
+                "DJANGO_SETTINGS_MODULE": "glitchtip.settings",
+                "SENTRY_DSN": "http://key@sentry.invalid/1",
+            },
+            timeout=60,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        cls.stages = json.loads(result.stdout.strip().splitlines()[-1])
+
+    def test_startup_does_not_import_aiohttp(self):
+        self.assertFalse(self.stages["modules"])
+
+    # django-allauth-async imports aiohttp at module level once the URLconf and
+    # adapter load, which the first request does. Drop this decorator when it
+    # imports lazily; the unexpected success is the reminder.
+    @unittest.expectedFailure
+    def test_first_request_does_not_import_aiohttp(self):
+        self.assertFalse(self.stages["urlconf"])

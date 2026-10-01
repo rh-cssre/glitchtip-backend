@@ -12,6 +12,7 @@ from apps.performance.maintenance import cleanup_old_transaction_events
 from apps.releases.maintenance import cleanup_old_releases
 from apps.sourcecode.maintenance import cleanup_old_debug_symbol_bundles
 from apps.stripe.maintenance import sync_stripe_models, update_subscription_cycles
+from apps.symbolication.maintenance import cleanup_symbolication_caches
 from glitchtip.memory_trim import malloc_trim
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,8 @@ async def perform_maintenance():
         cleanup_old_transaction_events,
     )
     await _run_step("cleanup_old_files", cleanup_old_files)
+    # After cleanup_old_files: deleting a FileBlob unlinks its caches.
+    await _run_step("cleanup_symbolication_caches", cleanup_symbolication_caches)
     await _run_step("cleanup_old_issue_events", cleanup_old_issue_events)
     await _run_step("cleanup_old_issues", cleanup_old_issues)
     await _run_step(

@@ -2,7 +2,6 @@ import hmac
 import logging
 import time
 
-import aiohttp
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.core.cache import cache
@@ -172,8 +171,14 @@ async def update_subscription(subscription: Subscription, request: HttpRequest):
                 "Content-Type": "application/json",
                 "From-Region": settings.STRIPE_REGION,
             }
+            # Imported here so loading this module doesn't import aiohttp; see
+            # glitchtip.ssrf_protection.
+            import aiohttp
+
+            from glitchtip.ssrf_protection import session_kwargs
+
             async with (
-                aiohttp.ClientSession(**settings.AIOHTTP_CONFIG) as session,
+                aiohttp.ClientSession(**session_kwargs()) as session,
                 session.post(
                     forward_url, data=request.body, headers=headers, ssl=True
                 ) as response,
