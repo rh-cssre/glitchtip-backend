@@ -162,13 +162,31 @@ class DiskTierTests(SimpleTestCase):
         self.assertIsNone(self.tier.load(CacheKind.SYMCACHE, "k", None))
 
     def test_publishes_whole_files_and_evicts_oldest_over_the_cap(self):
-        first = self.publish("a", 600_000)
+        first = self.publish("a", 500_000)
         os.utime(first, (1, 1))  # used long ago
-        second = self.publish("b", 600_000)
+        second = self.publish("b", 500_000)
+        third = self.publish("c", 500_000)
         self.assertFalse(os.path.exists(first))
         self.assertTrue(os.path.exists(second))
+        self.assertTrue(os.path.exists(third))
         # No temporary files are left behind.
-        self.assertEqual(len(self.files()), 1)
+        self.assertEqual(len(self.files()), 2)
+
+    def test_skips_a_cache_over_half_the_cap(self):
+        """Keeping it would evict most of the tier on every publish."""
+        self.assertIsNone(self.publish("big", MB // 2 + 1))
+        self.assertEqual(self.files(), [])
+
+    def test_never_evicts_the_file_it_just_wrote(self):
+        """Even when it is the oldest-used (another process touched the
+        rest since, or the clock moved), the fresh file stays."""
+        future = time.time() + 3600
+        others = [self.publish(key, 400_000) for key in ("a", "b")]
+        for other in others:
+            os.utime(other, (future, future))
+        fresh = self.publish("fresh", 400_000)
+        self.assertTrue(os.path.exists(fresh))
+        self.assertEqual(sum(os.path.exists(other) for other in others), 1)
 
     def test_eviction_stays_in_its_own_subtree(self):
         """Files the tier did not write, and temporary files another process
@@ -184,7 +202,7 @@ class DiskTierTests(SimpleTestCase):
         in_progress = os.path.join(os.path.dirname(in_progress), ".tmp-writing")
         with open(in_progress, "wb") as f:
             f.write(b"x" * 900_000)
-        self.publish("a", 600_000)
+        self.publish("a", 500_000)
         self.assertTrue(os.path.exists(foreign))
         self.assertTrue(os.path.exists(in_progress))
 

@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import logging
+import os
 import tempfile
 import threading
 import time
@@ -849,6 +850,91 @@ class DiskTierIntegrationTests(CacheTestCase):
                         self.assertIsNotNone(self.get(self.source_for(dif)))
                     self.assertEqual(cost.cache_storage_loads, 1)
             self.assertEqual(len(logs.records), 1)
+
+
+class DiskTierSafetyTests(CacheTestCase):
+    """Whatever the disk tier's size, a cache loads, is built once, and is
+    never sent back to be rebuilt in a loop."""
+
+    def setUp(self):
+        super().setUp()
+        self.dif = self.upload_elf()
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.directory = directory.name
+        override = override_settings(
+            GLITCHTIP_SYMBOLICATION_DISK_CACHE_DIR=self.directory,
+            GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB=1,
+        )
+        override.enable()
+        self.addCleanup(override.disable)
+
+    def tier_files(self) -> list[str]:
+        return [name for _, _, names in os.walk(self.directory) for name in names]
+
+    def lookups(self, count=4):
+        """``count`` cold lookups, as ``count`` fresh processes would make."""
+        with measure_symbolication() as cost:
+            caches = []
+            for _ in range(count):
+                store.clear_process_caches()
+                caches.append(self.get(self.source_for(self.dif)))
+        self.assertTrue(all(caches))
+        self.assertEqual(cost.cache_builds, 1)
+        self.assertEqual(SymbolicationCache.objects.get().state, CacheState.READY)
+        return cost
+
+    def test_a_cache_larger_than_the_tier(self):
+        with mock.patch.object(store.DiskTier, "_cap", staticmethod(lambda: 100)):
+            self.lookups()
+        self.assertEqual(self.tier_files(), [])
+
+    def test_a_tier_of_zero_bytes(self):
+        with mock.patch.object(store.DiskTier, "_cap", staticmethod(lambda: 0)):
+            self.lookups()
+        self.assertEqual(self.tier_files(), [])
+
+    def test_a_fresh_copy_evicted_by_another_process(self):
+        real_publish = store.disk_tier.publish
+
+        def publish_then_lose_it(*args):
+            path = real_publish(*args)
+            if path is not None:
+                os.remove(path)
+            return path
+
+        with mock.patch.object(store.disk_tier, "publish", publish_then_lose_it):
+            self.lookups()
+
+    def test_a_cache_that_never_loads_is_not_rebuilt_forever(self):
+        with (
+            mock.patch.object(
+                store, "_load_from_tiers", side_effect=FileNotFoundError("gone")
+            ),
+            measure_symbolication() as cost,
+        ):
+            for _ in range(10):
+                store.clear_process_caches()
+                self.assertIsNone(self.get(self.source_for(self.dif)))
+        self.assertLessEqual(cost.cache_builds, store.MAX_ATTEMPTS)
+        self.assertEqual(SymbolicationCache.objects.get().state, CacheState.FAILED)
+
+    def test_a_rebuild_out_of_attempts_fails_the_row(self):
+        self.get(self.source_for(self.dif))
+        row = SymbolicationCache.objects.get()
+        SymbolicationCache.objects.filter(id=row.id).update(attempts=store.MAX_ATTEMPTS)
+        row.refresh_from_db()
+        with mock.patch.object(store, "_enqueue", mock.AsyncMock()) as enqueue:
+            async_to_sync(store._rebuild)(row, None, delete_stored=False)
+        enqueue.assert_not_awaited()
+        self.assertEqual(SymbolicationCache.objects.get().state, CacheState.FAILED)
+
+    def test_a_pending_row_out_of_attempts_is_not_built(self):
+        row = self.row_for(self.dif, attempts=store.MAX_ATTEMPTS)
+        with mock.patch.object(tasks, "_build") as build:
+            self.build(row.id)
+        build.assert_not_called()
+        self.assertEqual(SymbolicationCache.objects.get().state, CacheState.FAILED)
 
 
 class MaintenanceTests(CacheTestCase):

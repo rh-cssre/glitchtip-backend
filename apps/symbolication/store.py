@@ -390,6 +390,9 @@ class DiskTier:
 
     PAUSE_SECONDS = 60
     TEMP_PREFIX = ".tmp-"
+    # A cache over this share of the cap is not kept: publishing it would
+    # evict most of the tier, and one over the cap would be evicted at once.
+    MAX_ENTRY_SHARE = 0.5
 
     def __init__(self):
         # Whether each configured directory is usable, decided once.
@@ -481,9 +484,12 @@ class DiskTier:
 
     def publish(self, kind: CacheKind, cache_key: str, source) -> str | None:
         """Copy a stored cache (an open file) into the tier; returns the local
-        path, or None when the tier is off or the write failed."""
+        path, or None when the tier is off, the cache is too big for it, or
+        the write failed."""
         directory = self.directory()
         if directory is None:
+            return None
+        if _size_of(source) > self._cap() * self.MAX_ENTRY_SHARE:
             return None
         path = os.path.join(directory, cache_path(kind, cache_key))
         for attempt in range(2):
@@ -498,7 +504,7 @@ class DiskTier:
                 self._pause(directory, err)
                 return None
         self._verified.add(path)  # written by this process from verified bytes
-        self.evict(directory)
+        self.evict(directory, keep=path)
         return path
 
     def _write(self, path: str, source):
@@ -515,9 +521,14 @@ class DiskTier:
                 os.remove(temp_path)
             raise
 
-    def evict(self, directory: str):
-        """Keep the tier's own subtree under its cap, oldest-used first."""
-        cap = settings.GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB * MB
+    @staticmethod
+    def _cap() -> int:
+        return settings.GLITCHTIP_SYMBOLICATION_DISK_CACHE_MB * MB
+
+    def evict(self, directory: str, keep: str | None = None):
+        """Keep the tier's own subtree under its cap, oldest-used first,
+        never removing ``keep`` (the file being published)."""
+        cap = self._cap()
         root = os.path.join(directory, STORAGE_PREFIX)
         young = time.time() - 60
         with self._lock:
@@ -534,10 +545,23 @@ class DiskTier:
             for _, size, path in sorted(files):
                 if total <= cap:
                     break
+                if path == keep:
+                    continue
                 with contextlib.suppress(OSError):
                     os.remove(path)
                     self._verified.discard(path)
                     total -= size
+
+
+def _size_of(source) -> int:
+    """The size of an open file: a Django File knows it, a plain stream is
+    measured."""
+    size = getattr(source, "size", None)
+    if size is None:
+        position = source.tell()
+        size = source.seek(0, os.SEEK_END)
+        source.seek(position)
+    return size
 
 
 _READ_AHEAD_BUFFER = 64 * 1024
@@ -605,7 +629,12 @@ def _load_from_tiers(name: str, source: CacheSource):
                 with contextlib.suppress(OSError):
                     os.remove(local)
                 raise
-            return cache, "storage_load", True
+            except OSError:
+                # The local copy went (another process evicted it, say), but
+                # the stored cache is fine: load that instead.
+                cache = None
+            if cache is not None:
+                return cache, "storage_load", True
         stored.seek(0)
         return _load_via_temp_file(loader, stored, digest)
 
@@ -833,19 +862,28 @@ async def _get_uncached(source: CacheSource, key, context: LookupContext, wait: 
 
 
 async def _rebuild(row: SymbolicationCache, organization_id, delete_stored: bool):
-    """Send a READY row back to be built again. Its stored bytes are deleted
-    only if the row still points at them: a rebuild another event already
-    finished must keep its cache."""
+    """Send a READY row back to be built again, or fail it once it has used
+    its attempts, so nothing can rebuild one cache forever. Its stored bytes
+    are deleted only if the row still points at them: a rebuild another
+    event already finished must keep its cache."""
+    exhausted = row.attempts >= MAX_ATTEMPTS
     moved = await SymbolicationCache.objects.filter(
         id=row.id, state=CacheState.READY, storage_name=row.storage_name
     ).aupdate(
-        state=CacheState.PENDING,
+        state=CacheState.FAILED if exhausted else CacheState.PENDING,
+        error="rebuilt too often" if exhausted else "",
         storage_name="" if delete_stored else row.storage_name,
         updated=timezone.now(),
     )
-    if moved:
-        if delete_stored:
-            await load_lane.run(_delete_stored, row.storage_name)
+    if not moved:
+        return
+    if delete_stored:
+        await load_lane.run(_delete_stored, row.storage_name)
+    if exhausted:
+        logger.warning(
+            "Symbolication cache %s was rebuilt too often; giving up.", row.id
+        )
+    else:
         await _enqueue(row.id, organization_id)
 
 

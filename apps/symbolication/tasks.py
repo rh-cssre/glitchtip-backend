@@ -172,20 +172,22 @@ async def build_cache(cache_id: int, organization_id: int | None = None):
     now = timezone.now()
     stale = now - STALE_BUILD
     claimed = await SymbolicationCache.objects.filter(
-        Q(state=CacheState.PENDING)
-        | Q(state=CacheState.BUILDING, updated__lt=stale, attempts__lt=MAX_ATTEMPTS),
+        Q(state=CacheState.PENDING) | Q(state=CacheState.BUILDING, updated__lt=stale),
         id=cache_id,
+        attempts__lt=MAX_ATTEMPTS,
     ).aupdate(state=CacheState.BUILDING, updated=now, attempts=F("attempts") + 1)
     if not claimed:
-        # A claim that went stale on its last attempt: give up on it.
+        # Out of attempts (a stale claim on its last one, or a row sent back
+        # to be built too often): give up on it rather than build forever.
         if await SymbolicationCache.objects.filter(
+            Q(state=CacheState.PENDING)
+            | Q(state=CacheState.BUILDING, updated__lt=stale),
             id=cache_id,
-            state=CacheState.BUILDING,
-            updated__lt=stale,
             attempts__gte=MAX_ATTEMPTS,
         ).aupdate(state=CacheState.FAILED, error="build did not finish", updated=now):
             logger.warning(
-                "Symbolication cache %s build never finished; giving up.", cache_id
+                "Symbolication cache %s ran out of build attempts; giving up.",
+                cache_id,
             )
         return
     row = (
