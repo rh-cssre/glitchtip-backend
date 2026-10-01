@@ -135,6 +135,30 @@ class ValidatingResolver(AbstractResolver):
             await self._resolver.close()
 
 
+class ValidatingConnector(aiohttp.TCPConnector):
+    """TCPConnector that refuses to dial private/internal addresses.
+
+    Hostnames are vetted by :class:`ValidatingResolver`. IP-literal hosts never
+    reach a resolver -- ``TCPConnector._resolve_host`` short-circuits them -- so
+    a URL, redirect, or OIDC discovery document naming
+    ``https://169.254.169.254/`` is refused here instead. Together they cover
+    every address the connector dials, including each redirect hop.
+    """
+
+    def __init__(self, allow_private: bool = False, **kwargs):
+        super().__init__(resolver=ValidatingResolver(allow_private), **kwargs)
+        self._allow_private = allow_private
+        # TCPConnector treats a passed-in resolver as externally owned and
+        # never closes it; this one is ours, so close it with the connector.
+        self._resolver_owner = True
+
+    async def _resolve_host(self, host, port, traces=None):
+        if not self._allow_private and _is_ip_literal(host) and _address_blocked(host):
+            logger.warning("blocked outbound connection to internal address %r", host)
+            raise OSError(f"URL host {host!r} is a private/internal address")
+        return await super()._resolve_host(host, port, traces)
+
+
 def session_kwargs(**overrides) -> dict:
     """``ClientSession`` keyword arguments: ``AIOHTTP_CONFIG`` plus the default
     ``AIOHTTP_TIMEOUT``, with ``overrides`` taking precedence."""
@@ -151,7 +175,7 @@ def safe_session(allow_private: bool = False, **kwargs) -> aiohttp.ClientSession
     Uses the project-wide :func:`session_kwargs` (timeout, user-agent, etc.) and
     owns a fresh connector per session so its lifecycle matches the session's.
     """
-    connector = aiohttp.TCPConnector(resolver=ValidatingResolver(allow_private))
+    connector = ValidatingConnector(allow_private)
     return aiohttp.ClientSession(connector=connector, **session_kwargs(**kwargs))
 
 

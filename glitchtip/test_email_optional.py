@@ -7,6 +7,10 @@ behavior; the configured-email path stays covered by the existing per-app mail
 tests (which run with EMAIL_ENABLED defaulting True under TESTING).
 """
 
+import os
+import subprocess
+import sys
+
 from allauth.account.models import EmailAddress
 from django.core import mail
 from django.test import TestCase, override_settings
@@ -111,3 +115,53 @@ class FirstRunDisabledEmailTestCase(TestCase):
         # No 500 from a failed send, and nothing actually goes out.
         self.assertNotEqual(res.status_code, 500)
         self.assertEqual(len(mail.outbox), 0)
+
+
+_ANYMAIL_PROBE = """\
+import sys, django
+from django.conf import settings
+django.setup()
+print("anymail" in settings.INSTALLED_APPS, "anymail" in sys.modules)
+"""
+
+
+class AnymailOptionalTestCase(TestCase):
+    """Anymail's app is installed only when it is the mail transport, so the
+    common SMTP / no-email install doesn't import it (or `requests` with it)."""
+
+    def _probe(self, **env):
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("EMAIL_BACKEND", "EMAIL_URL")
+        } | {"DJANGO_SETTINGS_MODULE": "glitchtip.settings", **env}
+        result = subprocess.run(
+            [sys.executable, "-c", _ANYMAIL_PROBE],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout.strip().splitlines()[-1]
+
+    def test_not_loaded_without_anymail_backend(self):
+        self.assertEqual(self._probe(), "False False")
+
+    def test_installed_with_anymail_backend(self):
+        self.assertEqual(
+            self._probe(EMAIL_BACKEND="anymail.backends.test.EmailBackend"),
+            "True True",
+        )
+
+    @override_settings(EMAIL_BACKEND="anymail.backends.test.EmailBackend")
+    def test_anymail_backend_sends_without_app_installed(self):
+        # The test run uses the default settings, so the app isn't installed;
+        # the backend must not depend on it.
+        from django.conf import settings
+
+        self.assertNotIn("anymail", settings.INSTALLED_APPS)
+        self.assertEqual(
+            mail.send_mail("subject", "body", None, ["someone@example.com"]), 1
+        )

@@ -20,18 +20,20 @@ BLOCKED_IP_MESSAGE = "URLs targeting private or internal IPs are not allowed"
 
 
 def is_ip_blocked(ip_str: str) -> bool:
-    """Return True if `ip_str` is private, loopback, link-local, reserved, or multicast.
+    """Return True unless `ip_str` is a globally routable unicast address.
+
+    Blocks private, loopback, link-local, reserved and multicast addresses, and
+    everything else IANA marks not globally reachable -- notably the 100.64/10
+    carrier-grade NAT range, which ``is_private`` misses but which hosts some
+    cloud metadata services. IPv4-mapped IPv6 (``::ffff:10.0.0.1``) is judged by
+    its IPv4 address.
 
     Raises ValueError if `ip_str` is not a valid IP address literal.
     """
     ip = ipaddress.ip_address(ip_str)
-    return (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_reserved
-        or ip.is_multicast
-    )
+    if ip.version == 6 and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    return not ip.is_global or ip.is_multicast
 
 
 def _parse_hostname(url: str) -> str | None:

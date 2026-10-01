@@ -20,9 +20,11 @@ from django.test import SimpleTestCase
 
 from glitchtip.ssrf_protection import (
     BlockedRedirectError,
+    ValidatingConnector,
     ValidatingResolver,
     request_with_validated_redirects,
     resolve_validated_ip,
+    safe_session,
     session_kwargs,
 )
 from glitchtip.test_utils.dns import resolves_to
@@ -86,6 +88,63 @@ class ValidatingResolverTests(SimpleTestCase):
         resolver._resolver = FakeInnerResolver([_addr("10.0.0.1")])
         result = self._resolve(resolver)
         self.assertEqual(result[0]["host"], "10.0.0.1")
+
+
+class ValidatingConnectorTests(SimpleTestCase):
+    def test_rejects_internal_ip_literals(self):
+        # TCPConnector never consults the resolver for IP-literal hosts, so the
+        # connector itself must reject them (e.g. an OIDC discovery document
+        # pointing its token_endpoint at cloud metadata).
+        async def run():
+            connector = ValidatingConnector()
+            try:
+                for host in ["169.254.169.254", "127.0.0.1", "10.0.0.5", "::1"]:
+                    with self.assertRaises(OSError, msg=host):
+                        await connector._resolve_host(host, 443)
+            finally:
+                await connector.close()
+
+        async_to_sync(run)()
+
+    def test_public_ip_literal_passes(self):
+        async def run():
+            connector = ValidatingConnector()
+            try:
+                return await connector._resolve_host("93.184.216.34", 443)
+            finally:
+                await connector.close()
+
+        self.assertEqual(async_to_sync(run)()[0]["host"], "93.184.216.34")
+
+    def test_allow_private_passes_internal_literal(self):
+        async def run():
+            connector = ValidatingConnector(allow_private=True)
+            try:
+                return await connector._resolve_host("10.0.0.5", 443)
+            finally:
+                await connector.close()
+
+        self.assertEqual(async_to_sync(run)()[0]["host"], "10.0.0.5")
+
+    def test_hostnames_go_through_validating_resolver(self):
+        async def run():
+            connector = ValidatingConnector()
+            try:
+                return connector._resolver
+            finally:
+                await connector.close()
+
+        self.assertIsInstance(async_to_sync(run)(), ValidatingResolver)
+
+    def test_safe_session_uses_validating_connector(self):
+        async def run():
+            session = safe_session()
+            try:
+                return session.connector
+            finally:
+                await session.close()
+
+        self.assertIsInstance(async_to_sync(run)(), ValidatingConnector)
 
 
 class FakeResponse:

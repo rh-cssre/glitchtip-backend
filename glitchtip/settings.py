@@ -632,7 +632,6 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.nextcloud",
     "allauth.socialaccount.providers.openid_connect",
     "allauth.socialaccount.providers.okta",
-    "anymail",
     "corsheaders",
     "django_extensions",
 ]
@@ -1338,6 +1337,11 @@ if os.getenv(
 ):  # Careful, this will override most EMAIL_*** settings. Set them all individually, or use EMAIL_URL to set them all at once, but don't do both.
     EMAIL_CONFIG = env.email_url("EMAIL_URL")
     vars().update(EMAIL_CONFIG)
+# Anymail's app only registers system checks, and loading it imports `requests`
+# (several MiB per process), so install it only when it is the mail transport.
+# Its backends import fine without the app installed.
+if EMAIL_BACKEND.startswith("anymail."):
+    INSTALLED_APPS.append("anymail")
 EMAIL_INVITE_THROTTLE_COUNT = env.int("EMAIL_THROTTLE_COUNT", 50)
 EMAIL_INVITE_THROTTLE_INTERVAL = env.int("EMAIL_THROTTLE_INTERVAL", 300)  # 5 minutes
 EMAIL_INVITE_REQUIRE_VERIFICATION = env.bool("EMAIL_INVITE_REQUIRE_VERIFICATION", False)
