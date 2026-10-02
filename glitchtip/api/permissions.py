@@ -98,7 +98,7 @@ class OrgScope:
         live = {f"{path}__is_deleted": False for path in model.undeleted_through}
         if issubclass(model, SoftDeleteModel):
             # Here, not in a manager: a list view's returned queryset is
-            # gated again, and it may not have come from undeleted_objects.
+            # gated too, and it may not have come from undeleted_objects.
             live["is_deleted"] = False
         return qs.filter(self.gate(), **{model.org_field: self.org_id}, **live)
 
@@ -151,19 +151,14 @@ def _resolve_roles(scopes: list[Scopes]) -> tuple[frozenset[Scopes], tuple[int, 
 def org_scoped(scopes: list[Scopes], model: type[OrgScopedModel]):
     """Hand the view ``qs``: the undeleted rows of ``model`` the caller may reach.
 
-    Only ``qs`` is gated; ``Model.objects`` in the view is not. (On list
-    routes, ``org_scoped_list`` also gates the queryset the view returns.)
+    Only ``qs`` is gated; ``Model.objects`` in the view is not. (List routes
+    use ``org_scoped_list``, which gates the queryset the view returns.)
 
     ``organization_slug`` may carry the org's id or its slug (see
     ``resolve_org_id``); the name predates ids.
     """
     required, roles = _resolve_roles(scopes)
-    if not (isinstance(model, type) and issubclass(model, OrgScopedModel)):
-        raise ImproperlyConfigured(
-            f"{model!r} is gated by @org_scoped but is not an OrgScopedModel, "
-            "so the gate cannot isolate it. Declare org_field on it via "
-            "OrgScopedModel."
-        )
+    _require_scoped_model(model, "org_scoped")
 
     def decorator(view):
         if getattr(view, "_ninja_is_paginated", False):
@@ -174,12 +169,7 @@ def org_scoped(scopes: list[Scopes], model: type[OrgScopedModel]):
                 "@paginate above it"
             )
         signature = inspect.signature(view)
-        if "organization_slug" not in signature.parameters:
-            raise ImproperlyConfigured(
-                f"{view.__qualname__} is @org_scoped but takes no "
-                "`organization_slug` parameter -- the gate has no organization "
-                "to scope it to"
-            )
+        _require_org_slug(view, signature.parameters, "org_scoped")
         if "qs" not in signature.parameters:
             raise ImproperlyConfigured(
                 f"{view.__qualname__} is @org_scoped but takes no `qs` "
@@ -213,25 +203,58 @@ def org_scoped(scopes: list[Scopes], model: type[OrgScopedModel]):
 
 
 def org_scoped_list(scopes: list[Scopes], model: type[OrgScopedModel]):
-    """``org_scoped`` with pagination folded in for list routes.
+    """Gate the queryset a list view returns, once, then paginate it.
 
-    ``paginate`` evaluates whatever the view returns, not ``qs``, so the
-    returned queryset is gated again; a view returning ``Model.objects``
-    still can't leak another org's rows.
+    ``paginate`` evaluates whatever the view returns, so that is what gets
+    gated. The view takes no ``qs``: gating one as well would put the gate in
+    the SQL twice. ``model`` is only checked at import.
     """
-    gate = org_scoped(scopes, model)
+    required, roles = _resolve_roles(scopes)
+    _require_scoped_model(model, "org_scoped_list")
 
     def decorator(view):
-        @wraps(view)  # org_scoped reads qs/organization_slug off this signature
-        async def regated(request: OrgScopedHttpRequest, **kwargs):
-            result = await view(request, **kwargs)
+        parameters = inspect.signature(view).parameters
+        _require_org_slug(view, parameters, "org_scoped_list")
+        if "qs" in parameters:
+            raise ImproperlyConfigured(
+                f"{view.__qualname__} is @org_scoped_list but takes `qs`; a "
+                "list view builds its own queryset and the gate applies to it"
+            )
+
+        @wraps(view)  # ninja reads the signature for path params
+        async def gated(request, **kwargs):
+            scope = await OrgScope.from_request(request, required, roles, kwargs)
+            try:
+                result = await view(request, **kwargs)
+            except Http404:
+                if error := await scope.explain_miss():
+                    raise error from None
+                raise
             if not isinstance(result, QuerySet):
                 raise TypeError(f"{view.__qualname__} must return a QuerySet")
-            return request.org_scope.apply(result)
+            return scope.apply(result)
 
-        return paginate(gate(regated))
+        return paginate(gated)
 
     return decorator
+
+
+def _require_scoped_model(model, decorator: str) -> None:
+    if not (isinstance(model, type) and issubclass(model, OrgScopedModel)):
+        raise ImproperlyConfigured(
+            f"{model!r} is gated by @{decorator} but is not an OrgScopedModel, "
+            "so the gate cannot isolate it. Declare org_field on it via "
+            "OrgScopedModel."
+        )
+
+
+def _require_org_slug(view, parameters, decorator: str) -> None:
+    if "organization_slug" not in parameters:
+        raise ImproperlyConfigured(
+            f"{view.__qualname__} is @{decorator} but takes no "
+            "`organization_slug` parameter -- the gate has no organization "
+            "to scope it to"
+        )
 
 
 class OrgScopedHttpRequest(AuthHttpRequest):

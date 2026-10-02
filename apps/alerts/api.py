@@ -53,13 +53,14 @@ def get_project_alert_queryset(user_id: int, organization_slug: str, project_slu
 @org_scoped_list(["project:read", "project:write", "project:admin"], ProjectAlert)
 async def list_project_alerts(
     request: OrgScopedHttpRequest,
-    qs: QuerySet[ProjectAlert],
     response: HttpResponse,
     organization_slug: str,
     project_slug: str,
 ):
-    # The slug alone is not unique across orgs; qs is already this org's.
-    return qs.filter(project__slug=project_slug).prefetch_related("alertrecipient_set")
+    # The slug alone is not unique across orgs; the gate scopes this to the org.
+    return ProjectAlert.objects.filter(project__slug=project_slug).prefetch_related(
+        "alertrecipient_set"
+    )
 
 
 @router.post(

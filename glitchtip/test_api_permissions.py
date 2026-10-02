@@ -370,7 +370,7 @@ class OrgScopedGateTestCase(TestCase):
                 self.assertEqual([row["id"] for row in res.json()], [alert.id])
 
     async def test_list_gates_the_queryset_the_view_returns(self):
-        # A view that ignores qs must still only see the path org's live rows.
+        # A view returning every row must still only see the path org's live rows.
         await Project.objects.acreate(
             organization=self.org, name="gone", is_deleted=True
         )
@@ -382,15 +382,13 @@ class OrgScopedGateTestCase(TestCase):
 
         @router.get("/{organization_slug}/alerts/", response=list[_Id])
         @org_scoped_list(["project:read"], ProjectAlert)
-        async def leaky_alerts(
-            request, qs, response: HttpResponse, organization_slug: str
-        ):
+        async def leaky_alerts(request, response: HttpResponse, organization_slug: str):
             return ProjectAlert.objects.all()
 
         @router.get("/{organization_slug}/projects/", response=list[_Id])
         @org_scoped_list(["project:read"], Project)
         async def leaky_projects(
-            request, qs, response: HttpResponse, organization_slug: str
+            request, response: HttpResponse, organization_slug: str
         ):
             return Project.objects.all()
 
