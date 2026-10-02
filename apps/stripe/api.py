@@ -3,6 +3,7 @@ import logging
 from datetime import date, timedelta
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db.models import Prefetch, Q, Sum
 from django.db.models.functions import Coalesce, TruncDate
 from django.http import JsonResponse
@@ -689,6 +690,16 @@ async def configure_overage(
             and bool(sub.metered_item_id)
             and payload.cap_cents <= org.overage_spend_cap_cents
         )
+        # Keyed on the customer, which the meter aggregates on. Two enables
+        # racing across a resubscribe each read a different primary and list
+        # the other's subscription before either has attached; serialized, the
+        # second sees the first's item and the check below refuses it.
+        lock_key = f"overage-enable-{org.stripe_customer_id}"
+        if not await cache.aadd(lock_key, "1", 60):
+            return JsonResponse(
+                {"detail": "Overage billing is being updated. Please try again."},
+                status=409,
+            )
         try:
             # The meter aggregates per customer, so two subscriptions each
             # carrying the metered price both bill the same usage. One
@@ -741,6 +752,11 @@ async def configure_overage(
                         "metered_period_end",
                     ]
                 )
+            org.metered_billing_enabled = True
+            org.overage_spend_cap_cents = payload.cap_cents
+            await org.asave(
+                update_fields=["metered_billing_enabled", "overage_spend_cap_cents"]
+            )
         except StripeError as e:
             # Card declines are safe to show the owner; other Stripe errors
             # may leak internals, so log those and return a generic message.
@@ -757,11 +773,8 @@ async def configure_overage(
                 {"detail": "Could not enable overage billing. Please try again."},
                 status=502,
             )
-        org.metered_billing_enabled = True
-        org.overage_spend_cap_cents = payload.cap_cents
-        await org.asave(
-            update_fields=["metered_billing_enabled", "overage_spend_cap_cents"]
-        )
+        finally:
+            await cache.adelete(lock_key)
     else:
         # Keep the item attached and the last-report record intact: a re-enable
         # is then a flag flip, and the cap stays floored at what the cycle has

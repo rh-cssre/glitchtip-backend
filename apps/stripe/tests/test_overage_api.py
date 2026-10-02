@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from django.conf import settings
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -590,3 +591,42 @@ class OverageAPITestCase(TestCase):
         self.assertEqual(body["overageUnits"], 50_000)
         self.assertEqual(body["capUnits"], units_for_budget(5000))
         self.assertEqual(body["overageCostCents"], 0)
+
+    def test_enable_is_serialized_per_customer(self):
+        """Two enables racing across a resubscribe each read a different
+        primary and list the other's subscription before either has attached,
+        so both pass the one-item-per-customer check. While one holds the
+        lock the other is refused without touching Stripe; the lock is
+        released once the first finishes."""
+        lock = f"overage-enable-{self.org.stripe_customer_id}"
+        self.assertTrue(cache.add(lock, "1", 60))
+        self.addCleanup(cache.delete, lock)
+        with patch(
+            "apps.stripe.api.add_subscription_item", new_callable=AsyncMock
+        ) as add:
+            res = self._configure({"enabled": True, "capCents": 2000})
+        self.assertEqual(res.status_code, 409)
+        add.assert_not_awaited()
+        self.other_subscriptions.assert_not_awaited()
+        self.org.refresh_from_db()
+        self.assertFalse(self.org.metered_billing_enabled)
+
+        cache.delete(lock)
+        with (
+            patch("apps.stripe.api.fetch_subscription", new_callable=AsyncMock),
+            patch(
+                "apps.stripe.api.select_subscription_items",
+                new=MagicMock(return_value=(None, None)),
+            ),
+            patch(
+                "apps.stripe.api.add_subscription_item",
+                new=AsyncMock(return_value=self._item("si_new")),
+            ),
+            patch(
+                "apps.stripe.api.check_organization_throttle",
+                new=MagicMock(aenqueue=AsyncMock()),
+            ),
+        ):
+            res = self._configure({"enabled": True, "capCents": 2000})
+        self.assertEqual(res.status_code, 200)
+        self.assertIsNone(cache.get(lock))
