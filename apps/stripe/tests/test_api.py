@@ -80,6 +80,41 @@ class StripeAPITestCase(TestCase):
         )
         self.assertEqual(res.status_code, 200)
 
+    @patch("apps.stripe.api.create_session")
+    async def test_create_stripe_session_refuses_second_paid_subscription(
+        self, mock_create_session
+    ):
+        """Checkout creates a new subscription rather than changing the
+        existing one, so a paid org buying through it would pay two base
+        plans. Free and canceled subscriptions cost nothing to leave behind."""
+        mock_create_session.return_value = {"url": "test"}
+        paid_price = await baker.amake(
+            "stripe.StripePrice", product=self.product, price=15
+        )
+        url = reverse("api:create_stripe_session", args=[self.organization.slug])
+        cases = [
+            ("active paid", paid_price, SubscriptionStatus.ACTIVE, 400),
+            ("canceled paid", paid_price, SubscriptionStatus.CANCELED, 200),
+            ("active free", self.price, SubscriptionStatus.ACTIVE, 200),
+        ]
+        for label, price, status, expected in cases:
+            with self.subTest(label):
+                mock_create_session.reset_mock()
+                sub = await baker.amake(
+                    "stripe.StripeSubscription",
+                    organization=self.organization,
+                    price=price,
+                    status=status,
+                )
+                res = await self.async_client.post(
+                    url,
+                    {"price": paid_price.stripe_id},
+                    content_type="application/json",
+                )
+                await sub.adelete()
+                self.assertEqual(res.status_code, expected)
+                self.assertEqual(mock_create_session.called, expected == 200)
+
     async def test_list_stripe_products_excludes_archived(self):
         """A retired plan stays in the DB for its grandfathered subscriptions
         but must not be offered. is_public is a separate axis: a current price

@@ -255,6 +255,17 @@ async def create_stripe_session(
         organization_users__role=OrganizationUserRole.OWNER,
         organization_users__user=request.auth.user_id,
     )
+    # Checkout creates a new subscription, so a paid org buying through it would
+    # pay two base plans; it changes plan in the billing portal instead. A free
+    # plan is a $0 subscription and costs nothing to leave behind.
+    if await StripeSubscription.objects.filter(
+        organization=organization,
+        status__in=ACTIVE_SUBSCRIPTION_STATUSES,
+        price__price__gt=0,
+    ).aexists():
+        return JsonResponse(
+            {"detail": "Organization already has a paid subscription"}, status=400
+        )
     if organization.stripe_customer_id:
         customer_id = organization.stripe_customer_id
     else:
