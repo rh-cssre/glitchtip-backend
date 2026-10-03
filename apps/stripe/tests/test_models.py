@@ -572,11 +572,9 @@ class StripeTestCase(TestCase):
     async def test_sync_flags_two_metered_subscriptions_on_one_customer(
         self, mock_list_subscriptions
     ):
-        """The meter aggregates per customer, so two subscriptions carrying
-        the metered price each bill the whole usage. The enable guard stops
-        this from being created; the sync is the backstop that says so when
-        it exists anyway, canceled subscriptions excepted since they cannot
-        bill."""
+        """Two non-canceled subscriptions carrying the metered price on one
+        customer each bill the whole usage; the sync is the backstop that
+        says so when the enable guard has been bypassed."""
         await sync_to_async(baker.make)("stripe.StripeProduct", stripe_id="prod_1")
         now_timestamp = int(timezone.now().timestamp())
 
