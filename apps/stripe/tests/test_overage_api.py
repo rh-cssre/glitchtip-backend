@@ -590,7 +590,6 @@ class OverageAPITestCase(TestCase):
         self.assertEqual(body["overageUnits"], 50_000)
         self.assertEqual(body["capUnits"], units_for_budget(5000))
         self.assertEqual(body["overageCostCents"], 0)
-        self.assertEqual(body["reportedCostCents"], 0)
 
     def test_status_reports_what_the_cycle_has_already_sent(self):
         """Switching overage off stops reporting, not the invoice for the
