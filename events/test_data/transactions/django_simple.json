@@ -3,7 +3,7 @@
     "event_id": "5a337086bc1545448e29ed938729cba3",
     "sent_at": "2020-12-29T17:51:08.471989Z"
   },
-  { "type": "transaction", "content_type": "application/json", "length": 5684 },
+  { "type": "transaction", "content_type": "application/json" },
   {
     "type": "transaction",
     "transaction": "/",
