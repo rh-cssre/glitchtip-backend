@@ -206,7 +206,7 @@ async def _provision(stdout) -> None:
     product = await _find_product_by_type("overage")
     if product is None:
         product_id = await create_product(
-            "GlitchTip Overage",
+            "GlitchTip On-Demand Billing",
             metadata={"product_type": "overage"},
             description="Usage-based charges for events above your plan quota.",
         )
