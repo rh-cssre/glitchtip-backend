@@ -1,0 +1,17 @@
+GlitchTip — Support License
+
+Thank you for purchasing a GlitchTip support plan. Please keep this email
+for your records.
+
+Your license key:
+{{ license_key }}
+
+Add it to your self-hosted instance:
+- Set the GLITCHTIP_LICENSE_KEY environment variable, then restart, or
+- Enter it in the Django admin under Stripe > Support licenses (superuser only).
+
+Go to support (license key pre-filled):
+{{ support_url }}
+
+Documentation: https://glitchtip.com/documentation
+Questions? Email sales@glitchtip.com

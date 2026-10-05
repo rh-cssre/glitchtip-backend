@@ -1,0 +1,40 @@
+[
+  {
+    "culprit": "?(/assets/orphan.min.js)",
+    "exception": {
+      "values": [
+        {
+          "stacktrace": {
+            "frames": [
+              {
+                "abs_path": "https://example.com/assets/main.js",
+                "colno": 50,
+                "filename": "/assets/main.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              },
+              {
+                "abs_path": "https://example.com/assets/orphan.min.js",
+                "colno": 147,
+                "filename": "/assets/orphan.min.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              }
+            ]
+          },
+          "type": "TypeError",
+          "value": "x is undefined"
+        }
+      ]
+    },
+    "metadata": {
+      "filename": "/assets/orphan.min.js",
+      "function": "?",
+      "type": "TypeError",
+      "value": "x is undefined"
+    },
+    "title": "TypeError: x is undefined"
+  }
+]
