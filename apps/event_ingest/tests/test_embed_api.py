@@ -48,8 +48,13 @@ class ErrorPageEmbedTestCase(EventIngestTestCase):
 
     async def test_submit_report_with_issue(self):
         issue = await baker.amake("issue_events.Issue", project=self.project)
-        event = await baker.amake("issue_events.IssueEvent", issue=issue)
-        params = f"?dsn={self.project_key.get_dsn()}&eventId={event.id.hex}"
+        event = await baker.amake(
+            "issue_events.IssueEvent",
+            issue=issue,
+            event_id=uuid.uuid4(),
+            organization=self.project.organization,
+        )
+        params = f"?dsn={self.project_key.get_dsn()}&eventId={event.event_id.hex}"
         data = {"name": "Test Name", "email": "test@example.com", "comments": "hmm"}
         res = await self.async_client.post(self.url + params, data)
         self.assertEqual(res.status_code, 200)
