@@ -9,7 +9,7 @@ class ChunkUploadAPIPermissionTests(APIPermissionTestCase):
     def setUp(self):
         self.create_user_org()
         self.set_client_credentials(self.auth_token.token)
-        self.url = reverse("api:chunk_upload", args=[self.organization])
+        self.url = reverse("api:chunk_upload", args=[self.organization.slug])
 
     def test_post(self):
         # A fresh upload file per request: posting consumes the file object.

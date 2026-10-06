@@ -89,6 +89,13 @@ class ChunkUploadAPITestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(await FileBlob.objects.acount(), 1)
 
+    async def test_post_requires_membership(self):
+        other_org = await baker.amake("organizations_ext.Organization")
+        url = reverse("api:get_chunk_upload_info", args=[other_org.slug])
+        res = await self.async_client.post(url, {"file_gzip": generate_file()})
+        self.assertEqual(res.status_code, 404)
+        self.assertFalse(await FileBlob.objects.aexists())
+
     async def test_post_rejects_checksum_mismatch(self):
         chunk = SimpleUploadedFile(
             sha1(b"other content").hexdigest(), gzip.compress(b"sample content")
