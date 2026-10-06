@@ -46,7 +46,7 @@ def get_project_alert_queryset(user_id: int, organization_slug: str, project_slu
 
 
 @router.get(
-    "projects/{slug:organization_slug}/{slug:project_slug}/alerts/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/alerts/",
     response=list[ProjectAlertSchema],
     by_alias=True,
 )
@@ -54,7 +54,7 @@ def get_project_alert_queryset(user_id: int, organization_slug: str, project_slu
 async def list_project_alerts(
     request: OrgScopedHttpRequest,
     response: HttpResponse,
-    organization_slug: str,
+    organization_id_or_slug: str,
     project_slug: str,
 ):
     # The slug alone is not unique across orgs; the gate scopes this to the org.
@@ -64,14 +64,14 @@ async def list_project_alerts(
 
 
 @router.post(
-    "projects/{slug:organization_slug}/{slug:project_slug}/alerts/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/alerts/",
     response={201: ProjectAlertSchema},
     by_alias=True,
 )
 @has_permission(["project:write", "project:admin"])
 async def create_project_alert(
     request: AuthHttpRequest,
-    organization_slug: str,
+    organization_id_or_slug: str,
     project_slug: str,
     payload: ProjectAlertIn,
 ):
@@ -84,7 +84,7 @@ async def create_project_alert(
             )
             | Q(teams__members__user=user_id)
         ).distinct(),
-        organization__slug=organization_slug,
+        organization__slug=organization_id_or_slug,
         slug=project_slug,
     )
     data = payload.dict(exclude_unset=True)
@@ -97,26 +97,26 @@ async def create_project_alert(
         ]
     )
     return await get_project_alert_queryset(
-        user_id, organization_slug, project_slug
+        user_id, organization_id_or_slug, project_slug
     ).aget(id=project_alert.id)
 
 
 @router.put(
-    "projects/{slug:organization_slug}/{slug:project_slug}/alerts/{alert_id}/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/alerts/{alert_id}/",
     response=ProjectAlertSchema,
     by_alias=True,
 )
 @has_permission(["project:write", "project:admin"])
 async def update_project_alert(
     request: AuthHttpRequest,
-    organization_slug: str,
+    organization_id_or_slug: str,
     project_slug: str,
     alert_id: int,
     payload: ProjectAlertIn,
 ):
     user_id = request.auth.user_id
     alert = await aget_object_or_404(
-        get_project_alert_queryset(user_id, organization_slug, project_slug),
+        get_project_alert_queryset(user_id, organization_id_or_slug, project_slug),
         id=alert_id,
     )
 
@@ -146,19 +146,19 @@ async def update_project_alert(
         await alert.alertrecipient_set.filter(pk__in=delete_recipient_ids).adelete()
 
     return await get_project_alert_queryset(
-        user_id, organization_slug, project_slug
+        user_id, organization_id_or_slug, project_slug
     ).aget(id=alert.id)
 
 
 @router.delete(
-    "projects/{slug:organization_slug}/{slug:project_slug}/alerts/{alert_id}/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/alerts/{alert_id}/",
     response={204: None},
 )
 @org_scoped(["project:admin"], ProjectAlert)
 async def delete_project_alert(
     request: OrgScopedHttpRequest,
     qs: QuerySet[ProjectAlert],
-    organization_slug: str,
+    organization_id_or_slug: str,
     project_slug: str,
     alert_id: int,
 ):
@@ -169,21 +169,21 @@ async def delete_project_alert(
 
 
 @router.post(
-    "projects/{slug:organization_slug}/{slug:project_slug}/alerts/{alert_id}/test/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/alerts/{alert_id}/test/",
     response=list[TestAlertResultSchema],
     by_alias=True,
 )
 @has_permission(["project:write", "project:admin"])
 async def test_project_alert(
     request: AuthHttpRequest,
-    organization_slug: str,
+    organization_id_or_slug: str,
     project_slug: str,
     alert_id: int,
     recipient_id: int | None = None,
 ):
     alert = await aget_object_or_404(
         get_project_alert_queryset(
-            request.auth.user_id, organization_slug, project_slug
+            request.auth.user_id, organization_id_or_slug, project_slug
         ).select_related("project__organization"),
         id=alert_id,
     )
