@@ -9,15 +9,15 @@ from uuid import UUID
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.db import connections
+from django.db.models import QuerySet
 from django.http import Http404, HttpResponse
 from django.shortcuts import aget_object_or_404
 from ninja import Query, Router
 
-from apps.organizations_ext.queryset_utils import get_organization_for_user
+from apps.organizations_ext.models import Organization
 from apps.projects.models import LogProjectHourlyStatistic
-from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.pagination import set_pagination_headers
-from glitchtip.api.permissions import has_permission
+from glitchtip.api.permissions import OrgScopedHttpRequest, org_scoped
 from glitchtip.cold_storage import (
     ColdStorageBusy,
     cold_read_slot,
@@ -720,15 +720,16 @@ async def get_log_by_id(organization_id: int, log_id: UUID) -> LogEventRow | Non
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/logs/",
+    "organizations/{slug:organization_id_or_slug}/logs/",
     response=list[LogEventSchema],
     by_alias=True,
 )
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped(["event:read", "event:write", "event:admin"], Organization)
 async def list_logs(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
     response: HttpResponse,
-    organization_slug: str,
+    organization_id_or_slug: str,
     filters: Query[LogFilterSchema],
 ):
     """
@@ -749,9 +750,10 @@ async def list_logs(
     - cursor: Pagination cursor for "load more"
     - limit: Results per page (1-200, default 100)
     """
-    organization = await aget_object_or_404(
-        get_organization_for_user(request.auth.user_id, organization_slug)
-    )
+    # Hot and cold storage queries are hand-written and cannot carry the gate,
+    # and an empty result would not tell a non-member from no data, so the
+    # membership read comes first. The other log routes follow suit.
+    organization = await aget_object_or_404(qs.only("id"))
 
     # Determine time range (default to last 7 days)
     now = datetime.now(UTC)
@@ -811,20 +813,19 @@ async def list_logs(
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/logs/{uuid:log_id}/",
+    "organizations/{slug:organization_id_or_slug}/logs/{uuid:log_id}/",
     response=LogEventSchema,
     by_alias=True,
 )
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped(["event:read", "event:write", "event:admin"], Organization)
 async def get_log(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
     log_id: UUID,
 ):
     """Get a single log event by ID (searches both hot and cold storage)."""
-    organization = await aget_object_or_404(
-        get_organization_for_user(request.auth.user_id, organization_slug)
-    )
+    organization = await aget_object_or_404(qs.only("id"))
 
     log_event = await get_log_by_id(organization.id, log_id)
 
@@ -905,15 +906,16 @@ async def query_log_stats(
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/logs/stats/",
+    "organizations/{slug:organization_id_or_slug}/logs/stats/",
     response=LogStatsSchema,
     by_alias=True,
 )
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped(["event:read", "event:write", "event:admin"], Organization)
 async def get_log_stats(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
     response: HttpResponse,
-    organization_slug: str,
+    organization_id_or_slug: str,
     filters: Query[LogStatsFilterSchema],
 ):
     """
@@ -923,9 +925,7 @@ async def get_log_stats(
     Supports filtering by project and level.
     Time range defaults to last 7 days, max 90 days.
     """
-    organization = await aget_object_or_404(
-        get_organization_for_user(request.auth.user_id, organization_slug)
-    )
+    organization = await aget_object_or_404(qs.only("id"))
 
     # Determine time range (default to last 7 days, max 90 days)
     now = datetime.now(UTC)
@@ -964,14 +964,15 @@ async def get_log_stats(
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/logs/resources/",
+    "organizations/{slug:organization_id_or_slug}/logs/resources/",
     response=list[LogResourceSchema],
     by_alias=True,
 )
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped(["event:read", "event:write", "event:admin"], Organization)
 async def list_log_resources(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
     resource_type: str | None = None,
 ):
     """
@@ -980,9 +981,7 @@ async def list_log_resources(
     Returns resources ordered by last_seen (most recent first).
     Used to populate filter dropdowns in the UI.
     """
-    organization = await aget_object_or_404(
-        get_organization_for_user(request.auth.user_id, organization_slug)
-    )
+    organization = await aget_object_or_404(qs.only("id"))
 
     qs = LogResource.objects.filter(organization=organization)
     if resource_type:
