@@ -378,6 +378,26 @@ class DsymsAPIViewTestCase(GlitchTestCase):
         # Verify it's a valid ISO date
         self.assertTrue(res_data[0]["dateCreated"].endswith("Z"))
 
+    async def test_get_unknown_project(self):
+        url = f"/api/0/projects/{self.organization.slug}/nope/files/dsyms/"
+        response = await self.async_client.get(url)
+        self.assertEqual(response.status_code, 404)
+
+    async def test_mixed_case_organization_slug(self):
+        """Org slugs are case-sensitive, so the path's is used as sent."""
+        self.organization.slug = "Mixed-Case"
+        await self.organization.asave(update_fields=["slug"])
+        url = f"/api/0/projects/Mixed-Case/{self.project.slug}/files/dsyms/"
+        response = await self.async_client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+    async def test_reprocessing_requires_membership(self):
+        other_org = await baker.amake("organizations_ext.Organization")
+        other_project = await baker.amake("projects.Project", organization=other_org)
+        url = f"/api/0/projects/{other_org.slug}/{other_project.slug}/reprocessing/"
+        response = await self.async_client.post(url)
+        self.assertEqual(response.status_code, 404)
+
 
 class DifsTasksTestCase(GlitchTestCase):
     @classmethod

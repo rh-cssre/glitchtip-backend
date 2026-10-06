@@ -7,6 +7,7 @@ from hashlib import sha1
 
 from asgiref.sync import sync_to_async
 from django.core.files import File as DjangoFile
+from django.db.models import QuerySet
 from django.http import HttpResponse
 from django.shortcuts import aget_object_or_404
 from gt_rust.symbolic import normalize_debug_id
@@ -18,11 +19,9 @@ from ninja.pagination import paginate
 
 from apps.files.assemble import AssembleTask, ChunkFileState, get_assemble_status
 from apps.files.models import File, FileBlob
-from apps.organizations_ext.models import Organization
 from apps.projects.models import Project
-from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.decorators import optional_slash
-from glitchtip.api.permissions import has_permission
+from glitchtip.api.permissions import OrgScopedHttpRequest, org_scoped
 
 from .models import DebugInformationFile
 from .proguard import (  # noqa: F401 (re-exported for callers and tests)
@@ -48,21 +47,17 @@ router = Router()
 @optional_slash(
     router,
     "post",
-    "projects/{slug:organization_slug}/{slug:project_slug}/files/difs/assemble/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/files/difs/assemble/",
 )
-@has_permission(["project:write", "project:admin", "project:releases"])
+@org_scoped(["project:write", "project:admin", "project:releases"], Project)
 async def difs_assemble_api(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Project],
+    organization_id_or_slug: str,
     project_slug: str,
     payload: AssemblePayload,
 ):
-    organization = await aget_object_or_404(
-        Organization, slug=organization_slug.lower(), users=request.auth.user_id
-    )
-    project = await aget_object_or_404(
-        Project, slug=project_slug.lower(), organization=organization
-    )
+    project = await aget_object_or_404(qs, slug=project_slug.lower())
 
     responses = {}
 
@@ -126,18 +121,20 @@ async def difs_assemble_api(
 @optional_slash(
     router,
     "post",
-    "projects/{slug:organization_slug}/{slug:project_slug}/reprocessing/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/reprocessing/",
 )
-@has_permission(["project:write", "project:admin", "project:releases"])
+@org_scoped(["project:write", "project:admin", "project:releases"], Project)
 async def project_reprocessing(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Project],
+    organization_id_or_slug: str,
     project_slug: str,
 ):
     """
     Not implemented. It is a dummy API to keep `sentry-cli upload-dif` happy
     """
-    return
+    # Read the project anyway: an unevaluated qs checks no membership.
+    await aget_object_or_404(qs.only("id"), slug=project_slug.lower())
 
 
 async def create_dif_from_read_only_file(proguard_file, project, proguard_id, filename):
@@ -205,45 +202,39 @@ async def create_dif_from_read_only_file(proguard_file, project, proguard_id, fi
 @optional_slash(
     router,
     "get",
-    "projects/{slug:organization_slug}/{slug:project_slug}/files/dsyms/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/files/dsyms/",
     response=list[DebugFileSchema],
     by_alias=True,
 )
 @paginate
-@has_permission(["project:read", "project:write", "project:admin"])
+# Gates the project rather than the list, so an unknown project stays a 404.
+@org_scoped(["project:read", "project:write", "project:admin"], Project)
 async def list_dsyms(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Project],
+    organization_id_or_slug: str,
     project_slug: str,
     response: HttpResponse,
 ):
-    organization = await aget_object_or_404(
-        Organization, slug=organization_slug.lower(), users=request.auth.user_id
-    )
-    project = await aget_object_or_404(
-        Project, slug=project_slug.lower(), organization=organization
-    )
+    project = await aget_object_or_404(qs, slug=project_slug.lower())
 
     return DebugInformationFile.objects.filter(project=project).select_related("file")
 
 
 @optional_slash(
-    router, "post", "projects/{slug:organization_slug}/{slug:project_slug}/files/dsyms/"
+    router,
+    "post",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/files/dsyms/",
 )
-@has_permission(["project:write", "project:admin", "project:releases"])
+@org_scoped(["project:write", "project:admin", "project:releases"], Project)
 async def dsyms(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Project],
+    organization_id_or_slug: str,
     project_slug: str,
     file: UploadedFile = NinjaFile(...),
 ):
-    organization = await aget_object_or_404(
-        Organization, slug=organization_slug.lower(), users=request.auth.user_id
-    )
-    # self.check_object_permissions(request, organization)
-    project = await aget_object_or_404(
-        Project, slug=project_slug.lower(), organization=organization
-    )
+    project = await aget_object_or_404(qs, slug=project_slug.lower())
     if file.size > MAX_UPLOAD_BLOB_SIZE:
         raise HttpError(
             400,
