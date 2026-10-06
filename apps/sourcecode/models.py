@@ -38,10 +38,12 @@ class Repository(OrgScopedModel, CreatedModel):
         return self.name
 
 
-class DebugSymbolBundle(CreatedModel):
+class DebugSymbolBundle(OrgScopedModel, CreatedModel):
     """
     Supports Artifact Bundles, Release Bundles, and DIFs
     """
+
+    org_field = "organization_id"
 
     organization = models.ForeignKey(
         "organizations_ext.Organization", on_delete=models.CASCADE

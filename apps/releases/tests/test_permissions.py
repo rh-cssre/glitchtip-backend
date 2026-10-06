@@ -21,21 +21,21 @@ class ReleaseAPIPermissionTests(APIPermissionTestCase):
         self.project_list_url = reverse(
             "api:list_project_releases",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": self.project.slug,
             },
         )
         self.organization_detail_url = reverse(
             "api:get_release",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "version": self.release.version,
             },
         )
         self.project_detail_url = reverse(
             "api:get_project_release",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": self.project.slug,
                 "version": self.release.version,
             },
@@ -43,14 +43,14 @@ class ReleaseAPIPermissionTests(APIPermissionTestCase):
         self.org_delete_url = reverse(
             "api:delete_organization_release",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "version": self.release.version,
             },
         )
         self.project_delete_url = reverse(
             "api:delete_project_release",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": self.project.slug,
                 "version": self.release.version,
             },
@@ -123,13 +123,15 @@ class ReleaseFileAPIPermissionTests(APIPermissionTestCase):
             "releases.Release", organization=self.organization, projects=[self.project]
         )
         self.release_file = baker.make(
-            "sourcecode.DebugSymbolBundle", release=self.release
+            "sourcecode.DebugSymbolBundle",
+            release=self.release,
+            organization=self.organization,
         )
 
         self.list_url = reverse(
             "api:list_project_release_files",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": self.project.slug,
                 "version": self.release.version,
             },
@@ -137,7 +139,7 @@ class ReleaseFileAPIPermissionTests(APIPermissionTestCase):
         self.detail_url = reverse(
             "api:get_project_release_file",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": self.project.slug,
                 "version": self.release.version,
                 "file_id": self.release_file.pk,
