@@ -46,7 +46,7 @@ class TeamAPITestCase(TestCase):
         await self.async_client.aforce_login(member)
         url = reverse("api:delete_team", args=[self.organization.slug, team.slug])
         res = await self.async_client.delete(url)
-        self.assertEqual(res.status_code, 404)
+        self.assertEqual(res.status_code, 403)
         self.assertTrue(await Team.objects.filter(id=team.id).aexists())
 
     async def test_update(self):
@@ -59,6 +59,14 @@ class TeamAPITestCase(TestCase):
         self.assertContains(res, slug)
         await team.arefresh_from_db()
         self.assertEqual(team.slug, slug)
+
+        self.org_user.role = OrganizationUserRole.MEMBER
+        await self.org_user.asave()
+        url = reverse("api:update_team", args=[self.organization.slug, slug])
+        res = await self.async_client.put(
+            url, data={"slug": "other"}, content_type="application/json"
+        )
+        self.assertEqual(res.status_code, 403)
 
     async def test_list(self):
         url = reverse("api:list_teams", args=[self.organization.slug])
@@ -233,7 +241,7 @@ class TeamAPITestCase(TestCase):
         url = reverse(
             "api:add_team_to_project",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": new_project.slug,
                 "team_slug": team.slug,
             },
@@ -249,19 +257,34 @@ class TeamAPITestCase(TestCase):
         new_project = await baker.amake(
             "projects.Project", organization=self.organization
         )
-        user = await baker.amake("users.user")
-        await self.async_client.aforce_login(user)
-        await self.organization.aadd_user(user, OrganizationUserRole.MEMBER)
         url = reverse(
             "api:add_team_to_project",
-            kwargs={
-                "organization_slug": self.organization.slug,
-                "project_slug": new_project.slug,
-                "team_slug": team.slug,
-            },
+            args=[self.organization.slug, new_project.slug, team.slug],
         )
-        await self.async_client.post(url)
-        self.assertFalse(await new_project.teams.aexists())
+        for role, status in (
+            (OrganizationUserRole.MEMBER, 403),
+            (OrganizationUserRole.ADMIN, 403),
+            (OrganizationUserRole.MANAGER, 201),
+        ):
+            with self.subTest(role=role.label):
+                self.org_user.role = role
+                await self.org_user.asave()
+                res = await self.async_client.post(url)
+                self.assertEqual(res.status_code, status)
+                self.assertEqual(await new_project.teams.aexists(), status == 201)
+
+    async def test_add_team_to_project_ignores_other_org_team(self):
+        project = await baker.amake("projects.Project", organization=self.organization)
+        other_org = await baker.amake("organizations_ext.Organization")
+        await other_org.aadd_user(self.user)
+        other_team = await baker.amake("teams.Team", organization=other_org)
+        url = reverse(
+            "api:add_team_to_project",
+            args=[self.organization.slug, project.slug, other_team.slug],
+        )
+        res = await self.async_client.post(url)
+        self.assertEqual(res.status_code, 404)
+        self.assertFalse(await project.teams.aexists())
 
     async def test_delete_team_from_project(self):
         project = await baker.amake("projects.Project", organization=self.organization)
@@ -271,7 +294,7 @@ class TeamAPITestCase(TestCase):
         url = reverse(
             "api:delete_team_from_project",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": project.slug,
                 "team_slug": team.slug,
             },

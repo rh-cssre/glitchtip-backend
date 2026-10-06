@@ -13,26 +13,26 @@ class TeamAPIPermissionTests(APIPermissionTestCase):
         self.project = baker.make("projects.Project", organization=self.organization)
         self.list_url = reverse(
             "api:list_teams",
-            kwargs={"organization_slug": self.organization.slug},
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
         self.project_list_url = reverse(
             "api:list_project_teams",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": self.project.slug,
             },
         )
         self.detail_url = reverse(
             "api:get_team",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "team_slug": self.team.slug,
             },
         )
         self.create_team_url = reverse(
             "api:create_team",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
             },
         )
 
@@ -67,7 +67,7 @@ class TeamAPIPermissionTests(APIPermissionTestCase):
         self.set_client_credentials(None)
         self.client.force_login(self.user)
         self.set_user_role(OrganizationUserRole.MEMBER)
-        self.assertDeleteReqStatusCode(self.detail_url, 404)
+        self.assertDeleteReqStatusCode(self.detail_url, 403)
 
         self.set_user_role(OrganizationUserRole.OWNER)
         self.assertDeleteReqStatusCode(self.detail_url, 204)
