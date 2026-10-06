@@ -68,9 +68,9 @@ class UpdateIssueSchema(Schema):
         elif self.status == "resolvedInNextRelease":
             self.status = EventStatusEnum.resolved
             if self.status_details is None:
-                self.status_details = StatusDetailsSchema.model_validate(
-                    {"inNextRelease": True}
-                )
+                self.status_details = StatusDetailsSchema()
+            if not self.status_details.in_release:
+                self.status_details.in_next_release = True
         return self
 
 
@@ -531,7 +531,7 @@ async def update_project_issues(
             raise HttpError(400, f"Invalid status: {status_filter}")
         # Written into the query so the background batches apply it too
         filters.query = f"is:{status_filter} {filters.query or ''}".strip()
-    elif not filters.id__in and not filters.query:
+    elif not filters.id__in and not (filters.query or "").strip():
         filters.query = "is:unresolved"
 
     return await bulk_update_issues(user_id, organization_slug, filters, payload)
@@ -549,7 +549,9 @@ async def bulk_update_issues(
         )
     )
     # Not get_queryset(): its comment count annotation adds a GROUP BY that
-    # turns the id selections below into a scan of every org's issues.
+    # turns the id selections below into a scan of every org's issues, and
+    # DISTINCT does the same. Tag filters may repeat an issue (one IssueTag row
+    # per day); the selections below tolerate duplicate ids.
     qs = filter_issue_list(
         Issue.objects.filter(
             project__organization_id=organization_id,
@@ -557,6 +559,30 @@ async def bulk_update_issues(
         ),
         filters,
     )
+
+    # Mirrors update_issue_status: resolving may pin a release, any other
+    # status clears it.
+    release_update: dict[str, int | None] = {}
+    if payload.status and payload.status != EventStatus.RESOLVED.label:
+        release_update = {"resolved_in_release_id": None}
+    elif payload.status and payload.status_details:
+        details = payload.status_details
+        release_qs = None
+        if details.in_release:
+            release_qs = Release.objects.filter(
+                version=details.in_release, organization_id=organization_id
+            )
+        elif details.in_next_release:
+            # "Next" is per project
+            if len(filters.project__in or []) != 1:
+                raise HttpError(400, "inNextRelease needs a single project")
+            release_qs = Release.objects.filter(
+                projects=filters.project__in[0], organization_id=organization_id
+            ).order_by("-created")
+        if release_qs is not None:
+            release_id = await release_qs.values_list("id", flat=True).afirst()
+            if release_id:
+                release_update = {"resolved_in_release_id": release_id}
 
     merge_issue = None
     if payload.merge:
@@ -584,16 +610,9 @@ async def bulk_update_issues(
     updated_ids = [i async for i in qs.values_list("id", flat=True)[:limit]]
 
     should_enqueue = len(updated_ids) == limit
-    task_kwargs = {
-        "organization_slug": organization_slug,
-        "user_id": user_id,
-        "filter_params": filters.model_dump(by_alias=True, mode="json"),
-        "exclude_ids": updated_ids,
-        "max_id": max_id,
-        "update_params": payload.model_dump(mode="json"),
-    }
+    update_params = payload.model_dump(mode="json") | release_update
     if merge_issue:
-        task_kwargs["update_params"]["merge"] = merge_issue.id
+        update_params["merge"] = merge_issue.id
 
     if payload.status:
         # status lives on the IssueIndex leaf; the partition key prunes
@@ -601,26 +620,25 @@ async def bulk_update_issues(
         await IssueIndex.objects.filter(
             issue_id__in=updated_ids, organization_id=organization_id
         ).aupdate(status=EventStatus.from_string(payload.status))
-        if should_enqueue:
-            await update_issues_task.aenqueue(**task_kwargs)
+    if release_update:
+        await Issue.objects.filter(id__in=updated_ids).aupdate(**release_update)
 
     if "assigned_to" in payload.model_fields_set:
         assignee_org_user, assignee_team = await resolve_assignee(
             payload.assigned_to, organization_id
         )
-        assignee_org_user_id = assignee_org_user.id if assignee_org_user else None
-        assignee_team_id = assignee_team.id if assignee_team else None
-        await Issue.objects.filter(id__in=updated_ids).aupdate(
-            assigned_to_org_user_id=assignee_org_user_id,
-            assigned_to_team_id=assignee_team_id,
+        update_params["assigned_to_org_user_id"] = (
+            assignee_org_user.id if assignee_org_user else None
         )
-        if should_enqueue:
-            task_kwargs["update_params"]["assigned_to_org_user_id"] = (
-                assignee_org_user_id
-            )
-            task_kwargs["update_params"]["assigned_to_team_id"] = assignee_team_id
-            await update_issues_task.aenqueue(**task_kwargs)
+        update_params["assigned_to_team_id"] = (
+            assignee_team.id if assignee_team else None
+        )
+        await Issue.objects.filter(id__in=updated_ids).aupdate(
+            assigned_to_org_user_id=update_params["assigned_to_org_user_id"],
+            assigned_to_team_id=update_params["assigned_to_team_id"],
+        )
 
+    needs_drain = False
     if merge_issue:
         remove_qs = Issue.objects.filter(
             id__in=updated_ids, project_id=merge_issue.project_id
@@ -648,8 +666,16 @@ async def bulk_update_issues(
         needs_drain = len(event_ids) == CHUNK_SIZE
         if not needs_drain:
             await remove_qs.aupdate(is_deleted=True)
-        if should_enqueue or needs_drain:
-            await update_issues_task.aenqueue(**task_kwargs)
+
+    if should_enqueue or needs_drain:
+        await update_issues_task.aenqueue(
+            organization_slug=organization_slug,
+            user_id=user_id,
+            filter_params=filters.model_dump(by_alias=True, mode="json"),
+            update_params=update_params,
+            exclude_ids=updated_ids,
+            max_id=max_id,
+        )
 
     return payload
 

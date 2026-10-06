@@ -980,7 +980,7 @@ class IssueAPITestCase(GlitchTestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(enqueue.await_count, 2)
+        self.assertEqual(enqueue.await_count, 1)
         for task_kwargs in queued_tasks:
             self.assertCountEqual(task_kwargs["filter_params"]["id"], selected_ids)
             self.assertNotIn("id__in", task_kwargs["filter_params"])
@@ -2351,13 +2351,8 @@ class ProjectBulkUpdateAPITestCase(GlitchTestCase):
             .values_list("status", flat=True)
         ]
 
-    async def test_status_filter_applies_to_background_batches(self):
-        """An ignored ?status= filter would update every issue in the project"""
-        resolved = [
-            await amake_issue(project=self.project, status=EventStatus.RESOLVED)
-            for _ in range(51)
-        ]
-        unresolved = await amake_issue(project=self.project)
+    async def put_and_run_task(self, query: str, data: dict):
+        """PUT, then run the queued background task for issues past the first 50"""
         queued_tasks = []
 
         async def capture_task(**kwargs):
@@ -2365,15 +2360,54 @@ class ProjectBulkUpdateAPITestCase(GlitchTestCase):
 
         enqueue = AsyncMock(side_effect=capture_task)
         with patch("apps.issue_events.api.issues.update_issues_task", aenqueue=enqueue):
-            res = await self.put("status=resolved", {"status": "ignored"})
+            res = await self.put(query, data)
         self.assertEqual(res.status_code, 200)
         self.assertEqual(len(queued_tasks), 1)
         await asyncio.wait_for(update_issues_task.func(**queued_tasks[0]), timeout=30)
+
+    async def test_status_filter_applies_to_background_batches(self):
+        """An ignored ?status= filter would update every issue in the project"""
+        resolved = [
+            await amake_issue(project=self.project, status=EventStatus.RESOLVED)
+            for _ in range(51)
+        ]
+        unresolved = await amake_issue(project=self.project)
+
+        await self.put_and_run_task("status=resolved", {"status": "ignored"})
 
         self.assertEqual(
             await self.statuses(resolved), [EventStatus.IGNORED] * len(resolved)
         )
         self.assertEqual(await self.statuses([unresolved]), [EventStatus.UNRESOLVED])
+
+    async def test_every_change_reaches_background_batches(self):
+        """Status, assignment and release apply to all issues, not just the first
+        50, even when the status change takes issues out of the ?status= filter"""
+        release = await baker.amake("releases.Release", organization=self.organization)
+        await release.projects.aadd(self.project)
+        issues = [await amake_issue(project=self.project) for _ in range(51)]
+
+        ids = "&".join(f"id={issue.id}" for issue in issues)
+        await self.put_and_run_task(
+            f"{ids}&status=unresolved",
+            {"status": "resolvedInNextRelease", "assignedTo": f"user:{self.user.id}"},
+        )
+
+        self.assertEqual(
+            await self.statuses(issues), [EventStatus.RESOLVED] * len(issues)
+        )
+        changed = Issue.objects.filter(
+            id__in=[i.id for i in issues],
+            resolved_in_release=release,
+            assigned_to_org_user__user=self.user,
+        )
+        self.assertEqual(await changed.acount(), len(issues))
+
+        # Any other status clears the release
+        await self.put_and_run_task("status=resolved", {"status": "unresolved"})
+        self.assertFalse(
+            await Issue.objects.filter(resolved_in_release__isnull=False).aexists()
+        )
 
     async def test_selection(self):
         other_project = await baker.amake(
