@@ -18,7 +18,7 @@ class EnvironmentAPIPermissionTests(APIPermissionTestCase):
         )
         self.list_url = reverse(
             "api:list_environments",
-            kwargs={"organization_slug": self.organization.slug},
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
 
     def test_list(self):
