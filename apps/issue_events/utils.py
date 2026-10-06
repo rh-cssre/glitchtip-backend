@@ -1,4 +1,5 @@
 import logging
+import re
 import string
 
 from sentry.interfaces.stacktrace import get_context
@@ -48,6 +49,27 @@ def base32_encode(base10_value: int) -> str:
     Example 10 -> 'A'
     """
     return int2base(base10_value, 32)
+
+
+# Display form is "<PROJECT-SLUG>-<base32 short_id>"; slugs may contain hyphens,
+# so the code is whatever follows the last one.
+_SHORT_ID_RE = re.compile(r"^(.+)-([0-9a-v]{1,7})$", re.IGNORECASE)
+_MAX_SHORT_ID = 2147483647  # PositiveIntegerField
+
+
+def parse_short_id(value: str) -> tuple[str, int] | None:
+    """
+    Parse a display short ID into (project slug, short_id)
+    Example 'MY-PROJECT-1A' -> ('my-project', 42)
+    """
+    match = _SHORT_ID_RE.match(value.strip())
+    if match is None:
+        return None
+    slug, code = match.groups()
+    short_id = base32_decode(code)
+    if short_id > _MAX_SHORT_ID:
+        return None
+    return slug.lower(), short_id
 
 
 def to_camel_with_lower_id(string: str) -> str:

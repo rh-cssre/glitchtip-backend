@@ -28,6 +28,7 @@ from ..schema import (
     IssueSchema,
     IssueStatsResponse,
     IssueTagSchema,
+    ShortIdLookupSchema,
     StatsDetailSchema,
 )
 from ..services import (
@@ -38,6 +39,7 @@ from ..services import (
     sort_options,
 )
 from ..tasks import CHUNK_SIZE, delete_issue_task, update_issues_task
+from ..utils import parse_short_id
 from . import router
 
 EventStatusEnum = StrEnum("EventStatusEnum", EventStatus.labels)
@@ -338,6 +340,60 @@ async def update_issue_status(qs: QuerySet, issue_id: int, payload: UpdateIssueS
     return obj
 
 
+async def get_short_id_hit(
+    organization_slug: str, query: str, project_slug: str | None = None
+) -> int | None:
+    """Issue id when a search query is a short ID such as ``PROJECT-1A``"""
+    parsed = parse_short_id(query)
+    if parsed is None:
+        return None
+    slug, short_id = parsed
+    if project_slug is not None and slug != project_slug:
+        return None
+    # Callers filter their permission-scoped queryset by the returned id
+    return (
+        await Issue.objects.filter(
+            project__organization__slug=organization_slug,
+            project__slug=slug,
+            short_id=short_id,
+            is_deleted=False,
+        )
+        .values_list("id", flat=True)
+        .afirst()
+    )
+
+
+@router.get(
+    "organizations/{slug:organization_slug}/shortids/{short_id}/",
+    response=ShortIdLookupSchema,
+    by_alias=True,
+)
+@has_permission(["event:read", "event:write", "event:admin"])
+async def get_issue_by_short_id(
+    request: AuthHttpRequest, organization_slug: str, short_id: str
+):
+    """Resolve a short ID such as ``PROJECT-1A`` to its issue"""
+    parsed = parse_short_id(short_id)
+    if parsed is None:
+        raise Http404()
+    project_slug, number = parsed
+    qs = await get_queryset(request.auth.user_id, organization_slug=organization_slug)
+    try:
+        issue = await qs.filter(
+            project__slug=project_slug, short_id=number, is_deleted=False
+        ).aget()
+    except Issue.DoesNotExist:
+        raise Http404()
+    request.matching_event_id = None
+    return {
+        "organizationSlug": organization_slug,
+        "projectSlug": issue.project.slug,
+        "groupId": str(issue.id),
+        "group": issue,
+        "shortId": issue.short_id_display,
+    }
+
+
 @router.get(
     "organizations/{slug:organization_slug}/issues/",
     response=list[IssueSchema],
@@ -351,6 +407,7 @@ async def list_issues(
     organization_slug: str,
     filters: Query[IssueFilters],
     sort: sort_options = "-last_seen",
+    short_id_lookup: str | None = Query(None, alias="shortIdLookup"),
 ):
     qs = (
         await get_queryset(request.auth.user_id, organization_slug=organization_slug)
@@ -358,6 +415,12 @@ async def list_issues(
     event_id: UUID | None = None
     organization_id: int | None = None
     if filters.query:
+        if short_id_lookup == "1" and (
+            issue_id := await get_short_id_hit(organization_slug, filters.query)
+        ):
+            # A short ID names one issue, so the other filters don't apply
+            response["X-Sentry-Direct-Hit"] = "1"
+            return filter_issue_list(qs.filter(id=issue_id), {}, sort)
         try:
             event_id = UUID(filters.query)
         except ValueError:
@@ -531,6 +594,7 @@ async def list_project_issues(
     project_slug: str,
     filters: Query[IssueFilters],
     sort: sort_options = "-last_seen",
+    short_id_lookup: str | None = Query(None, alias="shortIdLookup"),
 ):
     qs = await get_queryset(
         request.auth.user_id,
@@ -540,6 +604,14 @@ async def list_project_issues(
     event_id: UUID | None = None
     organization_id: int | None = None
     if filters.query:
+        if short_id_lookup == "1" and (
+            issue_id := await get_short_id_hit(
+                organization_slug, filters.query, project_slug
+            )
+        ):
+            # A short ID names one issue, so the other filters don't apply
+            response["X-Sentry-Direct-Hit"] = "1"
+            return filter_issue_list(qs.filter(id=issue_id), {}, sort)
         try:
             event_id = UUID(filters.query)
         except ValueError:
