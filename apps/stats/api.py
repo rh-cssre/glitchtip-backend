@@ -2,12 +2,12 @@ from datetime import timedelta
 
 from asgiref.sync import sync_to_async
 from django.db import connection
+from django.db.models import QuerySet
 from django.http import Http404
 from ninja import Query, Router
 
 from apps.projects.models import Project
-from glitchtip.api.authentication import AuthHttpRequest
-from glitchtip.api.permissions import has_permission
+from glitchtip.api.permissions import OrgScopedHttpRequest, org_scoped
 
 from .schema import StatsV2Schema
 
@@ -49,10 +49,13 @@ def get_timeseries(category, start, end, interval, project_ids):
             return cursor.fetchall()
 
 
-@router.get("organizations/{slug:organization_slug}/stats_v2/")
-@has_permission(["org:read", "org:write", "org:admin"])
+@router.get("organizations/{slug:organization_id_or_slug}/stats_v2/")
+@org_scoped(["org:read", "org:write", "org:admin"], Project)
 async def stats_v2(
-    request: AuthHttpRequest, organization_slug: str, filters: Query[StatsV2Schema]
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Project],
+    organization_id_or_slug: str,
+    filters: Query[StatsV2Schema],
 ):
     """
     Reverse engineered stats v2 endpoint. Endpoint in sentry not documented.
@@ -70,10 +73,7 @@ async def stats_v2(
     category = filters.category
     # Get projects that are authorized, filtered by organization, and selected by user
     # Intentionally separate SQL call to simplify raw SQL
-    projects = Project.objects.filter(
-        organization__slug=organization_slug,
-        organization__users=request.auth.user_id,
-    )
+    projects = qs
     if filters.project:
         projects = projects.filter(pk__in=filters.project)
     project_ids = [id async for id in projects.values_list("id", flat=True)]
