@@ -139,8 +139,11 @@ class ProjectCounter(models.Model):
     value = models.PositiveIntegerField()
 
 
-class ProjectKey(CreatedModel):
+class ProjectKey(OrgScopedModel, CreatedModel):
     """Authentication key for a Project"""
+
+    org_field = "project__organization_id"
+    undeleted_through = ("project",)
 
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     is_active = models.BooleanField(default=True)

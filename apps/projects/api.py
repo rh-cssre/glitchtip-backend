@@ -1,17 +1,22 @@
 from uuid import UUID
 
+from django.db.models import QuerySet
 from django.http import Http404, HttpResponse
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Status
 from ninja.errors import ValidationError
 from ninja.pagination import paginate
 
-from apps.organizations_ext.constants import OrganizationUserRole
-from apps.organizations_ext.models import Organization
 from apps.shared.types import MeID
 from apps.teams.models import Team
 from apps.teams.schema import ProjectTeamSchema
-from glitchtip.api.permissions import AuthHttpRequest, has_permission
+from glitchtip.api.permissions import (
+    AuthHttpRequest,
+    OrgScopedHttpRequest,
+    has_permission,
+    org_scoped,
+    org_scoped_list,
+)
 
 from .models import Project, ProjectKey, UserProjectAlert
 from .schema import (
@@ -55,19 +60,6 @@ def get_projects_queryset(
     return qs
 
 
-def get_project_keys_queryset(
-    user_id: int, organization_slug: str, project_slug: str, key_id: UUID | None = None
-):
-    qs = ProjectKey.objects.filter(
-        project__organization__users=user_id,
-        project__organization__slug=organization_slug,
-        project__slug=project_slug,
-    )
-    if key_id:
-        qs = qs.filter(public_key=key_id)
-    return qs
-
-
 @router.get(
     "projects/",
     response=list[ProjectOrganizationSchema],
@@ -85,16 +77,19 @@ async def list_projects(request: AuthHttpRequest, response: HttpResponse):
 
 
 @router.get(
-    "projects/{slug:organization_slug}/{slug:project_slug}/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/",
     response=ProjectOrganizationSchema,
     by_alias=True,
 )
-@has_permission(["project:read", "project:write", "project:admin"])
+@org_scoped(["project:read", "project:write", "project:admin"], Project)
 async def get_project(
-    request: AuthHttpRequest, organization_slug: str, project_slug: str
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Project],
+    organization_id_or_slug: str,
+    project_slug: str,
 ):
     return await aget_object_or_404(
-        get_projects_queryset(request.auth.user_id, organization_slug).select_related(
+        Project.annotate_is_member(qs, request.auth.user_id).select_related(
             "organization"
         ),
         slug=project_slug,
@@ -102,19 +97,20 @@ async def get_project(
 
 
 @router.put(
-    "projects/{slug:organization_slug}/{slug:project_slug}/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/",
     response=ProjectOrganizationSchema,
     by_alias=True,
 )
-@has_permission(["project:write", "project:admin"])
+@org_scoped(["project:write", "project:admin"], Project)
 async def update_project(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Project],
+    organization_id_or_slug: str,
     project_slug: str,
     payload: ProjectIn,
 ):
     project = await aget_object_or_404(
-        get_projects_queryset(request.auth.user_id, organization_slug).select_related(
+        Project.annotate_is_member(qs, request.auth.user_id).select_related(
             "organization"
         ),
         slug=project_slug,
@@ -126,85 +122,77 @@ async def update_project(
 
 
 @router.delete(
-    "projects/{slug:organization_slug}/{slug:project_slug}/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/",
     response={204: None},
 )
-@has_permission(["project:admin"])
+@org_scoped(["project:admin"], Project)
 async def delete_project(
-    request: AuthHttpRequest, organization_slug: str, project_slug: str
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Project],
+    organization_id_or_slug: str,
+    project_slug: str,
 ):
-    project = await aget_object_or_404(
-        get_projects_queryset(request.auth.user_id, organization_slug),
-        slug=project_slug,
-        organization__organization_users__user_id=request.auth.user_id,
-        organization__organization_users__role__gte=OrganizationUserRole.ADMIN,
-    )
+    # Fetched, not qs.adelete(): Project.delete() soft-deletes and enqueues
+    # the cleanup task, which a queryset delete would skip.
+    project = await aget_object_or_404(qs, slug=project_slug)
     await project.adelete()
     return Status(204, None)
 
 
 @router.get(
-    "teams/{slug:organization_slug}/{slug:team_slug}/projects/",
+    "teams/{slug:organization_id_or_slug}/{slug:team_slug}/projects/",
     response=list[ProjectSchema],
     by_alias=True,
 )
-@paginate
-@has_permission(["project:read"])
+@org_scoped_list(["project:read"], Project)
 async def list_team_projects(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
     response: HttpResponse,
-    organization_slug: str,
+    organization_id_or_slug: str,
     team_slug: str,
 ):
     """List all projects for a given team"""
-    return get_projects_queryset(
-        request.auth.user_id, organization_slug=organization_slug, team_slug=team_slug
+    return Project.annotate_is_member(
+        Project.objects.filter(teams__slug=team_slug), request.auth.user_id
     ).order_by("name")
 
 
 @router.post(
-    "teams/{slug:organization_slug}/{slug:team_slug}/projects/",
+    "teams/{slug:organization_id_or_slug}/{slug:team_slug}/projects/",
     response={201: ProjectSchema},
     by_alias=True,
 )
-@has_permission(["project:write", "project:admin"])
+@org_scoped(["project:write", "project:admin"], Team)
 async def create_project(
-    request: AuthHttpRequest, organization_slug: str, team_slug: str, payload: ProjectIn
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Team],
+    organization_id_or_slug: str,
+    team_slug: str,
+    payload: ProjectIn,
 ):
     """Create a new project given a team and organization"""
-    user_id = request.auth.user_id
-    team = await aget_object_or_404(
-        Team,
-        slug=team_slug,
-        organization__slug=organization_slug,
-        organization__users=user_id,
-        organization__organization_users__role__gte=OrganizationUserRole.ADMIN,
-    )
-    organization = await aget_object_or_404(
-        Organization,
-        slug=organization_slug,
-        users=user_id,
-        organization_users__role__gte=OrganizationUserRole.ADMIN,
-    )
+    # The project's slug is made unique per organization, which reads it.
+    team = await aget_object_or_404(qs.select_related("organization"), slug=team_slug)
     project = await Project.objects.acreate(
-        organization=organization, **payload.dict(exclude_unset=True)
+        organization=team.organization, **payload.dict(exclude_unset=True)
     )
     await project.teams.aadd(team)
-    project = await get_projects_queryset(user_id).aget(id=project.id)
+    project = await Project.annotate_is_member(
+        Project.objects, request.auth.user_id
+    ).aget(id=project.id)
     return Status(201, project)
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/projects/",
+    "organizations/{slug:organization_id_or_slug}/projects/",
     response=list[ProjectTeamSchema],
     by_alias=True,
 )
-@paginate
-@has_permission(["project:read"])
+@org_scoped_list(["project:read"], Project)
 async def list_organization_projects(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
     response: HttpResponse,
-    organization_slug: str,
+    organization_id_or_slug: str,
     query: str | None = None,
 ):
     """
@@ -213,7 +201,7 @@ async def list_organization_projects(
     query: Filter on team, ex: ?query=!team:burke-software
     """
     queryset = (
-        get_projects_queryset(request.auth.user_id, organization_slug=organization_slug)
+        Project.annotate_is_member(Project.objects.all(), request.auth.user_id)
         .prefetch_related("teams")
         .order_by("name")
     )
@@ -232,81 +220,70 @@ async def list_organization_projects(
 
 
 @router.get(
-    "projects/{slug:organization_slug}/{slug:project_slug}/keys/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/keys/",
     response=list[ProjectKeySchema],
     by_alias=True,
 )
-@paginate
-@has_permission(["project:read", "project:write", "project:admin"])
+@org_scoped_list(["project:read", "project:write", "project:admin"], ProjectKey)
 async def list_project_keys(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
     response: HttpResponse,
-    organization_slug: str,
+    organization_id_or_slug: str,
     project_slug: str,
     status: str | None = None,
 ):
     """List all DSN keys for a given project"""
-    return get_project_keys_queryset(
-        request.auth.user_id, organization_slug, project_slug
-    )
+    return ProjectKey.objects.filter(project__slug=project_slug)
 
 
 @router.get(
-    "projects/{slug:organization_slug}/{slug:project_slug}/keys/{uuid:key_id}/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/keys/{uuid:key_id}/",
     response=ProjectKeySchema,
     by_alias=True,
 )
-@has_permission(["project:read", "project:write", "project:admin"])
+@org_scoped(["project:read", "project:write", "project:admin"], ProjectKey)
 async def get_project_key(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[ProjectKey],
+    organization_id_or_slug: str,
     project_slug: str,
     key_id: UUID,
 ):
-    return await aget_object_or_404(
-        get_project_keys_queryset(
-            request.auth.user_id, organization_slug, project_slug, key_id=key_id
-        )
-    )
+    return await aget_object_or_404(qs, project__slug=project_slug, public_key=key_id)
 
 
 @router.put(
-    "projects/{slug:organization_slug}/{slug:project_slug}/keys/{uuid:key_id}/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/keys/{uuid:key_id}/",
     response=ProjectKeySchema,
     by_alias=True,
 )
-@has_permission(["project:write", "project:admin"])
+@org_scoped(["project:write", "project:admin"], ProjectKey)
 async def update_project_key(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[ProjectKey],
+    organization_id_or_slug: str,
     project_slug: str,
     key_id: UUID,
     payload: ProjectKeyIn,
 ):
-    return await aget_object_or_404(
-        get_project_keys_queryset(
-            request.auth.user_id, organization_slug, project_slug, key_id=key_id
-        )
-    )
+    return await aget_object_or_404(qs, project__slug=project_slug, public_key=key_id)
 
 
 @router.post(
-    "projects/{slug:organization_slug}/{slug:project_slug}/keys/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/keys/",
     response={201: ProjectKeySchema},
     by_alias=True,
 )
-@has_permission(["project:write", "project:admin"])
+@org_scoped(["project:write", "project:admin"], Project)
 async def create_project_key(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Project],
+    organization_id_or_slug: str,
     project_slug: str,
     payload: ProjectKeyIn,
 ):
     """Create new key for project. Rate limiting not implemented."""
-    project = await aget_object_or_404(
-        get_projects_queryset(request.auth.user_id, organization_slug),
-        slug=project_slug,
-    )
+    project = await aget_object_or_404(qs, slug=project_slug)
     return Status(
         201,
         await ProjectKey.objects.acreate(
@@ -319,23 +296,18 @@ async def create_project_key(
 
 
 @router.delete(
-    "projects/{slug:organization_slug}/{slug:project_slug}/keys/{uuid:key_id}/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/keys/{uuid:key_id}/",
     response={204: None},
 )
-@has_permission(["project:admin"])
+@org_scoped(["project:admin"], ProjectKey)
 async def delete_project_key(
-    request: AuthHttpRequest, organization_slug: str, project_slug: str, key_id: UUID
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[ProjectKey],
+    organization_id_or_slug: str,
+    project_slug: str,
+    key_id: UUID,
 ):
-    result, _ = (
-        await get_project_keys_queryset(
-            request.auth.user_id, organization_slug, project_slug, key_id=key_id
-        )
-        .filter(
-            project__organization__organization_users__user_id=request.auth.user_id,
-            project__organization__organization_users__role__gte=OrganizationUserRole.ADMIN,
-        )
-        .adelete()
-    )
+    result, _ = await qs.filter(project__slug=project_slug, public_key=key_id).adelete()
     if not result:
         raise Http404
     return Status(204, None)
