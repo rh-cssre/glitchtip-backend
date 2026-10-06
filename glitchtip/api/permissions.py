@@ -204,12 +204,13 @@ def org_scoped(scopes: list[Scopes], model: type[OrgScopedModel]):
     return decorator
 
 
-def org_scoped_list(scopes: list[Scopes], model: type[OrgScopedModel]):
+def org_scoped_list(scopes: list[Scopes], model: type[OrgScopedModel], pagination=None):
     """Gate the queryset a list view returns, once, then paginate it.
 
     ``paginate`` evaluates whatever the view returns, so that is what gets
     gated. The view takes no ``qs``: gating one as well would put the gate in
-    the SQL twice. ``model`` is only checked at import.
+    the SQL twice. ``model`` is only checked at import. ``pagination`` is a
+    pagination class for routes that don't use the default.
     """
     required, roles = _resolve_roles(scopes)
     _require_scoped_model(model, "org_scoped_list")
@@ -236,7 +237,7 @@ def org_scoped_list(scopes: list[Scopes], model: type[OrgScopedModel]):
                 raise TypeError(f"{view.__qualname__} must return a QuerySet")
             return scope.apply(result)
 
-        return paginate(gated)
+        return paginate(pagination)(gated) if pagination else paginate(gated)
 
     return decorator
 

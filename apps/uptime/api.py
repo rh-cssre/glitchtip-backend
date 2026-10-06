@@ -18,14 +18,17 @@ from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Status
 from ninja.errors import HttpError
-from ninja.pagination import paginate
 
 from apps.environments.models import Environment
 from apps.organizations_ext.models import Organization
 from apps.organizations_ext.utils import get_uptime_monitor_limit
 from apps.projects.models import Project
-from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.pagination import AsyncLinkHeaderPagination
+from glitchtip.api.permissions import (
+    OrgScopedHttpRequest,
+    org_scoped,
+    org_scoped_list,
+)
 
 from .models import Monitor, MonitorCheck, StatusPage
 from .schema import (
@@ -92,12 +95,18 @@ class StatusPagePagination(AsyncLinkHeaderPagination):
         return page
 
 
+def with_monitor_details(qs: QuerySet[Monitor]) -> QuerySet[Monitor]:
+    """Monitors with check annotations but WITHOUT checks prefetch."""
+    return qs.annotate(
+        latest_is_up=F("cached_is_up"), last_change=F("cached_last_change")
+    ).select_related("project", "organization")
+
+
 def get_monitor_queryset(user_id: int, organization_slug: str):
-    """Get monitors with annotations but WITHOUT checks prefetch."""
-    return (
-        Monitor.objects.with_check_annotations()
-        .filter(organization__users=user_id, organization__slug=organization_slug)
-        .select_related("project", "organization")
+    return with_monitor_details(
+        Monitor.objects.filter(
+            organization__users=user_id, organization__slug=organization_slug
+        )
     )
 
 
@@ -325,15 +334,15 @@ async def heartbeat_check(
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/monitors/",
+    "organizations/{slug:organization_id_or_slug}/monitors/",
     response=list[MonitorSchema],
     by_alias=True,
 )
-@paginate(MonitorPagination)
+@org_scoped_list(["org:read"], Monitor, pagination=MonitorPagination)
 async def list_monitors(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
     response: HttpResponse,
-    organization_slug: str,
+    organization_id_or_slug: str,
     sort: monitor_sort_options = "-created",
 ):
     """
@@ -342,39 +351,39 @@ async def list_monitors(
     ``sort`` accepts created, name, project and status; prefix with ``-`` to
     reverse. Ascending status is down first.
     """
-    return sort_monitors(
-        get_monitor_queryset(request.auth.user_id, organization_slug), sort
-    )
+    return sort_monitors(with_monitor_details(Monitor.objects.all()), sort)
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/monitors/{int:monitor_id}/",
+    "organizations/{slug:organization_id_or_slug}/monitors/{int:monitor_id}/",
     response=MonitorDetailSchema,
     by_alias=True,
 )
+@org_scoped(["org:read"], Monitor)
 async def get_monitor(
-    request: AuthHttpRequest, organization_slug: str, monitor_id: int
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Monitor],
+    organization_id_or_slug: str,
+    monitor_id: int,
 ):
-    monitor = await aget_object_or_404(
-        get_monitor_queryset(request.auth.user_id, organization_slug),
-        id=monitor_id,
-    )
+    monitor = await aget_object_or_404(with_monitor_details(qs), id=monitor_id)
     await attach_checks_to_monitors([monitor])
     return monitor
 
 
 @router.post(
-    "organizations/{slug:organization_slug}/monitors/",
+    "organizations/{slug:organization_id_or_slug}/monitors/",
     response={201: MonitorSchema},
     by_alias=True,
 )
+@org_scoped(["project:write"], Organization)
 async def create_monitor(
-    request: AuthHttpRequest, organization_slug: str, payload: MonitorIn
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
+    payload: MonitorIn,
 ):
-    user_id = request.auth.user_id
-    organization = await aget_object_or_404(
-        Organization, slug=organization_slug, users=user_id
-    )
+    organization = await aget_object_or_404(qs)
     limit = await get_uptime_monitor_limit(organization)
     if limit is not None:
         # Deliberately advisory: two concurrent creates can both see a count
@@ -394,32 +403,29 @@ async def create_monitor(
         organization.id, data.pop("environment_id", None)
     )
     monitor = await Monitor.objects.acreate(organization=organization, **data)
-    monitor = await get_monitor_queryset(user_id, organization_slug).aget(id=monitor.id)
+    monitor = await with_monitor_details(Monitor.objects).aget(id=monitor.id)
     await attach_checks_to_monitors([monitor])
     return Status(201, monitor)
 
 
 @router.put(
-    "organizations/{slug:organization_slug}/monitors/{int:monitor_id}/",
+    "organizations/{slug:organization_id_or_slug}/monitors/{int:monitor_id}/",
     response=MonitorSchema,
     by_alias=True,
 )
+@org_scoped(["project:write"], Monitor)
 async def update_monitor(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Monitor],
+    organization_id_or_slug: str,
     monitor_id: int,
     payload: MonitorIn,
 ):
-    monitor = await aget_object_or_404(
-        get_monitor_queryset(request.auth.user_id, organization_slug),
-        id=monitor_id,
-    )
+    monitor = await aget_object_or_404(with_monitor_details(qs), id=monitor_id)
     data = payload.dict()
     if project_id := data["project"]:
         result = await Project.objects.filter(
-            organization__slug=organization_slug,
-            organization__users=request.auth.user_id,
-            id=project_id,
+            organization_id=monitor.organization_id, id=project_id
         ).afirst()
         data["project"] = result
     data["environment_id"] = await resolve_environment_id(
@@ -433,15 +439,15 @@ async def update_monitor(
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/monitors/{int:monitor_id}/checks/",
+    "organizations/{slug:organization_id_or_slug}/monitors/{int:monitor_id}/checks/",
     response=list[MonitorCheckResponseTimeSchema],
     by_alias=True,
 )
-@paginate
+@org_scoped_list(["org:read"], MonitorCheck)
 async def list_monitor_checks(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
     response: HttpResponse,
-    organization_slug: str,
+    organization_id_or_slug: str,
     monitor_id: int,
     is_change: bool | None = None,
 ):
@@ -451,11 +457,7 @@ async def list_monitor_checks(
     This is useful to see only when a service went up and down.
     """
     checks = (
-        MonitorCheck.objects.filter(
-            monitor_id=monitor_id,
-            monitor__organization__slug=organization_slug,
-            monitor__organization__users=request.auth.user_id,
-        )
+        MonitorCheck.objects.filter(monitor_id=monitor_id)
         .only("is_up", "reason", "response_time")
         # By the partition key, so paging deeper walks partitions newest-first
         # instead of re-opening every one per page. See MonitorCheck.Meta.
@@ -467,18 +469,18 @@ async def list_monitor_checks(
 
 
 @router.get(
-    "/organizations/{slug:organization_slug}/status-pages/",
+    "/organizations/{slug:organization_id_or_slug}/status-pages/",
     response=list[StatusPageSchema],
     by_alias=True,
 )
-@paginate(StatusPagePagination)
+@org_scoped_list(["org:read"], StatusPage, pagination=StatusPagePagination)
 async def list_status_pages(
-    request: AuthHttpRequest, response: HttpResponse, organization_slug: str
+    request: OrgScopedHttpRequest,
+    response: HttpResponse,
+    organization_id_or_slug: str,
 ):
     """List status pages, used for showing the current status of an uptime monitor"""
-    return StatusPage.objects.filter(
-        organization__users=request.auth.user_id
-    ).prefetch_related(
+    return StatusPage.objects.prefetch_related(
         # MonitorSchema reads the check annotations (is_up/last_change) and the
         # organization (heartbeat URL) and project (project_name); load them
         # eagerly so async serialization does not fall back to sync queries.
@@ -492,16 +494,18 @@ async def list_status_pages(
 
 
 @router.post(
-    "/organizations/{slug:organization_slug}/status-pages/",
+    "/organizations/{slug:organization_id_or_slug}/status-pages/",
     response={201: StatusPageSchema},
     by_alias=True,
 )
+@org_scoped(["project:write"], Organization)
 async def create_status_page(
-    request: AuthHttpRequest, organization_slug: str, payload: StatusPageIn
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
+    payload: StatusPageIn,
 ):
-    organization = await aget_object_or_404(
-        Organization, slug=organization_slug, users=request.auth.user_id
-    )
+    organization = await aget_object_or_404(qs)
     data = payload.dict()
     status_page = await StatusPage.objects.acreate(organization=organization, **data)
     return Status(
@@ -511,17 +515,17 @@ async def create_status_page(
 
 
 @router.delete(
-    "organizations/{slug:organization_slug}/monitors/{int:monitor_id}/",
+    "organizations/{slug:organization_id_or_slug}/monitors/{int:monitor_id}/",
     response={204: None},
 )
+@org_scoped(["project:write"], Monitor)
 async def delete_monitor(
-    request: AuthHttpRequest, organization_slug: str, monitor_id: int
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Monitor],
+    organization_id_or_slug: str,
+    monitor_id: int,
 ):
-    result, _ = (
-        await get_monitor_queryset(request.auth.user_id, organization_slug)
-        .filter(id=monitor_id)
-        .adelete()
-    )
+    result, _ = await qs.filter(id=monitor_id).adelete()
     if result:
         return Status(204, None)
     raise Http404

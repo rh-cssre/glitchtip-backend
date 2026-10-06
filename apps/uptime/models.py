@@ -8,7 +8,7 @@ from django.db.models import F
 from django.urls import reverse
 from django_extensions.db.fields import AutoSlugField
 
-from glitchtip.base_models import CreatedModel
+from glitchtip.base_models import CreatedModel, OrgScopedModel
 from glitchtip.partition_manager import UUID7Helper
 
 from .constants import HTTP_MONITOR_TYPES, MonitorCheckReason, MonitorType
@@ -36,7 +36,9 @@ class OptionalSchemeURLValidator(URLValidator):
             super().__call__(value)
 
 
-class Monitor(models.Model):
+class Monitor(OrgScopedModel, models.Model):
+    org_field = "organization_id"
+
     # Fields ordered for optimal data alignment: 8-byte (FKs, timestamps), 4-byte, 2-byte, then variable-width
     organization = models.ForeignKey(
         "organizations_ext.Organization", on_delete=models.CASCADE
@@ -136,7 +138,7 @@ def _generate_uuid7():
     return UUID7Helper.from_datetime()
 
 
-class MonitorCheck(models.Model):
+class MonitorCheck(OrgScopedModel, models.Model):
     """A single probe of a monitor.
 
     A check has a start, a finish, and a result. Only two of those are stored:
@@ -150,6 +152,8 @@ class MonitorCheck(models.Model):
     longer expressible. Every writer must therefore mint ``id`` from the moment
     the check started rather than letting it default to insert time.
     """
+
+    org_field = "organization_id"
 
     # Partitioned by id (UUIDv7) -> Hash by organization
 
@@ -241,10 +245,12 @@ class UptimeCheckHourlyStatistic(models.Model):
         pass
 
 
-class StatusPage(CreatedModel):
+class StatusPage(OrgScopedModel, CreatedModel):
     """
     A status page is a collection of monitors that are available to view
     """
+
+    org_field = "organization_id"
 
     # Fields ordered for optimal data alignment: 8-byte FKs first, 1-byte booleans, then variable-width
     organization = models.ForeignKey(
