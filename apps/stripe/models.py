@@ -9,6 +9,7 @@ from django.db.models.expressions import F, OuterRef, Subquery
 from django.utils import timezone
 
 from apps.organizations_ext.models import Organization
+from glitchtip.base_models import OrgScopedModel
 
 from .client import (
     cancel_subscription,
@@ -259,7 +260,9 @@ class StripePrice(StripeModel):
             _warn_duplicate_public_prices(prices)
 
 
-class StripeSubscription(StripeModel):
+class StripeSubscription(OrgScopedModel, StripeModel):
+    org_field = "organization_id"
+
     created = models.DateTimeField()
     current_period_start = models.DateTimeField()
     current_period_end = models.DateTimeField()
