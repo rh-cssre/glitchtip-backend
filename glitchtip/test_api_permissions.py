@@ -109,7 +109,14 @@ class OrgScopedModelCheckTestCase(SimpleTestCase):
             class Meta:
                 app_label = "alerts"
 
-        for model in (StopsAtProject, ReachesOrganizationColumn):
+        # Only Organization may name its own primary key.
+        class OwnId(OrgScopedModel, models.Model):
+            org_field = "id"
+
+            class Meta:
+                app_label = "alerts"
+
+        for model in (StopsAtProject, ReachesOrganizationColumn, OwnId):
             with self.subTest(model.org_field):
                 error = check_org_field(model)
                 self.assertEqual(error.id, "glitchtip.E002")

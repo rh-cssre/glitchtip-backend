@@ -256,7 +256,9 @@ async def get_current_period_dates(
 ALL_DIGITS_SLUG = r"^[0-9]+$"
 
 
-class Organization(SharedBaseModel, OrganizationBase):
+class Organization(OrgScopedModel, SharedBaseModel, OrganizationBase):
+    org_field = "id"
+
     id = models.AutoField(primary_key=True)  # BIGINT is unnecessary
     slug = OrganizationSlugField(
         max_length=200,
