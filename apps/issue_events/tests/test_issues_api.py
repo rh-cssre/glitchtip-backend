@@ -2295,6 +2295,12 @@ class ShortIdAPITestCase(GlitchTestCase):
         )
         self.assertEqual([i["id"] for i in res.json()], [str(issue.id)])
 
+        # The Kelvin sign case-folds to "k" but is not base32
+        res = await self.async_client.get(
+            org_url + "?query=my-app-%E2%84%AA&shortIdLookup=1"
+        )
+        self.assertEqual(res.status_code, 200)
+
         # A short ID with no match falls back to text search
         res = await self.async_client.get(org_url + "?query=my-app-1b&shortIdLookup=1")
         self.assertEqual([i["id"] for i in res.json()], [str(decoy.id)])

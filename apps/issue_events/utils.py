@@ -52,8 +52,11 @@ def base32_encode(base10_value: int) -> str:
 
 
 # Display form is "<PROJECT-SLUG>-<base32 short_id>"; slugs may contain hyphens,
-# so the code is whatever follows the last one.
-_SHORT_ID_RE = re.compile(r"^(.+)-([0-9a-v]{1,7})$", re.IGNORECASE)
+# so the code is whatever follows the last one. ASCII-only: Unicode case folding
+# would let characters like the Kelvin sign through to int(..., 32).
+_SHORT_ID_RE = re.compile(
+    r"^([a-z0-9_-]{1,50})-([0-9a-v]{1,7})$", re.IGNORECASE | re.ASCII
+)
 _MAX_SHORT_ID = 2147483647  # PositiveIntegerField
 
 
