@@ -513,11 +513,11 @@ async def update_project_issues(
     with the ``status`` given in the query string, or to unresolved issues.
     """
     user_id = request.auth.user_id
-    # 404s unless the user belongs to the organization
-    await get_queryset(user_id, organization_slug=organization_slug)
     project_id = await aget_object_or_404(
         Project.objects.filter(
-            organization__slug=organization_slug, slug=project_slug
+            organization__slug=organization_slug,
+            organization__users=user_id,
+            slug=project_slug,
         ).values_list("id", flat=True)
     )
     filters.project__in = [project_id]
@@ -543,8 +543,20 @@ async def bulk_update_issues(
     filters: IssueFilters,
     payload: UpdateIssueSchema,
 ):
-    qs = await get_queryset(user_id, organization_slug=organization_slug)
-    qs = filter_issue_list(qs, filters)
+    organization_id = await aget_object_or_404(
+        Organization.objects.filter(slug=organization_slug, users=user_id).values_list(
+            "id", flat=True
+        )
+    )
+    # Not get_queryset(): its comment count annotation adds a GROUP BY that
+    # turns the id selections below into a scan of every org's issues.
+    qs = filter_issue_list(
+        Issue.objects.filter(
+            project__organization_id=organization_id,
+            index__organization_id=organization_id,
+        ),
+        filters,
+    )
 
     merge_issue = None
     if payload.merge:
@@ -582,12 +594,6 @@ async def bulk_update_issues(
     }
     if merge_issue:
         task_kwargs["update_params"]["merge"] = merge_issue.id
-
-    organization_id = (
-        await Organization.objects.filter(slug=organization_slug)
-        .values_list("id", flat=True)
-        .afirst()
-    )
 
     if payload.status:
         # status lives on the IssueIndex leaf; the partition key prunes
@@ -636,7 +642,7 @@ async def bulk_update_issues(
         if moved_event_count:
             await IssueIndex.objects.filter(
                 issue_id=merge_issue.id,
-                organization_id=merge_issue.project.organization_id,
+                organization_id=organization_id,
             ).aupdate(count=F("count") + moved_event_count)
 
         needs_drain = len(event_ids) == CHUNK_SIZE
