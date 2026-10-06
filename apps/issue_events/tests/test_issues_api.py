@@ -2187,3 +2187,135 @@ class OrganizationScopedIssueAPITestCase(GlitchTestCase):
             self.tags_url(self.other_organization.slug, issue.id)
         )
         self.assertEqual(res.status_code, 404)
+
+
+class ShortIdAPITestCase(GlitchTestCase):
+    """Short IDs like ``MY-APP-1A`` resolve to issues within the path's org.
+
+    The user is a member of ``other_organization`` too, so a hit leaking from
+    it means the org slug is ignored, not merely that membership is checked.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.create_user()
+        cls.other_organization = baker.make("organizations_ext.Organization")
+        cls.other_organization.add_user(cls.user, OrganizationUserRole.ADMIN)
+        # Hyphenated slug: the code is whatever follows the last hyphen
+        cls.app_project = baker.make(
+            "projects.Project", organization=cls.organization, name="My App"
+        )
+        cls.other_org_project = baker.make(
+            "projects.Project", organization=cls.other_organization, name="My App"
+        )
+
+    def setUp(self):
+        self.async_client.force_login(self.user)
+
+    def lookup_url(self, short_id: str, organization_slug: str | None = None):
+        return reverse(
+            "api:get_issue_by_short_id",
+            kwargs={
+                "organization_slug": organization_slug or self.organization.slug,
+                "short_id": short_id,
+            },
+        )
+
+    async def test_lookup(self):
+        self.assertEqual(self.app_project.slug, "my-app")
+        issue = await amake_issue(project=self.app_project, short_id=42)
+        await amake_issue(project=self.app_project, short_id=43, is_deleted=True)
+        await amake_issue(project=self.other_org_project, short_id=44)
+
+        for short_id in ["MY-APP-1A", "my-app-1a"]:
+            with self.subTest(short_id=short_id):
+                res = await self.async_client.get(self.lookup_url(short_id))
+                self.assertEqual(res.status_code, 200)
+                data = res.json()
+                self.assertEqual(data["organizationSlug"], self.organization.slug)
+                self.assertEqual(data["projectSlug"], "my-app")
+                self.assertEqual(data["groupId"], str(issue.id))
+                self.assertEqual(data["group"]["id"], str(issue.id))
+                self.assertEqual(data["shortId"], "MY-APP-1A")
+
+        for short_id in [
+            "MY-APP-1B",  # deleted
+            "MY-APP-1C",  # exists only in another org the user belongs to
+            "MY-APP-1D",  # no such issue
+            "APP-1A",  # wrong project slug
+            "MY-APP-ZZ",  # not base32
+            "MYAPP",  # no hyphen
+            "MY-APP-" + "V" * 7,  # overflows the column
+        ]:
+            with self.subTest(short_id=short_id):
+                res = await self.async_client.get(self.lookup_url(short_id))
+                self.assertEqual(res.status_code, 404)
+
+        res = await self.async_client.get(
+            self.lookup_url("MY-APP-1C", self.other_organization.slug)
+        )
+        self.assertEqual(res.status_code, 200)
+
+    async def test_list_direct_hit(self):
+        issue = await amake_issue(project=self.app_project, short_id=42)
+        # Text search alone would return this one too
+        decoy = await amake_issue(project=self.app_project, short_id=1)
+        await IssueIndex.objects.filter(issue=decoy).aupdate(
+            fts_document=SearchVector(Value("my-app-1a my-app-1b"))
+        )
+        org_url = reverse(
+            "api:list_issues", kwargs={"organization_slug": self.organization.slug}
+        )
+        project_url = reverse(
+            "api:list_project_issues",
+            kwargs={
+                "organization_slug": self.organization.slug,
+                "project_slug": self.app_project.slug,
+            },
+        )
+        other_project = await baker.amake(
+            "projects.Project", organization=self.organization, name="Other"
+        )
+        for url in [org_url, project_url]:
+            with self.subTest(url=url):
+                res = await self.async_client.get(
+                    url + "?query=my-app-1a&shortIdLookup=1"
+                )
+                self.assertEqual([i["id"] for i in res.json()], [str(issue.id)])
+                self.assertEqual(res.headers.get("X-Sentry-Direct-Hit"), "1")
+
+                # Opt-in: without the flag it is a plain text search
+                res = await self.async_client.get(url + "?query=my-app-1a")
+                self.assertEqual([i["id"] for i in res.json()], [str(decoy.id)])
+                self.assertNotIn("X-Sentry-Direct-Hit", res.headers)
+
+        # A hit ignores the other filters
+        res = await self.async_client.get(
+            org_url + f"?query=my-app-1a&shortIdLookup=1&project={other_project.id}"
+        )
+        self.assertEqual([i["id"] for i in res.json()], [str(issue.id)])
+
+        # The Kelvin sign case-folds to "k" but is not base32
+        res = await self.async_client.get(
+            org_url + "?query=my-app-%E2%84%AA&shortIdLookup=1"
+        )
+        self.assertEqual(res.status_code, 200)
+
+        # A short ID with no match falls back to text search
+        res = await self.async_client.get(org_url + "?query=my-app-1b&shortIdLookup=1")
+        self.assertEqual([i["id"] for i in res.json()], [str(decoy.id)])
+        self.assertNotIn("X-Sentry-Direct-Hit", res.headers)
+
+        # The project list only direct-hits its own project's short IDs
+        other_project_url = reverse(
+            "api:list_project_issues",
+            kwargs={
+                "organization_slug": self.organization.slug,
+                "project_slug": other_project.slug,
+            },
+        )
+        res = await self.async_client.get(
+            other_project_url + "?query=MY-APP-1A&shortIdLookup=1"
+        )
+        self.assertEqual(res.json(), [])
+        self.assertNotIn("X-Sentry-Direct-Hit", res.headers)
