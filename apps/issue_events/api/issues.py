@@ -13,8 +13,10 @@ from django.utils import timezone
 from ninja import Field, Query, Schema, Status
 from ninja.errors import HttpError
 from ninja.pagination import paginate
+from pydantic import model_validator
 
 from apps.organizations_ext.models import Organization, OrganizationUser
+from apps.projects.models import Project
 from apps.releases.models import Release
 from apps.releases.schema import CommitSchema
 from apps.teams.models import Team
@@ -51,12 +53,25 @@ class StatusDetailsSchema(Schema):
 
 
 class UpdateIssueSchema(Schema):
-    status: EventStatusEnum | None = None
+    # sentry-cli sends "muted" for ignored and "resolvedInNextRelease"
+    status: EventStatusEnum | Literal["muted", "resolvedInNextRelease"] | None = None
     status_details: StatusDetailsSchema | None = Field(
         default=None, validation_alias="statusDetails"
     )
     merge: int | None = None
     assigned_to: str | None = Field(default=None, validation_alias="assignedTo")
+
+    @model_validator(mode="after")
+    def normalize_status(self):
+        if self.status == "muted":
+            self.status = EventStatusEnum.ignored
+        elif self.status == "resolvedInNextRelease":
+            self.status = EventStatusEnum.resolved
+            if self.status_details is None:
+                self.status_details = StatusDetailsSchema.model_validate(
+                    {"inNextRelease": True}
+                )
+        return self
 
 
 async def resolve_assignee(
@@ -474,7 +489,60 @@ async def update_issues(
     filters: Query[IssueFilters],
     payload: UpdateIssueSchema,
 ):
+    return await bulk_update_issues(
+        request.auth.user_id, organization_slug, filters, payload
+    )
+
+
+@router.put(
+    "projects/{slug:organization_slug}/{slug:project_slug}/issues/",
+    response=UpdateIssueSchema,
+)
+@has_permission(["event:write", "event:admin"])
+async def update_project_issues(
+    request: AuthHttpRequest,
+    organization_slug: str,
+    project_slug: str,
+    filters: Query[IssueFilters],
+    payload: UpdateIssueSchema,
+    status_filter: str | None = Query(None, alias="status"),
+):
+    """
+    Bulk update a project's issues, selected by repeated ``id`` parameters.
+    Without ``id`` only a status change is allowed; it applies to the issues
+    with the ``status`` given in the query string, or to unresolved issues.
+    """
     user_id = request.auth.user_id
+    # 404s unless the user belongs to the organization
+    await get_queryset(user_id, organization_slug=organization_slug)
+    project_id = await aget_object_or_404(
+        Project.objects.filter(
+            organization__slug=organization_slug, slug=project_slug
+        ).values_list("id", flat=True)
+    )
+    filters.project__in = [project_id]
+
+    if not filters.id__in and payload.model_fields_set - {"status", "status_details"}:
+        raise HttpError(400, "Only a status change may omit id")
+    if status_filter is not None:
+        if status_filter == "muted":
+            status_filter = "ignored"
+        if status_filter not in EventStatus.labels:
+            raise HttpError(400, f"Invalid status: {status_filter}")
+        # Written into the query so the background batches apply it too
+        filters.query = f"is:{status_filter} {filters.query or ''}".strip()
+    elif not filters.id__in and not filters.query:
+        filters.query = "is:unresolved"
+
+    return await bulk_update_issues(user_id, organization_slug, filters, payload)
+
+
+async def bulk_update_issues(
+    user_id: int,
+    organization_slug: str,
+    filters: IssueFilters,
+    payload: UpdateIssueSchema,
+):
     qs = await get_queryset(user_id, organization_slug=organization_slug)
     qs = filter_issue_list(qs, filters)
 

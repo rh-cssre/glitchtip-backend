@@ -2319,3 +2319,109 @@ class ShortIdAPITestCase(GlitchTestCase):
         )
         self.assertEqual(res.json(), [])
         self.assertNotIn("X-Sentry-Direct-Hit", res.headers)
+
+
+class ProjectBulkUpdateAPITestCase(GlitchTestCase):
+    """PUT /projects/{org}/{project}/issues/, the bulk update sentry-cli uses"""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.create_user()
+        cls.url = reverse(
+            "api:list_project_issues",
+            kwargs={
+                "organization_slug": cls.organization.slug,
+                "project_slug": cls.project.slug,
+            },
+        )
+
+    def setUp(self):
+        self.async_client.force_login(self.user)
+
+    async def put(self, query: str, data: dict):
+        return await self.async_client.put(
+            f"{self.url}?{query}", data, content_type="application/json"
+        )
+
+    async def statuses(self, issues) -> list[int]:
+        return [
+            status
+            async for status in IssueIndex.objects.filter(issue__in=issues)
+            .order_by("issue_id")
+            .values_list("status", flat=True)
+        ]
+
+    async def test_status_filter_applies_to_background_batches(self):
+        """An ignored ?status= filter would update every issue in the project"""
+        resolved = [
+            await amake_issue(project=self.project, status=EventStatus.RESOLVED)
+            for _ in range(51)
+        ]
+        unresolved = await amake_issue(project=self.project)
+        queued_tasks = []
+
+        async def capture_task(**kwargs):
+            queued_tasks.append(deepcopy(kwargs))
+
+        enqueue = AsyncMock(side_effect=capture_task)
+        with patch("apps.issue_events.api.issues.update_issues_task", aenqueue=enqueue):
+            res = await self.put("status=resolved", {"status": "ignored"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(queued_tasks), 1)
+        await asyncio.wait_for(update_issues_task.func(**queued_tasks[0]), timeout=30)
+
+        self.assertEqual(
+            await self.statuses(resolved), [EventStatus.IGNORED] * len(resolved)
+        )
+        self.assertEqual(await self.statuses([unresolved]), [EventStatus.UNRESOLVED])
+
+    async def test_selection(self):
+        other_project = await baker.amake(
+            "projects.Project", organization=self.organization
+        )
+        unresolved = await amake_issue(project=self.project)
+        resolved = await amake_issue(project=self.project, status=EventStatus.RESOLVED)
+        other = await amake_issue(project=other_project)
+
+        # No id and no status: unresolved issues of this project only.
+        # "muted" is sentry-cli's name for ignored.
+        res = await self.put("", {"status": "muted"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(
+            await self.statuses([unresolved, resolved, other]),
+            [EventStatus.IGNORED, EventStatus.RESOLVED, EventStatus.UNRESOLVED],
+        )
+
+        # An id from another project is not updated
+        res = await self.put(
+            f"id={resolved.id}&id={other.id}", {"status": "resolvedInNextRelease"}
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(await self.statuses([other]), [EventStatus.UNRESOLVED])
+
+        res = await self.put(f"id={unresolved.id}", {"status": "resolvedInNextRelease"})
+        self.assertEqual(await self.statuses([unresolved]), [EventStatus.RESOLVED])
+
+    async def test_rejected(self):
+        issue = await amake_issue(project=self.project)
+        for query, data in [
+            ("", {"assignedTo": None}),  # non-status change needs id
+            ("", {"merge": 1}),
+            ("status=bogus", {"status": "resolved"}),
+        ]:
+            with self.subTest(query=query, data=data):
+                res = await self.put(query, data)
+                self.assertEqual(res.status_code, 400)
+        self.assertEqual(await self.statuses([issue]), [EventStatus.UNRESOLVED])
+
+        other_org_url = reverse(
+            "api:list_project_issues",
+            kwargs={
+                "organization_slug": "not-a-member",
+                "project_slug": self.project.slug,
+            },
+        )
+        res = await self.async_client.put(
+            other_org_url, {"status": "resolved"}, content_type="application/json"
+        )
+        self.assertEqual(res.status_code, 404)
