@@ -44,34 +44,22 @@ async def update_issues_task(
     )
 
     status = update_params.get("status")
+    event_status = EventStatus.from_string(status) if status else None
     merge_id = update_params.get("merge")
-    assignee_org_user_id = update_params.get("assigned_to_org_user_id")
-    assignee_team_id = update_params.get("assigned_to_team_id")
-    apply_assignment = "assigned_to_org_user_id" in update_params
+    issue_update = {
+        key: update_params[key]
+        for key in (
+            "assigned_to_org_user_id",
+            "assigned_to_team_id",
+            "resolved_in_release_id",
+        )
+        if key in update_params
+    }
 
-    if status:
-        event_status = EventStatus.from_string(status)
-        # Optimization: Don't update rows that already match. status lives on the
-        # IssueIndex leaf.
-        status_qs = remaining_qs.exclude(index__status=event_status)
-
-        last_issue_id = 0
-        while True:
-            batch_ids = [
-                i
-                async for i in status_qs.filter(id__gt=last_issue_id)
-                .order_by("id")
-                .values_list("id", flat=True)[:CHUNK_SIZE]
-            ]
-            if not batch_ids:
-                break
-            last_issue_id = batch_ids[-1]
-
-            await IssueIndex.objects.filter(
-                issue_id__in=batch_ids, organization_id=organization_id
-            ).aupdate(status=event_status)
-
-    if apply_assignment:
+    if event_status is not None or issue_update:
+        # Select each batch once and apply every change to it. A pass per change
+        # would re-run the filter after the status change, and a filter such as
+        # is:unresolved would then match nothing.
         last_issue_id = 0
         while True:
             batch_ids = [
@@ -83,10 +71,18 @@ async def update_issues_task(
             if not batch_ids:
                 break
             last_issue_id = batch_ids[-1]
-            await Issue.objects.filter(id__in=batch_ids).aupdate(
-                assigned_to_org_user_id=assignee_org_user_id,
-                assigned_to_team_id=assignee_team_id,
-            )
+
+            if event_status is not None:
+                # status lives on the IssueIndex leaf
+                await (
+                    IssueIndex.objects.filter(
+                        issue_id__in=batch_ids, organization_id=organization_id
+                    )
+                    .exclude(status=event_status)
+                    .aupdate(status=event_status)
+                )
+            if issue_update:
+                await Issue.objects.filter(id__in=batch_ids).aupdate(**issue_update)
 
     if merge_id:
         target_issue = await qs.filter(id=merge_id, is_deleted=False).afirst()
