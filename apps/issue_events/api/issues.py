@@ -392,29 +392,35 @@ async def get_short_id_hit(
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/shortids/{short_id}/",
+    "organizations/{slug:organization_id_or_slug}/shortids/{short_id}/",
     response=ShortIdLookupSchema,
     by_alias=True,
 )
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped(["event:read", "event:write", "event:admin"], Issue)
 async def get_issue_by_short_id(
-    request: AuthHttpRequest, organization_slug: str, short_id: str
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Issue],
+    organization_id_or_slug: str,
+    short_id: str,
 ):
     """Resolve a short ID such as ``PROJECT-1A`` to its issue"""
     parsed = parse_short_id(short_id)
     if parsed is None:
         raise Http404()
     project_slug, number = parsed
-    qs = await get_queryset(request.auth.user_id, organization_slug=organization_slug)
+    qs = with_issue_details(qs, request.org_scope.org_id)
     try:
-        issue = await qs.filter(
-            project__slug=project_slug, short_id=number, is_deleted=False
-        ).aget()
+        # The path may hold an id, so the output slug comes from the org row
+        issue = await (
+            qs.filter(project__slug=project_slug, short_id=number)
+            .select_related("project__organization")
+            .aget()
+        )
     except Issue.DoesNotExist:
         raise Http404()
     request.matching_event_id = None
     return {
-        "organizationSlug": organization_slug,
+        "organizationSlug": issue.project.organization.slug,
         "projectSlug": issue.project.slug,
         "groupId": str(issue.id),
         "group": issue,

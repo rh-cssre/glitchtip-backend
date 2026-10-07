@@ -16,7 +16,8 @@ from freezegun import freeze_time
 from model_bakery import baker
 
 from apps.organizations_ext.constants import OrganizationUserRole
-from glitchtip.test_utils.issue import amake_issue, arefresh_issue
+from apps.projects.models import Project
+from glitchtip.test_utils.issue import amake_issue, arefresh_issue, make_issue
 from glitchtip.test_utils.test_case import (
     APIPermissionTestCase,
     GlitchTestCase,
@@ -2213,11 +2214,12 @@ class ShortIdAPITestCase(GlitchTestCase):
     def setUp(self):
         self.async_client.force_login(self.user)
 
-    def lookup_url(self, short_id: str, organization_slug: str | None = None):
+    def lookup_url(self, short_id: str, organization_id_or_slug=None):
         return reverse(
             "api:get_issue_by_short_id",
             kwargs={
-                "organization_slug": organization_slug or self.organization.slug,
+                "organization_id_or_slug": organization_id_or_slug
+                or self.organization.slug,
                 "short_id": short_id,
             },
         )
@@ -2255,6 +2257,54 @@ class ShortIdAPITestCase(GlitchTestCase):
         res = await self.async_client.get(
             self.lookup_url("MY-APP-1C", self.other_organization.slug)
         )
+        self.assertEqual(res.status_code, 200)
+
+    async def test_lookup_by_org_id(self):
+        """The path may hold the org id; the output still names the org slug."""
+        issue = await amake_issue(project=self.app_project, short_id=42)
+
+        res = await self.async_client.get(
+            self.lookup_url("MY-APP-1A", self.organization.id)
+        )
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["organizationSlug"], self.organization.slug)
+        self.assertEqual(data["groupId"], str(issue.id))
+
+    async def test_lookup_non_member(self):
+        stranger_org = await baker.amake("organizations_ext.Organization")
+        stranger_project = await baker.amake(
+            "projects.Project", organization=stranger_org, name="My App"
+        )
+        await amake_issue(project=stranger_project, short_id=42)
+
+        for org in [stranger_org.slug, stranger_org.id]:
+            with self.subTest(org=org):
+                res = await self.async_client.get(self.lookup_url("MY-APP-1A", org))
+                self.assertEqual(res.status_code, 404)
+
+    async def test_lookup_deleted_project(self):
+        await amake_issue(project=self.app_project, short_id=42)
+        await Project.objects.filter(id=self.app_project.id).aupdate(is_deleted=True)
+
+        res = await self.async_client.get(self.lookup_url("MY-APP-1A"))
+
+        self.assertEqual(res.status_code, 404)
+
+    # Kept synchronous: assertNumQueries cannot observe queries issued on the
+    # async DB connection used by the async test client.
+    def test_lookup_query_count(self):
+        """Membership, role and the org slug all ride on the one issue query."""
+        make_issue(project=self.app_project, short_id=42)
+        self.client.force_login(self.user)
+
+        with self.assertNumQueries(1):
+            res = self.client.get(self.lookup_url("MY-APP-1A", self.organization.id))
+        self.assertEqual(res.status_code, 200)
+
+        with self.assertNumQueries(2):  # + the slug lookup
+            res = self.client.get(self.lookup_url("MY-APP-1A"))
         self.assertEqual(res.status_code, 200)
 
     async def test_list_direct_hit_ignores_other_orgs(self):
