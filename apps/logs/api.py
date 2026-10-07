@@ -752,7 +752,7 @@ async def list_logs(
     """
     # Hot and cold storage queries are hand-written and cannot carry the gate,
     # and an empty result would not tell a non-member from no data, so the
-    # membership read comes first. The other log routes follow suit.
+    # membership read comes first.
     organization = await aget_object_or_404(qs.only("id"))
 
     # Determine time range (default to last 7 days)

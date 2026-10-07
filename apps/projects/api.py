@@ -171,7 +171,7 @@ async def create_project(
     payload: ProjectIn,
 ):
     """Create a new project given a team and organization"""
-    # The project's slug is made unique per organization, which reads it.
+    # The slug field's uniqueness check reads project.organization on save.
     team = await aget_object_or_404(qs.select_related("organization"), slug=team_slug)
     project = await Project.objects.acreate(
         organization=team.organization, **payload.dict(exclude_unset=True)

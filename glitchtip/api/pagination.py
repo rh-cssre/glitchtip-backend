@@ -243,12 +243,10 @@ class AsyncLinkHeaderPagination(CursorPagination):
 
 
 class MissOnEmptyMixin:
-    """For gated lists that answered a non-member with 404 before the gate
-    was folded into their query.
+    """404 a non-member on a gated list instead of returning an empty page.
 
-    A folded gate makes a non-member's list come back empty, not 404. An empty
-    page asks the gate why, so the 404 survives at the cost of one query, paid
-    on empty pages only.
+    The gate makes a non-member's list come back empty. An empty page asks the
+    gate why, which costs one query, paid on empty pages only.
     """
 
     async def apaginate_queryset(
