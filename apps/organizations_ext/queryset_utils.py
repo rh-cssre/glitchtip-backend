@@ -75,30 +75,3 @@ def get_organizations_queryset(
     if add_details:
         qs = prefetch_organization_details(qs, user_id)
     return qs
-
-
-def get_organization_users_queryset(
-    user_id: int,
-    organization_slug: str,
-    team_slug: str | None = None,
-    role_required=False,
-    add_details=False,
-):
-    qs = select_organization_user_details(
-        OrganizationUser.objects.filter(
-            organization__users=user_id, organization__slug=organization_slug
-        )
-    )
-    if team_slug:
-        qs = qs.filter(teams__slug=team_slug)
-    if role_required:
-        qs = qs.annotate(
-            actor_role=Subquery(
-                qs.filter(organization__organization_users__user=user_id).values(
-                    "organization__organization_users__role"
-                )[:1]
-            )
-        )
-    if add_details:
-        qs = qs.prefetch_related("teams")
-    return qs

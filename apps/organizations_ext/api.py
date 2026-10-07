@@ -2,7 +2,7 @@ from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.contrib.auth import aget_user
 from django.core.cache import cache
-from django.db.models import QuerySet
+from django.db.models import Exists, OuterRef, QuerySet
 from django.db.utils import IntegrityError
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import aget_object_or_404
@@ -28,7 +28,6 @@ from .invitation_backend import InvitationTokenGenerator
 from .models import Organization, OrganizationOwner, OrganizationUser
 from .queryset_utils import (
     annotate_actor_role,
-    get_organization_users_queryset,
     get_organizations_queryset,
     prefetch_organization_details,
     select_organization_user_details,
@@ -287,29 +286,33 @@ async def create_organization_member(
     "organizations/{slug:organization_id_or_slug}/members/{int:member_id}/",
     response={204: None},
 )
+# Tokens need member:admin; the gate admits every role, because any member
+# may remove themselves. Removing someone else is checked below.
 @has_permission(["member:admin"])
+@org_scoped(["member:read", "member:write", "member:admin"], OrganizationUser)
 async def delete_organization_member(
-    request: AuthHttpRequest, organization_id_or_slug: str, member_id: int
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[OrganizationUser],
+    organization_id_or_slug: str,
+    member_id: int,
 ):
     """Remove member (user) from organization"""
     user_id = request.auth.user_id
-    if await OrganizationOwner.objects.filter(
-        organization_user__user_id=user_id,
-        organization__slug=organization_id_or_slug,
-        organization_user__id=member_id,
-    ).aexists():
-        raise HttpError(400, "User is organization owner. Transfer ownership first.")
     org_user = await aget_object_or_404(
-        get_organization_users_queryset(
-            user_id, organization_id_or_slug, role_required=True
+        annotate_actor_role(qs, user_id, "organization_id").annotate(
+            is_owner=Exists(
+                OrganizationOwner.objects.filter(organization_user=OuterRef("pk"))
+            )
         ),
         id=member_id,
     )
-    # Check org role of user initiating request, but allow org users to remove themselves
-    if org_user.actor_role < OrganizationUserRole.MANAGER and not (
-        org_user.user and org_user.user.id == user_id
-    ):
-        raise HttpError(403, "Forbidden")
+    is_self = org_user.user_id == user_id
+    if is_self and org_user.is_owner:
+        raise HttpError(400, "User is organization owner. Transfer ownership first.")
+    if not is_self and org_user.actor_role < OrganizationUserRole.MANAGER:
+        raise HttpError(
+            403, "Removing another member requires the manager role or above."
+        )
     try:
         await org_user.adelete()
     except IntegrityError as err:

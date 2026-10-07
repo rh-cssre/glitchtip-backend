@@ -1,4 +1,12 @@
-from django.db.models import Count, Exists, OuterRef, Prefetch, QuerySet, Subquery
+from django.db.models import (
+    Count,
+    Exists,
+    F,
+    OuterRef,
+    Prefetch,
+    QuerySet,
+    Subquery,
+)
 from django.http import Http404, HttpResponse
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Status
@@ -6,9 +14,9 @@ from ninja.errors import HttpError
 
 from apps.organizations_ext.constants import OrganizationUserRole
 from apps.organizations_ext.models import OrganizationUser
+from apps.organizations_ext.queryset_utils import annotate_actor_role
 from apps.projects.models import Project
 from apps.shared.types import MeID
-from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.permissions import (
     OrgScopedHttpRequest,
     has_permission,
@@ -158,61 +166,67 @@ async def create_team(
 
 
 async def modify_member_for_team(
-    organization_id_or_slug: str,
+    qs: QuerySet[Team],
     member_id: MeID,
     team_slug: str,
     user_id: int,
     add_member=True,
 ):
+    # One query: the team, the member to add or remove, and everything the
+    # role rule below needs. annotate_team_details' is_member is whether the
+    # caller is in the team.
+    target = OrganizationUser.objects.filter(
+        organization_id=OuterRef("organization_id")
+    )
+    target = (
+        target.filter(user_id=user_id)
+        if member_id == "me"
+        else target.filter(id=member_id)
+    )
     team = await aget_object_or_404(
-        annotate_team_details(
-            Team.objects.filter(
-                organization__slug=organization_id_or_slug,
-                organization__users=user_id,
-            ),
-            user_id,
+        annotate_actor_role(
+            annotate_team_details(qs, user_id), user_id, "organization_id"
+        ).annotate(
+            target_id=Subquery(target.values("id")[:1]),
+            target_user_id=Subquery(target.values("user_id")[:1]),
+            open_membership=F("organization__open_membership"),
         ),
         slug=team_slug,
     )
-    org_user_qs = OrganizationUser.objects.filter(
-        organization__slug=organization_id_or_slug
-    ).select_related("organization")
-    if member_id == "me":
-        org_user = await org_user_qs.aget(user_id=user_id)
-    else:
-        org_user = await aget_object_or_404(org_user_qs, id=member_id)
+    if team.target_id is None:
+        raise Http404
 
-    open_membership = org_user.organization.open_membership
-    is_self = org_user.user_id == user_id
-
-    if not (open_membership and is_self):
-        in_team = await team.members.filter(user_id=user_id).aexists()
-        if in_team:
-            required_role = OrganizationUserRole.ADMIN
-        else:
-            required_role = OrganizationUserRole.MANAGER
-
-        if not await OrganizationUser.objects.filter(
-            user_id=user_id, organization=org_user.organization, role__gte=required_role
-        ).aexists():
+    is_self = team.target_user_id == user_id
+    if not (team.open_membership and is_self):
+        required_role = (
+            OrganizationUserRole.ADMIN
+            if team.is_member
+            else OrganizationUserRole.MANAGER
+        )
+        if team.actor_role < required_role:
             raise HttpError(403, "Must be admin to modify teams")
 
     if add_member:
-        await team.members.aadd(org_user)
+        await team.members.aadd(team.target_id)
         team.is_member = True
     else:
-        await team.members.aremove(org_user)
+        await team.members.aremove(team.target_id)
     return team
 
 
+# Tokens need team:write or team:admin; the gate admits every role, because
+# any member may join or leave a team under open membership. The role rule is
+# checked in modify_member_for_team.
 @router.post(
     "/organizations/{slug:organization_id_or_slug}/members/{slug:member_id}/teams/{slug:team_slug}/",
     response={201: TeamProjectSchema},
     by_alias=True,
 )
 @has_permission(["team:write", "team:admin"])
+@org_scoped(["team:read", "team:write", "team:admin"], Team)
 async def add_member_to_team(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Team],
     organization_id_or_slug: str,
     member_id: MeID,
     team_slug: str,
@@ -220,7 +234,7 @@ async def add_member_to_team(
     return Status(
         201,
         await modify_member_for_team(
-            organization_id_or_slug, member_id, team_slug, request.auth.user_id, True
+            qs, member_id, team_slug, request.auth.user_id, True
         ),
     )
 
@@ -231,14 +245,16 @@ async def add_member_to_team(
     by_alias=True,
 )
 @has_permission(["team:write", "team:admin"])
+@org_scoped(["team:read", "team:write", "team:admin"], Team)
 async def delete_member_from_team(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Team],
     organization_id_or_slug: str,
     member_id: MeID,
     team_slug: str,
 ):
     return await modify_member_for_team(
-        organization_id_or_slug, member_id, team_slug, request.auth.user_id, False
+        qs, member_id, team_slug, request.auth.user_id, False
     )
 
 
