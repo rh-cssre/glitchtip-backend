@@ -2257,6 +2257,21 @@ class ShortIdAPITestCase(GlitchTestCase):
         )
         self.assertEqual(res.status_code, 200)
 
+    async def test_list_direct_hit_ignores_other_orgs(self):
+        """Another org's project with the same slug and short ID, created first
+        so it would win an unscoped lookup, must not hide this org's issue."""
+        await amake_issue(project=self.other_org_project, short_id=42)
+        issue = await amake_issue(project=self.app_project, short_id=42)
+        url = reverse(
+            "api:list_issues",
+            kwargs={"organization_id_or_slug": self.organization.slug},
+        )
+
+        res = await self.async_client.get(url + "?query=MY-APP-1A&shortIdLookup=1")
+
+        self.assertEqual(res.headers.get("X-Sentry-Direct-Hit"), "1")
+        self.assertEqual([row["id"] for row in res.json()], [str(issue.id)])
+
     async def test_list_direct_hit(self):
         issue = await amake_issue(project=self.app_project, short_id=42)
         # Text search alone would return this one too
@@ -2265,7 +2280,8 @@ class ShortIdAPITestCase(GlitchTestCase):
             fts_document=SearchVector(Value("my-app-1a my-app-1b"))
         )
         org_url = reverse(
-            "api:list_issues", kwargs={"organization_id_or_slug": self.organization.slug}
+            "api:list_issues",
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
         project_url = reverse(
             "api:list_project_issues",
@@ -2380,6 +2396,21 @@ class ProjectBulkUpdateAPITestCase(GlitchTestCase):
             await self.statuses(resolved), [EventStatus.IGNORED] * len(resolved)
         )
         self.assertEqual(await self.statuses([unresolved]), [EventStatus.UNRESOLVED])
+
+    async def test_by_org_id(self):
+        """The path may name the org by id; the background batches still get
+        the org's real slug, which the task resolves the org from."""
+        issues = [await amake_issue(project=self.project) for _ in range(51)]
+        self.url = reverse(
+            "api:list_project_issues",
+            args=[str(self.organization.id), self.project.slug],
+        )
+
+        await self.put_and_run_task("", {"status": "resolved"})
+
+        self.assertEqual(
+            await self.statuses(issues), [EventStatus.RESOLVED] * len(issues)
+        )
 
     async def test_every_change_reaches_background_batches(self):
         """Status, assignment and release apply to all issues, not just the first
