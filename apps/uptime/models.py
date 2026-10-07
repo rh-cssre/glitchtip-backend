@@ -14,7 +14,7 @@ from glitchtip.partition_manager import UUID7Helper
 from .constants import HTTP_MONITOR_TYPES, MonitorCheckReason, MonitorType
 
 
-class MonitorManager(models.Manager):
+class MonitorQuerySet(models.QuerySet):
     def with_check_annotations(self):
         """
         Adds MonitorCheck annotations:
@@ -98,7 +98,7 @@ class Monitor(OrgScopedModel, models.Model):
         "confirmation_threshold debounce; reset to 0 on any successful check.",
     )
 
-    objects = MonitorManager()
+    objects = MonitorQuerySet.as_manager()
 
     class Meta:
         indexes = [models.Index(fields=["-created"])]

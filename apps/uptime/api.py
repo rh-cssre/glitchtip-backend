@@ -97,9 +97,7 @@ class StatusPagePagination(AsyncLinkHeaderPagination):
 
 def with_monitor_details(qs: QuerySet[Monitor]) -> QuerySet[Monitor]:
     """Monitors with check annotations but WITHOUT checks prefetch."""
-    return qs.annotate(
-        latest_is_up=F("cached_is_up"), last_change=F("cached_last_change")
-    ).select_related("project", "organization")
+    return qs.with_check_annotations().select_related("project", "organization")
 
 
 def get_monitor_queryset(user_id: int, organization_slug: str):

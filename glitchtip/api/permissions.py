@@ -265,8 +265,9 @@ class OrgScopedHttpRequest(AuthHttpRequest):
 
     The folded gate doesn't resolve an ``OrganizationUser`` row, so there is
     no role here. ``org_scope.org_id`` is the path's org id, but nothing has
-    checked it yet: membership is only proven inside ``qs``, so filter with
-    ``org_scope.apply``, never with the bare id.
+    checked it yet: membership is only proven inside ``qs``. Filter with
+    ``org_scope.apply``; the bare id is safe only in a query that also
+    carries the gate, or once a gated read has matched.
     """
 
     org_scope: OrgScope

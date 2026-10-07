@@ -531,7 +531,7 @@ async def update_project_issues(
         .afirst()
     )
     if project_id is None:
-        raise await request.org_scope.explain_miss() or Http404()
+        raise Http404()
     filters.project__in = [project_id]
 
     if not filters.id__in and payload.model_fields_set - {"status", "status_details"}:
