@@ -317,9 +317,15 @@ async def list_project_issue_event(
     organization_id_or_slug: str,
     project_slug: str,
 ):
-    # Order by -id (UUIDv7) for partition pruning; equivalent to -received ordering
+    # The gate filters the event's own organization_id, which leaves the
+    # project join unscoped; project slugs repeat across orgs, so without the
+    # org id the planner can't start from the one project. Order by -id
+    # (UUIDv7) for partition pruning; equivalent to -received ordering.
     return (
-        IssueEvent.objects.filter(issue__project__slug=project_slug)
+        IssueEvent.objects.filter(
+            issue__project__organization_id=request.org_scope.org_id,
+            issue__project__slug=project_slug,
+        )
         .select_related("issue")
         .order_by("-id")
     )

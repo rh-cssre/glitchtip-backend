@@ -2,7 +2,9 @@ import re
 import uuid
 from datetime import timedelta
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
@@ -89,6 +91,34 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
 
         self.assertEqual(res.json()[-1]["id"], first_event.id.hex)
         self.assertNotContains(res, last_event.id.hex)
+
+    # Kept synchronous: see note on test_multi_page_list.
+    def test_project_list_scopes_project_to_org(self):
+        """The project join must carry the org id: project slugs repeat across
+        orgs, and without it the planner hash-joins every event of the org."""
+        event = baker.make(
+            "issue_events.IssueEvent",
+            issue__project=self.project,
+            organization=self.organization,
+        )
+        url = reverse(
+            "api:list_project_issue_event",
+            args=[self.organization.slug, self.project.slug],
+        )
+
+        with CaptureQueriesContext(connection) as ctx:
+            res = self.client.get(url)
+
+        self.assertContains(res, event.id.hex)
+        scoped = f'"projects_project"."organization_id" = {self.organization.id}'
+        event_queries = [
+            q["sql"]
+            for q in ctx.captured_queries
+            if "issue_events_issueevent" in q["sql"]
+        ]
+        self.assertTrue(event_queries)
+        for sql in event_queries:
+            self.assertIn(scoped, sql)
 
     # Kept synchronous: see note on test_multi_page_list.
     def test_single_page_list(self):
