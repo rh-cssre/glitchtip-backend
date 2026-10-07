@@ -152,9 +152,13 @@ async def list_team_projects(
     team_slug: str,
 ):
     """List all projects for a given team"""
-    return Project.annotate_is_member(
-        Project.objects.filter(teams__slug=team_slug), request.auth.user_id
-    ).order_by("name")
+    # Filter after annotating: a teams filter first would confine
+    # is_member's count to the path's team.
+    return (
+        Project.annotate_is_member(Project.objects.all(), request.auth.user_id)
+        .filter(teams__slug=team_slug)
+        .order_by("name")
+    )
 
 
 @router.post(

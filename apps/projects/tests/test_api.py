@@ -240,7 +240,9 @@ class TeamProjectsAPITestCase(TestCase):
     def setUp(self):
         self.user = baker.make("users.user")
         self.organization = baker.make("organizations_ext.Organization")
-        self.organization.add_user(self.user, OrganizationUserRole.ADMIN)
+        self.org_user = self.organization.add_user(
+            self.user, OrganizationUserRole.ADMIN
+        )
         self.team = baker.make("teams.Team", organization=self.organization)
         self.client.force_login(self.user)
         self.async_client.force_login(self.user)
@@ -273,6 +275,20 @@ class TeamProjectsAPITestCase(TestCase):
         )
         res = await self.async_client.get(self.url)
         self.assertNotContains(res, project_teamless)
+
+    async def test_list_is_member_through_another_team(self):
+        # The caller isn't in the path's team, only in another of the project's
+        # teams, which still makes them a project member.
+        project = await baker.amake("projects.Project", organization=self.organization)
+        await project.teams.aadd(self.team)
+        await baker.amake(
+            "teams.Team",
+            organization=self.organization,
+            members=[self.org_user],
+            projects=[project],
+        )
+        res = await self.async_client.get(self.url)
+        self.assertEqual([p["isMember"] for p in res.json()], [True])
 
     async def test_create(self):
         data = {"name": "test-team"}
