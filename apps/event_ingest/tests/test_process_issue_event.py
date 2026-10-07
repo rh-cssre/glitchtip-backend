@@ -1059,7 +1059,7 @@ class SentryCompatTestCase(EventIngestTestCase):
             reverse(
                 "api:get_event_json",
                 kwargs={
-                    "organization_slug": self.organization.slug,
+                    "organization_id_or_slug": self.organization.slug,
                     "issue_id": event.issue_id,
                     "event_id": event.id,
                 },
@@ -1108,7 +1108,7 @@ class SentryCompatTestCase(EventIngestTestCase):
         return reverse(
             "api:get_project_issue_event",
             kwargs={
-                "organization_slug": self.project.organization.slug,
+                "organization_id_or_slug": self.project.organization.slug,
                 "project_slug": self.project.slug,
                 "event_id": event_id,
             },

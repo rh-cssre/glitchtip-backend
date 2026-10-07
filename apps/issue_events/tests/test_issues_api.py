@@ -36,7 +36,7 @@ def get_issue_url(issue_id: int) -> str:
 def get_organization_issue_url(organization_slug: str, issue_id: int) -> str:
     return reverse(
         "api:update_organization_issue",
-        kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+        kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
     )
 
 
@@ -45,7 +45,7 @@ class IssueAPITestCase(GlitchTestCase):
     def setUpTestData(cls):
         cls.create_user()
         cls.list_url = reverse(
-            "api:list_issues", kwargs={"organization_slug": cls.organization.slug}
+            "api:list_issues", kwargs={"organization_id_or_slug": cls.organization.slug}
         )
 
     def setUp(self):
@@ -139,7 +139,7 @@ class IssueAPITestCase(GlitchTestCase):
         url = reverse(
             "api:list_project_issues",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": self.project.slug,
             },
         )
@@ -1652,7 +1652,7 @@ class IssueAPITestCase(GlitchTestCase):
         # Construct the URL and query parameters
         url = reverse(
             "api:issue_stats",  # Adjust the name based on your URL resolver
-            kwargs={"organization_slug": self.organization.slug},
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
         query_params = f"?groups={issue_with_stats.id}&groups={issue_without_stats.id}"
 
@@ -1729,7 +1729,7 @@ class IssueAPITestCase(GlitchTestCase):
 
         url = reverse(
             "api:issue_stats",
-            kwargs={"organization_slug": self.organization.slug},
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
         query_params = f"?groups={issue.id}&statsPeriod=14d"
 
@@ -1852,7 +1852,8 @@ class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
         self.issue = baker.make("issue_events.Issue", project=self.project)
 
         self.list_url = reverse(
-            "api:list_issues", kwargs={"organization_slug": self.organization.slug}
+            "api:list_issues",
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
 
     def test_list(self):
@@ -2048,25 +2049,25 @@ class OrganizationScopedIssueAPITestCase(GlitchTestCase):
     def detail_url(self, organization_slug: str, issue_id: int) -> str:
         return reverse(
             "api:get_organization_issue",
-            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+            kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
         )
 
     def commits_url(self, organization_slug: str, issue_id: int) -> str:
         return reverse(
             "api:list_organization_issue_commits",
-            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+            kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
         )
 
     def delete_url(self, organization_slug: str, issue_id: int) -> str:
         return reverse(
             "api:delete_organization_issue",
-            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+            kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
         )
 
     def tags_url(self, organization_slug: str, issue_id: int) -> str:
         return reverse(
             "api:list_organization_issue_tags",
-            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+            kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
         )
 
     async def test_retrieve(self):
@@ -2264,12 +2265,12 @@ class ShortIdAPITestCase(GlitchTestCase):
             fts_document=SearchVector(Value("my-app-1a my-app-1b"))
         )
         org_url = reverse(
-            "api:list_issues", kwargs={"organization_slug": self.organization.slug}
+            "api:list_issues", kwargs={"organization_id_or_slug": self.organization.slug}
         )
         project_url = reverse(
             "api:list_project_issues",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": self.app_project.slug,
             },
         )
@@ -2310,7 +2311,7 @@ class ShortIdAPITestCase(GlitchTestCase):
         other_project_url = reverse(
             "api:list_project_issues",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": other_project.slug,
             },
         )
@@ -2330,7 +2331,7 @@ class ProjectBulkUpdateAPITestCase(GlitchTestCase):
         cls.url = reverse(
             "api:list_project_issues",
             kwargs={
-                "organization_slug": cls.organization.slug,
+                "organization_id_or_slug": cls.organization.slug,
                 "project_slug": cls.project.slug,
             },
         )
@@ -2451,7 +2452,7 @@ class ProjectBulkUpdateAPITestCase(GlitchTestCase):
         other_org_url = reverse(
             "api:list_project_issues",
             kwargs={
-                "organization_slug": "not-a-member",
+                "organization_id_or_slug": "not-a-member",
                 "project_slug": self.project.slug,
             },
         )

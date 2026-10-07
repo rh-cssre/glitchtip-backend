@@ -115,20 +115,20 @@ class OrganizationScopedCommentsApiTestCase(GlitchTipTestCase):
     def list_url(self, organization_slug: str, issue_id: int) -> str:
         return reverse(
             "api:list_organization_comments",
-            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+            kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
         )
 
     def add_url(self, organization_slug: str, issue_id: int) -> str:
         return reverse(
             "api:add_organization_comment",
-            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+            kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
         )
 
     def update_url(self, organization_slug: str, issue_id: int, comment_id: int) -> str:
         return reverse(
             "api:update_organization_comment",
             kwargs={
-                "organization_slug": organization_slug,
+                "organization_id_or_slug": organization_slug,
                 "issue_id": issue_id,
                 "comment_id": comment_id,
             },
@@ -138,7 +138,7 @@ class OrganizationScopedCommentsApiTestCase(GlitchTipTestCase):
         return reverse(
             "api:delete_organization_comment",
             kwargs={
-                "organization_slug": organization_slug,
+                "organization_id_or_slug": organization_slug,
                 "issue_id": issue_id,
                 "comment_id": comment_id,
             },

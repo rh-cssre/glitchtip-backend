@@ -31,7 +31,7 @@ def get_event_json_url(organization_slug: str, issue_id: int, event_id: str) -> 
     return reverse(
         "api:get_event_json",
         kwargs={
-            "organization_slug": organization_slug,
+            "organization_id_or_slug": organization_slug,
             "issue_id": issue_id,
             "event_id": event_id,
         },
@@ -224,7 +224,7 @@ class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
         self.project_list_url = reverse(
             "api:list_project_issue_event",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": self.project.slug,
             },
         )
@@ -232,7 +232,7 @@ class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
         self.project_detail_url = reverse(
             "api:get_project_issue_event",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": self.project.slug,
                 "event_id": self.event.id.hex,
             },
@@ -345,20 +345,20 @@ class OrganizationScopedIssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
     def list_url(self, organization_slug: str, issue_id: int) -> str:
         return reverse(
             "api:list_organization_issue_event",
-            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+            kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
         )
 
     def latest_url(self, organization_slug: str, issue_id: int) -> str:
         return reverse(
             "api:get_organization_latest_issue_event",
-            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+            kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
         )
 
     def detail_url(self, organization_slug: str, issue_id: int, event_id: str) -> str:
         return reverse(
             "api:get_organization_issue_event",
             kwargs={
-                "organization_slug": organization_slug,
+                "organization_id_or_slug": organization_slug,
                 "issue_id": issue_id,
                 "event_id": event_id,
             },
