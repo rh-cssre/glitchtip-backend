@@ -18,6 +18,7 @@ from apps.mcp.data import (
     get_monitors,
     get_organizations,
     get_projects,
+    resolve_issue_id,
     update_issue,
 )
 from apps.mcp.serializers import (
@@ -162,6 +163,34 @@ class DataLayerTest(TestCase):
         other_issue = baker.make("issue_events.Issue")
         result = async_to_sync(get_issue)(self.user.id, other_issue.id)
         self.assertIsNone(result)
+
+    def test_resolve_issue_id(self):
+        resolve = async_to_sync(resolve_issue_id)
+        slug = self.project.slug.upper()
+        issue = baker.make("issue_events.Issue", project=self.project, short_id=42)
+        # Same project slug in an org the user isn't in
+        baker.make(
+            "issue_events.Issue",
+            project=baker.make("projects.Project", name=self.project.name),
+            short_id=43,
+        )
+        for value in [issue.id, str(issue.id), f"{slug}-1A", f"{slug}-1a".lower()]:
+            with self.subTest(value=value):
+                self.assertEqual(resolve(self.user.id, value), issue.id)
+        self.assertIsNone(resolve(self.user.id, f"{slug}-1B"))
+        with self.assertRaises(ValueError):
+            resolve(self.user.id, "not a short id")
+
+        # Same short ID in a second org the user belongs to is ambiguous
+        other_project = baker.make("projects.Project", name=self.project.name)
+        other_project.organization.add_user(self.user)
+        other = baker.make("issue_events.Issue", project=other_project, short_id=42)
+        with self.assertRaises(ValueError):
+            resolve(self.user.id, f"{slug}-1A")
+        self.assertEqual(
+            resolve(self.user.id, f"{slug}-1A", other_project.organization.slug),
+            other.id,
+        )
 
     def test_get_latest_event(self):
         issue = baker.make("issue_events.Issue", project=self.project)

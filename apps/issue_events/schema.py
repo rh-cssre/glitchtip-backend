@@ -165,6 +165,14 @@ class IssueSchema(ModelSchema):
         ]
 
 
+class ShortIdLookupSchema(Schema):
+    organizationSlug: str
+    projectSlug: str
+    groupId: str
+    group: IssueSchema
+    shortId: str
+
+
 class IssueDetailSchema(IssueSchema):
     userReportCount: int = Field(validation_alias="user_report_count")
 

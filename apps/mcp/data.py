@@ -11,6 +11,7 @@ from apps.issue_events.constants import EventStatus
 from apps.issue_events.models import Issue, IssueEvent, IssueIndex
 from apps.issue_events.services import filter_issue_list, is_uuid7
 from apps.issue_events.services import get_queryset as get_issues_qs
+from apps.issue_events.utils import parse_short_id
 from apps.logs.api import LogEventRow, query_logs_combined
 from apps.logs.constants import parse_level_filters
 from apps.organizations_ext.models import Organization
@@ -72,6 +73,36 @@ async def get_issues(
     qs = _apply_compliance_filter(qs)
     limit = min(limit, AsyncLinkHeaderPagination.max_page_size)
     return [issue async for issue in qs[:limit]]
+
+
+async def resolve_issue_id(
+    user_id: int, issue_id: int | str, organization_slug: str | None = None
+) -> int | None:
+    """Accept a numeric issue id or a short ID such as ``PROJECT-1A``"""
+    if isinstance(issue_id, int):
+        return issue_id
+    if issue_id.strip().isdigit():
+        return int(issue_id)
+    parsed = parse_short_id(issue_id)
+    if parsed is None:
+        raise ValueError(f"Not an issue id or short ID: {issue_id!r}")
+    project_slug, short_id = parsed
+    qs = Issue.objects.filter(
+        project__organization__users=user_id,
+        project__slug=project_slug,
+        short_id=short_id,
+        is_deleted=False,
+    )
+    if organization_slug:
+        qs = qs.filter(project__organization__slug=organization_slug)
+    # Project slugs are only unique per organization
+    ids = [i async for i in qs.values_list("id", flat=True)[:2]]
+    if len(ids) > 1:
+        raise ValueError(
+            f"Short ID {issue_id!r} matches issues in more than one "
+            "organization; pass organization_slug"
+        )
+    return ids[0] if ids else None
 
 
 async def get_issue(user_id: int, issue_id: int) -> Issue | None:
