@@ -692,15 +692,30 @@ class LookupTests(CacheTestCase):
             release.wait(5)
             return real(*args)
 
+        key = (
+            CacheKind.SYMCACHE,
+            store.format_tag(CacheKind.SYMCACHE),
+            self.source_for(dif).cache_key,
+        )
+
         async def many():
             waiting = [
                 asyncio.create_task(store.get_cache(self.source_for(dif)))
                 for _ in range(5)
             ]
-            while len(store._loads_in_flight) < 1:
-                await asyncio.sleep(0.01)
-            await asyncio.sleep(0.05)  # let the rest join the load in flight
-            release.set()
+            # All five have joined once the load has a callback from each,
+            # plus the leader's one to forget the load when it is done.
+            # Each event awaits queries first, so a fixed sleep can release
+            # the load before a straggler joins it.
+            try:
+                async with asyncio.timeout(5):
+                    while (
+                        key not in store._loads_in_flight
+                        or len(store._loads_in_flight[key]._done_callbacks) < 6
+                    ):
+                        await asyncio.sleep(0.01)
+            finally:
+                release.set()
             return await asyncio.gather(*waiting)
 
         with (
