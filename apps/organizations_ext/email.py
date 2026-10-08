@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 from django.conf import settings
 
+from apps.stripe.overage import overage_active, overage_eligible
 from glitchtip.email import DetailEmail
 
 from .models import Organization, OrganizationUser
@@ -29,13 +30,18 @@ class ThrottleNoticeEmail(DetailEmail):
         )
         organization = self.object
         subscription_link = f"{base_url}/{organization.slug}/settings/subscription"
-        product: StripeProduct | None = None
-        if organization.stripe_primary_subscription:
-            product = organization.stripe_primary_subscription.price.product
+        sub = organization.stripe_primary_subscription
+        product: StripeProduct | None = sub.price.product if sub else None
         context.update(
             {
                 "organization": organization,
                 "product": product,
+                # A paid org changes plan through us, not by upgrading itself.
+                "paid": bool(sub and sub.price.price > 0),
+                # On-demand is live, so the throttle means its spend cap is
+                # reached; nothing past the cap is charged.
+                "at_spend_cap": overage_active(organization),
+                "on_demand_available": self._on_demand_available(organization),
                 "event_limit": product.events if product else None,
                 "total_event_count": getattr(self, "total_event_count", 0),
                 "subscription_link": subscription_link,
@@ -43,6 +49,23 @@ class ThrottleNoticeEmail(DetailEmail):
             }
         )
         return context
+
+    @staticmethod
+    def _on_demand_available(organization: Organization) -> bool:
+        """Turning on-demand on would be accepted: the same plan and live
+        price tests the configure endpoint applies."""
+        from apps.stripe.models import StripePrice
+
+        if organization.metered_billing_enabled:
+            return False
+        if not overage_eligible(organization.stripe_primary_subscription):
+            return False
+        return StripePrice.objects.filter(
+            is_metered=True,
+            active=True,
+            product__is_overage=True,
+            product__active=True,
+        ).exists()
 
 
 class InvitationEmail(DetailEmail):

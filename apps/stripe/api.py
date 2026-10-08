@@ -655,7 +655,9 @@ async def configure_overage(
             )
         if payload.cap_cents <= 0:
             return JsonResponse(
-                {"detail": "A positive spend cap is required to enable on-demand billing."},
+                {
+                    "detail": "A positive spend cap is required to enable on-demand billing."
+                },
                 status=400,
             )
         if payload.cap_cents > settings.GLITCHTIP_OVERAGE_MAX_CAP_CENTS:
