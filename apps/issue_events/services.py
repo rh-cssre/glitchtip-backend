@@ -180,7 +180,8 @@ def filter_issue_list(
                 if query_name == "is":
                     qs = qs.filter(index__status=EventStatus.from_string(query_value))
                 elif query_name == "has":
-                    # Does not require distinct as we already have a group by from annotations
+                    # Can repeat an issue; get_queryset()'s GROUP BY collapses it,
+                    # and the bulk update tolerates duplicate ids
                     qs = qs.filter(
                         issuetag__tag_key__key=query_value,
                     )

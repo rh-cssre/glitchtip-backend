@@ -980,7 +980,7 @@ class IssueAPITestCase(GlitchTestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(enqueue.await_count, 2)
+        self.assertEqual(enqueue.await_count, 1)
         for task_kwargs in queued_tasks:
             self.assertCountEqual(task_kwargs["filter_params"]["id"], selected_ids)
             self.assertNotIn("id__in", task_kwargs["filter_params"])
@@ -2185,5 +2185,277 @@ class OrganizationScopedIssueAPITestCase(GlitchTestCase):
         )
         res = await self.async_client.get(
             self.tags_url(self.other_organization.slug, issue.id)
+        )
+        self.assertEqual(res.status_code, 404)
+
+
+class ShortIdAPITestCase(GlitchTestCase):
+    """Short IDs like ``MY-APP-1A`` resolve to issues within the path's org.
+
+    The user is a member of ``other_organization`` too, so a hit leaking from
+    it means the org slug is ignored, not merely that membership is checked.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.create_user()
+        cls.other_organization = baker.make("organizations_ext.Organization")
+        cls.other_organization.add_user(cls.user, OrganizationUserRole.ADMIN)
+        # Hyphenated slug: the code is whatever follows the last hyphen
+        cls.app_project = baker.make(
+            "projects.Project", organization=cls.organization, name="My App"
+        )
+        cls.other_org_project = baker.make(
+            "projects.Project", organization=cls.other_organization, name="My App"
+        )
+
+    def setUp(self):
+        self.async_client.force_login(self.user)
+
+    def lookup_url(self, short_id: str, organization_slug: str | None = None):
+        return reverse(
+            "api:get_issue_by_short_id",
+            kwargs={
+                "organization_slug": organization_slug or self.organization.slug,
+                "short_id": short_id,
+            },
+        )
+
+    async def test_lookup(self):
+        self.assertEqual(self.app_project.slug, "my-app")
+        issue = await amake_issue(project=self.app_project, short_id=42)
+        await amake_issue(project=self.app_project, short_id=43, is_deleted=True)
+        await amake_issue(project=self.other_org_project, short_id=44)
+
+        for short_id in ["MY-APP-1A", "my-app-1a"]:
+            with self.subTest(short_id=short_id):
+                res = await self.async_client.get(self.lookup_url(short_id))
+                self.assertEqual(res.status_code, 200)
+                data = res.json()
+                self.assertEqual(data["organizationSlug"], self.organization.slug)
+                self.assertEqual(data["projectSlug"], "my-app")
+                self.assertEqual(data["groupId"], str(issue.id))
+                self.assertEqual(data["group"]["id"], str(issue.id))
+                self.assertEqual(data["shortId"], "MY-APP-1A")
+
+        for short_id in [
+            "MY-APP-1B",  # deleted
+            "MY-APP-1C",  # exists only in another org the user belongs to
+            "MY-APP-1D",  # no such issue
+            "APP-1A",  # wrong project slug
+            "MY-APP-ZZ",  # not base32
+            "MYAPP",  # no hyphen
+            "MY-APP-" + "V" * 7,  # overflows the column
+        ]:
+            with self.subTest(short_id=short_id):
+                res = await self.async_client.get(self.lookup_url(short_id))
+                self.assertEqual(res.status_code, 404)
+
+        res = await self.async_client.get(
+            self.lookup_url("MY-APP-1C", self.other_organization.slug)
+        )
+        self.assertEqual(res.status_code, 200)
+
+    async def test_list_direct_hit(self):
+        issue = await amake_issue(project=self.app_project, short_id=42)
+        # Text search alone would return this one too
+        decoy = await amake_issue(project=self.app_project, short_id=1)
+        await IssueIndex.objects.filter(issue=decoy).aupdate(
+            fts_document=SearchVector(Value("my-app-1a my-app-1b"))
+        )
+        org_url = reverse(
+            "api:list_issues", kwargs={"organization_slug": self.organization.slug}
+        )
+        project_url = reverse(
+            "api:list_project_issues",
+            kwargs={
+                "organization_slug": self.organization.slug,
+                "project_slug": self.app_project.slug,
+            },
+        )
+        other_project = await baker.amake(
+            "projects.Project", organization=self.organization, name="Other"
+        )
+        for url in [org_url, project_url]:
+            with self.subTest(url=url):
+                res = await self.async_client.get(
+                    url + "?query=my-app-1a&shortIdLookup=1"
+                )
+                self.assertEqual([i["id"] for i in res.json()], [str(issue.id)])
+                self.assertEqual(res.headers.get("X-Sentry-Direct-Hit"), "1")
+
+                # Opt-in: without the flag it is a plain text search
+                res = await self.async_client.get(url + "?query=my-app-1a")
+                self.assertEqual([i["id"] for i in res.json()], [str(decoy.id)])
+                self.assertNotIn("X-Sentry-Direct-Hit", res.headers)
+
+        # A hit ignores the other filters
+        res = await self.async_client.get(
+            org_url + f"?query=my-app-1a&shortIdLookup=1&project={other_project.id}"
+        )
+        self.assertEqual([i["id"] for i in res.json()], [str(issue.id)])
+
+        # The Kelvin sign case-folds to "k" but is not base32
+        res = await self.async_client.get(
+            org_url + "?query=my-app-%E2%84%AA&shortIdLookup=1"
+        )
+        self.assertEqual(res.status_code, 200)
+
+        # A short ID with no match falls back to text search
+        res = await self.async_client.get(org_url + "?query=my-app-1b&shortIdLookup=1")
+        self.assertEqual([i["id"] for i in res.json()], [str(decoy.id)])
+        self.assertNotIn("X-Sentry-Direct-Hit", res.headers)
+
+        # The project list only direct-hits its own project's short IDs
+        other_project_url = reverse(
+            "api:list_project_issues",
+            kwargs={
+                "organization_slug": self.organization.slug,
+                "project_slug": other_project.slug,
+            },
+        )
+        res = await self.async_client.get(
+            other_project_url + "?query=MY-APP-1A&shortIdLookup=1"
+        )
+        self.assertEqual(res.json(), [])
+        self.assertNotIn("X-Sentry-Direct-Hit", res.headers)
+
+
+class ProjectBulkUpdateAPITestCase(GlitchTestCase):
+    """PUT /projects/{org}/{project}/issues/, the bulk update sentry-cli uses"""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.create_user()
+        cls.url = reverse(
+            "api:list_project_issues",
+            kwargs={
+                "organization_slug": cls.organization.slug,
+                "project_slug": cls.project.slug,
+            },
+        )
+
+    def setUp(self):
+        self.async_client.force_login(self.user)
+
+    async def put(self, query: str, data: dict):
+        return await self.async_client.put(
+            f"{self.url}?{query}", data, content_type="application/json"
+        )
+
+    async def statuses(self, issues) -> list[int]:
+        return [
+            status
+            async for status in IssueIndex.objects.filter(issue__in=issues)
+            .order_by("issue_id")
+            .values_list("status", flat=True)
+        ]
+
+    async def put_and_run_task(self, query: str, data: dict):
+        """PUT, then run the queued background task for issues past the first 50"""
+        queued_tasks = []
+
+        async def capture_task(**kwargs):
+            queued_tasks.append(deepcopy(kwargs))
+
+        enqueue = AsyncMock(side_effect=capture_task)
+        with patch("apps.issue_events.api.issues.update_issues_task", aenqueue=enqueue):
+            res = await self.put(query, data)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(queued_tasks), 1)
+        await asyncio.wait_for(update_issues_task.func(**queued_tasks[0]), timeout=30)
+
+    async def test_status_filter_applies_to_background_batches(self):
+        """An ignored ?status= filter would update every issue in the project"""
+        resolved = [
+            await amake_issue(project=self.project, status=EventStatus.RESOLVED)
+            for _ in range(51)
+        ]
+        unresolved = await amake_issue(project=self.project)
+
+        await self.put_and_run_task("status=resolved", {"status": "ignored"})
+
+        self.assertEqual(
+            await self.statuses(resolved), [EventStatus.IGNORED] * len(resolved)
+        )
+        self.assertEqual(await self.statuses([unresolved]), [EventStatus.UNRESOLVED])
+
+    async def test_every_change_reaches_background_batches(self):
+        """Status, assignment and release apply to all issues, not just the first
+        50, even when the status change takes issues out of the ?status= filter"""
+        release = await baker.amake("releases.Release", organization=self.organization)
+        await release.projects.aadd(self.project)
+        issues = [await amake_issue(project=self.project) for _ in range(51)]
+
+        ids = "&".join(f"id={issue.id}" for issue in issues)
+        await self.put_and_run_task(
+            f"{ids}&status=unresolved",
+            {"status": "resolvedInNextRelease", "assignedTo": f"user:{self.user.id}"},
+        )
+
+        self.assertEqual(
+            await self.statuses(issues), [EventStatus.RESOLVED] * len(issues)
+        )
+        changed = Issue.objects.filter(
+            id__in=[i.id for i in issues],
+            resolved_in_release=release,
+            assigned_to_org_user__user=self.user,
+        )
+        self.assertEqual(await changed.acount(), len(issues))
+
+        # Any other status clears the release
+        await self.put_and_run_task("status=resolved", {"status": "unresolved"})
+        self.assertFalse(
+            await Issue.objects.filter(resolved_in_release__isnull=False).aexists()
+        )
+
+    async def test_selection(self):
+        other_project = await baker.amake(
+            "projects.Project", organization=self.organization
+        )
+        unresolved = await amake_issue(project=self.project)
+        resolved = await amake_issue(project=self.project, status=EventStatus.RESOLVED)
+        other = await amake_issue(project=other_project)
+
+        # No id and no status: unresolved issues of this project only.
+        # "muted" is sentry-cli's name for ignored.
+        res = await self.put("", {"status": "muted"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(
+            await self.statuses([unresolved, resolved, other]),
+            [EventStatus.IGNORED, EventStatus.RESOLVED, EventStatus.UNRESOLVED],
+        )
+
+        # An id from another project is not updated
+        res = await self.put(
+            f"id={resolved.id}&id={other.id}", {"status": "resolvedInNextRelease"}
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(await self.statuses([other]), [EventStatus.UNRESOLVED])
+
+        res = await self.put(f"id={unresolved.id}", {"status": "resolvedInNextRelease"})
+        self.assertEqual(await self.statuses([unresolved]), [EventStatus.RESOLVED])
+
+    async def test_rejected(self):
+        issue = await amake_issue(project=self.project)
+        for query, data in [
+            ("", {"assignedTo": None}),  # non-status change needs id
+            ("", {"merge": 1}),
+            ("status=bogus", {"status": "resolved"}),
+        ]:
+            with self.subTest(query=query, data=data):
+                res = await self.put(query, data)
+                self.assertEqual(res.status_code, 400)
+        self.assertEqual(await self.statuses([issue]), [EventStatus.UNRESOLVED])
+
+        other_org_url = reverse(
+            "api:list_project_issues",
+            kwargs={
+                "organization_slug": "not-a-member",
+                "project_slug": self.project.slug,
+            },
+        )
+        res = await self.async_client.put(
+            other_org_url, {"status": "resolved"}, content_type="application/json"
         )
         self.assertEqual(res.status_code, 404)

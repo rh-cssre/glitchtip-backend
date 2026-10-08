@@ -16,6 +16,8 @@ class OrgScopedModel:
     """
 
     org_field: str
+    # FK paths to soft-deleted parents; a row under a deleted one is hidden.
+    undeleted_through: tuple[str, ...] = ()
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -29,6 +31,14 @@ class OrgScopedModel:
             raise ImproperlyConfigured(
                 f"{cls.__qualname__}.org_field is {field!r}, which joins "
                 f"organization from the data model. Use {field}_id."
+            )
+        through = cls.undeleted_through
+        if not isinstance(through, tuple) or not all(
+            isinstance(path, str) and path for path in through
+        ):
+            raise ImproperlyConfigured(
+                f"{cls.__qualname__}.undeleted_through is {through!r}; it must "
+                "be a tuple of foreign key paths, such as ('project',)"
             )
         ORG_SCOPED_MODELS.append(cls)
 
