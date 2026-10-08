@@ -568,6 +568,91 @@ class StripeTestCase(TestCase):
             await StripeSubscription.objects.acount(), len(subscriptions_page_1)
         )
 
+    @patch("apps.stripe.models.list_subscriptions")
+    async def test_sync_flags_two_metered_subscriptions_on_one_customer(
+        self, mock_list_subscriptions
+    ):
+        """Two non-canceled subscriptions carrying the metered price on one
+        customer each bill the whole usage; the sync is the backstop that
+        says so when the enable guard has been bypassed."""
+        await sync_to_async(baker.make)("stripe.StripeProduct", stripe_id="prod_1")
+        now_timestamp = int(timezone.now().timestamp())
+
+        def price(id, usage_type):
+            return Price(
+                object="price",
+                active=True,
+                billing_scheme=None,
+                created=0,
+                currency="",
+                livemode=False,
+                lookup_key=None,
+                nickname=None,
+                recurring={"usage_type": usage_type},
+                tax_behavior=None,
+                tiers_mode=None,
+                type="",
+                unit_amount_decimal="0",
+                metadata={},
+                id=id,
+                product="prod_1",
+                unit_amount=0,
+            )
+
+        def item(id, usage_type):
+            return SubscriptionItem(
+                id=id,
+                object="subscription_item",
+                created=now_timestamp,
+                current_period_end=now_timestamp + 2592000,
+                current_period_start=now_timestamp,
+                metadata={},
+                price=price(f"price_{usage_type}", usage_type),
+                quantity=1,
+                subscription="sub",
+                tax_rates=[],
+            )
+
+        def subscription(id, customer_id, status, metered):
+            items = [item(f"{id}_base", "licensed")]
+            if metered:
+                items.append(item(f"{id}_metered", "metered"))
+            return SubscriptionExpandCustomer(
+                object="subscription",
+                id=id,
+                customer=Customer(
+                    object="customer",
+                    id=customer_id,
+                    email="",
+                    metadata={"organization_id": str(self.org.id)},
+                    name="",
+                ),
+                items=SubscriptionItems(object="list", data=items),
+                created=now_timestamp,
+                status=status,
+                livemode=False,
+                metadata={},
+                cancel_at_period_end=False,
+                start_date=now_timestamp,
+                collection_method="charge_automatically",
+            )
+
+        async def pages():
+            yield [
+                subscription("sub_a", "cus_two", SubscriptionStatus.ACTIVE, True),
+                subscription("sub_b", "cus_two", SubscriptionStatus.ACTIVE, True),
+                subscription("sub_c", "cus_one", SubscriptionStatus.ACTIVE, True),
+                subscription("sub_d", "cus_one", SubscriptionStatus.CANCELED, True),
+            ]
+
+        mock_list_subscriptions.return_value = pages()
+        with self.assertLogs("apps.stripe.models", level="ERROR") as logs:
+            await StripeSubscription.sync_from_stripe()
+        flagged = [m for m in logs.output if "metered price" in m]
+        self.assertEqual(len(flagged), 1)
+        self.assertIn("cus_two", flagged[0])
+        self.assertIn("sub_a, sub_b", flagged[0])
+
     @override_settings(
         STRIPE_WEBHOOK_SECRET="test_webhook_secret",
         STRIPE_WEBHOOK_TOLERANCE=300,

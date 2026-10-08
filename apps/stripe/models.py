@@ -523,6 +523,7 @@ class StripeSubscription(OrgScopedModel, StripeModel):
         organization_ids = set()
         active_organization_ids = set()
         known_price_ids = set()
+        metered_by_customer: dict[str, list[str]] = {}
         async for subscriptions in list_subscriptions():
             logger.info(f"Found {len(subscriptions)} subcriptions in Stripe")
 
@@ -550,6 +551,13 @@ class StripeSubscription(OrgScopedModel, StripeModel):
                 price = base_item.price
                 price_id = price.id
                 metered_item_id = metered_item.id if metered_item else ""
+                if (
+                    metered_item
+                    and subscription.status not in TERMINAL_SUBSCRIPTION_STATUSES
+                ):
+                    metered_by_customer.setdefault(subscription.customer.id, []).append(
+                        subscription.id
+                    )
 
                 # If unseen organization id, check if it exists
                 if organization_id not in organization_ids:
@@ -644,6 +652,18 @@ class StripeSubscription(OrgScopedModel, StripeModel):
             logger.info(
                 f"Created/updated {len(stripe_subscriptions)} subscriptions in Django"
             )
+
+        # The meter aggregates per customer, so each of these bills the whole
+        # usage. configure_overage refuses to create this state; a human
+        # resolves it when something else has.
+        for customer_id, sub_ids in metered_by_customer.items():
+            if len(sub_ids) > 1:
+                logger.error(
+                    "Customer %s carries the metered price on %d subscriptions (%s)",
+                    customer_id,
+                    len(sub_ids),
+                    ", ".join(sub_ids),
+                )
 
         await cls.set_primary_subscriptions_for_organizations(active_organization_ids)
         await cls.update_outdated_subscriptions()
