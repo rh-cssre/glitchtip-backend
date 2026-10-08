@@ -590,3 +590,40 @@ class OverageAPITestCase(TestCase):
         self.assertEqual(body["overageUnits"], 50_000)
         self.assertEqual(body["capUnits"], units_for_budget(5000))
         self.assertEqual(body["overageCostCents"], 0)
+
+    def test_status_reports_what_the_cycle_has_already_sent(self):
+        """Switching overage off stops reporting, not the invoice for the
+        figure already sent, so the card is told that figure for as long as
+        the item that bills it is attached."""
+        now = timezone.now()
+        in_cycle = now - timedelta(hours=1)
+        last_cycle = self.sub.current_period_start - timedelta(days=1)
+        cases = [
+            # (name, enabled, item, plan_price, last_at, reported, projected)
+            ("never enabled", False, "", 15, None, 0, 0),
+            ("disabled this cycle", False, "si_1", 15, in_cycle, 600, 0),
+            ("disabled last cycle", False, "si_1", 15, last_cycle, 0, 0),
+            ("item gone", False, "", 15, in_cycle, 0, 0),
+            ("plan ineligible, flag kept", True, "si_1", 0, in_cycle, 600, 0),
+            ("re-enabled", True, "si_1", 15, in_cycle, 600, 750),
+        ]
+        for name, enabled, item, plan_price, last_at, reported, projected in cases:
+            with self.subTest(name):
+                self.org.metered_billing_enabled = enabled
+                self.org.overage_spend_cap_cents = 5000
+                # 40,000 units at $0.00015 = $6.00.
+                self.org.overage_last_reported_units = 40_000 if last_at else 0
+                self.org.overage_last_reported_at = last_at
+                self.org.save()
+                self.sub.metered_item_id = item
+                self.sub.save(update_fields=["metered_item_id"])
+                self.price.price = plan_price
+                self.price.save(update_fields=["price"])
+
+                with patch(
+                    "apps.stripe.api.get_event_counts",
+                    new=AsyncMock(return_value=EventCounts(issue_event_count=150_000)),
+                ):
+                    body = self._status().json()
+                self.assertEqual(body["reportedCostCents"], reported)
+                self.assertEqual(body["overageCostCents"], projected)

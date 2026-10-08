@@ -50,6 +50,7 @@ from .overage import (
     cycle_quota,
     overage_active,
     overage_eligible,
+    reported_units,
     units_for_budget,
 )
 from .utils import (
@@ -538,6 +539,9 @@ class OverageStatusSchema(CamelSchema):
     usage: int
     overage_units: int
     overage_cost_cents: int
+    # Cost of what was already sent to Stripe this period; still invoiced after
+    # overage is switched off.
+    reported_cost_cents: int
     throttle_rate: int
 
 
@@ -595,6 +599,7 @@ async def overage_status(org: Organization) -> dict:
         # cap.
         quota = cycle_quota(org, period[0], quota)
     overage_units = max(0, usage - quota)
+    reported = 0
     if period and active:
         billed_units = billable_units(
             overage_units,
@@ -602,6 +607,11 @@ async def overage_status(org: Organization) -> dict:
             org.overage_last_reported_units,
             org.overage_last_reported_at,
             *period,
+        )
+    # Only while the item that invoices it is still attached.
+    if period and sub and sub.metered_item_id:
+        reported = reported_units(
+            org.overage_last_reported_units, org.overage_last_reported_at, *period
         )
 
     return {
@@ -616,6 +626,7 @@ async def overage_status(org: Organization) -> dict:
         "usage": usage,
         "overage_units": overage_units,
         "overage_cost_cents": cost_cents_for_units(billed_units),
+        "reported_cost_cents": cost_cents_for_units(reported),
         "throttle_rate": org.event_throttle_rate,
     }
 
@@ -655,10 +666,12 @@ async def configure_overage(
     Enabling attaches the metered overage price as a second subscription item,
     whose own Stripe billing period becomes the organization's usage window
     from then on (see ``billing_window``). Disabling only clears the flag: the
-    item stays attached (dormant, billing zero), so a re-enable within the
-    same cycle can't re-bill reported usage and toggling never moves the
-    window. Either way a throttle re-check is enqueued so the new headroom (or
-    block) takes effect promptly.
+    item stays attached and dormant, so a re-enable within the same cycle
+    can't re-bill reported usage and toggling never moves the window. Dormant
+    means nothing further is reported, not that the period bills zero: the
+    figure already filed with Stripe this period is still invoiced, and the
+    status response says so in ``reported_cost_cents``. Either way a throttle
+    re-check is enqueued so the new headroom (or block) takes effect promptly.
     """
     org = await aget_object_or_404(
         qs.select_related("stripe_primary_subscription__price__product")
@@ -783,7 +796,8 @@ async def configure_overage(
     else:
         # Keep the item attached and the last-report record intact: a re-enable
         # is then a flag flip, and the cap stays floored at what the cycle has
-        # billed so toggling can't retract it. A dormant item bills zero.
+        # billed so toggling can't retract it. Nothing more is reported while
+        # dormant; what was already reported this period is still invoiced.
         org.metered_billing_enabled = False
         await org.asave(update_fields=["metered_billing_enabled"])
 

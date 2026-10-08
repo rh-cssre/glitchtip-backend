@@ -117,9 +117,22 @@ def billable_units(
     comes through. Shared by the sweep that reports to the meter and the status
     view, so what the owner sees is what is invoiced.
     """
-    if last_at is not None and cycle_start <= last_at < cycle_end:
-        cap_units = max(cap_units, last_units)
+    cap_units = max(
+        cap_units, reported_units(last_units, last_at, cycle_start, cycle_end)
+    )
     return min(overage_units, cap_units)
+
+
+def reported_units(last_units: int, last_at, cycle_start, cycle_end) -> int:
+    """The last figure reported to Stripe, if it was sent in this cycle, else 0.
+
+    Shared by the cap floor above and the status view, so what the owner is
+    told is still owed after switching overage off is the figure the floor
+    protects.
+    """
+    if last_at is not None and cycle_start <= last_at < cycle_end:
+        return last_units
+    return 0
 
 
 def tier_problems(raw_price: dict) -> list[str]:
