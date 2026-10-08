@@ -10,6 +10,7 @@ from tempfile import SpooledTemporaryFile
 
 from django.conf import settings
 from django.core.files.base import File as FileObj
+from django.db.models import QuerySet
 from django.shortcuts import aget_object_or_404
 from django.urls import reverse
 from ninja import File, Router
@@ -19,7 +20,7 @@ from ninja.files import UploadedFile
 from apps.organizations_ext.models import Organization
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.decorators import optional_slash
-from glitchtip.api.permissions import has_permission
+from glitchtip.api.permissions import OrgScopedHttpRequest, org_scoped
 
 from .models import FileBlob
 
@@ -105,10 +106,12 @@ def decompress_chunk(upload) -> FileObj:
 router = Router()
 
 
-@optional_slash(router, "get", "organizations/{slug:organization_slug}/chunk-upload/")
-async def get_chunk_upload_info(request: AuthHttpRequest, organization_slug: str):
+@optional_slash(
+    router, "get", "organizations/{slug:organization_id_or_slug}/chunk-upload/"
+)
+async def get_chunk_upload_info(request: AuthHttpRequest, organization_id_or_slug: str):
     """Get server settings for chunk file upload"""
-    path = reverse("api:get_chunk_upload_info", args=[organization_slug])
+    path = reverse("api:get_chunk_upload_info", args=[organization_id_or_slug])
     url = (
         path
         if settings.GLITCHTIP_CHUNK_UPLOAD_USE_RELATIVE_URL
@@ -127,11 +130,14 @@ async def get_chunk_upload_info(request: AuthHttpRequest, organization_slug: str
     }
 
 
-@optional_slash(router, "post", "organizations/{slug:organization_slug}/chunk-upload/")
-@has_permission(["project:write", "project:admin", "project:releases"])
+@optional_slash(
+    router, "post", "organizations/{slug:organization_id_or_slug}/chunk-upload/"
+)
+@org_scoped(["project:write", "project:admin", "project:releases"], Organization)
 async def chunk_upload(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
     file_gzip: list[UploadedFile] = File(...),
 ):
     """Upload one or more gzipped files to save"""
@@ -139,9 +145,7 @@ async def chunk_upload(
     logger.info("chunkupload.start")
 
     # Membership check; the organization itself is not otherwise needed.
-    await aget_object_or_404(
-        Organization, slug=organization_slug.lower(), users=request.auth.user_id
-    )
+    await aget_object_or_404(qs.only("id"))
 
     logger.info("chunkupload.post.files", extra={"len": len(file_gzip)})
 

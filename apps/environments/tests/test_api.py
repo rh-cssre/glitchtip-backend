@@ -2,6 +2,7 @@ from django.test import TestCase
 from django.urls import reverse
 from model_bakery import baker
 
+from apps.organizations_ext.constants import OrganizationUserRole
 from glitchtip.test_utils.test_case import GlitchTipTestCaseMixin
 
 from ..models import EnvironmentProject
@@ -99,4 +100,16 @@ class EnvironmentProjectTestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertContains(res, "true")
         self.assertTrue(
             await EnvironmentProject.objects.filter(is_hidden=True).aexists()
+        )
+
+        # project:write is admin and up
+        self.org_user.role = OrganizationUserRole.MEMBER
+        await self.org_user.asave()
+        data["isHidden"] = False
+        res = await self.async_client.put(
+            detail_url, data, content_type="application/json"
+        )
+        self.assertEqual(res.status_code, 403)
+        self.assertFalse(
+            await EnvironmentProject.objects.filter(is_hidden=False).aexists()
         )

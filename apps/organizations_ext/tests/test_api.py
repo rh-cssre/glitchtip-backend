@@ -61,6 +61,17 @@ class OrganizationsAPITestCase(TestCase):
         ]
         self.assertCountEqual(data, owner_scopes)
 
+        # Not the role of another member of the same organization
+        organization_3 = await baker.amake("organizations_ext.Organization")
+        await organization_3.aadd_user(await baker.amake("users.user"))
+        await organization_3.aadd_user(self.user, role=OrganizationUserRole.MEMBER)
+        url = reverse("api:get_organization", args=[organization_3.slug])
+        res = await self.async_client.get(url)
+        member_scopes = OrganizationUserRole.get_role(OrganizationUserRole.MEMBER)[
+            "scopes"
+        ]
+        self.assertCountEqual(res.json()["access"], member_scopes)
+
     async def test_organizations_create(self):
         data = {"name": "test"}
         res = await self.async_client.post(
@@ -145,6 +156,12 @@ class OrganizationsAPITestCase(TestCase):
         await org_2_user.asave()
 
         url = reverse("api:delete_organization", args=[organization_2.slug])
+        res = await self.async_client.delete(url)
+        self.assertEqual(res.status_code, 403)
+
+        # org:admin is owner-only
+        org_2_user.role = OrganizationUserRole.MANAGER
+        await org_2_user.asave()
         res = await self.async_client.delete(url)
         self.assertEqual(res.status_code, 403)
 

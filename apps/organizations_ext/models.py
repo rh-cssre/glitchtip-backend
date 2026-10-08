@@ -33,6 +33,7 @@ from apps.projects.models import (
 from apps.sourcecode.models import DebugSymbolBundle
 from apps.stripe.utils import billing_window, compute_cycle_n_ago, has_metered_window
 from apps.uptime.models import UptimeCheckHourlyStatistic
+from glitchtip.base_models import OrgScopedModel
 
 from .constants import OrganizationUserRole
 from .fields import OrganizationSlugField
@@ -255,7 +256,9 @@ async def get_current_period_dates(
 ALL_DIGITS_SLUG = r"^[0-9]+$"
 
 
-class Organization(SharedBaseModel, OrganizationBase):
+class Organization(OrgScopedModel, SharedBaseModel, OrganizationBase):
+    org_field = "id"
+
     id = models.AutoField(primary_key=True)  # BIGINT is unnecessary
     slug = OrganizationSlugField(
         max_length=200,
@@ -500,7 +503,9 @@ class Organization(SharedBaseModel, OrganizationBase):
         return self.owner.organization_user.user == user
 
 
-class OrganizationUser(SharedBaseModel, OrganizationUserBase):
+class OrganizationUser(OrgScopedModel, SharedBaseModel, OrganizationUserBase):
+    org_field = "organization_id"
+
     user = models.ForeignKey(
         "users.User",
         blank=True,

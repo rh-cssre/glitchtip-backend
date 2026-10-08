@@ -1,9 +1,11 @@
 from django.db import models
 
-from glitchtip.base_models import CreatedModel
+from glitchtip.base_models import CreatedModel, OrgScopedModel
 
 
-class Release(CreatedModel):
+class Release(OrgScopedModel, CreatedModel):
+    org_field = "organization_id"
+
     organization = models.ForeignKey(
         "organizations_ext.Organization", on_delete=models.CASCADE
     )

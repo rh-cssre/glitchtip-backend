@@ -10,7 +10,7 @@ class OrganizationProjectsViewTestCase(GlitchTipTestCaseMixin, TestCase):
         self.create_logged_in_user()
         self.async_client.force_login(self.user)
         self.url = reverse(
-            "api:list_organization_projects", args=[self.organization.slug]
+            "api:list_organization_projects", args=[self.organization.id]
         )
 
     def test_organization_projects_list(self):

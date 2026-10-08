@@ -1,16 +1,19 @@
 from django.db import IntegrityError
+from django.db.models import QuerySet
 from django.http import HttpResponse
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Status
 from ninja.errors import HttpError
-from ninja.pagination import paginate
 
 from apps.files.models import FileBlob
 from apps.files.tasks import assemble_artifacts_task
 from apps.organizations_ext.models import Organization
-from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.decorators import optional_slash
-from glitchtip.api.permissions import has_permission
+from glitchtip.api.permissions import (
+    OrgScopedHttpRequest,
+    org_scoped,
+    org_scoped_list,
+)
 
 from .models import Repository
 from .schema import ArtifactBundleAssembleIn, RepositoryIn, RepositorySchema
@@ -18,39 +21,33 @@ from .schema import ArtifactBundleAssembleIn, RepositoryIn, RepositorySchema
 router = Router()
 
 
-def get_repositories_queryset(organization_slug: str, user_id: int):
-    return Repository.objects.filter(
-        organization__slug=organization_slug,
-        organization__users=user_id,
-    ).order_by("-created")
-
-
 @router.get(
-    "organizations/{slug:organization_slug}/repos/",
+    "organizations/{slug:organization_id_or_slug}/repos/",
     response=list[RepositorySchema],
     by_alias=True,
 )
-@paginate
-@has_permission(["org:read", "org:write", "org:admin"])
+@org_scoped_list(["org:read", "org:write", "org:admin"], Repository)
 async def list_repositories(
-    request: AuthHttpRequest, response: HttpResponse, organization_slug: str
+    request: OrgScopedHttpRequest,
+    response: HttpResponse,
+    organization_id_or_slug: str,
 ):
-    return get_repositories_queryset(organization_slug, request.auth.user_id)
+    return Repository.objects.order_by("-created")
 
 
 @router.post(
-    "organizations/{slug:organization_slug}/repos/",
+    "organizations/{slug:organization_id_or_slug}/repos/",
     response={201: RepositorySchema},
     by_alias=True,
 )
-@has_permission(["org:write", "org:admin"])
+@org_scoped(["org:write", "org:admin"], Organization)
 async def create_repository(
-    request: AuthHttpRequest, organization_slug: str, payload: RepositoryIn
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
+    payload: RepositoryIn,
 ):
-    user_id = request.auth.user_id
-    organization = await aget_object_or_404(
-        Organization, slug=organization_slug, users=user_id
-    )
+    organization = await aget_object_or_404(qs)
     try:
         repo = await Repository.objects.acreate(
             organization=organization,
@@ -64,17 +61,19 @@ async def create_repository(
 
 
 @optional_slash(
-    router, "post", "organizations/{slug:organization_slug}/artifactbundle/assemble/"
+    router,
+    "post",
+    "organizations/{slug:organization_id_or_slug}/artifactbundle/assemble/",
 )
-@has_permission(["project:write", "project:admin", "project:releases"])
+@org_scoped(["project:write", "project:admin", "project:releases"], Organization)
 async def artifact_bundle_assemble(
-    request: AuthHttpRequest, organization_slug: str, payload: ArtifactBundleAssembleIn
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
+    payload: ArtifactBundleAssembleIn,
 ):
     """Associate files with assembly bundle and optionally release"""
-    user_id = request.auth.user_id
-    organization = await aget_object_or_404(
-        Organization, slug=organization_slug, users=user_id
-    )
+    organization = await aget_object_or_404(qs.only("id"))
 
     existing_chunks = [
         checksum

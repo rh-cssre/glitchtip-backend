@@ -105,6 +105,51 @@ class OrganizationMemberAPIPermissionTests(APIPermissionTestCase):
         self.auth_token.add_permission("member:admin")
         self.assertDeleteReqStatusCode(self.detail_url, 204)
 
+    def test_member_token_removes_itself(self):
+        """has_permission demands member:admin of the token, and the gate
+        admits every role, so a member's token may remove its own user."""
+        self.set_user_role(OrganizationUserRole.MEMBER)
+        self.auth_token.add_permissions(["member:read", "member:admin"])
+        self.assertDeleteReqStatusCode(self.detail_url, 204)
+
+    def test_member_token_removes_others_by_role(self):
+        other = self.organization.add_user(baker.make("users.User"))
+        url = reverse(
+            "api:get_organization_member", args=[self.organization.slug, other.pk]
+        )
+        self.auth_token.add_permissions(["member:read", "member:admin"])
+        self.set_user_role(OrganizationUserRole.MEMBER)
+        self.assertDeleteReqStatusCode(url, 403)
+        self.set_user_role(OrganizationUserRole.MANAGER)
+        self.assertDeleteReqStatusCode(url, 204)
+
+    def test_member_token_with_admin_scope_only(self):
+        """Differs from master, which let this token remove its own user: the
+        gate maps member:admin alone to manager and up."""
+        self.set_user_role(OrganizationUserRole.MEMBER)
+        self.auth_token.add_permission("member:admin")
+        self.assertDeleteReqStatusCode(self.detail_url, 403)
+
+    def test_destroy_by_org_id(self):
+        other = self.organization.add_user(baker.make("users.User"))
+        self.set_user_role(OrganizationUserRole.MANAGER)
+        self.auth_token.add_permission("member:admin")
+        url = reverse(
+            "api:get_organization_member", args=[self.organization.id, other.pk]
+        )
+        self.assertDeleteReqStatusCode(url, 204)
+
+    def test_destroy_non_member(self):
+        stranger_org = baker.make("organizations_ext.Organization")
+        stranger = stranger_org.add_user(baker.make("users.User"))
+        stranger_org.add_user(baker.make("users.User"))  # not the last member
+        self.auth_token.add_permission("member:admin")
+        for org in [stranger_org.slug, stranger_org.id]:
+            with self.subTest(org=org):
+                url = reverse("api:get_organization_member", args=[org, stranger.pk])
+                self.assertDeleteReqStatusCode(url, 404)
+        self.assertTrue(stranger_org.users.filter(id=stranger.user_id).exists())
+
     def test_user_destroy(self):
         another_user = baker.make("users.user")
         another_org_user = self.organization.add_user(another_user)

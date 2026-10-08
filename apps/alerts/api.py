@@ -1,14 +1,11 @@
-from django.db.models import Q, QuerySet
+from django.db.models import QuerySet
 from django.http import Http404, HttpResponse
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Status
 
-from apps.organizations_ext.constants import OrganizationUserRole
 from apps.projects.models import Project
-from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.permissions import (
     OrgScopedHttpRequest,
-    has_permission,
     org_scoped,
     org_scoped_list,
 )
@@ -46,7 +43,7 @@ def get_project_alert_queryset(user_id: int, organization_slug: str, project_slu
 
 
 @router.get(
-    "projects/{slug:organization_slug}/{slug:project_slug}/alerts/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/alerts/",
     response=list[ProjectAlertSchema],
     by_alias=True,
 )
@@ -54,7 +51,7 @@ def get_project_alert_queryset(user_id: int, organization_slug: str, project_slu
 async def list_project_alerts(
     request: OrgScopedHttpRequest,
     response: HttpResponse,
-    organization_slug: str,
+    organization_id_or_slug: str,
     project_slug: str,
 ):
     # The slug alone is not unique across orgs; the gate scopes this to the org.
@@ -64,29 +61,19 @@ async def list_project_alerts(
 
 
 @router.post(
-    "projects/{slug:organization_slug}/{slug:project_slug}/alerts/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/alerts/",
     response={201: ProjectAlertSchema},
     by_alias=True,
 )
-@has_permission(["project:write", "project:admin"])
+@org_scoped(["project:write", "project:admin"], Project)
 async def create_project_alert(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Project],
+    organization_id_or_slug: str,
     project_slug: str,
     payload: ProjectAlertIn,
 ):
-    user_id = request.auth.user_id
-    project = await aget_object_or_404(
-        Project.objects.filter(
-            Q(
-                organization__users=user_id,
-                organization__organization_users__role__gte=OrganizationUserRole.ADMIN,
-            )
-            | Q(teams__members__user=user_id)
-        ).distinct(),
-        organization__slug=organization_slug,
-        slug=project_slug,
-    )
+    project = await aget_object_or_404(qs, slug=project_slug)
     data = payload.dict(exclude_unset=True)
     recipients = data.pop("alert_recipients", [])
     project_alert = await project.projectalert_set.acreate(**data)
@@ -96,29 +83,27 @@ async def create_project_alert(
             for recipient in recipients
         ]
     )
-    return await get_project_alert_queryset(
-        user_id, organization_slug, project_slug
-    ).aget(id=project_alert.id)
+    return await ProjectAlert.objects.prefetch_related("alertrecipient_set").aget(
+        id=project_alert.id
+    )
 
 
 @router.put(
-    "projects/{slug:organization_slug}/{slug:project_slug}/alerts/{alert_id}/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/alerts/{alert_id}/",
     response=ProjectAlertSchema,
     by_alias=True,
 )
-@has_permission(["project:write", "project:admin"])
+@org_scoped(["project:write", "project:admin"], ProjectAlert)
 async def update_project_alert(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[ProjectAlert],
+    organization_id_or_slug: str,
     project_slug: str,
     alert_id: int,
     payload: ProjectAlertIn,
 ):
-    user_id = request.auth.user_id
-    alert = await aget_object_or_404(
-        get_project_alert_queryset(user_id, organization_slug, project_slug),
-        id=alert_id,
-    )
+    qs = qs.filter(project__slug=project_slug).prefetch_related("alertrecipient_set")
+    alert = await aget_object_or_404(qs, id=alert_id)
 
     data = payload.dict(exclude_unset=True)
     alert_recipients = data.pop("alert_recipients", [])
@@ -145,20 +130,18 @@ async def update_project_alert(
     if delete_recipient_ids:
         await alert.alertrecipient_set.filter(pk__in=delete_recipient_ids).adelete()
 
-    return await get_project_alert_queryset(
-        user_id, organization_slug, project_slug
-    ).aget(id=alert.id)
+    return await qs.aget(id=alert.id)
 
 
 @router.delete(
-    "projects/{slug:organization_slug}/{slug:project_slug}/alerts/{alert_id}/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/alerts/{alert_id}/",
     response={204: None},
 )
 @org_scoped(["project:admin"], ProjectAlert)
 async def delete_project_alert(
     request: OrgScopedHttpRequest,
     qs: QuerySet[ProjectAlert],
-    organization_slug: str,
+    organization_id_or_slug: str,
     project_slug: str,
     alert_id: int,
 ):
@@ -169,22 +152,21 @@ async def delete_project_alert(
 
 
 @router.post(
-    "projects/{slug:organization_slug}/{slug:project_slug}/alerts/{alert_id}/test/",
+    "projects/{slug:organization_id_or_slug}/{slug:project_slug}/alerts/{alert_id}/test/",
     response=list[TestAlertResultSchema],
     by_alias=True,
 )
-@has_permission(["project:write", "project:admin"])
+@org_scoped(["project:write", "project:admin"], ProjectAlert)
 async def test_project_alert(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[ProjectAlert],
+    organization_id_or_slug: str,
     project_slug: str,
     alert_id: int,
     recipient_id: int | None = None,
 ):
     alert = await aget_object_or_404(
-        get_project_alert_queryset(
-            request.auth.user_id, organization_slug, project_slug
-        ).select_related("project__organization"),
+        qs.filter(project__slug=project_slug).select_related("project__organization"),
         id=alert_id,
     )
     recipients = alert.alertrecipient_set.all()

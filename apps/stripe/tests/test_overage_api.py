@@ -497,7 +497,7 @@ class OverageAPITestCase(TestCase):
             new=MagicMock(aenqueue=AsyncMock()),
         ):
             res = self._configure({"enabled": True, "capCents": 2000})
-        self.assertEqual(res.status_code, 404)
+        self.assertEqual(res.status_code, 403)
 
     def test_status_shows_the_cycle_quota_and_the_cap_floor(self):
         """What the card shows must be what the sweep bills: the cycle's

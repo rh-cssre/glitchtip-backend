@@ -177,7 +177,7 @@ class ProjectsAPITestCase(TestCase):
         await self.async_client.aforce_login(member)
         url = reverse("api:delete_project", args=[self.organization.slug, project.slug])
         res = await self.async_client.delete(url)
-        self.assertEqual(res.status_code, 404)
+        self.assertEqual(res.status_code, 403)
         await project.arefresh_from_db()
 
     async def test_project_key_delete_requires_admin_role(self):
@@ -192,15 +192,57 @@ class ProjectsAPITestCase(TestCase):
             args=[self.organization.slug, self.project.slug, key.public_key],
         )
         res = await self.async_client.delete(url)
-        self.assertEqual(res.status_code, 404)
+        self.assertEqual(res.status_code, 403)
         self.assertTrue(await ProjectKey.objects.filter(id=key.id).aexists())
+
+    async def test_project_writes_require_admin_role(self):
+        """project:write is admin and up, so a member can neither edit a
+        project nor mint a DSN for it."""
+        member = await baker.amake("users.user")
+        await self.organization.aadd_user(member, role=OrganizationUserRole.MEMBER)
+        await self.async_client.aforce_login(member)
+        args = [self.organization.slug, self.project.slug]
+        for name, url in (
+            ("update", self.update_url),
+            ("create key", reverse("api:create_project_key", args=args)),
+        ):
+            with self.subTest(name):
+                res = await self.async_client.generic(
+                    "PUT" if name == "update" else "POST",
+                    url,
+                    '{"name": "Renamed"}',
+                    content_type="application/json",
+                )
+                self.assertEqual(res.status_code, 403)
+        await self.project.arefresh_from_db()
+        self.assertEqual(self.project.name, "Alpha")
+        self.assertFalse(
+            await ProjectKey.objects.filter(
+                project=self.project, name="Renamed"
+            ).aexists()
+        )
+
+    async def test_deleted_project_keys_are_hidden(self):
+        project = await baker.amake(
+            "projects.Project", organization=self.organization, is_deleted=True
+        )
+        key = await ProjectKey.objects.filter(project=project).aget()
+        res = await self.async_client.get(
+            reverse(
+                "api:get_project_key",
+                args=[self.organization.slug, project.slug, key.public_key],
+            )
+        )
+        self.assertEqual(res.status_code, 404)
 
 
 class TeamProjectsAPITestCase(TestCase):
     def setUp(self):
         self.user = baker.make("users.user")
         self.organization = baker.make("organizations_ext.Organization")
-        self.organization.add_user(self.user, OrganizationUserRole.ADMIN)
+        self.org_user = self.organization.add_user(
+            self.user, OrganizationUserRole.ADMIN
+        )
         self.team = baker.make("teams.Team", organization=self.organization)
         self.client.force_login(self.user)
         self.async_client.force_login(self.user)
@@ -233,6 +275,20 @@ class TeamProjectsAPITestCase(TestCase):
         )
         res = await self.async_client.get(self.url)
         self.assertNotContains(res, project_teamless)
+
+    async def test_list_is_member_through_another_team(self):
+        # The caller isn't in the path's team, only in another of the project's
+        # teams, which still makes them a project member.
+        project = await baker.amake("projects.Project", organization=self.organization)
+        await project.teams.aadd(self.team)
+        await baker.amake(
+            "teams.Team",
+            organization=self.organization,
+            members=[self.org_user],
+            projects=[project],
+        )
+        res = await self.async_client.get(self.url)
+        self.assertEqual([p["isMember"] for p in res.json()], [True])
 
     async def test_create(self):
         data = {"name": "test-team"}

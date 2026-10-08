@@ -49,7 +49,7 @@ class LogsAPITestCase(GlitchTipTestCaseMixin, TestCase):
         await self.create_log(body="Log 3")
 
         url = reverse(
-            "api:list_logs", kwargs={"organization_slug": self.organization.slug}
+            "api:list_logs", kwargs={"organization_id_or_slug": self.organization.slug}
         )
         res = await self.async_client.get(url)
 
@@ -66,7 +66,7 @@ class LogsAPITestCase(GlitchTipTestCaseMixin, TestCase):
         await self.create_log(environment="staging", body="Staging log")
 
         url = reverse(
-            "api:list_logs", kwargs={"organization_slug": self.organization.slug}
+            "api:list_logs", kwargs={"organization_id_or_slug": self.organization.slug}
         )
         res = await self.async_client.get(url, {"environment": "prod"})
 
@@ -81,7 +81,7 @@ class LogsAPITestCase(GlitchTipTestCaseMixin, TestCase):
         await self.create_log(host="host-2", body="Host 2 log")
 
         url = reverse(
-            "api:list_logs", kwargs={"organization_slug": self.organization.slug}
+            "api:list_logs", kwargs={"organization_id_or_slug": self.organization.slug}
         )
         res = await self.async_client.get(url, {"host": "host-1"})
 
@@ -115,7 +115,7 @@ class LogsAPITestCase(GlitchTipTestCaseMixin, TestCase):
             )
 
         url = reverse(
-            "api:list_logs", kwargs={"organization_slug": self.organization.slug}
+            "api:list_logs", kwargs={"organization_id_or_slug": self.organization.slug}
         )
         res = await self.async_client.get(url)
 
@@ -135,7 +135,7 @@ class LogsAPITestCase(GlitchTipTestCaseMixin, TestCase):
         await self.create_log(project=project2, body="Project 2 log")
 
         url = reverse(
-            "api:list_logs", kwargs={"organization_slug": self.organization.slug}
+            "api:list_logs", kwargs={"organization_id_or_slug": self.organization.slug}
         )
         res = await self.async_client.get(url, {"project": self.project.id})
 
@@ -151,7 +151,7 @@ class LogsAPITestCase(GlitchTipTestCaseMixin, TestCase):
         await self.create_log(level=LogLevel.ERROR, body="Error log")
 
         url = reverse(
-            "api:list_logs", kwargs={"organization_slug": self.organization.slug}
+            "api:list_logs", kwargs={"organization_id_or_slug": self.organization.slug}
         )
 
         # Filter by error level
@@ -174,7 +174,7 @@ class LogsAPITestCase(GlitchTipTestCaseMixin, TestCase):
         await self.create_log(body="User logout")
 
         url = reverse(
-            "api:list_logs", kwargs={"organization_slug": self.organization.slug}
+            "api:list_logs", kwargs={"organization_id_or_slug": self.organization.slug}
         )
         res = await self.async_client.get(url, {"query": "User"})
 
@@ -189,7 +189,7 @@ class LogsAPITestCase(GlitchTipTestCaseMixin, TestCase):
         await self.create_log(body="Untraced log")
 
         url = reverse(
-            "api:list_logs", kwargs={"organization_slug": self.organization.slug}
+            "api:list_logs", kwargs={"organization_id_or_slug": self.organization.slug}
         )
         res = await self.async_client.get(url, {"traceId": str(trace_id)})
 
@@ -211,7 +211,7 @@ class LogsAPITestCase(GlitchTipTestCaseMixin, TestCase):
             )
 
         url = reverse(
-            "api:list_logs", kwargs={"organization_slug": self.organization.slug}
+            "api:list_logs", kwargs={"organization_id_or_slug": self.organization.slug}
         )
 
         # Filter for hours 1-3
@@ -230,7 +230,7 @@ class LogsAPITestCase(GlitchTipTestCaseMixin, TestCase):
         url = reverse(
             "api:get_log",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "log_id": str(log.id),
             },
         )
@@ -248,7 +248,7 @@ class LogsAPITestCase(GlitchTipTestCaseMixin, TestCase):
         url = reverse(
             "api:get_log",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "log_id": str(fake_id),
             },
         )
@@ -261,7 +261,7 @@ class LogsAPITestCase(GlitchTipTestCaseMixin, TestCase):
         await self.async_client.alogout()
 
         url = reverse(
-            "api:list_logs", kwargs={"organization_slug": self.organization.slug}
+            "api:list_logs", kwargs={"organization_id_or_slug": self.organization.slug}
         )
         res = await self.async_client.get(url)
 
@@ -281,7 +281,9 @@ class LogsAPITestCase(GlitchTipTestCaseMixin, TestCase):
             body="Secret log",
         )
 
-        url = reverse("api:list_logs", kwargs={"organization_slug": other_org.slug})
+        url = reverse(
+            "api:list_logs", kwargs={"organization_id_or_slug": other_org.slug}
+        )
         res = await self.async_client.get(url)
 
         # Should get 404 as user doesn't belong to this org
@@ -316,7 +318,7 @@ class LogsAPIPermissionTestCase(TestCase):
         )
 
         url = reverse(
-            "api:list_logs", kwargs={"organization_slug": self.organization.slug}
+            "api:list_logs", kwargs={"organization_id_or_slug": self.organization.slug}
         )
         res = self.client.get(url, **self.get_headers())
 
@@ -329,7 +331,7 @@ class LogsAPIPermissionTestCase(TestCase):
         self.auth_token.add_permission("project:read")
 
         url = reverse(
-            "api:list_logs", kwargs={"organization_slug": self.organization.slug}
+            "api:list_logs", kwargs={"organization_id_or_slug": self.organization.slug}
         )
         res = self.client.get(url, **self.get_headers())
 
@@ -403,7 +405,8 @@ class LogStatsAPITestCase(GlitchTipTestCaseMixin, TestCase):
     async def test_get_log_stats(self):
         """Test fetching log statistics."""
         url = reverse(
-            "api:get_log_stats", kwargs={"organization_slug": self.organization.slug}
+            "api:get_log_stats",
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
         res = await self.async_client.get(url)
 
@@ -431,7 +434,8 @@ class LogStatsAPITestCase(GlitchTipTestCaseMixin, TestCase):
     async def test_get_log_stats_filter_by_level(self):
         """Test filtering stats by level."""
         url = reverse(
-            "api:get_log_stats", kwargs={"organization_slug": self.organization.slug}
+            "api:get_log_stats",
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
         res = await self.async_client.get(url, {"level": ["error"]})
 
@@ -445,7 +449,8 @@ class LogStatsAPITestCase(GlitchTipTestCaseMixin, TestCase):
     async def test_get_log_stats_filter_by_service(self):
         """Test filtering stats by service name (using hash bucket)."""
         url = reverse(
-            "api:get_log_stats", kwargs={"organization_slug": self.organization.slug}
+            "api:get_log_stats",
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
         # Filter by "worker" service - should only get stats for that bucket
         res = await self.async_client.get(
@@ -462,7 +467,8 @@ class LogStatsAPITestCase(GlitchTipTestCaseMixin, TestCase):
     async def test_get_log_stats_filter_by_environment(self):
         """Test filtering stats by environment."""
         url = reverse(
-            "api:get_log_stats", kwargs={"organization_slug": self.organization.slug}
+            "api:get_log_stats",
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
         # Filter by "staging" environment
         res = await self.async_client.get(
@@ -482,7 +488,9 @@ class LogStatsAPITestCase(GlitchTipTestCaseMixin, TestCase):
         new_org = await baker.amake("organizations_ext.Organization")
         await new_org.aadd_user(self.user)
 
-        url = reverse("api:get_log_stats", kwargs={"organization_slug": new_org.slug})
+        url = reverse(
+            "api:get_log_stats", kwargs={"organization_id_or_slug": new_org.slug}
+        )
         res = await self.async_client.get(url)
 
         self.assertEqual(res.status_code, 200)
@@ -525,7 +533,7 @@ class LogResourcesAPITestCase(GlitchTipTestCaseMixin, TestCase):
         """Test listing resources for an organization."""
         url = reverse(
             "api:list_log_resources",
-            kwargs={"organization_slug": self.organization.slug},
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
         res = await self.async_client.get(url)
 
@@ -542,7 +550,7 @@ class LogResourcesAPITestCase(GlitchTipTestCaseMixin, TestCase):
         """Test filtering resources by type."""
         url = reverse(
             "api:list_log_resources",
-            kwargs={"organization_slug": self.organization.slug},
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
         res = await self.async_client.get(url, {"resource_type": "environment"})
 
@@ -559,7 +567,7 @@ class LogResourcesAPITestCase(GlitchTipTestCaseMixin, TestCase):
         await new_org.aadd_user(self.user)
 
         url = reverse(
-            "api:list_log_resources", kwargs={"organization_slug": new_org.slug}
+            "api:list_log_resources", kwargs={"organization_id_or_slug": new_org.slug}
         )
         res = await self.async_client.get(url)
 

@@ -3,7 +3,7 @@ import logging
 from datetime import date, timedelta
 
 from django.conf import settings
-from django.db.models import Prefetch, Q, Sum
+from django.db.models import Prefetch, Q, QuerySet, Sum
 from django.db.models.functions import Coalesce, TruncDate
 from django.http import JsonResponse
 from django.shortcuts import aget_object_or_404
@@ -25,6 +25,7 @@ from apps.projects.models import (
 )
 from apps.uptime.models import UptimeCheckHourlyStatistic
 from glitchtip.api.authentication import AuthHttpRequest
+from glitchtip.api.permissions import OrgScopedHttpRequest, org_scoped
 from glitchtip.schema import CamelSchema
 
 from .client import (
@@ -221,17 +222,18 @@ async def list_stripe_products(request: AuthHttpRequest):
 
 
 @router.get(
-    "subscriptions/{slug:organization_slug}/",
+    "subscriptions/{slug:organization_id_or_slug}/",
     response=StripeSubscriptionSchema | None,
     by_alias=True,
 )
-async def get_stripe_subscription(request: AuthHttpRequest, organization_slug: str):
+@org_scoped(["org:read"], StripeSubscription)
+async def get_stripe_subscription(
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[StripeSubscription],
+    organization_id_or_slug: str,
+):
     return await (
-        StripeSubscription.objects.filter(
-            organization__users=request.auth.user_id,
-            organization__slug=organization_slug,
-            status__in=ACTIVE_SUBSCRIPTION_STATUSES,
-        )
+        qs.filter(status__in=ACTIVE_SUBSCRIPTION_STATUSES)
         .select_related("price__product")
         .order_by("-created")
         .afirst()
@@ -239,21 +241,22 @@ async def get_stripe_subscription(request: AuthHttpRequest, organization_slug: s
 
 
 @router.post(
-    "organizations/{slug:organization_slug}/create-stripe-subscription-checkout/",
+    "organizations/{slug:organization_id_or_slug}/create-stripe-subscription-checkout/",
     response=StripeCheckoutSessionSchema,
 )
+@org_scoped(["org:admin"], Organization)
 async def create_stripe_session(
-    request: AuthHttpRequest, organization_slug: str, payload: PriceIDSchema
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
+    payload: PriceIDSchema,
 ):
     """
     Create Stripe Checkout, send to client for redirecting to Stripe
     See https://stripe.com/docs/api/checkout/sessions/create
     """
     organization = await aget_object_or_404(
-        Organization.objects.select_related("owner__organization_user__user"),
-        slug=organization_slug,
-        organization_users__role=OrganizationUserRole.OWNER,
-        organization_users__user=request.auth.user_id,
+        qs.select_related("owner__organization_user__user")
     )
     # Checkout creates a new subscription, so a paid org buying through it would
     # pay two base plans; it changes plan in the billing portal instead. A free
@@ -278,29 +281,31 @@ async def create_stripe_session(
     await aget_object_or_404(
         StripePrice, stripe_id=price_id, is_metered=False, active=True
     )
-    return await create_session(price_id, customer_id, organization_slug)
+    # The return URLs are frontend routes, which take the slug whichever form
+    # the path used.
+    return await create_session(price_id, customer_id, organization.slug)
 
 
 @router.post(
-    "organizations/{slug:organization_slug}/create-billing-portal/",
+    "organizations/{slug:organization_id_or_slug}/create-billing-portal/",
     response=StripePortalSessionSchema,
 )
+@org_scoped(["org:admin"], Organization)
 async def stripe_billing_portal_session(
-    request: AuthHttpRequest, organization_slug: str
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
 ):
     """See https://stripe.com/docs/billing/subscriptions/integrating-self-serve-portal"""
     organization = await aget_object_or_404(
-        Organization.objects.select_related("owner__organization_user__user"),
-        slug=organization_slug,
-        organization_users__role=OrganizationUserRole.OWNER,
-        organization_users__user=request.auth.user_id,
+        qs.select_related("owner__organization_user__user")
     )
     if organization.stripe_customer_id:
         customer_id = organization.stripe_customer_id
     else:
         customer = await create_customer(organization)
         customer_id = customer.id
-    return await create_portal_session(customer_id, organization_slug)
+    return await create_portal_session(customer_id, organization.slug)
 
 
 @router.post("subscriptions/", response=CreateSubscriptionResponse, by_alias=True)
@@ -380,13 +385,15 @@ def usage_response(counts: EventCounts) -> dict:
 
 
 @router.get(
-    "subscriptions/{slug:organization_slug}/events_count/period/",
+    "subscriptions/{slug:organization_id_or_slug}/events_count/period/",
     response=SubscriptionUsageSchema,
     by_alias=True,
 )
+@org_scoped(["org:read"], Organization)
 async def subscription_events_count_for_period(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
     periods_ago: int = 0,
 ):
     retention_days = max(30, settings.GLITCHTIP_RETENTION_DAYS)
@@ -398,11 +405,7 @@ async def subscription_events_count_for_period(
             status=400,
         )
 
-    org = await aget_object_or_404(
-        Organization,
-        slug=organization_slug,
-        users=request.auth.user_id,
-    )
+    org = await aget_object_or_404(qs)
 
     period = await get_current_period_dates(org, periods_ago)
     if period is None:
@@ -415,18 +418,17 @@ async def subscription_events_count_for_period(
 
 
 @router.get(
-    "subscriptions/{slug:organization_slug}/events_count/daily/",
+    "subscriptions/{slug:organization_id_or_slug}/events_count/daily/",
     response=DailyEventsCountSchema,
     by_alias=True,
 )
+@org_scoped(["org:read"], Organization)
 async def subscription_events_count_daily(
-    request: AuthHttpRequest, organization_slug: str
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
 ):
-    org = await aget_object_or_404(
-        Organization,
-        slug=organization_slug,
-        users=request.auth.user_id,
-    )
+    org = await aget_object_or_404(qs)
 
     period = await get_current_period_dates(org)
     if period is None:
@@ -567,19 +569,7 @@ async def _get_overage_price() -> StripePrice | None:
     )
 
 
-@router.get(
-    "subscriptions/{slug:organization_slug}/overage/",
-    response=OverageStatusSchema,
-    by_alias=True,
-)
-async def get_overage_status(request: AuthHttpRequest, organization_slug: str):
-    org = await aget_object_or_404(
-        Organization.objects.select_related(
-            "stripe_primary_subscription__price__product"
-        ),
-        slug=organization_slug,
-        users=request.auth.user_id,
-    )
+async def overage_status(org: Organization) -> dict:
     sub = org.stripe_primary_subscription
     # Same test configure_overage applies, so the card can't offer a toggle the
     # POST would reject.
@@ -630,13 +620,35 @@ async def get_overage_status(request: AuthHttpRequest, organization_slug: str):
     }
 
 
-@router.post(
-    "organizations/{slug:organization_slug}/overage/",
+@router.get(
+    "subscriptions/{slug:organization_id_or_slug}/overage/",
     response=OverageStatusSchema,
     by_alias=True,
 )
+@org_scoped(["org:read"], Organization)
+async def get_overage_status(
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
+):
+    return await overage_status(
+        await aget_object_or_404(
+            qs.select_related("stripe_primary_subscription__price__product")
+        )
+    )
+
+
+@router.post(
+    "organizations/{slug:organization_id_or_slug}/overage/",
+    response=OverageStatusSchema,
+    by_alias=True,
+)
+@org_scoped(["org:admin"], Organization)
 async def configure_overage(
-    request: AuthHttpRequest, organization_slug: str, payload: OverageConfigIn
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
+    payload: OverageConfigIn,
 ):
     """Enable/disable metered overage billing and set the spend cap (owner-only).
 
@@ -649,12 +661,7 @@ async def configure_overage(
     block) takes effect promptly.
     """
     org = await aget_object_or_404(
-        Organization.objects.select_related(
-            "stripe_primary_subscription__price__product"
-        ),
-        slug=organization_slug,
-        organization_users__role=OrganizationUserRole.OWNER,
-        organization_users__user=request.auth.user_id,
+        qs.select_related("stripe_primary_subscription__price__product")
     )
     sub = org.stripe_primary_subscription
 
@@ -781,4 +788,8 @@ async def configure_overage(
         await org.asave(update_fields=["metered_billing_enabled"])
 
     await check_organization_throttle.aenqueue(org.id, bypass_cache=True)
-    return await get_overage_status(request, organization_slug)
+    return await overage_status(
+        await Organization.objects.select_related(
+            "stripe_primary_subscription__price__product"
+        ).aget(id=org.id)
+    )

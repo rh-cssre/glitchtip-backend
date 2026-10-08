@@ -1,6 +1,6 @@
 from django.db import models
 
-from glitchtip.base_models import CreatedModel
+from glitchtip.base_models import CreatedModel, OrgScopedModel
 
 
 class RepositoryStatus(models.TextChoices):
@@ -11,7 +11,9 @@ class RepositoryStatus(models.TextChoices):
     DELETION_IN_PROGRESS = "deletion_in_progress"
 
 
-class Repository(CreatedModel):
+class Repository(OrgScopedModel, CreatedModel):
+    org_field = "organization_id"
+
     organization = models.ForeignKey(
         "organizations_ext.Organization", on_delete=models.CASCADE
     )
@@ -36,10 +38,12 @@ class Repository(CreatedModel):
         return self.name
 
 
-class DebugSymbolBundle(CreatedModel):
+class DebugSymbolBundle(OrgScopedModel, CreatedModel):
     """
     Supports Artifact Bundles, Release Bundles, and DIFs
     """
+
+    org_field = "organization_id"
 
     organization = models.ForeignKey(
         "organizations_ext.Organization", on_delete=models.CASCADE

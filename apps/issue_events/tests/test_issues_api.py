@@ -16,7 +16,8 @@ from freezegun import freeze_time
 from model_bakery import baker
 
 from apps.organizations_ext.constants import OrganizationUserRole
-from glitchtip.test_utils.issue import amake_issue, arefresh_issue
+from apps.projects.models import Project
+from glitchtip.test_utils.issue import amake_issue, arefresh_issue, make_issue
 from glitchtip.test_utils.test_case import (
     APIPermissionTestCase,
     GlitchTestCase,
@@ -36,7 +37,7 @@ def get_issue_url(issue_id: int) -> str:
 def get_organization_issue_url(organization_slug: str, issue_id: int) -> str:
     return reverse(
         "api:update_organization_issue",
-        kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+        kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
     )
 
 
@@ -45,7 +46,7 @@ class IssueAPITestCase(GlitchTestCase):
     def setUpTestData(cls):
         cls.create_user()
         cls.list_url = reverse(
-            "api:list_issues", kwargs={"organization_slug": cls.organization.slug}
+            "api:list_issues", kwargs={"organization_id_or_slug": cls.organization.slug}
         )
 
     def setUp(self):
@@ -139,7 +140,7 @@ class IssueAPITestCase(GlitchTestCase):
         url = reverse(
             "api:list_project_issues",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": self.project.slug,
             },
         )
@@ -1652,7 +1653,7 @@ class IssueAPITestCase(GlitchTestCase):
         # Construct the URL and query parameters
         url = reverse(
             "api:issue_stats",  # Adjust the name based on your URL resolver
-            kwargs={"organization_slug": self.organization.slug},
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
         query_params = f"?groups={issue_with_stats.id}&groups={issue_without_stats.id}"
 
@@ -1729,7 +1730,7 @@ class IssueAPITestCase(GlitchTestCase):
 
         url = reverse(
             "api:issue_stats",
-            kwargs={"organization_slug": self.organization.slug},
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
         query_params = f"?groups={issue.id}&statsPeriod=14d"
 
@@ -1852,7 +1853,8 @@ class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
         self.issue = baker.make("issue_events.Issue", project=self.project)
 
         self.list_url = reverse(
-            "api:list_issues", kwargs={"organization_slug": self.organization.slug}
+            "api:list_issues",
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
 
     def test_list(self):
@@ -2048,25 +2050,25 @@ class OrganizationScopedIssueAPITestCase(GlitchTestCase):
     def detail_url(self, organization_slug: str, issue_id: int) -> str:
         return reverse(
             "api:get_organization_issue",
-            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+            kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
         )
 
     def commits_url(self, organization_slug: str, issue_id: int) -> str:
         return reverse(
             "api:list_organization_issue_commits",
-            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+            kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
         )
 
     def delete_url(self, organization_slug: str, issue_id: int) -> str:
         return reverse(
             "api:delete_organization_issue",
-            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+            kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
         )
 
     def tags_url(self, organization_slug: str, issue_id: int) -> str:
         return reverse(
             "api:list_organization_issue_tags",
-            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+            kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
         )
 
     async def test_retrieve(self):
@@ -2212,11 +2214,12 @@ class ShortIdAPITestCase(GlitchTestCase):
     def setUp(self):
         self.async_client.force_login(self.user)
 
-    def lookup_url(self, short_id: str, organization_slug: str | None = None):
+    def lookup_url(self, short_id: str, organization_id_or_slug=None):
         return reverse(
             "api:get_issue_by_short_id",
             kwargs={
-                "organization_slug": organization_slug or self.organization.slug,
+                "organization_id_or_slug": organization_id_or_slug
+                or self.organization.slug,
                 "short_id": short_id,
             },
         )
@@ -2256,6 +2259,69 @@ class ShortIdAPITestCase(GlitchTestCase):
         )
         self.assertEqual(res.status_code, 200)
 
+    async def test_lookup_by_org_id(self):
+        """The path may hold the org id; the output still names the org slug."""
+        issue = await amake_issue(project=self.app_project, short_id=42)
+
+        res = await self.async_client.get(
+            self.lookup_url("MY-APP-1A", self.organization.id)
+        )
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["organizationSlug"], self.organization.slug)
+        self.assertEqual(data["groupId"], str(issue.id))
+
+    async def test_lookup_non_member(self):
+        stranger_org = await baker.amake("organizations_ext.Organization")
+        stranger_project = await baker.amake(
+            "projects.Project", organization=stranger_org, name="My App"
+        )
+        await amake_issue(project=stranger_project, short_id=42)
+
+        for org in [stranger_org.slug, stranger_org.id]:
+            with self.subTest(org=org):
+                res = await self.async_client.get(self.lookup_url("MY-APP-1A", org))
+                self.assertEqual(res.status_code, 404)
+
+    async def test_lookup_deleted_project(self):
+        await amake_issue(project=self.app_project, short_id=42)
+        await Project.objects.filter(id=self.app_project.id).aupdate(is_deleted=True)
+
+        res = await self.async_client.get(self.lookup_url("MY-APP-1A"))
+
+        self.assertEqual(res.status_code, 404)
+
+    # Kept synchronous: assertNumQueries cannot observe queries issued on the
+    # async DB connection used by the async test client.
+    def test_lookup_query_count(self):
+        """Membership, role and the org slug all ride on the one issue query."""
+        make_issue(project=self.app_project, short_id=42)
+        self.client.force_login(self.user)
+
+        with self.assertNumQueries(1):
+            res = self.client.get(self.lookup_url("MY-APP-1A", self.organization.id))
+        self.assertEqual(res.status_code, 200)
+
+        with self.assertNumQueries(2):  # + the slug lookup
+            res = self.client.get(self.lookup_url("MY-APP-1A"))
+        self.assertEqual(res.status_code, 200)
+
+    async def test_list_direct_hit_ignores_other_orgs(self):
+        """Another org's project with the same slug and short ID, created first
+        so it would win an unscoped lookup, must not hide this org's issue."""
+        await amake_issue(project=self.other_org_project, short_id=42)
+        issue = await amake_issue(project=self.app_project, short_id=42)
+        url = reverse(
+            "api:list_issues",
+            kwargs={"organization_id_or_slug": self.organization.slug},
+        )
+
+        res = await self.async_client.get(url + "?query=MY-APP-1A&shortIdLookup=1")
+
+        self.assertEqual(res.headers.get("X-Sentry-Direct-Hit"), "1")
+        self.assertEqual([row["id"] for row in res.json()], [str(issue.id)])
+
     async def test_list_direct_hit(self):
         issue = await amake_issue(project=self.app_project, short_id=42)
         # Text search alone would return this one too
@@ -2264,12 +2330,13 @@ class ShortIdAPITestCase(GlitchTestCase):
             fts_document=SearchVector(Value("my-app-1a my-app-1b"))
         )
         org_url = reverse(
-            "api:list_issues", kwargs={"organization_slug": self.organization.slug}
+            "api:list_issues",
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
         project_url = reverse(
             "api:list_project_issues",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": self.app_project.slug,
             },
         )
@@ -2310,7 +2377,7 @@ class ShortIdAPITestCase(GlitchTestCase):
         other_project_url = reverse(
             "api:list_project_issues",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": other_project.slug,
             },
         )
@@ -2330,7 +2397,7 @@ class ProjectBulkUpdateAPITestCase(GlitchTestCase):
         cls.url = reverse(
             "api:list_project_issues",
             kwargs={
-                "organization_slug": cls.organization.slug,
+                "organization_id_or_slug": cls.organization.slug,
                 "project_slug": cls.project.slug,
             },
         )
@@ -2379,6 +2446,21 @@ class ProjectBulkUpdateAPITestCase(GlitchTestCase):
             await self.statuses(resolved), [EventStatus.IGNORED] * len(resolved)
         )
         self.assertEqual(await self.statuses([unresolved]), [EventStatus.UNRESOLVED])
+
+    async def test_by_org_id(self):
+        """The path may name the org by id; the background batches still get
+        the org's real slug, which the task resolves the org from."""
+        issues = [await amake_issue(project=self.project) for _ in range(51)]
+        self.url = reverse(
+            "api:list_project_issues",
+            args=[str(self.organization.id), self.project.slug],
+        )
+
+        await self.put_and_run_task("", {"status": "resolved"})
+
+        self.assertEqual(
+            await self.statuses(issues), [EventStatus.RESOLVED] * len(issues)
+        )
 
     async def test_every_change_reaches_background_batches(self):
         """Status, assignment and release apply to all issues, not just the first
@@ -2451,7 +2533,7 @@ class ProjectBulkUpdateAPITestCase(GlitchTestCase):
         other_org_url = reverse(
             "api:list_project_issues",
             kwargs={
-                "organization_slug": "not-a-member",
+                "organization_id_or_slug": "not-a-member",
                 "project_slug": self.project.slug,
             },
         )

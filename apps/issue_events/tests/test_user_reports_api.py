@@ -19,7 +19,7 @@ def list_user_reports_url(issue_id: int) -> str:
 def list_organization_user_reports_url(organization_slug: str, issue_id: int) -> str:
     return reverse(
         "api:list_organization_user_reports",
-        kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+        kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
     )
 
 

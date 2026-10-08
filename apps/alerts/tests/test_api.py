@@ -229,8 +229,8 @@ class AlertAPITestCase(GlitchTipTestCaseMixin, TestCase):
             "alertRecipients": [{"recipientType": "email", "url": ""}],
         }
         res = await self.async_client.post(url, data, content_type="application/json")
-        # Member without project team membership cannot create alerts
-        self.assertEqual(res.status_code, 404)
+        # Creating alerts needs admin or above
+        self.assertEqual(res.status_code, 403)
 
         org_user.role = OrganizationUserRole.ADMIN
         await org_user.asave()
@@ -247,6 +247,87 @@ class AlertAPITestCase(GlitchTipTestCaseMixin, TestCase):
         res = await self.async_client.get(url)
         # Members can still view alerts
         self.assertEqual(len(res.json()), 1)
+
+    def alert_write_requests(self, alert, organization_id_or_slug=None):
+        """(method, url, success status) for create, update and test"""
+        args = [organization_id_or_slug or self.organization.slug, alert.project.slug]
+        return [
+            ("post", reverse("api:create_project_alert", args=args), 201),
+            ("put", reverse("api:update_project_alert", args=[*args, alert.pk]), 200),
+            ("post", reverse("api:test_project_alert", args=[*args, alert.pk]), 200),
+        ]
+
+    async def alert_write(self, method: str, url: str):
+        data = {"timespanMinutes": 1, "quantity": 1}
+        return await getattr(self.async_client, method)(
+            url, data, content_type="application/json"
+        )
+
+    async def test_alert_writes_need_admin(self):
+        """Create, update and test need admin or above. A member on one of
+        the project's teams does not qualify."""
+        alert = await baker.amake("alerts.ProjectAlert", project=self.project)
+        user = await baker.amake("users.user")
+        org_user = await self.organization.aadd_user(user, OrganizationUserRole.MEMBER)
+        await self.team.members.aadd(org_user)
+        await self.async_client.aforce_login(user)
+
+        for method, url, _ in self.alert_write_requests(alert):
+            with self.subTest(url=url):
+                res = await self.alert_write(method, url)
+                self.assertEqual(res.status_code, 403)
+                self.assertIn("Member", res.json()["detail"])
+
+        org_user.role = OrganizationUserRole.ADMIN
+        await org_user.asave()
+        for method, url, status in self.alert_write_requests(alert):
+            with self.subTest(url=url):
+                res = await self.alert_write(method, url)
+                self.assertEqual(res.status_code, status)
+
+    async def test_alert_writes_by_org_id(self):
+        alert = await baker.amake("alerts.ProjectAlert", project=self.project)
+
+        for method, url, status in self.alert_write_requests(
+            alert, self.organization.id
+        ):
+            with self.subTest(url=url):
+                res = await self.alert_write(method, url)
+                self.assertEqual(res.status_code, status)
+
+    async def test_alert_writes_non_member(self):
+        other_org = await baker.amake("organizations_ext.Organization")
+        other_project = await baker.amake(
+            "projects.Project", organization=other_org, slug=self.project.slug
+        )
+        alert = await baker.amake("alerts.ProjectAlert", project=other_project)
+
+        for org in [other_org.slug, other_org.id]:
+            for method, url, _ in self.alert_write_requests(alert, org):
+                with self.subTest(url=url):
+                    res = await self.alert_write(method, url)
+                    self.assertEqual(res.status_code, 404)
+
+    async def test_alert_writes_other_project(self):
+        """An alert is reachable only under its own project's path."""
+        sibling = await baker.amake("projects.Project", organization=self.organization)
+        alert = await baker.amake("alerts.ProjectAlert", project=sibling)
+        args = [self.organization.slug, self.project.slug, alert.pk]
+
+        for method, name in [("put", "update"), ("post", "test")]:
+            with self.subTest(name=name):
+                url = reverse(f"api:{name}_project_alert", args=args)
+                res = await self.alert_write(method, url)
+                self.assertEqual(res.status_code, 404)
+
+    async def test_alert_writes_deleted_project(self):
+        alert = await baker.amake("alerts.ProjectAlert", project=self.project)
+        await Project.objects.filter(id=self.project.id).aupdate(is_deleted=True)
+
+        for method, url, _ in self.alert_write_requests(alert):
+            with self.subTest(url=url):
+                res = await self.alert_write(method, url)
+                self.assertEqual(res.status_code, 404)
 
     async def test_project_alerts_update(self):
         alert = await baker.amake(

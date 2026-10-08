@@ -108,6 +108,12 @@ async def get_queryset(
     if project_slug:
         qs = qs.filter(project__slug=project_slug)
 
+    return with_issue_details(qs, leaf_org_id)
+
+
+def with_issue_details(
+    qs: QuerySet[Issue], leaf_org_id: int | None = None
+) -> QuerySet[Issue]:
     # Constrain the IssueIndex partition key so org-scoped list/search
     # queries prune the hash partitions instead of scanning all of them (the
     # leaf is joined on issue_id, which alone gives the planner no partition to

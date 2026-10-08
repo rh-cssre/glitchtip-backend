@@ -2,13 +2,18 @@ import asyncio
 import uuid
 from datetime import datetime, timedelta
 
-from django.db.models import OuterRef, Subquery
+from django.db.models import OuterRef, QuerySet, Subquery
 from django.http import Http404, HttpResponse
 from ninja.pagination import paginate
 
-from apps.organizations_ext.models import Organization
 from glitchtip.api.authentication import AuthHttpRequest
-from glitchtip.api.permissions import has_permission
+from glitchtip.api.pagination import MissOnEmptyPagination
+from glitchtip.api.permissions import (
+    OrgScopedHttpRequest,
+    has_permission,
+    org_scoped,
+    org_scoped_list,
+)
 from glitchtip.cold_storage import ColdStorageBusy, cold_read_slot
 from glitchtip.partition_manager import UUID7Helper
 
@@ -18,20 +23,11 @@ from ..services import is_uuid7
 from . import router
 
 
-def get_queryset(
-    request: AuthHttpRequest,
-    issue_id: int | None = None,
-    organization_slug: str | None = None,
-    project_slug: str | None = None,
-):
+def get_queryset(request: AuthHttpRequest, issue_id: int | None = None):
     user_id = request.auth.user_id
     qs = IssueEvent.objects.filter(issue__project__organization__users=user_id)
     if issue_id:
         qs = qs.filter(issue_id=issue_id)
-    if organization_slug:
-        qs = qs.filter(issue__project__organization__slug=organization_slug)
-    if project_slug:
-        qs = qs.filter(issue__project__slug=project_slug)
     return qs.select_related("issue")
 
 
@@ -39,22 +35,16 @@ async def get_user_report(event_id: uuid.UUID) -> UserReport | None:
     return await UserReport.objects.filter(event_id=event_id).afirst()
 
 
-async def _resolve_issue(
-    request: AuthHttpRequest, issue_id: int, organization_slug: str | None = None
-) -> Issue:
+async def _resolve_issue(request: AuthHttpRequest, issue_id: int) -> Issue:
     """Resolve an issue the caller is a member of, or 404.
 
-    ``organization_slug`` (when set) additionally requires the issue to live in
-    that organization, which is what makes the organization-scoped routes 404 a
-    wrong-org request. This is the only place the slug is needed - everything
-    downstream scopes by ``issue.project.organization_id``, which prunes the
-    IssueEvent hash sub-partitions without joining back to organization.
+    Everything downstream scopes by ``issue.project.organization_id``, which
+    prunes the IssueEvent hash sub-partitions without joining back to
+    organization.
     """
     qs = Issue.objects.filter(
         id=issue_id, project__organization__users=request.auth.user_id
     )
-    if organization_slug:
-        qs = qs.filter(project__organization__slug=organization_slug)
     issue = await qs.select_related("project__organization", "index").afirst()
     if not issue:
         raise Http404()
@@ -227,31 +217,26 @@ async def list_issue_event(
 
 
 @router.get(
-    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/events/",
+    "/organizations/{slug:organization_id_or_slug}/issues/{int:issue_id}/events/",
     response=list[IssueEventSchema],
 )
-@paginate
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped_list(
+    ["event:read", "event:write", "event:admin"],
+    IssueEvent,
+    pagination=MissOnEmptyPagination,
+)
 async def list_organization_issue_event(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
     response: HttpResponse,
     issue_id: int,
-    organization_slug: str,
+    organization_id_or_slug: str,
 ):
-    # Order by -id (UUIDv7) for partition pruning; equivalent to -received ordering
-    org_id = await (
-        Organization.objects.filter(slug=organization_slug, users=request.auth.user_id)
-        .values_list("id", flat=True)
-        .afirst()
-    )
-    if not org_id:
-        raise Http404()
-    # The Organization lookup above already established membership, so scope the
-    # hot table by organization_id alone - it prunes the hash sub-partitions
-    # without joining issue -> project -> organization.
+    # The gate filters organization_id, which prunes the hash sub-partitions
+    # without joining issue -> project -> organization. Order by -id (UUIDv7)
+    # for partition pruning; equivalent to -received ordering.
     return (
-        get_queryset(request, issue_id=issue_id)
-        .filter(organization_id=org_id)
+        IssueEvent.objects.filter(issue_id=issue_id)
+        .select_related("issue")
         .order_by("-id")
     )
 
@@ -269,16 +254,22 @@ async def get_latest_issue_event(request: AuthHttpRequest, issue_id: int):
 
 
 @router.get(
-    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/events/latest/",
+    "/organizations/{slug:organization_id_or_slug}/issues/{int:issue_id}/events/latest/",
     response=IssueEventDetailSchema,
     by_alias=True,
 )
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped(["event:read", "event:write", "event:admin"], Issue)
 async def get_organization_latest_issue_event(
-    request: AuthHttpRequest, organization_slug: str, issue_id: int
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Issue],
+    organization_id_or_slug: str,
+    issue_id: int,
 ):
-    # Resolve issue first to get organization_id for hash partition pruning
-    issue = await _resolve_issue(request, issue_id, organization_slug)
+    issue = await (
+        qs.filter(id=issue_id).select_related("project__organization", "index").afirst()
+    )
+    if not issue:
+        raise Http404()
     return await _get_latest_event_for_issue(request, issue, issue_id)
 
 
@@ -294,91 +285,104 @@ async def get_issue_event(request: AuthHttpRequest, issue_id: int, event_id: uui
 
 
 @router.get(
-    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/events/{event_id}/",
+    "/organizations/{slug:organization_id_or_slug}/issues/{int:issue_id}/events/{event_id}/",
     response=IssueEventDetailSchema,
     by_alias=True,
 )
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped(["event:read", "event:write", "event:admin"], Issue)
 async def get_organization_issue_event(
-    request: AuthHttpRequest, organization_slug: str, issue_id: int, event_id: uuid.UUID
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Issue],
+    organization_id_or_slug: str,
+    issue_id: int,
+    event_id: uuid.UUID,
 ):
-    issue = await _resolve_issue(request, issue_id, organization_slug)
+    issue = await (
+        qs.filter(id=issue_id).select_related("project__organization", "index").afirst()
+    )
+    if not issue:
+        raise Http404()
     return await _get_issue_event(request, issue, event_id)
 
 
 @router.get(
-    "/projects/{slug:organization_slug}/{slug:project_slug}/events/",
+    "/projects/{slug:organization_id_or_slug}/{slug:project_slug}/events/",
     response=list[IssueEventSchema],
     by_alias=True,
 )
-@paginate
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped_list(["event:read", "event:write", "event:admin"], IssueEvent)
 async def list_project_issue_event(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
     response: HttpResponse,
-    organization_slug: str,
+    organization_id_or_slug: str,
     project_slug: str,
 ):
-    # Order by -id (UUIDv7) for partition pruning; equivalent to -received ordering
-    return get_queryset(
-        request, organization_slug=organization_slug, project_slug=project_slug
-    ).order_by("-id")
+    # The gate filters the event's own organization_id, which leaves the
+    # project join unscoped; project slugs repeat across orgs, so without the
+    # org id the planner can't start from the one project. Order by -id
+    # (UUIDv7) for partition pruning; equivalent to -received ordering.
+    return (
+        IssueEvent.objects.filter(
+            issue__project__organization_id=request.org_scope.org_id,
+            issue__project__slug=project_slug,
+        )
+        .select_related("issue")
+        .order_by("-id")
+    )
 
 
 @router.get(
-    "/projects/{slug:organization_slug}/{slug:project_slug}/events/{event_id}/",
+    "/projects/{slug:organization_id_or_slug}/{slug:project_slug}/events/{event_id}/",
     response=IssueEventDetailSchema,
     by_alias=True,
 )
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped(["event:read", "event:write", "event:admin"], IssueEvent)
 async def get_project_issue_event(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[IssueEvent],
+    organization_id_or_slug: str,
     project_slug: str,
     event_id: uuid.UUID,
 ):
-    qs = get_queryset(
-        request, organization_slug=organization_slug, project_slug=project_slug
+    org_id = request.org_scope.org_id
+    # The prev/next subqueries only run for an event the gate already let
+    # through, so they need the partition key, not the gate.
+    siblings = IssueEvent.objects.filter(
+        organization_id=org_id, issue__project__slug=project_slug
     )
-    # Use id (UUIDv7) for prev/next navigation - enables partition pruning
-    qs = qs.annotate(
-        previous=Subquery(
-            qs.filter(id__lt=OuterRef("id")).order_by("-id").values("id")[:1]
-        ),
-        next=Subquery(qs.filter(id__gt=OuterRef("id")).order_by("id").values("id")[:1]),
+    qs = (
+        qs.filter(issue__project__slug=project_slug)
+        .select_related("issue")
+        .annotate(
+            previous=Subquery(
+                siblings.filter(id__lt=OuterRef("id")).order_by("-id").values("id")[:1]
+            ),
+            next=Subquery(
+                siblings.filter(id__gt=OuterRef("id")).order_by("id").values("id")[:1]
+            ),
+        )
     )
 
+    # A UUIDv7 event_id is our own primary key; anything else is a
+    # client-provided sentry SDK event_id (typically UUIDv4).
     if is_uuid7(event_id):
         event = await qs.filter(id=event_id).afirst()
     else:
-        # Client-provided sentry SDK event_id (typically UUIDv4).
-        # Include organization_id to prune hash sub-partitions.
-        org_id = await (
-            Organization.objects.filter(
-                slug=organization_slug, users=request.auth.user_id
-            )
-            .values_list("id", flat=True)
-            .afirst()
-        )
-        if not org_id:
-            raise Http404()
-        event = await qs.filter(event_id=event_id, organization_id=org_id).afirst()
+        event = await qs.filter(event_id=event_id).afirst()
 
     if event:
         event.user_report = await get_user_report(event.id)
         return event
 
-    # Fall back to cold storage
-    org = await Organization.objects.filter(
-        slug=organization_slug, users=request.auth.user_id
-    ).afirst()
-    if not org:
-        raise Http404()
+    # Fall back to cold storage, which can't carry the gate: prove membership
+    # first.
+    if error := await request.org_scope.explain_miss():
+        raise error
 
     async with cold_read_slot() as slot:
         if not slot:
             raise ColdStorageBusy()
-        cold_event = await asyncio.to_thread(_get_event_from_cold, event_id, org.id)
+        cold_event = await asyncio.to_thread(_get_event_from_cold, event_id, org_id)
     if not cold_event:
         raise Http404()
 
@@ -396,41 +400,33 @@ async def get_project_issue_event(
 
 
 @router.get(
-    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/events/{event_id}/json/",
+    "/organizations/{slug:organization_id_or_slug}/issues/{int:issue_id}/events/{event_id}/json/",
     response=IssueEventJsonSchema,
     by_alias=True,
     exclude_none=True,
 )
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped(["event:read", "event:write", "event:admin"], IssueEvent)
 async def get_event_json(
-    request: AuthHttpRequest, organization_slug: str, issue_id: int, event_id: uuid.UUID
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[IssueEvent],
+    organization_id_or_slug: str,
+    issue_id: int,
+    event_id: uuid.UUID,
 ):
-    qs = get_queryset(request, organization_slug=organization_slug, issue_id=issue_id)
+    qs = qs.filter(issue_id=issue_id).select_related("issue")
 
     if is_uuid7(event_id):
         obj = await qs.filter(id=event_id).afirst()
     else:
-        org_id = await (
-            Organization.objects.filter(
-                slug=organization_slug, users=request.auth.user_id
-            )
-            .values_list("id", flat=True)
-            .afirst()
-        )
-        if not org_id:
-            raise Http404()
-        obj = await qs.filter(event_id=event_id, organization_id=org_id).afirst()
+        obj = await qs.filter(event_id=event_id).afirst()
 
     if obj:
         return obj
 
-    # Fall back to cold storage
-    issue = (
-        await Issue.objects.filter(
-            id=issue_id,
-            project__organization__slug=organization_slug,
-            project__organization__users=request.auth.user_id,
-        )
+    # Fall back to cold storage, which can't carry the gate: it rides on the
+    # issue read instead.
+    issue = await (
+        request.org_scope.apply(Issue.objects.filter(id=issue_id))
         .select_related("project__organization", "index")
         .afirst()
     )

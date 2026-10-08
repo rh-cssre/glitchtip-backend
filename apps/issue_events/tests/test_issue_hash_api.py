@@ -27,7 +27,7 @@ class IssueAPITestCase(GlitchTestCase):
         list_url = reverse(
             "api:list_issue_hashes",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "issue_id": self.issue_hash.issue_id,
             },
         )
@@ -38,7 +38,7 @@ class IssueAPITestCase(GlitchTestCase):
         list_url = reverse(
             "api:list_issue_hashes",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "issue_id": self.issue_hash.issue_id,
             },
         )

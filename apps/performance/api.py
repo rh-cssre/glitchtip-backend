@@ -2,16 +2,19 @@ from datetime import timedelta
 from typing import Literal
 
 from asgiref.sync import sync_to_async
+from django.db.models import QuerySet
 from django.http import HttpResponse
 from django.shortcuts import aget_object_or_404
 from django.utils import timezone
 from ninja import Query, Router, Schema
-from ninja.pagination import paginate
 
-from apps.organizations_ext.queryset_utils import get_organization_for_user
+from apps.organizations_ext.models import Organization
 from apps.shared.schema.fields import RelativeDateTime
-from glitchtip.api.authentication import AuthHttpRequest
-from glitchtip.api.permissions import has_permission
+from glitchtip.api.permissions import (
+    OrgScopedHttpRequest,
+    org_scoped,
+    org_scoped_list,
+)
 
 from .cold_storage import (
     query_n_plus_one_patterns,
@@ -76,25 +79,18 @@ class NPlusOneFilters(Schema):
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/transaction-groups/",
+    "organizations/{slug:organization_id_or_slug}/transaction-groups/",
     response=list[TransactionGroupSchema],
     by_alias=True,
 )
-@paginate
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped_list(["event:read", "event:write", "event:admin"], TransactionGroup)
 async def list_transaction_groups(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
     response: HttpResponse,
     filters: Query[TransactionGroupFilters],
-    organization_slug: str,
+    organization_id_or_slug: str,
 ):
-    organization = await get_organization_for_user(
-        request.auth.user_id, organization_slug
-    ).afirst()
-    if not organization:
-        return TransactionGroup.objects.none()
-
-    qs = TransactionGroup.objects.filter(organization=organization)
+    qs = TransactionGroup.objects.all()
 
     if filters.project:
         qs = qs.filter(project_id__in=filters.project)
@@ -109,42 +105,34 @@ async def list_transaction_groups(
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/transaction-groups/{int:id}/",
+    "organizations/{slug:organization_id_or_slug}/transaction-groups/{int:id}/",
     response=TransactionGroupSchema,
     by_alias=True,
 )
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped(["event:read", "event:write", "event:admin"], TransactionGroup)
 async def get_transaction_group(
-    request: AuthHttpRequest, organization_slug: str, id: int
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[TransactionGroup],
+    organization_id_or_slug: str,
+    id: int,
 ):
-    organization = await get_organization_for_user(
-        request.auth.user_id, organization_slug
-    ).afirst()
-    return await aget_object_or_404(TransactionGroup, id=id, organization=organization)
+    return await aget_object_or_404(qs, id=id)
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/transaction-groups/{int:id}/spans/",
+    "organizations/{slug:organization_id_or_slug}/transaction-groups/{int:id}/spans/",
     response=list[SpanGroupSchema],
     by_alias=True,
 )
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped(["event:read", "event:write", "event:admin"], TransactionGroup)
 async def list_transaction_spans(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[TransactionGroup],
+    organization_id_or_slug: str,
     id: int,
     filters: Query[SpanGroupFilters],
 ):
-    organization = await get_organization_for_user(
-        request.auth.user_id, organization_slug
-    ).afirst()
-    if not organization:
-        return []
-
-    # Verify user has access to this transaction group
-    group = await TransactionGroup.objects.filter(
-        id=id, organization=organization
-    ).afirst()
+    group = await qs.filter(id=id).afirst()
     if not group:
         return []
 
@@ -153,7 +141,7 @@ async def list_transaction_spans(
     end_dt = filters.end or now
 
     return await sync_to_async(query_span_groups_for_transaction)(
-        org_id=organization.id,
+        org_id=group.organization_id,
         transaction_name=group.transaction,
         start_dt=start_dt,
         end_dt=end_dt,
@@ -161,19 +149,19 @@ async def list_transaction_spans(
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/span-groups/",
+    "organizations/{slug:organization_id_or_slug}/span-groups/",
     response=list[SpanGroupSchema],
     by_alias=True,
 )
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped(["event:read", "event:write", "event:admin"], Organization)
 async def list_span_groups(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
     filters: Query[OrgSpanGroupFilters],
 ):
-    organization = await get_organization_for_user(
-        request.auth.user_id, organization_slug
-    ).afirst()
+    # Cold storage can't carry the gate, so prove membership first.
+    organization = await qs.only("id").afirst()
     if not organization:
         return []
 
@@ -194,19 +182,19 @@ async def list_span_groups(
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/n-plus-one/",
+    "organizations/{slug:organization_id_or_slug}/n-plus-one/",
     response=list[NPlusOnePatternSchema],
     by_alias=True,
 )
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped(["event:read", "event:write", "event:admin"], Organization)
 async def list_n_plus_one_patterns(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
     filters: Query[NPlusOneFilters],
 ):
-    organization = await get_organization_for_user(
-        request.auth.user_id, organization_slug
-    ).afirst()
+    # Cold storage can't carry the gate, so prove membership first.
+    organization = await qs.only("id").afirst()
     if not organization:
         return []
 
@@ -227,26 +215,19 @@ async def list_n_plus_one_patterns(
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/transaction-groups/{int:id}/trend/",
+    "organizations/{slug:organization_id_or_slug}/transaction-groups/{int:id}/trend/",
     response=list[TransactionTrendSchema],
     by_alias=True,
 )
-@has_permission(["event:read", "event:write", "event:admin"])
+@org_scoped(["event:read", "event:write", "event:admin"], TransactionGroup)
 async def get_transaction_trend(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[TransactionGroup],
+    organization_id_or_slug: str,
     id: int,
     filters: Query[SpanGroupFilters],
 ):
-    organization = await get_organization_for_user(
-        request.auth.user_id, organization_slug
-    ).afirst()
-    if not organization:
-        return []
-
-    group = await TransactionGroup.objects.filter(
-        id=id, organization=organization
-    ).afirst()
+    group = await qs.filter(id=id).afirst()
     if not group:
         return []
 
@@ -255,7 +236,7 @@ async def get_transaction_trend(
     end_dt = filters.end or now
 
     return await sync_to_async(query_transaction_trend)(
-        org_id=organization.id,
+        org_id=group.organization_id,
         transaction_name=group.transaction,
         start_dt=start_dt,
         end_dt=end_dt,

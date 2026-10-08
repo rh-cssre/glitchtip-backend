@@ -2,7 +2,9 @@ import re
 import uuid
 from datetime import timedelta
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
@@ -31,7 +33,7 @@ def get_event_json_url(organization_slug: str, issue_id: int, event_id: str) -> 
     return reverse(
         "api:get_event_json",
         kwargs={
-            "organization_slug": organization_slug,
+            "organization_id_or_slug": organization_slug,
             "issue_id": issue_id,
             "event_id": event_id,
         },
@@ -89,6 +91,34 @@ class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
 
         self.assertEqual(res.json()[-1]["id"], first_event.id.hex)
         self.assertNotContains(res, last_event.id.hex)
+
+    # Kept synchronous: see note on test_multi_page_list.
+    def test_project_list_scopes_project_to_org(self):
+        """The project join must carry the org id: project slugs repeat across
+        orgs, and without it the planner hash-joins every event of the org."""
+        event = baker.make(
+            "issue_events.IssueEvent",
+            issue__project=self.project,
+            organization=self.organization,
+        )
+        url = reverse(
+            "api:list_project_issue_event",
+            args=[self.organization.slug, self.project.slug],
+        )
+
+        with CaptureQueriesContext(connection) as ctx:
+            res = self.client.get(url)
+
+        self.assertContains(res, event.id.hex)
+        scoped = f'"projects_project"."organization_id" = {self.organization.id}'
+        event_queries = [
+            q["sql"]
+            for q in ctx.captured_queries
+            if "issue_events_issueevent" in q["sql"]
+        ]
+        self.assertTrue(event_queries)
+        for sql in event_queries:
+            self.assertIn(scoped, sql)
 
     # Kept synchronous: see note on test_multi_page_list.
     def test_single_page_list(self):
@@ -224,7 +254,7 @@ class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
         self.project_list_url = reverse(
             "api:list_project_issue_event",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": self.project.slug,
             },
         )
@@ -232,7 +262,7 @@ class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
         self.project_detail_url = reverse(
             "api:get_project_issue_event",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": self.project.slug,
                 "event_id": self.event.id.hex,
             },
@@ -345,20 +375,20 @@ class OrganizationScopedIssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
     def list_url(self, organization_slug: str, issue_id: int) -> str:
         return reverse(
             "api:list_organization_issue_event",
-            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+            kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
         )
 
     def latest_url(self, organization_slug: str, issue_id: int) -> str:
         return reverse(
             "api:get_organization_latest_issue_event",
-            kwargs={"organization_slug": organization_slug, "issue_id": issue_id},
+            kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
         )
 
     def detail_url(self, organization_slug: str, issue_id: int, event_id: str) -> str:
         return reverse(
             "api:get_organization_issue_event",
             kwargs={
-                "organization_slug": organization_slug,
+                "organization_id_or_slug": organization_slug,
                 "issue_id": issue_id,
                 "event_id": event_id,
             },

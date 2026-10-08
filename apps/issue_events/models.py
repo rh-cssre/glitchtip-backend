@@ -8,7 +8,12 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
 
-from glitchtip.base_models import AggregationModel, CreatedModel, SoftDeleteModel
+from glitchtip.base_models import (
+    AggregationModel,
+    CreatedModel,
+    OrgScopedModel,
+    SoftDeleteModel,
+)
 from glitchtip.partition_manager import UUID7Helper
 from sentry.constants import MAX_CULPRIT_LENGTH
 
@@ -75,7 +80,10 @@ class IssueAggregate(AggregationModel):
     # PartitioningMeta removed to detach from psql_partition
 
 
-class Issue(SoftDeleteModel):
+class Issue(OrgScopedModel, SoftDeleteModel):
+    org_field = "project__organization_id"
+    undeleted_through = ("project",)
+
     # Fields ordered for optimal data alignment: 8-byte, 4-byte, 2-byte, 1-byte, then variable-width
     project = models.ForeignKey(
         "projects.Project", on_delete=models.CASCADE, related_name="issues"
@@ -294,7 +302,10 @@ def _ensure_issue_index(instance, created, raw=False, **kwargs):
         )
 
 
-class IssueHash(models.Model):
+class IssueHash(OrgScopedModel, models.Model):
+    org_field = "project__organization_id"
+    undeleted_through = ("issue", "project")
+
     issue = models.ForeignKey(Issue, on_delete=models.CASCADE, related_name="hashes")
     # Redundant project allows for unique constraint
     project = models.ForeignKey(
@@ -310,7 +321,10 @@ class IssueHash(models.Model):
         ]
 
 
-class Comment(models.Model):
+class Comment(OrgScopedModel, models.Model):
+    org_field = "issue__project__organization_id"
+    undeleted_through = ("issue", "issue__project")
+
     created = models.DateTimeField(auto_now_add=True)
     issue = models.ForeignKey(Issue, on_delete=models.CASCADE, related_name="comments")
     user = models.ForeignKey(
@@ -322,7 +336,10 @@ class Comment(models.Model):
         ordering = ("-created",)
 
 
-class UserReport(CreatedModel):
+class UserReport(OrgScopedModel, CreatedModel):
+    org_field = "project__organization_id"
+    undeleted_through = ("project",)
+
     project = models.ForeignKey(
         "projects.Project", on_delete=models.CASCADE, related_name="+"
     )
@@ -341,7 +358,7 @@ class UserReport(CreatedModel):
         ]
 
 
-class IssueEvent(models.Model):
+class IssueEvent(OrgScopedModel, models.Model):
     """
     Dual-ID Schema with Optimized Column Alignment
 
@@ -360,6 +377,8 @@ class IssueEvent(models.Model):
     - Partitioned by RANGE on id (UUIDv7)
     - Sub-partitioned by HASH on organization_id
     """
+
+    org_field = "organization_id"
 
     # 16-byte alignment: UUIDs
     id = models.UUIDField(

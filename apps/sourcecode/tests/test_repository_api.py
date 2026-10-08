@@ -14,7 +14,7 @@ class RepositoryAPITestCase(GlitchTipTestCaseMixin, TestCase):
         self.async_client.force_login(self.user)
         self.url = reverse(
             "api:list_repositories",
-            kwargs={"organization_slug": self.organization.slug},
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
 
     async def test_list_empty(self):
@@ -82,6 +82,20 @@ class RepositoryAPITestCase(GlitchTipTestCaseMixin, TestCase):
         )
         self.assertEqual(res.status_code, 409)
 
+    async def test_create_requires_manager(self):
+        """org:write is manager and up."""
+        for role, status in (
+            (OrganizationUserRole.ADMIN, 403),
+            (OrganizationUserRole.MANAGER, 201),
+        ):
+            with self.subTest(role=role.label):
+                self.org_user.role = role
+                await self.org_user.asave()
+                res = await self.async_client.post(
+                    self.url, {"name": role.label}, content_type="application/json"
+                )
+                self.assertEqual(res.status_code, status)
+
 
 class RepositoryAPIPermissionTestCase(TestCase):
     def setUp(self):
@@ -93,7 +107,7 @@ class RepositoryAPIPermissionTestCase(TestCase):
         self.auth_token = baker.make("api_tokens.APIToken", user=self.user)
         self.url = reverse(
             "api:list_repositories",
-            kwargs={"organization_slug": self.organization.slug},
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
 
     def get_headers(self):

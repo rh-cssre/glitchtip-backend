@@ -36,7 +36,7 @@ class ReleaseAPITestCase(GlitchTestCase):
     async def test_list(self):
         url = reverse(
             "api:list_releases",
-            kwargs={"organization_slug": self.organization.slug},
+            kwargs={"organization_id_or_slug": self.organization.slug},
         )
         release1 = await baker.amake("releases.Release", organization=self.organization)
         release2 = await baker.amake("releases.Release")
@@ -55,7 +55,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:get_release",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "version": release.version,
             },
         )
@@ -67,7 +67,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:update_release",
             kwargs={
-                "organization_slug": release.organization.slug,
+                "organization_id_or_slug": release.organization.slug,
                 "version": release.version,
             },
         )
@@ -82,7 +82,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:delete_organization_release",
             kwargs={
-                "organization_slug": release1.organization.slug,
+                "organization_id_or_slug": release1.organization.slug,
                 "version": release1.version,
             },
         )
@@ -94,7 +94,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:delete_organization_release",
             kwargs={
-                "organization_slug": release2.organization.slug,
+                "organization_id_or_slug": release2.organization.slug,
                 "version": release2.version,
             },
         )
@@ -106,7 +106,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:list_project_releases",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "project_slug": self.project.slug,
             },
         )
@@ -129,7 +129,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:update_project_release",
             kwargs={
-                "organization_slug": release.organization.slug,
+                "organization_id_or_slug": release.organization.slug,
                 "project_slug": self.project.slug,
                 "version": release.version,
             },
@@ -151,7 +151,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:delete_project_release",
             kwargs={
-                "organization_slug": release.organization.slug,
+                "organization_id_or_slug": release.organization.slug,
                 "project_slug": other_project.slug,
                 "version": release.version,
             },
@@ -163,7 +163,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:delete_project_release",
             kwargs={
-                "organization_slug": release.organization.slug,
+                "organization_id_or_slug": release.organization.slug,
                 "project_slug": self.project.slug,
                 "version": release.version,
             },
@@ -190,7 +190,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:create_deploy",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "version": release.version,
             },
         )
@@ -207,7 +207,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:create_deploy",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "version": release.version,
             },
         ).rstrip("/")
@@ -224,7 +224,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:list_deploys",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "version": release.version,
             },
         )
@@ -240,7 +240,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:create_commits",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "version": release.version,
             },
         )
@@ -268,7 +268,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:create_commits",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "version": release.version,
             },
         )
@@ -290,7 +290,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:list_commits",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "version": release.version,
             },
         )
@@ -305,7 +305,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:list_commits",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "version": release.version,
             },
         )
@@ -329,7 +329,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:list_release_files",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "version": release.version,
             },
         )
@@ -348,7 +348,7 @@ class ReleaseAPITestCase(GlitchTestCase):
         url = reverse(
             "api:get_release",
             kwargs={
-                "organization_slug": self.organization.slug,
+                "organization_id_or_slug": self.organization.slug,
                 "version": release.version,
             },
         )

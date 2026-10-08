@@ -1,9 +1,12 @@
 from django.db import models
 
-from glitchtip.base_models import CreatedModel
+from glitchtip.base_models import CreatedModel, OrgScopedModel
 
 
-class EnvironmentProject(CreatedModel):
+class EnvironmentProject(OrgScopedModel, CreatedModel):
+    org_field = "project__organization_id"
+    undeleted_through = ("project",)
+
     project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
     environment = models.ForeignKey(
         "environments.Environment", on_delete=models.CASCADE
@@ -14,7 +17,9 @@ class EnvironmentProject(CreatedModel):
         unique_together = ("project", "environment")
 
 
-class Environment(CreatedModel):
+class Environment(OrgScopedModel, CreatedModel):
+    org_field = "organization_id"
+
     name = models.CharField(max_length=255)
     organization = models.ForeignKey(
         "organizations_ext.Organization", on_delete=models.CASCADE

@@ -70,6 +70,9 @@ def check_org_field(model: type[Model]) -> Error | None:
             id="glitchtip.E001",
         )
 
+    if model is Organization and final_field.primary_key:
+        # The organization itself is gated on its own id.
+        return None
     if not (final_field.is_relation and final_field.related_model is Organization):
         return Error(
             f"{model._meta.label}.org_field is {model.org_field!r}, which ends "

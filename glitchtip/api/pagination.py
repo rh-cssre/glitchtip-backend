@@ -240,3 +240,25 @@ class AsyncLinkHeaderPagination(CursorPagination):
         if base._fields is None:  # type: ignore[attr-defined]
             base = base.values("pk").distinct()
         return await base[: self.max_hits].acount()  # type: ignore[attr-defined]
+
+
+class MissOnEmptyMixin:
+    """404 a non-member on a gated list instead of returning an empty page.
+
+    The gate makes a non-member's list come back empty. An empty page asks the
+    gate why, which costs one query, paid on empty pages only.
+    """
+
+    async def apaginate_queryset(
+        self, queryset, pagination, request, response, **params
+    ):
+        page = await super().apaginate_queryset(
+            queryset, pagination, request, response, **params
+        )
+        if not page and (error := await request.org_scope.explain_miss()):
+            raise error
+        return page
+
+
+class MissOnEmptyPagination(MissOnEmptyMixin, AsyncLinkHeaderPagination):
+    pass

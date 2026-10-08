@@ -1,16 +1,17 @@
 from uuid import UUID
 
+from django.db.models import QuerySet
 from django.http import HttpResponse
-from django.shortcuts import aget_object_or_404
 from ninja import Query, Schema, Status
-from ninja.pagination import paginate
 
 from apps.issue_events.models import IssueEvent, IssueHash
 from apps.issue_events.schema import IssueHashSchema
-from apps.organizations_ext.models import Organization
-from glitchtip.api.authentication import AuthHttpRequest
-from glitchtip.api.pagination import AsyncLinkHeaderPagination
-from glitchtip.api.permissions import has_permission
+from glitchtip.api.pagination import AsyncLinkHeaderPagination, MissOnEmptyMixin
+from glitchtip.api.permissions import (
+    OrgScopedHttpRequest,
+    org_scoped,
+    org_scoped_list,
+)
 
 from . import router
 
@@ -33,25 +34,23 @@ class IssueHashPagination(AsyncLinkHeaderPagination):
         return result
 
 
+class GatedIssueHashPagination(MissOnEmptyMixin, IssueHashPagination):
+    pass
+
+
 @router.get(
-    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/hashes/",
+    "/organizations/{slug:organization_id_or_slug}/issues/{int:issue_id}/hashes/",
     response=list[IssueHashSchema],
     by_alias=True,
 )
-@has_permission(["event:read"])
-@paginate(IssueHashPagination)
+@org_scoped_list(["event:read"], IssueHash, pagination=GatedIssueHashPagination)
 async def list_issue_hashes(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
     response: HttpResponse,
-    organization_slug: str,
+    organization_id_or_slug: str,
     issue_id: int,
 ):
-    organization = await aget_object_or_404(
-        Organization, users=request.auth.user_id, slug=organization_slug
-    )
-    return IssueHash.objects.filter(
-        issue_id=issue_id, issue__project__organization=organization
-    ).order_by("value")
+    return IssueHash.objects.filter(issue_id=issue_id).order_by("value")
 
 
 class IssueHashQuerySchema(Schema):
@@ -59,22 +58,19 @@ class IssueHashQuerySchema(Schema):
 
 
 @router.delete(
-    "/organizations/{slug:organization_slug}/issues/{int:issue_id}/hashes/",
+    "/organizations/{slug:organization_id_or_slug}/issues/{int:issue_id}/hashes/",
     response={202: None},
 )
-@has_permission(["event:admin"])
+@org_scoped(["event:admin"], IssueHash)
 async def delete_hash(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[IssueHash],
+    organization_id_or_slug: str,
     issue_id: int,
     query: Query[IssueHashQuerySchema],
 ):
-    organization = await aget_object_or_404(
-        Organization, users=request.auth.user_id, slug=organization_slug
-    )
-    await IssueHash.objects.filter(
-        value__in=query.id,
-        issue_id=issue_id,
-        issue__project__organization=organization,
-    ).adelete()
+    deleted, _ = await qs.filter(value__in=query.id, issue_id=issue_id).adelete()
+    # Nothing to delete is a 202, unless the caller isn't a member.
+    if not deleted and (error := await request.org_scope.explain_miss()):
+        raise error
     return Status(202, None)

@@ -16,17 +16,17 @@ from urllib.parse import urlsplit
 from allauth.socialaccount.models import SocialApp
 from asgiref.sync import sync_to_async
 from django.db import transaction
+from django.db.models import QuerySet
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Status
 from ninja.errors import HttpError
 
-from glitchtip.api.authentication import AuthHttpRequest
-from glitchtip.api.permissions import has_permission
+from glitchtip.api.permissions import OrgScopedHttpRequest, org_scoped
 from glitchtip.url_validation import is_ip_blocked
 
 from .constants import OrganizationUserRole
 from .models import Organization, OrganizationSocialApp
-from .queryset_utils import get_organizations_queryset
+from .queryset_utils import annotate_actor_role
 from .schema import (
     OrganizationSocialAppIn,
     OrganizationSocialAppSchema,
@@ -80,21 +80,6 @@ def validate_server_url(url: str) -> str:
         if is_ip_blocked(str(ip)):
             raise HttpError(400, "Server URL must be a public address")
     return url
-
-
-async def get_organization_for_manager(
-    request: AuthHttpRequest, organization_slug: str
-) -> Organization:
-    organization = await aget_object_or_404(
-        get_organizations_queryset(
-            request.auth.user_id,
-            role_required=True,
-            organization_slug=organization_slug,
-        )
-    )
-    if organization.actor_role < OrganizationUserRole.MANAGER:
-        raise HttpError(403, "forbidden")
-    return organization
 
 
 def get_social_apps_queryset(organization: Organization):
@@ -155,28 +140,39 @@ def create_linked_social_app(
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/social-apps/",
+    "organizations/{slug:organization_id_or_slug}/social-apps/",
     response=list[OrganizationSocialAppSchema],
     by_alias=True,
 )
-@has_permission(["org:read", "org:write", "org:admin"])
+@org_scoped(["org:read", "org:write", "org:admin"], Organization)
 async def list_organization_social_apps(
-    request: AuthHttpRequest, organization_slug: str
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
 ):
-    organization = await get_organization_for_manager(request, organization_slug)
+    # Tokens need only org:read here, but the caller must still be a manager,
+    # which no scope list expresses.
+    organization = await aget_object_or_404(
+        annotate_actor_role(qs, request.auth.user_id, "pk")
+    )
+    if organization.actor_role < OrganizationUserRole.MANAGER:
+        raise HttpError(403, "forbidden")
     return [app async for app in get_social_apps_queryset(organization)]
 
 
 @router.post(
-    "organizations/{slug:organization_slug}/social-apps/",
+    "organizations/{slug:organization_id_or_slug}/social-apps/",
     response={201: OrganizationSocialAppSchema},
     by_alias=True,
 )
-@has_permission(["org:write", "org:admin"])
+@org_scoped(["org:write", "org:admin"], Organization)
 async def create_organization_social_app(
-    request: AuthHttpRequest, organization_slug: str, payload: OrganizationSocialAppIn
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
+    payload: OrganizationSocialAppIn,
 ):
-    organization = await get_organization_for_manager(request, organization_slug)
+    organization = await aget_object_or_404(qs)
     if not await organization_can_customize_sso(organization):
         raise HttpError(403, "Custom SSO is not included in your plan")
     if (
@@ -204,18 +200,19 @@ async def create_organization_social_app(
 
 
 @router.put(
-    "organizations/{slug:organization_slug}/social-apps/{int:social_app_id}/",
+    "organizations/{slug:organization_id_or_slug}/social-apps/{int:social_app_id}/",
     response=OrganizationSocialAppSchema,
     by_alias=True,
 )
-@has_permission(["org:write", "org:admin"])
+@org_scoped(["org:write", "org:admin"], Organization)
 async def update_organization_social_app(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
     social_app_id: int,
     payload: OrganizationSocialAppUpdateIn,
 ):
-    organization = await get_organization_for_manager(request, organization_slug)
+    organization = await aget_object_or_404(qs)
     social_app = await aget_object_or_404(
         get_social_apps_queryset(organization), id=social_app_id
     )
@@ -239,14 +236,17 @@ async def update_organization_social_app(
 
 
 @router.delete(
-    "organizations/{slug:organization_slug}/social-apps/{int:social_app_id}/",
+    "organizations/{slug:organization_id_or_slug}/social-apps/{int:social_app_id}/",
     response={204: None},
 )
-@has_permission(["org:write", "org:admin"])
+@org_scoped(["org:write", "org:admin"], Organization)
 async def delete_organization_social_app(
-    request: AuthHttpRequest, organization_slug: str, social_app_id: int
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
+    social_app_id: int,
 ):
-    organization = await get_organization_for_manager(request, organization_slug)
+    organization = await aget_object_or_404(qs)
     social_app = await aget_object_or_404(
         get_social_apps_queryset(organization), id=social_app_id
     )

@@ -1,9 +1,8 @@
-from django.db.models import F
+from django.db.models import F, QuerySet
 from django.http import Http404, HttpResponse
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Status
 from ninja.errors import ValidationError
-from ninja.pagination import paginate
 
 from apps.files.models import FileBlob
 from apps.files.tasks import assemble_artifacts_task
@@ -11,9 +10,12 @@ from apps.organizations_ext.models import Organization
 from apps.projects.models import Project
 from apps.sourcecode.models import DebugSymbolBundle
 from apps.sourcecode.schema import DebugSymbolBundleSchema
-from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.decorators import optional_slash
-from glitchtip.api.permissions import has_permission
+from glitchtip.api.permissions import (
+    OrgScopedHttpRequest,
+    org_scoped,
+    org_scoped_list,
+)
 
 from .models import Deploy, Release
 from .schema import (
@@ -55,58 +57,27 @@ DELETE /projects/{organization_slug}/{project_slug}/releases/{version}/files/{fi
 """
 
 
-def get_releases_queryset(
-    organization_slug: str,
-    user_id: int,
-    id: int | None = None,
-    version: str | None = None,
-    project_slug: str | None = None,
-):
-    qs = Release.objects.filter(
-        organization__slug=organization_slug, organization__users=user_id
-    )
-    if id:
-        qs = qs.filter(id=id)
-    if version:
-        qs = qs.filter(version=version)
-    if project_slug:
-        qs = qs.filter(projects__slug=project_slug)
+def with_release_details(qs: QuerySet[Release]) -> QuerySet[Release]:
     return qs.select_related("repository").prefetch_related("projects")
 
 
-def get_release_files_queryset(
-    organization_slug: str,
-    user_id: int,
-    version: str | None = None,
-    project_slug: str | None = None,
-    id: int | None = None,
-):
-    qs = DebugSymbolBundle.objects.filter(
-        release__organization__slug=organization_slug,
-        release__organization__users=user_id,
-    )
-    if id:
-        qs = qs.filter(id=id)
-    if version:
-        qs = qs.filter(release__version=version)
-    if project_slug:
-        qs = qs.filter(release__projects__slug=project_slug)
-    return qs.select_related("file")
+async def get_release_details(release_id: int) -> Release:
+    return await with_release_details(Release.objects).aget(id=release_id)
 
 
 @router.post(
-    "/organizations/{slug:organization_slug}/releases/",
+    "/organizations/{slug:organization_id_or_slug}/releases/",
     response={201: ReleaseSchema},
     by_alias=True,
 )
-@has_permission(["project:releases"])
+@org_scoped(["project:releases"], Organization)
 async def create_release(
-    request: AuthHttpRequest, organization_slug: str, payload: ReleaseIn
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
+    payload: ReleaseIn,
 ):
-    user_id = request.auth.user_id
-    organization = await aget_object_or_404(
-        Organization, slug=organization_slug, users=user_id
-    )
+    organization = await aget_object_or_404(qs)
     data = payload.dict()
     project_slugs = data.pop("projects")
     projects = [
@@ -122,280 +93,260 @@ async def create_release(
         organization=organization, version=version, defaults=data
     )
     await release.projects.aadd(*projects)
-    return await get_releases_queryset(organization_slug, user_id, id=release.id).aget()
+    return await get_release_details(release.id)
 
 
 @router.post(
-    "/projects/{slug:organization_slug}/{slug:project_slug}/releases/",
+    "/projects/{slug:organization_id_or_slug}/{slug:project_slug}/releases/",
     response={201: ReleaseSchema},
     by_alias=True,
 )
-@has_permission(["project:releases"])
+@org_scoped(["project:releases"], Project)
 async def create_project_release(
-    request: AuthHttpRequest, organization_slug: str, project_slug, payload: ReleaseBase
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Project],
+    organization_id_or_slug: str,
+    project_slug,
+    payload: ReleaseBase,
 ):
-    user_id = request.auth.user_id
-    project = await aget_object_or_404(
-        Project.objects.select_related("organization"),
-        slug=project_slug,
-        organization__slug=organization_slug,
-        organization__users=user_id,
-    )
+    project = await aget_object_or_404(qs, slug=project_slug)
     data = payload.dict()
     version = data.pop("version")
     release, _ = await Release.objects.aget_or_create(
-        organization=project.organization, version=version, defaults=data
+        organization_id=project.organization_id, version=version, defaults=data
     )
     await release.projects.aadd(project)
-    return await get_releases_queryset(organization_slug, user_id, id=release.id).aget()
+    return await get_release_details(release.id)
 
 
 @router.get(
-    "/organizations/{slug:organization_slug}/releases/",
+    "/organizations/{slug:organization_id_or_slug}/releases/",
     response=list[ReleaseSchema],
     by_alias=True,
 )
-@paginate
-@has_permission(["project:releases"])
+@org_scoped_list(["project:releases"], Release)
 async def list_releases(
-    request: AuthHttpRequest, response: HttpResponse, organization_slug: str
+    request: OrgScopedHttpRequest,
+    response: HttpResponse,
+    organization_id_or_slug: str,
 ):
-    return get_releases_queryset(organization_slug, request.auth.user_id)
+    return with_release_details(Release.objects.all())
 
 
 @router.get(
-    "/organizations/{slug:organization_slug}/releases/{str:version}/",
+    "/organizations/{slug:organization_id_or_slug}/releases/{str:version}/",
     response=ReleaseSchema,
     by_alias=True,
 )
-@has_permission(["project:releases"])
-async def get_release(request: AuthHttpRequest, organization_slug: str, version: str):
-    return await aget_object_or_404(
-        get_releases_queryset(organization_slug, request.auth.user_id, version=version)
-    )
+@org_scoped(["project:releases"], Release)
+async def get_release(
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Release],
+    organization_id_or_slug: str,
+    version: str,
+):
+    return await aget_object_or_404(with_release_details(qs), version=version)
 
 
 @router.put(
-    "/organizations/{slug:organization_slug}/releases/{str:version}/",
+    "/organizations/{slug:organization_id_or_slug}/releases/{str:version}/",
     response=ReleaseSchema,
     by_alias=True,
 )
-@has_permission(["project:releases"])
+@org_scoped(["project:releases"], Release)
 async def update_release(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Release],
+    organization_id_or_slug: str,
     version: str,
     payload: ReleaseUpdate,
 ):
-    user_id = request.auth.user_id
-    release = await aget_object_or_404(
-        get_releases_queryset(organization_slug, user_id, version=version)
-    )
+    release = await aget_object_or_404(qs, version=version)
     for attr, value in payload.dict().items():
         setattr(release, attr, value)
     await release.asave()
-    return await get_releases_queryset(organization_slug, user_id, id=release.id).aget()
+    return await get_release_details(release.id)
 
 
 @router.delete(
-    "/organizations/{slug:organization_slug}/releases/{str:version}/",
+    "/organizations/{slug:organization_id_or_slug}/releases/{str:version}/",
     response={204: None},
 )
-@has_permission(["project:releases"])
+@org_scoped(["project:releases"], Release)
 async def delete_organization_release(
-    request: AuthHttpRequest, organization_slug: str, version: str
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Release],
+    organization_id_or_slug: str,
+    version: str,
 ):
-    result, _ = await get_releases_queryset(
-        organization_slug, request.auth.user_id, version=version
-    ).adelete()
+    result, _ = await qs.filter(version=version).adelete()
     if not result:
         raise Http404
     return Status(204, None)
 
 
 @router.get(
-    "/organizations/{slug:organization_slug}/releases/{str:version}/files/",
+    "/organizations/{slug:organization_id_or_slug}/releases/{str:version}/files/",
     response=list[DebugSymbolBundleSchema],
     by_alias=True,
 )
-@paginate
-@has_permission(["project:releases"])
+@org_scoped_list(["project:releases"], DebugSymbolBundle)
 async def list_release_files(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
     response: HttpResponse,
-    organization_slug: str,
+    organization_id_or_slug: str,
     version: str,
 ):
-    return get_release_files_queryset(
-        organization_slug,
-        request.auth.user_id,
-        version=version,
+    return DebugSymbolBundle.objects.filter(release__version=version).select_related(
+        "file"
     )
 
 
 @router.get(
-    "/organizations/{slug:organization_slug}/releases/{str:version}/files/{int:file_id}/",
+    "/organizations/{slug:organization_id_or_slug}/releases/{str:version}/files/{int:file_id}/",
     response=DebugSymbolBundleSchema,
     by_alias=True,
 )
-@has_permission(["project:releases"])
+@org_scoped(["project:releases"], DebugSymbolBundle)
 async def get_organization_release_file(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[DebugSymbolBundle],
+    organization_id_or_slug: str,
     project_slug: str,
     version: str,
     file_id: int,
 ):
     return await aget_object_or_404(
-        get_release_files_queryset(
-            organization_slug,
-            request.auth.user_id,
-            project_slug=project_slug,
-            version=version,
-            id=file_id,
-        )
+        qs.select_related("file"),
+        release__projects__slug=project_slug,
+        release__version=version,
+        id=file_id,
     )
 
 
 @router.delete(
-    "/organizations/{slug:organization_slug}/releases/{str:version}/files/{int:file_id}/",
+    "/organizations/{slug:organization_id_or_slug}/releases/{str:version}/files/{int:file_id}/",
     response={204: None},
 )
-@has_permission(["project:releases"])
+@org_scoped(["project:releases"], DebugSymbolBundle)
 async def delete_organization_release_file(
-    request: AuthHttpRequest, organization_slug: str, version: str, file_id: int
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[DebugSymbolBundle],
+    organization_id_or_slug: str,
+    version: str,
+    file_id: int,
 ):
-    result, _ = await get_release_files_queryset(
-        organization_slug, request.auth.user_id, version=version, id=file_id
-    ).adelete()
+    result, _ = await qs.filter(release__version=version, id=file_id).adelete()
     if not result:
         raise Http404
     return Status(204, None)
 
 
 @router.get(
-    "/projects/{slug:organization_slug}/{slug:project_slug}/releases/",
+    "/projects/{slug:organization_id_or_slug}/{slug:project_slug}/releases/",
     response=list[ReleaseSchema],
     by_alias=True,
 )
-@paginate
-@has_permission(["project:releases"])
+@org_scoped_list(["project:releases"], Release)
 async def list_project_releases(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
     response: HttpResponse,
-    organization_slug: str,
+    organization_id_or_slug: str,
     project_slug: str,
 ):
-    return get_releases_queryset(
-        organization_slug, request.auth.user_id, project_slug=project_slug
-    )
+    return with_release_details(Release.objects.filter(projects__slug=project_slug))
 
 
 @router.get(
-    "/projects/{slug:organization_slug}/{slug:project_slug}/releases/{str:version}/",
+    "/projects/{slug:organization_id_or_slug}/{slug:project_slug}/releases/{str:version}/",
     response=ReleaseSchema,
     by_alias=True,
 )
-@has_permission(["project:releases"])
+@org_scoped(["project:releases"], Release)
 async def get_project_release(
-    request: AuthHttpRequest, organization_slug: str, project_slug: str, version: str
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Release],
+    organization_id_or_slug: str,
+    project_slug: str,
+    version: str,
 ):
     return await aget_object_or_404(
-        get_releases_queryset(
-            organization_slug,
-            request.auth.user_id,
-            project_slug=project_slug,
-            version=version,
-        )
+        with_release_details(qs), projects__slug=project_slug, version=version
     )
 
 
 @router.put(
-    "/projects/{slug:organization_slug}/{slug:project_slug}/releases/{str:version}/",
+    "/projects/{slug:organization_id_or_slug}/{slug:project_slug}/releases/{str:version}/",
     response=ReleaseSchema,
     by_alias=True,
 )
-@has_permission(["project:releases"])
+@org_scoped(["project:releases"], Release)
 async def update_project_release(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Release],
+    organization_id_or_slug: str,
     project_slug: str,
     version: str,
     payload: ReleaseUpdate,
 ):
-    user_id = request.auth.user_id
-    release = await aget_object_or_404(
-        get_releases_queryset(
-            organization_slug, user_id, version=version, project_slug=project_slug
-        )
-    )
+    release = await aget_object_or_404(qs, projects__slug=project_slug, version=version)
     for attr, value in payload.dict().items():
         setattr(release, attr, value)
     await release.asave()
-    return await get_releases_queryset(
-        organization_slug, user_id, id=release.id, project_slug=project_slug
-    ).aget()
+    return await get_release_details(release.id)
 
 
 @router.delete(
-    "/projects/{slug:organization_slug}/{slug:project_slug}/releases/{str:version}/",
+    "/projects/{slug:organization_id_or_slug}/{slug:project_slug}/releases/{str:version}/",
     response={204: None},
 )
-@has_permission(["project:releases"])
+@org_scoped(["project:releases"], Release)
 async def delete_project_release(
-    request: AuthHttpRequest, organization_slug: str, project_slug: str, version: str
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Release],
+    organization_id_or_slug: str,
+    project_slug: str,
+    version: str,
 ):
-    result, _ = await get_releases_queryset(
-        organization_slug,
-        request.auth.user_id,
-        version=version,
-        project_slug=project_slug,
-    ).adelete()
+    result, _ = await qs.filter(projects__slug=project_slug, version=version).adelete()
     if not result:
         raise Http404
     return Status(204, None)
 
 
 @router.get(
-    "/projects/{slug:organization_slug}/{slug:project_slug}/releases/{str:version}/files/",
+    "/projects/{slug:organization_id_or_slug}/{slug:project_slug}/releases/{str:version}/files/",
     response=list[DebugSymbolBundleSchema],
     by_alias=True,
 )
-@paginate
-@has_permission(["project:releases"])
+@org_scoped_list(["project:releases"], DebugSymbolBundle)
 async def list_project_release_files(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
     response: HttpResponse,
-    organization_slug: str,
+    organization_id_or_slug: str,
     project_slug: str,
     version: str,
 ):
-    return get_release_files_queryset(
-        organization_slug,
-        request.auth.user_id,
-        project_slug=project_slug,
-        version=version,
-    )
+    return DebugSymbolBundle.objects.filter(
+        release__projects__slug=project_slug, release__version=version
+    ).select_related("file")
 
 
 @router.delete(
-    "/projects/{slug:organization_slug}/{slug:project_slug}/releases/{str:version}/files/{int:file_id}/",
+    "/projects/{slug:organization_id_or_slug}/{slug:project_slug}/releases/{str:version}/files/{int:file_id}/",
     response={204: None},
 )
-@has_permission(["project:releases"])
+@org_scoped(["project:releases"], DebugSymbolBundle)
 async def delete_project_release_file(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[DebugSymbolBundle],
+    organization_id_or_slug: str,
     project_slug: str,
     version: str,
     file_id: int,
 ):
-    result, _ = await get_release_files_queryset(
-        organization_slug,
-        request.auth.user_id,
-        version=version,
-        id=file_id,
-        project_slug=project_slug,
+    result, _ = await qs.filter(
+        release__projects__slug=project_slug, release__version=version, id=file_id
     ).adelete()
     if not result:
         raise Http404
@@ -403,47 +354,43 @@ async def delete_project_release_file(
 
 
 @router.get(
-    "/projects/{slug:organization_slug}/{slug:project_slug}/releases/{str:version}/files/{int:file_id}/",
+    "/projects/{slug:organization_id_or_slug}/{slug:project_slug}/releases/{str:version}/files/{int:file_id}/",
     response=DebugSymbolBundleSchema,
     by_alias=True,
 )
-@has_permission(["project:releases"])
+@org_scoped(["project:releases"], DebugSymbolBundle)
 async def get_project_release_file(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[DebugSymbolBundle],
+    organization_id_or_slug: str,
     project_slug: str,
     version: str,
     file_id: int,
 ):
     return await aget_object_or_404(
-        get_release_files_queryset(
-            organization_slug,
-            request.auth.user_id,
-            project_slug=project_slug,
-            version=version,
-            id=file_id,
-        )
+        qs.select_related("file"),
+        release__projects__slug=project_slug,
+        release__version=version,
+        id=file_id,
     )
 
 
 @optional_slash(
     router,
     "post",
-    "/organizations/{slug:organization_slug}/releases/{str:version}/deploys/",
+    "/organizations/{slug:organization_id_or_slug}/releases/{str:version}/deploys/",
     response={201: DeploySchema},
     by_alias=True,
 )
-@has_permission(["project:releases", "project:write", "project:admin"])
+@org_scoped(["project:releases", "project:write", "project:admin"], Release)
 async def create_deploy(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Release],
+    organization_id_or_slug: str,
     version: str,
     payload: DeployIn,
 ):
-    user_id = request.auth.user_id
-    release = await aget_object_or_404(
-        get_releases_queryset(organization_slug, user_id, version=version)
-    )
+    release = await aget_object_or_404(qs.only("id"), version=version)
     deploy = await Deploy.objects.acreate(
         release=release,
         environment=payload.environment,
@@ -460,82 +407,76 @@ async def create_deploy(
 @optional_slash(
     router,
     "get",
-    "/organizations/{slug:organization_slug}/releases/{str:version}/deploys/",
+    "/organizations/{slug:organization_id_or_slug}/releases/{str:version}/deploys/",
     response=list[DeploySchema],
     by_alias=True,
 )
-@has_permission(["project:releases", "project:write", "project:admin"])
+@org_scoped(["project:releases", "project:write", "project:admin"], Release)
 async def list_deploys(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Release],
+    organization_id_or_slug: str,
     version: str,
 ):
-    release = await aget_object_or_404(
-        get_releases_queryset(organization_slug, request.auth.user_id, version=version)
-    )
+    release = await aget_object_or_404(qs.only("id"), version=version)
     return [deploy async for deploy in Deploy.objects.filter(release=release)]
 
 
 @optional_slash(
     router,
     "post",
-    "/organizations/{slug:organization_slug}/releases/{str:version}/commits/",
+    "/organizations/{slug:organization_id_or_slug}/releases/{str:version}/commits/",
     response=ReleaseSchema,
     by_alias=True,
 )
-@has_permission(["project:releases", "project:write", "project:admin"])
+@org_scoped(["project:releases", "project:write", "project:admin"], Release)
 async def create_commits(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Release],
+    organization_id_or_slug: str,
     version: str,
     payload: list[CommitIn],
 ):
-    user_id = request.auth.user_id
-    release = await aget_object_or_404(
-        get_releases_queryset(organization_slug, user_id, version=version)
-    )
+    release = await aget_object_or_404(with_release_details(qs), version=version)
     commits = [commit.dict(by_alias=True) for commit in payload]
     release.commit_count = len(commits)
     release.data["commits"] = commits[:1000]
     await release.asave(update_fields=["commit_count", "data"])
-    return await get_releases_queryset(organization_slug, user_id, id=release.id).aget()
+    return release
 
 
 @optional_slash(
     router,
     "get",
-    "/organizations/{slug:organization_slug}/releases/{str:version}/commits/",
+    "/organizations/{slug:organization_id_or_slug}/releases/{str:version}/commits/",
     response=list[CommitSchema],
     by_alias=True,
 )
-@has_permission(["project:releases", "project:write", "project:admin"])
+@org_scoped(["project:releases", "project:write", "project:admin"], Release)
 async def list_commits(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Release],
+    organization_id_or_slug: str,
     version: str,
 ):
-    release = await aget_object_or_404(
-        get_releases_queryset(organization_slug, request.auth.user_id, version=version)
-    )
+    release = await aget_object_or_404(qs, version=version)
     return release.data.get("commits", [])
 
 
 @optional_slash(
     router,
     "post",
-    "/organizations/{slug:organization_slug}/releases/{str:version}/assemble/",
+    "/organizations/{slug:organization_id_or_slug}/releases/{str:version}/assemble/",
 )
-@has_permission(["project:releases", "project:write", "project:admin"])
+@org_scoped(["project:releases", "project:write", "project:admin"], Organization)
 async def assemble_release(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
     version: str,
     payload: AssembleSchema,
 ):
-    user_id = request.auth.user_id
-    organization = await aget_object_or_404(
-        Organization, slug=organization_slug, users=user_id
-    )
+    organization = await aget_object_or_404(qs.only("id"))
 
     existing_chunks = [
         checksum

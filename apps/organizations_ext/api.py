@@ -2,6 +2,7 @@ from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.contrib.auth import aget_user
 from django.core.cache import cache
+from django.db.models import Exists, OuterRef, QuerySet
 from django.db.utils import IntegrityError
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import aget_object_or_404
@@ -15,12 +16,22 @@ from apps.teams.schema import OrganizationDetailSchema
 from apps.users.models import User
 from apps.users.utils import ais_user_registration_open
 from glitchtip.api.authentication import AuthHttpRequest
-from glitchtip.api.permissions import has_permission
+from glitchtip.api.permissions import (
+    OrgScopedHttpRequest,
+    has_permission,
+    org_scoped,
+    org_scoped_list,
+)
 
 from .constants import OrganizationUserRole
 from .invitation_backend import InvitationTokenGenerator
 from .models import Organization, OrganizationOwner, OrganizationUser
-from .queryset_utils import get_organization_users_queryset, get_organizations_queryset
+from .queryset_utils import (
+    annotate_actor_role,
+    get_organizations_queryset,
+    prefetch_organization_details,
+    select_organization_user_details,
+)
 from .schema import (
     AcceptInviteIn,
     AcceptInviteSchema,
@@ -64,19 +75,25 @@ async def list_organizations(
     return get_organizations_queryset(request.auth.user_id).order_by("name")
 
 
+def organization_details(qs: QuerySet[Organization], user_id: int):
+    return prefetch_organization_details(
+        annotate_actor_role(qs, user_id, "pk"), user_id
+    )
+
+
 @router.get(
-    "organizations/{slug:organization_slug}/",
+    "organizations/{slug:organization_id_or_slug}/",
     response=OrganizationDetailSchema,
     by_alias=True,
 )
-@has_permission(["org:read", "org:write", "org:admin"])
-async def get_organization(request: AuthHttpRequest, organization_slug: str):
+@org_scoped(["org:read", "org:write", "org:admin"], Organization)
+async def get_organization(
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
+):
     """Return Organization with project and team details."""
-    return await aget_object_or_404(
-        get_organizations_queryset(
-            request.auth.user_id, add_details=True, organization_slug=organization_slug
-        )
-    )
+    return await aget_object_or_404(organization_details(qs, request.auth.user_id))
 
 
 @router.post("organizations/", response={201: OrganizationDetailSchema}, by_alias=True)
@@ -103,25 +120,21 @@ async def create_organization(request: AuthHttpRequest, payload: OrganizationInS
 
 
 @router.put(
-    "organizations/{slug:organization_slug}/",
+    "organizations/{slug:organization_id_or_slug}/",
     response=OrganizationDetailSchema,
     by_alias=True,
 )
-@has_permission(["org:write", "org:admin"])
+@org_scoped(["org:write", "org:admin"], Organization)
 async def update_organization(
-    request: AuthHttpRequest, organization_slug: str, payload: OrganizationInSchema
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
+    payload: OrganizationInSchema,
 ):
     """Update an organization."""
     organization = await aget_object_or_404(
-        get_organizations_queryset(
-            request.auth.user_id,
-            role_required=True,
-            add_details=True,
-            organization_slug=organization_slug,
-        ),
+        organization_details(qs, request.auth.user_id)
     )
-    if organization.actor_role < OrganizationUserRole.MANAGER:
-        raise HttpError(403, "forbidden")
     for attr, value in payload.dict(exclude_unset=True).items():
         setattr(organization, attr, value)
     await organization.asave()
@@ -129,79 +142,81 @@ async def update_organization(
 
 
 @router.delete(
-    "organizations/{slug:organization_slug}/",
+    "organizations/{slug:organization_id_or_slug}/",
     response={204: None},
 )
-@has_permission(["org:admin"])
-async def delete_organization(request: AuthHttpRequest, organization_slug: str):
-    organization = await aget_object_or_404(
-        get_organizations_queryset(
-            request.auth.user_id,
-            role_required=True,
-            organization_slug=organization_slug,
-        )
-    )
-    if organization.actor_role < OrganizationUserRole.MANAGER:
-        raise HttpError(403, "forbidden")
+@org_scoped(["org:admin"], Organization)
+async def delete_organization(
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
+):
+    # Fetched, not qs.adelete(): Organization.delete() soft-deletes and
+    # enqueues the cleanup task, which a queryset delete would skip.
+    organization = await aget_object_or_404(qs)
     await organization.adelete()
     return Status(204, None)
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/members/",
+    "organizations/{slug:organization_id_or_slug}/members/",
     response=list[OrganizationUserSchema],
     by_alias=True,
 )
-@paginate
-@has_permission(["member:read", "member:write", "member:admin"])
+@org_scoped_list(["member:read", "member:write", "member:admin"], OrganizationUser)
 async def list_organization_members(
-    request: AuthHttpRequest, response: HttpResponse, organization_slug: str
+    request: OrgScopedHttpRequest,
+    response: HttpResponse,
+    organization_id_or_slug: str,
 ):
-    return get_organization_users_queryset(request.auth.user_id, organization_slug)
+    return select_organization_user_details(OrganizationUser.objects.all())
 
 
 @router.get(
-    "teams/{slug:organization_slug}/{slug:team_slug}/members/",
+    "teams/{slug:organization_id_or_slug}/{slug:team_slug}/members/",
     response=list[OrganizationUserSchema],
     by_alias=True,
 )
-@paginate
-@has_permission(["member:read", "member:write", "member:admin"])
+@org_scoped_list(["member:read", "member:write", "member:admin"], OrganizationUser)
 async def list_team_organization_members(
-    request: AuthHttpRequest,
+    request: OrgScopedHttpRequest,
     response: HttpResponse,
-    organization_slug: str,
+    organization_id_or_slug: str,
     team_slug: str,
 ):
-    return get_organization_users_queryset(
-        request.auth.user_id, organization_slug, team_slug=team_slug
+    return select_organization_user_details(
+        OrganizationUser.objects.filter(teams__slug=team_slug)
     )
 
 
 @router.get(
-    "organizations/{slug:organization_slug}/members/{int:member_id}/",
+    "organizations/{slug:organization_id_or_slug}/members/{int:member_id}/",
     response=OrganizationUserDetailSchema,
     by_alias=True,
 )
-@has_permission(["member:read", "member:write", "member:admin"])
+@org_scoped(["member:read", "member:write", "member:admin"], OrganizationUser)
 async def get_organization_member(
-    request: AuthHttpRequest, organization_slug: str, member_id: int
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[OrganizationUser],
+    organization_id_or_slug: str,
+    member_id: int,
 ):
-    user_id = request.auth.user_id
     return await aget_object_or_404(
-        get_organization_users_queryset(user_id, organization_slug, add_details=True),
-        pk=member_id,
+        select_organization_user_details(qs).prefetch_related("teams"), pk=member_id
     )
 
 
 @router.post(
-    "organizations/{slug:organization_slug}/members/",
+    "organizations/{slug:organization_id_or_slug}/members/",
     response={201: OrganizationUserInviteSchema},
     by_alias=True,
 )
-@has_permission(["member:write", "member:admin"])
+@org_scoped(["member:write", "member:admin"], Organization)
 async def create_organization_member(
-    request: AuthHttpRequest, organization_slug: str, payload: OrganizationUserIn
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[Organization],
+    organization_id_or_slug: str,
+    payload: OrganizationUserIn,
 ):
     user = await User.objects.aget(id=request.auth.user_id)
 
@@ -215,15 +230,7 @@ async def create_organization_member(
         # invites; acceptance is gated by the invite token instead.
         raise HttpError(403, "User must have a verified email address")
 
-    organization = await aget_object_or_404(
-        get_organizations_queryset(
-            user.id, role_required=True, organization_slug=organization_slug
-        )
-        .filter(organization_users__user=user)
-        .prefetch_related("organization_users"),
-    )
-    if organization.actor_role < OrganizationUserRole.MANAGER:
-        raise HttpError(403, "forbidden")
+    organization = await aget_object_or_404(qs)
     email = payload.email
     if (
         not await ais_user_registration_open()
@@ -269,37 +276,43 @@ async def create_organization_member(
         await member.teams.aadd(*teams)
 
     await sync_to_async(invitation_backend().send_invitation)(member)
-    member = await get_organization_users_queryset(user.id, organization_slug).aget(
+    member = await select_organization_user_details(OrganizationUser.objects).aget(
         id=member.id
     )
     return Status(201, member)
 
 
 @router.delete(
-    "organizations/{slug:organization_slug}/members/{int:member_id}/",
+    "organizations/{slug:organization_id_or_slug}/members/{int:member_id}/",
     response={204: None},
 )
+# Tokens need member:admin; the gate admits every role, because any member
+# may remove themselves. Removing someone else is checked below.
 @has_permission(["member:admin"])
+@org_scoped(["member:read", "member:write", "member:admin"], OrganizationUser)
 async def delete_organization_member(
-    request: AuthHttpRequest, organization_slug: str, member_id: int
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[OrganizationUser],
+    organization_id_or_slug: str,
+    member_id: int,
 ):
     """Remove member (user) from organization"""
     user_id = request.auth.user_id
-    if await OrganizationOwner.objects.filter(
-        organization_user__user_id=user_id,
-        organization__slug=organization_slug,
-        organization_user__id=member_id,
-    ).aexists():
-        raise HttpError(400, "User is organization owner. Transfer ownership first.")
     org_user = await aget_object_or_404(
-        get_organization_users_queryset(user_id, organization_slug, role_required=True),
+        annotate_actor_role(qs, user_id, "organization_id").annotate(
+            is_owner=Exists(
+                OrganizationOwner.objects.filter(organization_user=OuterRef("pk"))
+            )
+        ),
         id=member_id,
     )
-    # Check org role of user initiating request, but allow org users to remove themselves
-    if org_user.actor_role < OrganizationUserRole.MANAGER and not (
-        org_user.user and org_user.user.id == user_id
-    ):
-        raise HttpError(403, "Forbidden")
+    is_self = org_user.user_id == user_id
+    if is_self and org_user.is_owner:
+        raise HttpError(400, "User is organization owner. Transfer ownership first.")
+    if not is_self and org_user.actor_role < OrganizationUserRole.MANAGER:
+        raise HttpError(
+            403, "Removing another member requires the manager role or above."
+        )
     try:
         await org_user.adelete()
     except IntegrityError as err:
@@ -315,36 +328,30 @@ async def delete_organization_member(
 
 
 @router.put(
-    "organizations/{slug:organization_slug}/members/{int:member_id}/",
+    "organizations/{slug:organization_id_or_slug}/members/{int:member_id}/",
     response=OrganizationUserDetailSchema,
     by_alias=True,
 )
-@has_permission(["member:write", "member:admin"])
+@org_scoped(["member:write", "member:admin"], OrganizationUser)
 async def update_organization_member(
-    request: AuthHttpRequest,
-    organization_slug: str,
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[OrganizationUser],
+    organization_id_or_slug: str,
     member_id: int,
     payload: OrganizationUserUpdateSchema,
 ):
     """Update member role within organization"""
     member = await aget_object_or_404(
-        get_organization_users_queryset(
-            request.auth.user_id,
-            organization_slug,
-            role_required=True,
-            add_details=True,
-        ).select_related("organization"),
-        id=member_id,
+        select_organization_user_details(qs).prefetch_related("teams"), id=member_id
     )
-    if member.actor_role < OrganizationUserRole.MANAGER:
-        raise HttpError(403, "Forbidden")
     member.role = OrganizationUserRole.from_string(payload.org_role)
     # Disallow an ownerless organization
     if (
         member.role < OrganizationUserRole.OWNER
         and not await OrganizationUser.objects.exclude(id=member_id)
         .filter(
-            organization__slug=organization_slug, role__gte=OrganizationUserRole.OWNER
+            organization_id=member.organization_id,
+            role__gte=OrganizationUserRole.OWNER,
         )
         .aexists()
     ):
@@ -354,13 +361,16 @@ async def update_organization_member(
 
 
 @router.post(
-    "organizations/{slug:organization_slug}/members/{int:member_id}/set_owner/",
+    "organizations/{slug:organization_id_or_slug}/members/{int:member_id}/set_owner/",
     response=OrganizationUserDetailSchema,
     by_alias=True,
 )
-@has_permission(["member:admin"])
+@org_scoped(["member:admin"], OrganizationUser)
 async def set_organization_owner(
-    request: AuthHttpRequest, organization_slug: str, member_id: int
+    request: OrgScopedHttpRequest,
+    qs: QuerySet[OrganizationUser],
+    organization_id_or_slug: str,
+    member_id: int,
 ):
     """
     Set this team member as the one and only one Organization owner
@@ -369,8 +379,10 @@ async def set_organization_owner(
     """
     user_id = request.auth.user_id
     new_owner = await aget_object_or_404(
-        get_organization_users_queryset(
-            user_id, organization_slug, add_details=True
+        annotate_actor_role(
+            select_organization_user_details(qs).prefetch_related("teams"),
+            user_id,
+            "organization_id",
         ).select_related("organization__owner__organization_user"),
         id=member_id,
     )
@@ -378,9 +390,7 @@ async def set_organization_owner(
     old_owner = organization.owner.organization_user
     if not (
         old_owner.user_id == user_id
-        or await organization.organization_users.filter(
-            user=user_id, role=OrganizationUserRole.OWNER
-        ).aexists()
+        or new_owner.actor_role == OrganizationUserRole.OWNER
     ):
         raise HttpError(403, "Only owner may set organization owner.")
 
