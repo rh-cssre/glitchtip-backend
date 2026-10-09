@@ -28,6 +28,7 @@ print_startup_banner()
 # Route ingest paths to a lightweight handler with minimal middleware
 from glitchtip.ingest_asgi import IngestDispatcher
 from glitchtip.memory_trim import PeriodicMemoryTrim
+from glitchtip.proxy_headers import ProxyHeaders
 
 application = IngestDispatcher(application)
 
@@ -473,27 +474,10 @@ def serve_static(app):
 
 application = serve_static(application)
 
-# Wrap application with granian proxy headers support
-# This allows granian to properly handle X-Forwarded-For and X-Forwarded-Proto headers
-# when running behind a reverse proxy (nginx, traefik, k8s ingress, etc.)
-try:
-    from granian.utils.proxies import wrap_asgi_with_proxy_headers
-
-    # TRUSTED_PROXIES can be:
-    # - "*" to trust all proxies (default, safe when granian isn't directly exposed)
-    # - A comma-separated list of IPs/CIDR ranges (e.g., "10.0.0.0/8,172.16.0.0/12")
-    # - For k8s: "*" is recommended since pod IPs are dynamic and pods aren't exposed
-    trusted_proxies = os.environ.get("TRUSTED_PROXIES", "*")
-    if "," in trusted_proxies:
-        trusted_proxies = [ip.strip() for ip in trusted_proxies.split(",")]
-
-    application = wrap_asgi_with_proxy_headers(
-        application, trusted_hosts=trusted_proxies
-    )
-except ImportError:
-    # Graceful fallback if granian can't be imported (custom installations
-    # serving this app under another ASGI server)
-    pass
+# Scheme and client address from X-Forwarded-Proto / X-Forwarded-For. Proxies
+# on non-public addresses are trusted by default; list public ones (a CDN) in
+# TRUSTED_PROXIES. See glitchtip/proxy_headers.py.
+application = ProxyHeaders(application, os.environ.get("TRUSTED_PROXIES"))
 
 # Outermost so lifespan startup reaches it at all (the vtasks wrapper consumes
 # lifespan without forwarding it inward): a pod receiving no HTTP traffic still
