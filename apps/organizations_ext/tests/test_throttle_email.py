@@ -12,9 +12,9 @@ from apps.stripe.models import StripeSubscription
 
 @override_settings(EMAIL_ENABLED=True)
 class ThrottleNoticeEmailTestCase(TestCase):
-    """A paid org cannot change plan itself yet, so the notice must never tell
-    it to upgrade, and an org at its on-demand spend cap must not be told it
-    merely exceeded its plan."""
+    """A paid org cannot change plan itself yet, so the notice sends it to
+    support instead of the free org's upgrade link, and an org at its
+    on-demand spend cap must not be told it merely exceeded its plan."""
 
     def setUp(self):
         self.org = baker.make("organizations_ext.Organization", event_throttle_rate=10)
@@ -63,16 +63,17 @@ class ThrottleNoticeEmailTestCase(TestCase):
         self.assertIn("Met event quota", subject)
         for body in (text, html):
             self.assertIn("Turn on on-demand billing", body)
-            self.assertIn("contact us about changing your plan", body)
+            self.assertIn("support@glitchtip.com", body)
+            self.assertIn("billing is turned on or you upgrade your plan", body)
             self.assertNotIn("Upgrade", body)
-            self.assertNotIn("upgrade", body)
 
     def test_paid_org_is_not_offered_on_demand_the_server_lacks(self):
         self.subscribe(price=15)
         _, text, html = self.send()
         for body in (text, html):
             self.assertNotIn("on-demand", body)
-            self.assertIn("contact us about changing your plan", body)
+            self.assertIn("support@glitchtip.com", body)
+            self.assertIn("It lifts once you upgrade your plan", body)
 
     def test_org_at_its_spend_cap_is_told_so(self):
         sub = self.subscribe(price=15)
@@ -87,6 +88,7 @@ class ThrottleNoticeEmailTestCase(TestCase):
             self.assertIn("reached its on-demand billing spend cap", body)
             self.assertIn("no further on-demand usage is charged", body)
             self.assertIn("Raise your spend cap", body)
+            self.assertIn("raised above your usage or you upgrade your plan", body)
             self.assertNotIn("exceeded its monthly event limit", body)
             self.assertNotIn("Turn on on-demand billing", body)
             self.assertNotIn("Upgrade", body)

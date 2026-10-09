@@ -49,8 +49,8 @@
                             {% endif %}
                             {% if paid %}
                             <li style="margin:0 0 6px 30px;">
-                                Visit your <a href="{{ subscription_link }}" style="color: #e94056; text-decoration: none;">subscription page</a>
-                                to contact us about changing your plan
+                                Email <a href="mailto:support@glitchtip.com" style="color: #e94056; text-decoration: none;">support@glitchtip.com</a>
+                                to change your plan
                             </li>
                             {% else %}
                             <li style="margin:0 0 6px 30px;" class="list-item-first">
@@ -67,8 +67,8 @@
                             In the meantime, we have placed a {{ organization.event_throttle_rate }}% throttle on incoming
                             events from projects on your organization account for this billing period.
                             {% if paid %}
-                            It lifts once {% if at_spend_cap %}your spend cap is raised or {% elif on_demand_available %}on-demand
-                            billing is turned on or {% endif %}your plan changes. Otherwise, it resets at the beginning of your
+                            It lifts once {% if at_spend_cap %}your spend cap is raised above your usage or {% elif on_demand_available %}on-demand
+                            billing is turned on or {% endif %}you upgrade your plan. Otherwise, it resets at the beginning of your
                             next billing cycle.
                             {% else %}
                             If you choose to upgrade your plan, this throttle will be removed. Otherwise, it will reset at
