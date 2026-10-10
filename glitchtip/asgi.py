@@ -474,9 +474,8 @@ def serve_static(app):
 
 application = serve_static(application)
 
-# Scheme and client address from X-Forwarded-Proto / X-Forwarded-For. Proxies
-# on non-public addresses are trusted by default; list public ones (a CDN) in
-# TRUSTED_PROXIES. See glitchtip/proxy_headers.py.
+# Scheme and client address from X-Forwarded-Proto / X-Forwarded-For.
+# TRUSTED_PROXIES defaults to private networks. See glitchtip/proxy_headers.py.
 application = ProxyHeaders(application, os.environ.get("TRUSTED_PROXIES"))
 
 # Outermost so lifespan startup reaches it at all (the vtasks wrapper consumes

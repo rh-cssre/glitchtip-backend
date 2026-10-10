@@ -5,6 +5,8 @@ GlitchTip startup banner display.
 import logging
 import os
 
+from glitchtip.proxy_headers import describe_trusted_proxies
+
 logger = logging.getLogger(__name__)
 
 LOGO = """\
@@ -61,6 +63,7 @@ def get_startup_info() -> dict:
         "email": describe_email(settings),
         "backend": backend,
         "retention_days": settings.GLITCHTIP_RETENTION_DAYS,
+        "proxies": describe_trusted_proxies(os.environ.get("TRUSTED_PROXIES")),
     }
 
 
@@ -76,14 +79,16 @@ def format_banner(info: dict) -> str:
         f"Email:            {info['email']}",
         f"Cache/Queue:      {info['backend']}",
         f"Event retention:  {info['retention_days']} days",
+        f"Trusted proxies:  {info['proxies']}",
     ]
 
     # Combine logo and info side by side
     output_lines = []
     max_lines = max(len(logo_lines), len(info_lines))
+    width = max(len(line) for line in logo_lines)
 
     for i in range(max_lines):
-        logo_part = logo_lines[i] if i < len(logo_lines) else " " * 10
+        logo_part = (logo_lines[i] if i < len(logo_lines) else "").ljust(width)
         info_part = info_lines[i] if i < len(info_lines) else ""
         output_lines.append(f"{logo_part}  {info_part}")
 
