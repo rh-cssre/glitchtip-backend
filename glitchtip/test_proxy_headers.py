@@ -1,4 +1,6 @@
 import logging
+import os
+from unittest import mock
 
 from django.test import SimpleTestCase
 
@@ -163,7 +165,11 @@ class ProxyHeadersTestCase(SimpleTestCase):
             }
             await wrapper(scope, None, None)
 
-        with self.assertLogs("glitchtip.proxy_headers", "INFO") as logs:
+        with (
+            mock.patch.dict(os.environ),
+            self.assertLogs("glitchtip.proxy_headers", "INFO") as logs,
+        ):
+            os.environ.pop("KUBERNETES_SERVICE_HOST", None)
             for _ in range(2):
                 await request(CDN_EDGE, CLIENT)
                 await request("10.0.0.9", f"{CLIENT}, {CDN_EDGE}")
@@ -172,6 +178,26 @@ class ProxyHeadersTestCase(SimpleTestCase):
         self.assertIn(f"Ignoring X-Forwarded-For from {CDN_EDGE}", untrusted)
         self.assertIn("Add cloudflare to TRUSTED_PROXIES", cloudflare)
         self.assertIn("Trusted proxies seen so far: 10.0.0.9.", seen)
+        self.assertIn("set TRUSTED_PROXIES to their addresses", seen)
+
+    async def test_kubernetes_hint_only_when_unset(self):
+        self.enable_logging()
+        scope = {
+            "type": "http",
+            "client": ("10.0.0.9", 1),
+            "headers": [(b"x-forwarded-for", CLIENT.encode())],
+        }
+        for setting, expect_hint in ((None, True), ("private", False)):
+            with self.subTest(setting=setting):
+                wrapper = ProxyHeaders(echo_app, setting)
+                env = {"KUBERNETES_SERVICE_HOST": "10.0.0.1"}
+                with (
+                    mock.patch.dict(os.environ, env),
+                    self.assertLogs("glitchtip.proxy_headers", "INFO") as logs,
+                ):
+                    await wrapper(dict(scope), None, None)
+                hint = "set TRUSTED_PROXIES to the network ranges"
+                self.assertEqual(hint in logs.output[0], expect_hint)
 
     def test_invalid_entry_is_skipped(self):
         self.enable_logging()
