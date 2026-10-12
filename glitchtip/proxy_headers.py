@@ -33,6 +33,7 @@ says what was seen and what to set.
 import bisect
 import ipaddress
 import logging
+import os
 import socket
 import time
 
@@ -170,7 +171,9 @@ class ProxyHeaders:
 
     def __init__(self, app, trusted_proxies: str | None = None):
         self.app = app
-        self.setting = (trusted_proxies or "").strip() or "private"
+        setting = (trusted_proxies or "").strip()
+        self.configured = bool(setting)
+        self.setting = setting or "private"
         networks = parse_trusted_proxies(trusted_proxies)
         self.trust_all = networks is None
         self.trusted = AddressSet(networks or [])
@@ -245,10 +248,22 @@ class ProxyHeaders:
         new = [p for p in proxies if p not in self.seen_proxies]
         if new and len(self.seen_proxies) < _MAX_REPORTED_PROXIES:
             self.seen_proxies.update(new)
+            # The kubelet sets this in every container, whatever the vendor.
+            if not self.configured and "KUBERNETES_SERVICE_HOST" in os.environ:
+                advice = (
+                    "On Kubernetes these change as pods and nodes are "
+                    "replaced, so set TRUSTED_PROXIES to the network range "
+                    "they come from rather than these addresses"
+                )
+            else:
+                advice = (
+                    "To trust only these, set TRUSTED_PROXIES to their "
+                    "addresses or ranges"
+                )
             logger.info(
-                "Trusted proxies seen so far: %s. To trust only these, set "
-                "TRUSTED_PROXIES to their addresses or ranges (currently %r).",
+                "Trusted proxies seen so far: %s. %s (currently %r).",
                 ", ".join(sorted(self.seen_proxies)),
+                advice,
                 self.setting,
             )
 
