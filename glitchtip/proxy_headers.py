@@ -252,7 +252,7 @@ class ProxyHeaders:
             if not self.configured and "KUBERNETES_SERVICE_HOST" in os.environ:
                 advice = (
                     "On Kubernetes these change as pods and nodes are "
-                    "replaced, so set TRUSTED_PROXIES to the network range "
+                    "replaced, so set TRUSTED_PROXIES to the network ranges "
                     "they come from rather than these addresses"
                 )
             else:
@@ -261,7 +261,7 @@ class ProxyHeaders:
                     "addresses or ranges"
                 )
             logger.info(
-                "Trusted proxies seen so far: %s. %s (currently %r).",
+                "Trusted proxies seen so far: %s. %s. TRUSTED_PROXIES is currently %r.",
                 ", ".join(sorted(self.seen_proxies)),
                 advice,
                 self.setting,

@@ -187,7 +187,7 @@ class ProxyHeadersTestCase(SimpleTestCase):
             "client": ("10.0.0.9", 1),
             "headers": [(b"x-forwarded-for", CLIENT.encode())],
         }
-        for setting, expect_hint in ((None, True), ("10.0.0.0/8", False)):
+        for setting, expect_hint in ((None, True), ("private", False)):
             with self.subTest(setting=setting):
                 wrapper = ProxyHeaders(echo_app, setting)
                 env = {"KUBERNETES_SERVICE_HOST": "10.0.0.1"}
@@ -196,7 +196,7 @@ class ProxyHeadersTestCase(SimpleTestCase):
                     self.assertLogs("glitchtip.proxy_headers", "INFO") as logs,
                 ):
                     await wrapper(dict(scope), None, None)
-                hint = "set TRUSTED_PROXIES to the network range"
+                hint = "set TRUSTED_PROXIES to the network ranges"
                 self.assertEqual(hint in logs.output[0], expect_hint)
 
     def test_invalid_entry_is_skipped(self):
