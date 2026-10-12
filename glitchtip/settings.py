@@ -1520,6 +1520,7 @@ NINJA_PAGINATION_CLASS = "glitchtip.api.pagination.AsyncLinkHeaderPagination"
 NINJA_PAGINATION_PER_PAGE = 50
 
 LOGGING_HANDLER_CLASS = env.str("DJANGO_LOGGING_HANDLER_CLASS", "logging.StreamHandler")
+LOG_LEVEL = env.str("LOG_LEVEL", "WARNING").upper()
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -1536,8 +1537,12 @@ LOGGING = {
             "handlers": ["null"],
             "propagate": False,
         },
+        # Reports the proxies it sees once, so operators can set TRUSTED_PROXIES.
+        "glitchtip.proxy_headers": {
+            "level": "INFO" if LOG_LEVEL == "WARNING" else LOG_LEVEL,
+        },
     },
-    "root": {"handlers": ["console"], "level": env.str("LOG_LEVEL", "WARNING")},
+    "root": {"handlers": ["console"], "level": LOG_LEVEL},
 }
 
 
