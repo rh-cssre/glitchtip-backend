@@ -139,12 +139,13 @@ GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE = env.int(
     5 * 1024 * 1024,  # 5 MB
 )
 
-# Limits size (in bytes) of an uploaded artifact bundle once expanded on disk,
-# and the number of entries it may contain. A zip's compression ratio has no
-# ceiling, so without these a small upload can fill a worker's local disk and
-# take unrelated work on that pod down with it. Enforced in
-# sentry.utils.zip.safe_extract_zip against the bytes actually written; the
-# sizes an archive declares for itself are uploader-supplied metadata.
+# Limits size (in bytes) of an uploaded zip (an artifact bundle, or a zip of
+# ProGuard mappings) once expanded, and the number of entries it may contain.
+# Both are per upload, across all of its entries. A zip's compression ratio
+# has no ceiling, so without these a small upload can fill a worker's local
+# disk and take unrelated work on that pod down with it. Enforced against the
+# bytes actually written; the sizes an archive declares for itself are
+# uploader-supplied metadata.
 #
 # Both are also applied to the archive before it is opened. That is not
 # redundant: reading a zip's directory allocates an entry object per member
@@ -154,7 +155,8 @@ GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE = env.int(
 #
 # 512 MB is well past any real source-map bundle — a large single-page app's
 # minified chunks plus their maps, sourcesContent included, land in the tens
-# of MB — while keeping one assemble task's worst case bounded. 10,000 entries
+# of MB, as does a large app's R8 mapping — while keeping one upload's worst
+# case bounded. 10,000 entries
 # is likewise far above a real bundle's file count. Operators building
 # something genuinely larger can raise either via env.
 GLITCHTIP_MAX_UNZIPPED_ARCHIVE_SIZE = env.int(

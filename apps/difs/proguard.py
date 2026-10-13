@@ -39,6 +39,16 @@ def extract_proguard_metadata(content: bytes):
     """
     head = content[:_PROGUARD_SNIFF_BYTES].removeprefix(codecs.BOM_UTF8)
 
+    if len(content) >= _PROGUARD_SNIFF_BYTES:
+        # The window cut the last line in half. A fragment is inconclusive,
+        # not invalid: judging it would reject a mapping whose first class
+        # record straddles the boundary, and fail the UTF-8 decode outright
+        # if the cut landed mid-character. With no line break at all there
+        # is nothing complete to judge, so the fragment is kept (and fails).
+        cut = max(head.rfind(b"\n"), head.rfind(b"\r"))
+        if 0 <= cut < len(head) - 1:
+            head = head[: cut + 1]
+
     for line in head.splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith(b"#"):

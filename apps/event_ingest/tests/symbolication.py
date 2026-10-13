@@ -518,9 +518,14 @@ def upload_crash_sources(project, debug_id: str) -> DebugInformationFile:
 
 def upload_proguard_mapping(project, content: bytes, mapping_uuid: str):
     """Upload a ProGuard mapping the way the dsyms upload API does."""
-    return async_to_sync(create_dif_from_read_only_file)(
-        io.BytesIO(content), project, mapping_uuid, f"proguard/{mapping_uuid}.txt"
+    result, _ = async_to_sync(create_dif_from_read_only_file)(
+        io.BytesIO(content),
+        project,
+        mapping_uuid,
+        f"proguard/{mapping_uuid}.txt",
+        settings.GLITCHTIP_MAX_UNZIPPED_ARCHIVE_SIZE,
     )
+    return result
 
 
 def make_source_bundle(debug_id: str, sources: dict[str, str], arch="any") -> bytes:
