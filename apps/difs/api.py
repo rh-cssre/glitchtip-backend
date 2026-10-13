@@ -1,8 +1,11 @@
 """Port of sentry.api.endpoints.debug_files.DifAssembleEndpoint"""
 
+import contextlib
 import io
+import lzma
 import tempfile
 import zipfile
+import zlib
 from hashlib import sha1
 
 from asgiref.sync import sync_to_async
@@ -42,6 +45,29 @@ from .tasks import (
 
 MAX_UPLOAD_BLOB_SIZE = 32 * 1024 * 1024  # 32MB
 _DIF_READ_CHUNK_SIZE = 64 * 1024
+# What reading a damaged archive raises: zipfile's own error, but also the
+# decompressors' (bz2 raises OSError), truncation, unsupported compression
+# methods, encryption (RuntimeError) and undecodable names (ValueError).
+_CORRUPT_ZIP_ERRORS = (
+    zipfile.BadZipFile,
+    zlib.error,
+    lzma.LZMAError,
+    OSError,
+    EOFError,
+    ValueError,
+    NotImplementedError,
+    RuntimeError,
+)
+
+
+@contextlib.contextmanager
+def _corrupt_zip_is_a_bad_request():
+    """For zip reads only: the errors are broad enough that wrapping storage
+    or database calls would report their failures as a bad upload."""
+    try:
+        yield
+    except _CORRUPT_ZIP_ERRORS as err:
+        raise HttpError(400, "Corrupt zip file uploaded") from err
 
 
 router = Router()
@@ -170,7 +196,8 @@ async def create_dif_from_read_only_file(
     """
     # Sniff before spending disk, so a file that is not a mapping costs one
     # small read.
-    head = proguard_file.read(_PROGUARD_SNIFF_BYTES)
+    with _corrupt_zip_is_a_bad_request():
+        head = proguard_file.read(_PROGUARD_SNIFF_BYTES)
     metadata = extract_proguard_metadata(head)
     if metadata is None:
         return None, len(head)
@@ -178,9 +205,10 @@ async def create_dif_from_read_only_file(
     with tempfile.NamedTemporaryFile("br+") as tmp:
         # The checksum is known only once the whole entry is read, so the
         # temp file is written even when the blob turns out to exist already.
-        checksum, size = await sync_to_async(_spool_entry)(
-            proguard_file, head, tmp, size_budget
-        )
+        with _corrupt_zip_is_a_bad_request():
+            checksum, size = await sync_to_async(_spool_entry)(
+                proguard_file, head, tmp, size_budget
+            )
 
         blob = await FileBlob.objects.filter(checksum=checksum).afirst()
 
@@ -294,7 +322,9 @@ async def dsyms(
     except ZipExtractionLimitExceeded as err:
         raise HttpError(400, str(err)) from err
 
-    with zipfile.ZipFile(buffer) as uploaded_zip_file:
+    with _corrupt_zip_is_a_bad_request():
+        archive = zipfile.ZipFile(buffer)
+    with archive as uploaded_zip_file:
         # The pre-open check bounds directory bytes, not the entry count, and
         # each entry costs a stored blob and several queries.
         if len(uploaded_zip_file.namelist()) > settings.GLITCHTIP_MAX_ARCHIVE_MEMBERS:
@@ -304,7 +334,9 @@ async def dsyms(
             if proguard_id is None:
                 raise HttpError(400, "")
 
-            with uploaded_zip_file.open(filename) as proguard_file:
+            with _corrupt_zip_is_a_bad_request():
+                entry = uploaded_zip_file.open(filename)
+            with entry as proguard_file:
                 result, size = await create_dif_from_read_only_file(
                     proguard_file, project, proguard_id, filename, size_budget
                 )

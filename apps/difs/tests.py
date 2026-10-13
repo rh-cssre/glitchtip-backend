@@ -429,6 +429,48 @@ class DsymsAPIViewTestCase(GlitchTestCase):
         self.assertIn("Too many files", response.json()["detail"])
         self.assertFalse(await DebugInformationFile.objects.aexists())
 
+    async def test_post_corrupt_zip_is_a_bad_request(self):
+        """Each of these passes is_zipfile() and raises something different
+        from zipfile, its decompressors or its encryption check."""
+        name = f"proguard/{self.uuid}.txt"
+        # Past the sniff window, so damage near the end surfaces mid-stream.
+        body = b"com.example.Foo -> a:\n" + b"    int field -> a\n" * 5000
+
+        def archive(method=zipfile.ZIP_STORED):
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, "w", method) as zf:
+                zf.writestr(name, body)
+            return bytearray(buffer.getvalue())
+
+        def central_header(data):
+            return data.rindex(b"PK\x01\x02")
+
+        bad_crc = archive()
+        at = bad_crc.rindex(b"field")
+        bad_crc[at : at + 5] = b"FIELD"
+        bad_deflate = archive(zipfile.ZIP_DEFLATED)
+        bad_deflate[200:260] = b"\xff" * 60
+        encrypted = archive()
+        encrypted[central_header(encrypted) + 8] |= 0x1
+        unknown_method = archive()
+        unknown_method[central_header(unknown_method) + 10] = 99
+        cases = {
+            "crc mismatch": bad_crc,
+            "corrupt deflate stream": bad_deflate,
+            "encrypted": encrypted,
+            "unknown compression method": unknown_method,
+        }
+        for case, data in cases.items():
+            with self.subTest(case):
+                upload_file = SimpleUploadedFile(
+                    "example.zip", bytes(data), content_type="multipart/form-data"
+                )
+                response = await self.async_client.post(self.url, {"file": upload_file})
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(
+                    response.json(), {"detail": "Corrupt zip file uploaded"}
+                )
+
     async def test_post_reads_the_entry_in_bounded_chunks(self):
         """The entry is never read whole: a zip's expansion ratio has no
         ceiling, so an unbounded read() is unbounded memory."""
