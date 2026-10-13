@@ -1,6 +1,7 @@
 import codecs
 import contextlib
 import gzip
+import io
 import json
 import tempfile
 import zipfile
@@ -12,6 +13,7 @@ from asgiref.sync import async_to_sync
 from django.core.cache import cache
 from django.core.files import File as DjangoFile
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from django.urls import reverse
 from gt_rust.symbolic import SymCache
 from model_bakery import baker
@@ -129,6 +131,32 @@ class ExtractProguardMetadataTestCase(GlitchTestCase):
         metadata = extract_proguard_metadata(content)
         self.assertEqual(metadata, {"arch": "any", "feature": "mapping"})
 
+    def test_a_line_cut_by_the_sniff_window_is_inconclusive(self):
+        """A first class record straddling the window is not judged from its
+        fragment, but a complete bad line near the edge is still rejected."""
+        window = _PROGUARD_SNIFF_BYTES
+        cases = [
+            # The fragment would fail the grammar check.
+            (
+                b"#"
+                + b"p" * (window - 30)
+                + b"\ncom.example.VeryLongClassName -> a:\n",
+                True,
+            ),
+            # The cut lands mid-character: the fragment would fail to decode.
+            (b"#" + b"p" * (window - 16) + "\ncom.example.Fö -> a:\n".encode(), True),
+            # A complete bad line before the cut is still judged.
+            (b"#" + b"p" * (window - 40) + b"\nnot a mapping\n" + b"a" * 100, False),
+            # No complete line in the window: nothing to excuse.
+            (b"x" * (window + 10), False),
+            (b"not a mapping\r" * (window // 10), False),
+        ]
+        for content, accepted in cases:
+            with self.subTest(accepted=accepted, tail=content[window - 8 : window]):
+                self.assertEqual(
+                    extract_proguard_metadata(content) is not None, accepted
+                )
+
 
 class DifsAssembleAPITestCase(GlitchTestCase):
     @classmethod
@@ -223,7 +251,7 @@ class DsymsAPIViewTestCase(GlitchTestCase):
         proguard_file.read.return_value = b""
 
         uploaded_zip_file = MagicMock()
-        uploaded_zip_file.namelist.return_value = iter([f"proguard/{self.uuid}.txt"])
+        uploaded_zip_file.namelist.return_value = [f"proguard/{self.uuid}.txt"]
         uploaded_zip_file.open.return_value.__enter__.return_value = proguard_file
 
         with (
@@ -322,7 +350,7 @@ class DsymsAPIViewTestCase(GlitchTestCase):
         proguard_file.read.return_value = b"\xff\xfe\x00\x01"
 
         uploaded_zip_file = MagicMock()
-        uploaded_zip_file.namelist.return_value = iter([f"proguard/{self.uuid}.txt"])
+        uploaded_zip_file.namelist.return_value = [f"proguard/{self.uuid}.txt"]
         uploaded_zip_file.open.return_value.__enter__.return_value = proguard_file
 
         upload_file = SimpleUploadedFile(
@@ -341,6 +369,94 @@ class DsymsAPIViewTestCase(GlitchTestCase):
         self.assertEqual(
             response.json(), {"detail": "Invalid proguard mapping file uploaded"}
         )
+
+    async def test_post_expansion_budget_is_shared_across_entries(self):
+        """The cap is per upload, not per entry: the endpoint stores every
+        entry, so a per-entry cap would not bound a payload split over more
+        entries."""
+        entry = b"com.example.Foo -> a:\n" + b"    int field -> a\n" * 300
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            for uuid in (self.uuid, "b1c2d3e4-1234-4321-8765-0a1b2c3d4e5f"):
+                zf.writestr(f"proguard/{uuid}.txt", entry)
+        archive = buffer.getvalue()
+        # Room for one entry but not both, and above the archive's own size
+        # so the pre-open check is not what rejects it.
+        budget = len(entry) + 100
+        self.assertGreater(budget, len(archive))
+
+        upload_file = SimpleUploadedFile(
+            "example.zip", archive, content_type="multipart/form-data"
+        )
+        with override_settings(GLITCHTIP_MAX_UNZIPPED_ARCHIVE_SIZE=budget):
+            response = await self.async_client.post(self.url, {"file": upload_file})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"detail": "Uploaded file expands too large"})
+
+    async def test_post_rejects_an_oversized_directory_before_opening(self):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as zf:
+            for i in range(20):
+                zf.writestr(f"proguard/{self.uuid}-{i}.txt", b"")
+        upload_file = SimpleUploadedFile(
+            "example.zip", buffer.getvalue(), content_type="multipart/form-data"
+        )
+        with (
+            override_settings(GLITCHTIP_MAX_ARCHIVE_MEMBERS=1),
+            patch("zipfile.ZipFile") as ZipFile,
+        ):
+            response = await self.async_client.post(self.url, {"file": upload_file})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("archive directory", response.json()["detail"])
+        ZipFile.assert_not_called()
+
+    async def test_post_rejects_too_many_entries(self):
+        """The directory check bounds bytes, not entries: short names fit
+        more entries than GLITCHTIP_MAX_ARCHIVE_MEMBERS through it."""
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as zf:
+            for i in range(3):
+                zf.writestr(f"proguard/{i}.txt", b"a -> b:\n")
+        upload_file = SimpleUploadedFile(
+            "example.zip", buffer.getvalue(), content_type="multipart/form-data"
+        )
+        with override_settings(GLITCHTIP_MAX_ARCHIVE_MEMBERS=2):
+            response = await self.async_client.post(self.url, {"file": upload_file})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Too many files", response.json()["detail"])
+        self.assertFalse(await DebugInformationFile.objects.aexists())
+
+    async def test_post_reads_the_entry_in_bounded_chunks(self):
+        """The entry is never read whole: a zip's expansion ratio has no
+        ceiling, so an unbounded read() is unbounded memory."""
+        body = io.BytesIO(b"com.example.Foo -> a:\n" + b"    int f -> a\n" * 10000)
+        proguard_file = MagicMock()
+        proguard_file.read.side_effect = body.read
+
+        uploaded_zip_file = MagicMock()
+        uploaded_zip_file.namelist.return_value = [f"proguard/{self.uuid}.txt"]
+        uploaded_zip_file.open.return_value.__enter__.return_value = proguard_file
+
+        upload_file = SimpleUploadedFile(
+            "example.zip", b"random_content", content_type="multipart/form-data"
+        )
+        with (
+            patch("zipfile.is_zipfile", return_value=True),
+            patch("apps.difs.api._reject_oversized_input"),
+            patch("zipfile.ZipFile") as ZipFile,
+        ):
+            ZipFile.return_value.__enter__.return_value = uploaded_zip_file
+            response = await self.async_client.post(self.url, {"file": upload_file})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()[0]["size"], len(body.getvalue()))
+        self.assertGreater(proguard_file.read.call_count, 2)
+        for call in proguard_file.read.call_args_list:
+            self.assertEqual(len(call.args), 1, "read() called without a size limit")
+            self.assertLessEqual(call.args[0], _PROGUARD_SNIFF_BYTES)
 
     async def test_get(self):
         """

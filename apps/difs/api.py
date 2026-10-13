@@ -6,6 +6,7 @@ import zipfile
 from hashlib import sha1
 
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from django.core.files import File as DjangoFile
 from django.db.models import QuerySet
 from django.http import HttpResponse
@@ -22,9 +23,10 @@ from apps.files.models import File, FileBlob
 from apps.projects.models import Project
 from glitchtip.api.decorators import optional_slash
 from glitchtip.api.permissions import OrgScopedHttpRequest, org_scoped
+from sentry.utils.zip import ZipExtractionLimitExceeded, _reject_oversized_input
 
 from .models import DebugInformationFile
-from .proguard import (  # noqa: F401 (re-exported for callers and tests)
+from .proguard import (
     _PROGUARD_SNIFF_BYTES,
     extract_proguard_id,
     extract_proguard_metadata,
@@ -39,6 +41,7 @@ from .tasks import (
 )
 
 MAX_UPLOAD_BLOB_SIZE = 32 * 1024 * 1024  # 32MB
+_DIF_READ_CHUNK_SIZE = 64 * 1024
 
 
 router = Router()
@@ -137,20 +140,51 @@ async def project_reprocessing(
     await aget_object_or_404(qs.only("id"), slug=project_slug.lower())
 
 
-async def create_dif_from_read_only_file(proguard_file, project, proguard_id, filename):
+def _spool_entry(entry, head: bytes, out, size_budget: int) -> tuple[str, int]:
+    """Copy a zip entry to ``out`` in chunks, returning its SHA-1 and size.
+    Off the event loop: inflating up to the whole budget takes seconds."""
+    hasher = sha1()
+    size = 0
+    chunk = head
+    while chunk:
+        size += len(chunk)
+        if size > size_budget:
+            raise HttpError(400, "Uploaded file expands too large")
+        hasher.update(chunk)
+        out.write(chunk)
+        chunk = entry.read(_DIF_READ_CHUNK_SIZE)
+    out.flush()
+    return hasher.hexdigest(), size
+
+
+async def create_dif_from_read_only_file(
+    proguard_file, project, proguard_id, filename, size_budget
+):
+    """Validate one `proguard/<uuid>.txt` zip entry and store it as a DIF.
+
+    The entry is streamed rather than read whole: a zip's compression ratio
+    has no ceiling, so `read()` on an uploaded entry is unbounded however
+    small the upload was. `size_budget` is the expanded bytes the upload has
+    left across its remaining entries. Returns `(result, bytes_read)` so the
+    caller can debit it.
+    """
+    # Sniff before spending disk, so a file that is not a mapping costs one
+    # small read.
+    head = proguard_file.read(_PROGUARD_SNIFF_BYTES)
+    metadata = extract_proguard_metadata(head)
+    if metadata is None:
+        return None, len(head)
+
     with tempfile.NamedTemporaryFile("br+") as tmp:
-        content = proguard_file.read()
-        metadata = extract_proguard_metadata(content)
-        if metadata is None:
-            return None
-        checksum = sha1(content).hexdigest()
-        size = len(content)
+        # The checksum is known only once the whole entry is read, so the
+        # temp file is written even when the blob turns out to exist already.
+        checksum, size = await sync_to_async(_spool_entry)(
+            proguard_file, head, tmp, size_budget
+        )
 
         blob = await FileBlob.objects.filter(checksum=checksum).afirst()
 
         if blob is None:
-            tmp.write(content)
-            tmp.flush()
             blob = FileBlob(checksum=checksum, size=size)
             await sync_to_async(blob.blob.save)(filename, DjangoFile(tmp))
             await blob.asave()
@@ -196,7 +230,7 @@ async def create_dif_from_read_only_file(proguard_file, project, proguard_id, fi
             "dateCreated": fileobj.created,
         }
 
-        return result
+        return result, size
 
 
 @optional_slash(
@@ -250,21 +284,36 @@ async def dsyms(
 
     results = []
 
+    # One budget for the whole upload: every entry is stored, so a per-entry
+    # cap would not bound a payload split over more entries.
+    size_budget = settings.GLITCHTIP_MAX_UNZIPPED_ARCHIVE_SIZE
+    try:
+        _reject_oversized_input(
+            buffer, size_budget, settings.GLITCHTIP_MAX_ARCHIVE_MEMBERS
+        )
+    except ZipExtractionLimitExceeded as err:
+        raise HttpError(400, str(err)) from err
+
     with zipfile.ZipFile(buffer) as uploaded_zip_file:
+        # The pre-open check bounds directory bytes, not the entry count, and
+        # each entry costs a stored blob and several queries.
+        if len(uploaded_zip_file.namelist()) > settings.GLITCHTIP_MAX_ARCHIVE_MEMBERS:
+            raise HttpError(400, "Too many files in the uploaded archive")
         for filename in uploaded_zip_file.namelist():
             proguard_id = extract_proguard_id(filename)
             if proguard_id is None:
                 raise HttpError(400, "")
 
             with uploaded_zip_file.open(filename) as proguard_file:
-                result = await create_dif_from_read_only_file(
-                    proguard_file, project, proguard_id, filename
+                result, size = await create_dif_from_read_only_file(
+                    proguard_file, project, proguard_id, filename, size_budget
                 )
                 if result is None:
                     raise HttpError(
                         400,
                         "Invalid proguard mapping file uploaded",
                     )
+                size_budget -= size
                 results.append(result)
 
     return results
