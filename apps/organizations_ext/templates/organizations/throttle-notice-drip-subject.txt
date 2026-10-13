@@ -1,4 +1,6 @@
-{% if product %}
+{% if at_spend_cap %}
+Reached the on-demand spend cap for {{ organization.name|striptags }}
+{% elif product %}
 Met event quota for {{ organization.name|striptags }}
 {% else %}
 Choose a GlitchTip subscription for {{ organization.name|striptags }}

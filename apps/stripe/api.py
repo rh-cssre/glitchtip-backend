@@ -681,12 +681,14 @@ async def configure_overage(
     if payload.enabled:
         if not overage_eligible(sub):
             return JsonResponse(
-                {"detail": "An active paid plan is required for overage billing."},
+                {"detail": "An active paid plan is required for on-demand billing."},
                 status=400,
             )
         if payload.cap_cents <= 0:
             return JsonResponse(
-                {"detail": "A positive spend cap is required to enable overage."},
+                {
+                    "detail": "A positive spend cap is required to enable on-demand billing."
+                },
                 status=400,
             )
         if payload.cap_cents > settings.GLITCHTIP_OVERAGE_MAX_CAP_CENTS:
@@ -700,14 +702,14 @@ async def configure_overage(
         overage_price = await _get_overage_price()
         if overage_price is None:
             return JsonResponse(
-                {"detail": "Overage billing is not configured on this server."},
+                {"detail": "On-demand billing is not configured on this server."},
                 status=400,
             )
         if not org.stripe_customer_id:
             # Nothing to attach to or meter; also keeps the customer-scoped
             # listing below from ever running unscoped.
             return JsonResponse(
-                {"detail": "A billing account is required for overage billing."},
+                {"detail": "A billing account is required for on-demand billing."},
                 status=400,
             )
         # A cap decrease on an already-enabled org only reduces exposure; it
@@ -743,7 +745,7 @@ async def configure_overage(
                     return JsonResponse(
                         {
                             "detail": "Another subscription on this account already "
-                            "has overage billing. Contact support to consolidate "
+                            "has on-demand billing. Contact support to consolidate "
                             "your subscriptions first."
                         },
                         status=400,
@@ -785,7 +787,7 @@ async def configure_overage(
                 e.code,
             )
             return JsonResponse(
-                {"detail": "Could not enable overage billing. Please try again."},
+                {"detail": "Could not enable on-demand billing. Please try again."},
                 status=502,
             )
         org.metered_billing_enabled = True

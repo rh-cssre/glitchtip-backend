@@ -1,20 +1,32 @@
 {% load humanize %}
 
 {% if product %}
-Hello and thank you for using GlitchTip. We noticed your organization {{ organization.name|striptags }}
+{% if at_spend_cap %}Hello and thank you for using GlitchTip. Your organization {{ organization.name|striptags }}
+has reached its on-demand billing spend cap for this billing period, so no further on-demand usage is charged.
+Your plan includes {{ event_limit|intcomma }} events, and for the current billing period we have received
+{{ total_event_count|intcomma }} events for your organization. Here are your options.
+
+Raise your spend cap to keep collecting events this billing period:
+{{ subscription_link }}
+{% else %}Hello and thank you for using GlitchTip. We noticed your organization {{ organization.name|striptags }}
 has exceeded its monthly event limit on your {{ product.name }} and wanted to give you a heads up.
 Your plan allows for {{ event_limit|intcomma }} events, but for the current billing period we have received
 {{ total_event_count|intcomma }} events for your organization. Here are a couple options to avoid this in the future.
-
-Upgrade to a new plan for more events at this link:
+{% if on_demand_available %}
+Turn on on-demand billing to keep collecting events past your plan limit, up to a monthly spend cap you set:
 {{ subscription_link }}
+{% endif %}{% endif %}
+{% if paid %}Email support@glitchtip.com to change your plan.{% else %}Upgrade to a new plan for more events at this link:
+{{ subscription_link }}{% endif %}
 
 Read about configuring your SDK to send fewer events to GlitchTip here:
 {{ faq_link }}
 
 In the meantime, we have placed a {{ organization.event_throttle_rate }}% throttle on incoming events
-from projects on your organization account for this billing period. If you choose to upgrade your plan,
-this throttle will be removed. Otherwise, it will reset at the beginning of your next billing cycle.
+from projects on your organization account for this billing period.
+{% if paid %}It lifts once {% if at_spend_cap %}your spend cap is raised above your usage or {% elif on_demand_available %}on-demand billing is turned on or {% endif %}you upgrade your plan.
+Otherwise, it resets at the beginning of your next billing cycle.{% else %}If you choose to upgrade your plan, this throttle will be removed.
+Otherwise, it will reset at the beginning of your next billing cycle.{% endif %}
 {% else %}
 Hello and thank you for using GlitchTip. We noticed you recently created an account for your organization
 {{ organization.name|striptags }}, but that you haven't yet signed up for a subscription plan. We invite you to
