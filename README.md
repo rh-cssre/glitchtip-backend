@@ -106,6 +106,6 @@ DJANGO_LOGGING_HANDLER_CLASS=google.cloud.logging_v2.handlers.ContainerEngineHan
 - Thank you to the Sentry team for their ongoing open source SDK work and formerly open source backend of which this
   project is based on.
 - We use gitter for our public gitter room
-- Plausible Analytics is used for analytics
+- Plausible Analytics is used for analytics on our marketing site (glitchtip.com)
 - Django - no other web framework is as feature complete
 - django-ninja/Pydantic - brings typed and async-first api design

@@ -1547,11 +1547,6 @@ LOGGING = {
     "root": {"handlers": ["console"], "level": LOG_LEVEL},
 }
 
-
-# Set to track activity with Plausible
-PLAUSIBLE_URL = env.str("PLAUSIBLE_URL", default=None)
-PLAUSIBLE_DOMAIN = env.str("PLAUSIBLE_DOMAIN", default=None)
-
 # Support license key — typically a Stripe subscription ID.
 # Hides the "Support GlitchTip" banner and enables future support features.
 GLITCHTIP_LICENSE_KEY = env.str("GLITCHTIP_LICENSE_KEY", None)

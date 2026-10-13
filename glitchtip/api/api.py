@@ -174,8 +174,6 @@ class SettingsOut(CamelSchema):
     enable_social_apps_user_registration: bool
     enable_organization_creation: bool
     stripe_public_key: str | None
-    plausible_url: str | None
-    plausible_domain: str | None
     chatwoot_website_token: str | None
     sentryDSN: str | None
     sentry_traces_sample_rate: float | None
@@ -258,8 +256,6 @@ async def get_settings(request: HttpRequest):
         "enable_social_apps_user_registration": enable_social_apps_user_registration,
         "enable_organization_creation": settings.ENABLE_ORGANIZATION_CREATION,
         "stripe_public_key": settings.STRIPE_PUBLIC_KEY,
-        "plausible_url": settings.PLAUSIBLE_URL,
-        "plausible_domain": settings.PLAUSIBLE_DOMAIN,
         "chatwoot_website_token": settings.CHATWOOT_WEBSITE_TOKEN,
         "sentryDSN": settings.SENTRY_FRONTEND_DSN,
         "sentry_traces_sample_rate": settings.SENTRY_TRACES_SAMPLE_RATE,
