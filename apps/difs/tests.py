@@ -13,6 +13,7 @@ from asgiref.sync import async_to_sync
 from django.core.cache import cache
 from django.core.files import File as DjangoFile
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.models.fields.files import FieldFile
 from django.test import override_settings
 from django.urls import reverse
 from gt_rust.symbolic import SymCache
@@ -454,7 +455,12 @@ class DsymsAPIViewTestCase(GlitchTestCase):
         encrypted[central_header(encrypted) + 8] |= 0x1
         unknown_method = archive()
         unknown_method[central_header(unknown_method) + 10] = 99
+        # A name flagged UTF-8 that is not: is_zipfile() passes, ZipFile() fails.
+        bad_name = archive()
+        bad_name[central_header(bad_name) + 9] |= 0x08
+        bad_name[central_header(bad_name) + 46] = 0xFF
         cases = {
+            "undecodable entry name": bad_name,
             "crc mismatch": bad_crc,
             "corrupt deflate stream": bad_deflate,
             "encrypted": encrypted,
@@ -2099,6 +2105,50 @@ class ChunkedDifAssembleTestCase(GlitchTipTransactionTestCase):
                 content_type="application/json",
             )
         self.assertEqual(response.json()[checksum]["state"], "created")
+
+    def post_chunks(self, checksum, chunks, name=None):
+        with patch("apps.difs.api.difs_assemble", aenqueue=AsyncMock()):
+            response = self.client.post(
+                self.url,
+                {
+                    checksum: {
+                        "name": name or f"/proguard/{self.MAPPING_UUID}.txt",
+                        "chunks": chunks,
+                    }
+                },
+                content_type="application/json",
+            )
+        return response.json()[checksum]
+
+    def test_the_assemble_sniff_reads_a_bounded_number_of_chunks(self):
+        """The client lists the chunks, empty ones included; the sniff opens
+        a few and leaves anything longer to the assemble task."""
+        parts = [f"# {i}\n".encode() for i in range(20)] + [b"prose\n"]
+        chunks = [store_blob(f"c{i}", part).checksum for i, part in enumerate(parts)]
+        empty = store_blob("empty", b"").checksum
+        with patch.object(
+            FieldFile, "open", autospec=True, side_effect=FieldFile.open
+        ) as opened:
+            state = self.post_chunks("0" * 40, [empty] * 1000 + chunks)
+        self.assertEqual(state["state"], "created")
+        self.assertLessEqual(opened.call_count, 8)
+
+    def test_the_assemble_sniff_runs_once_across_polls(self):
+        mapping = (PROGUARD_FIXTURES / "mapping.txt").read_bytes()
+        chunk = store_blob("chunk", mapping).checksum
+        with patch.object(
+            FieldFile, "open", autospec=True, side_effect=FieldFile.open
+        ) as opened:
+            self.post_chunks(chunk, [chunk])
+            self.post_chunks(chunk, [chunk])
+        self.assertEqual(opened.call_count, 1)
+
+    def test_an_unreadable_chunk_is_left_to_the_assemble_task(self):
+        blob = store_blob("chunk", b"com.example.Foo -> a:\n")
+        blob.blob.storage.delete(blob.blob.name)
+        self.assertEqual(
+            self.post_chunks(blob.checksum, [blob.checksum])["state"], "created"
+        )
 
     def test_the_uuid_can_come_from_the_file_name(self):
         """sentry-cli names the upload /proguard/<uuid>.txt, leading slash

@@ -10,6 +10,7 @@ from hashlib import sha1
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
+from django.core.cache import cache
 from django.core.files import File as DjangoFile
 from django.db.models import QuerySet
 from django.http import HttpResponse
@@ -45,7 +46,7 @@ from .tasks import (
     DIF_STATE_ERROR,
     DIF_STATE_NOT_FOUND,
     DIF_STATE_OK,
-    chunks_look_like_a_mapping,
+    chunks_are_not_a_mapping,
     difs_assemble,
 )
 
@@ -77,6 +78,18 @@ def _corrupt_zip_is_a_bad_request():
 
 
 router = Router()
+
+
+async def _refuse_as_not_a_mapping(project_id, checksum, chunks) -> bool:
+    """Sniff a file named as a mapping, once: upload tools poll assemble
+    until it finishes, and on S3 each sniff downloads a whole chunk."""
+    passed_key = f"difs-sniff-passed:{project_id}:{checksum}"
+    if await cache.aget(passed_key):
+        return False
+    if await sync_to_async(chunks_are_not_a_mapping)(chunks):
+        return True
+    await cache.aset(passed_key, True, 600)
+    return False
 
 
 @optional_slash(
@@ -147,9 +160,9 @@ async def difs_assemble_api(
             }
             continue
 
-        if extract_proguard_id(name) and not await sync_to_async(
-            chunks_look_like_a_mapping
-        )(chunks):
+        if extract_proguard_id(name) and await _refuse_as_not_a_mapping(
+            project.id, checksum, chunks
+        ):
             detail = "not a ProGuard mapping"
             await sync_to_async(set_assemble_status)(
                 AssembleTask.DIF,
@@ -202,7 +215,8 @@ def _spool_entry(entry, head: bytes, out, size_budget: int) -> tuple[str, int]:
             raise HttpError(400, "Uploaded file expands too large")
         hasher.update(chunk)
         out.write(chunk)
-        chunk = entry.read(_DIF_READ_CHUNK_SIZE)
+        with _corrupt_zip_is_a_bad_request():
+            chunk = entry.read(_DIF_READ_CHUNK_SIZE)
     out.flush()
     return hasher.hexdigest(), size
 
@@ -229,10 +243,9 @@ async def create_dif_from_read_only_file(
     with tempfile.NamedTemporaryFile("br+") as tmp:
         # The checksum is known only once the whole entry is read, so the
         # temp file is written even when the blob turns out to exist already.
-        with _corrupt_zip_is_a_bad_request():
-            checksum, size = await sync_to_async(_spool_entry)(
-                proguard_file, head, tmp, size_budget
-            )
+        checksum, size = await sync_to_async(_spool_entry)(
+            proguard_file, head, tmp, size_budget
+        )
 
         blob = await FileBlob.objects.filter(checksum=checksum).afirst()
 
