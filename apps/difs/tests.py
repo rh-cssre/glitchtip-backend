@@ -2133,15 +2133,27 @@ class ChunkedDifAssembleTestCase(GlitchTipTransactionTestCase):
         self.assertEqual(state["state"], "created")
         self.assertLessEqual(opened.call_count, 8)
 
-    def test_the_assemble_sniff_runs_once_across_polls(self):
-        mapping = (PROGUARD_FIXTURES / "mapping.txt").read_bytes()
-        chunk = store_blob("chunk", mapping).checksum
+    def test_the_assemble_sniff_reads_each_chunk_once(self):
+        """Polls, made-up file checksums and varied trailing chunks over the
+        same stored chunks cost one storage read per chunk."""
+        first = store_blob("first", b"plain prose\n" * 6000).checksum
+        filler = store_blob("filler", b"x").checksum
+        empty = store_blob("empty", b"").checksum
+        manifests = [
+            [first],
+            [first],
+            [first, filler],
+            [first, empty, filler],
+            [filler, filler, filler],
+        ]
         with patch.object(
             FieldFile, "open", autospec=True, side_effect=FieldFile.open
         ) as opened:
-            self.post_chunks(chunk, [chunk])
-            self.post_chunks(chunk, [chunk])
-        self.assertEqual(opened.call_count, 1)
+            for i, chunks in enumerate(manifests):
+                self.assertEqual(
+                    self.post_chunks(f"{i}" * 40, chunks)["state"], "error"
+                )
+        self.assertEqual(opened.call_count, 2)
 
     def test_an_unreadable_chunk_is_left_to_the_assemble_task(self):
         blob = store_blob("chunk", b"com.example.Foo -> a:\n")

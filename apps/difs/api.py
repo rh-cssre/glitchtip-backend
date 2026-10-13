@@ -10,7 +10,6 @@ from hashlib import sha1
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
-from django.core.cache import cache
 from django.core.files import File as DjangoFile
 from django.db.models import QuerySet
 from django.http import HttpResponse
@@ -78,18 +77,6 @@ def _corrupt_zip_is_a_bad_request():
 
 
 router = Router()
-
-
-async def _refuse_as_not_a_mapping(project_id, checksum, chunks) -> bool:
-    """Sniff a file named as a mapping, once: upload tools poll assemble
-    until it finishes, and on S3 each sniff downloads a whole chunk."""
-    passed_key = f"difs-sniff-passed:{project_id}:{checksum}"
-    if await cache.aget(passed_key):
-        return False
-    if await sync_to_async(chunks_are_not_a_mapping)(chunks):
-        return True
-    await cache.aset(passed_key, True, 600)
-    return False
 
 
 @optional_slash(
@@ -160,8 +147,8 @@ async def difs_assemble_api(
             }
             continue
 
-        if extract_proguard_id(name) and await _refuse_as_not_a_mapping(
-            project.id, checksum, chunks
+        if extract_proguard_id(name) and await sync_to_async(chunks_are_not_a_mapping)(
+            chunks
         ):
             detail = "not a ProGuard mapping"
             await sync_to_async(set_assemble_status)(

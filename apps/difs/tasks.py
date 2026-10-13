@@ -4,6 +4,7 @@ import tempfile
 from hashlib import sha1
 
 from asgiref.sync import sync_to_async
+from django.core.cache import cache as django_cache
 from django.core.files import File as DjangoFile
 from django.db.models import Q
 from django.tasks import task
@@ -432,6 +433,10 @@ def difs_extract_metadata_from_file(file):
 _SNIFF_MAX_CHUNKS = 8
 
 
+def _chunk_head_key(checksum: str) -> str:
+    return f"difs-chunk-head:{_PROGUARD_SNIFF_BYTES}:{checksum}"
+
+
 def chunks_are_not_a_mapping(chunks: list[str]) -> bool:
     """Whether stored chunks are certainly not a ProGuard mapping.
 
@@ -440,24 +445,36 @@ def chunks_are_not_a_mapping(chunks: list[str]) -> bool:
     assemble task finds out, nobody is asking. Reads the first
     _PROGUARD_SNIFF_BYTES only, across chunks if the client chose small ones.
     Anything it cannot read or judge cheaply is left to the assemble task.
+
+    Each chunk's head is cached under the chunk's own checksum, verified at
+    upload: tools poll assemble until it finishes, a manifest can list one
+    chunk under any number of made-up file checksums, and on S3 a read
+    downloads the whole chunk. So storage is read once per distinct chunk.
     """
     sampled = chunks[:_SNIFF_MAX_CHUNKS]
-    try:
-        blobs = FileBlob.objects.in_bulk(set(sampled), field_name="checksum")
-        head = b""
-        for checksum in sampled:
-            if len(head) >= _PROGUARD_SNIFF_BYTES:
-                break
-            blob = blobs.get(checksum)
-            if blob is None:
+    cached = django_cache.get_many([_chunk_head_key(c) for c in sampled])
+    head = b""
+    for checksum in sampled:
+        if len(head) >= _PROGUARD_SNIFF_BYTES:
+            break
+        part = cached.get(_chunk_head_key(checksum))
+        if part is None:
+            try:
+                blob = FileBlob.objects.filter(checksum=checksum).first()
+                if blob is None:
+                    return False
+                part = b""
+                if blob.size:
+                    with blob.blob.open("rb") as stored:
+                        part = stored.read(_PROGUARD_SNIFF_BYTES)
+            except Exception as err:
+                getLogger().warning(
+                    "difs assemble sniff failed: %s", type(err).__name__
+                )
                 return False
-            if blob.size == 0:
-                continue
-            with blob.blob.open("rb") as stored:
-                head += stored.read(_PROGUARD_SNIFF_BYTES - len(head))
-    except Exception as err:
-        getLogger().warning("difs assemble sniff failed: %s", type(err).__name__)
-        return False
+            django_cache.set(_chunk_head_key(checksum), part, 600)
+            cached[_chunk_head_key(checksum)] = part
+        head += part[: _PROGUARD_SNIFF_BYTES - len(head)]
     if len(head) < _PROGUARD_SNIFF_BYTES and len(chunks) > len(sampled):
         return False
     return extract_proguard_metadata(head) is None
