@@ -21,7 +21,12 @@ from ninja.errors import HttpError
 from ninja.files import UploadedFile
 from ninja.pagination import paginate
 
-from apps.files.assemble import AssembleTask, ChunkFileState, get_assemble_status
+from apps.files.assemble import (
+    AssembleTask,
+    ChunkFileState,
+    get_assemble_status,
+    set_assemble_status,
+)
 from apps.files.models import File, FileBlob
 from apps.projects.models import Project
 from glitchtip.api.decorators import optional_slash
@@ -40,6 +45,7 @@ from .tasks import (
     DIF_STATE_ERROR,
     DIF_STATE_NOT_FOUND,
     DIF_STATE_OK,
+    chunks_look_like_a_mapping,
     difs_assemble,
 )
 
@@ -138,6 +144,24 @@ async def difs_assemble_api(
                 "state": DIF_STATE_ERROR,
                 "missingChunks": [],
                 "detail": status[1],
+            }
+            continue
+
+        if extract_proguard_id(name) and not await sync_to_async(
+            chunks_look_like_a_mapping
+        )(chunks):
+            detail = "not a ProGuard mapping"
+            await sync_to_async(set_assemble_status)(
+                AssembleTask.DIF,
+                project.id,
+                checksum,
+                ChunkFileState.ERROR,
+                detail=detail,
+            )
+            responses[checksum] = {
+                "state": DIF_STATE_ERROR,
+                "missingChunks": [],
+                "detail": detail,
             }
             continue
 

@@ -427,6 +427,24 @@ def difs_extract_metadata_from_file(file):
             ]
 
 
+def chunks_look_like_a_mapping(chunks: list[str]) -> bool:
+    """Sniff a mapping from its stored chunks, before it is assembled.
+
+    The upload tool takes the assemble response as final, so a file named
+    as a mapping that is not one has to be refused there; by the time the
+    assemble task finds out, nobody is asking. Reads the first
+    _PROGUARD_SNIFF_BYTES only, across chunks if the client chose small ones.
+    """
+    head = b""
+    for checksum in chunks:
+        if len(head) >= _PROGUARD_SNIFF_BYTES:
+            break
+        blob = FileBlob.objects.get(checksum=checksum)
+        with blob.blob.open("rb") as stored:
+            head += stored.read(_PROGUARD_SNIFF_BYTES - len(head))
+    return extract_proguard_metadata(head) is not None
+
+
 def _proguard_mapping_metadata(file, name: str, debug_id: str | None):
     """The DIF data for a ProGuard mapping uploaded by chunks, as the
     dsyms upload stores it, or None if ``file`` is not a mapping or its

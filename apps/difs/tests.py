@@ -2069,6 +2069,37 @@ class ChunkedDifAssembleTestCase(GlitchTipTransactionTestCase):
         _, again = self.assemble(mapping, "mapping.txt", self.MAPPING_UUID)
         self.assertEqual(again["state"], "ok")
 
+    def test_a_file_named_as_a_mapping_is_refused_at_assemble(self):
+        """Upload tools take the assemble response as final, so the refusal
+        has to be in it: the assemble task finds out too late to tell them."""
+        content = b"plain prose, not a mapping\n    1:2:void foo() -> a\n"
+        with patch("apps.difs.api.difs_assemble", aenqueue=AsyncMock()) as task:
+            _, first = self.assemble(content, f"/proguard/{self.MAPPING_UUID}.txt")
+        self.assertEqual(first["state"], "error")
+        self.assertEqual(first["detail"], "not a ProGuard mapping")
+        task.aenqueue.assert_not_called()
+
+    def test_the_assemble_sniff_reads_across_small_chunks(self):
+        """A client may pick chunks smaller than the sniff window; judging
+        the first alone would see half a class record."""
+        parts = [b"# header\ncom.exam", b"ple.Foo -> a:\n"]
+        checksum = sha1(b"".join(parts)).hexdigest()
+        chunks = [
+            store_blob(f"chunk{i}", part).checksum for i, part in enumerate(parts)
+        ]
+        with patch("apps.difs.api.difs_assemble", aenqueue=AsyncMock()):
+            response = self.client.post(
+                self.url,
+                {
+                    checksum: {
+                        "name": f"/proguard/{self.MAPPING_UUID}.txt",
+                        "chunks": chunks,
+                    }
+                },
+                content_type="application/json",
+            )
+        self.assertEqual(response.json()[checksum]["state"], "created")
+
     def test_the_uuid_can_come_from_the_file_name(self):
         """sentry-cli names the upload /proguard/<uuid>.txt, leading slash
         included, and may send no debug_id."""
