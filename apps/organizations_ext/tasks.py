@@ -224,11 +224,13 @@ async def _report_overage(
     file the figure under the new one -- the whole prior cycle, billed again.
 
     ``overage_units`` is usage above the cycle's quota and ``cap_units`` what
-    the spend cap affords. Within a cycle the cap is floored at what has
-    already been billed: lowering it stops growth from that point but doesn't
-    retract billed usage, or dropping the cap to a dollar on the last day would
-    forgive the month. The floor is on the cap, not on the figure sent, so it
-    can never pin a figure the true total no longer supports.
+    the caller's copy of the spend cap affords; it only decides whether to take
+    the lock, and the figure sent uses the cap re-read under it. Within a cycle
+    the cap is floored at what has already been billed: lowering it stops
+    growth from that point but doesn't retract billed usage, or dropping the
+    cap to a dollar on the last day would forgive the month. The floor is on
+    the cap, not on the figure sent, so it can never pin a figure the true
+    total no longer supports.
     """
     from apps.stripe.client import create_meter_event
 
@@ -254,8 +256,8 @@ async def _report_overage(
         )
 
     # The caller's copy of the record is enough to know nothing new is due,
-    # which is the common case; a stale copy only errs toward the locked re-read,
-    # except a cap raised since, which waits for the check its save enqueues.
+    # which is the common case. A stale copy errs toward the locked re-read,
+    # or, after a raised cap, defers the new units to a later check.
     if in_cycle(org.overage_last_reported_at) and (
         figure(cap_units, org.overage_last_reported_units, org.overage_last_reported_at)
         == org.overage_last_reported_units
@@ -266,9 +268,8 @@ async def _report_overage(
     if not await cache.aadd(lock_key, "1", 60):
         return
     try:
-        # The sweep's batch copy can predate the owner lowering the cap or
-        # switching overage off, and a figure sent from it is locked in by the
-        # floor for the rest of the cycle, so the decision is re-read here too.
+        # The caller's copy can predate a lowered cap or overage switched off,
+        # and the floor would keep a figure sent from it for the cycle.
         (
             last_units,
             last_at,

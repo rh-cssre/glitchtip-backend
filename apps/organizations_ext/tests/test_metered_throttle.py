@@ -125,13 +125,13 @@ class MeteredThrottleTestCase(TestCase):
     ):
         """Run the throttle check with usage and clock pinned; return the meter mock.
 
-        ``stale`` is a copy of the organization loaded earlier, checked as the
-        sweep checks its batch copy instead of re-reading the record.
-
         ``fetched`` is what Stripe answers should the check re-read the
         subscription (a stale metered period); by default Stripe is
         unreachable, so an unexpected refresh leaves the window as it was.
         The counting window the check used is kept in ``self.counted``.
+
+        ``stale`` is an earlier copy of the organization, checked as the sweep
+        checks its batch instead of re-read.
         """
         if at is None:
             self.clock += timedelta(seconds=10)
@@ -370,9 +370,7 @@ class MeteredThrottleTestCase(TestCase):
         self.assertEqual(self._sent(mock_meter), 30_000)
 
     def test_cap_lowered_after_the_sweep_loaded_bills_the_new_cap(self):
-        # The sweep loads its batch, the owner lowers the cap, then the sweep
-        # reaches the org. Reporting from the stale cap would let the floor
-        # lock the old figure in for the rest of the cycle.
+        # The owner lowers the cap after the sweep loaded its batch.
         org, _ = self._make_org()
         stale = self._load(org)
         org.overage_spend_cap_cents = 500  # 33,333 affordable units
@@ -391,8 +389,8 @@ class MeteredThrottleTestCase(TestCase):
         org.refresh_from_db()
         self.assertIsNone(org.overage_last_reported_at)
 
-    def test_cap_lowered_after_the_sweep_loaded_keeps_billed_usage(self):
-        # The fresh cap still can't retract what was already billed.
+    def test_cap_lowered_after_the_sweep_loaded_stops_growth(self):
+        # The stale cap would send 60,000; the fresh one holds the 50,000 billed.
         org, _ = self._make_org()
         self._run(org, 150_000)  # 50,000 reported
         stale = self._load(org)
