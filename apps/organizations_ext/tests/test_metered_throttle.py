@@ -12,9 +12,14 @@ from apps.stripe.constants import SubscriptionStatus
 from apps.stripe.exceptions import StripeError
 from apps.stripe.models import StripeSubscription
 
-from ..tasks import _cycle_quota, check_organization_throttle
+from ..tasks import (
+    _check_and_update_throttle,
+    _cycle_quota,
+    check_organization_throttle,
+)
 
 _check = async_to_sync(check_organization_throttle.func)
+_check_copy = async_to_sync(_check_and_update_throttle)
 _cycle_quota_sync = async_to_sync(_cycle_quota)
 
 BASE_PERIOD = object()  # _make_org: the metered item's period is the plan's
@@ -108,8 +113,20 @@ class MeteredThrottleTestCase(TestCase):
         org.save(update_fields=["stripe_primary_subscription"])
         return org, sub
 
-    def _run(self, org, usage, meter_error=None, at=None, formula="last", fetched=None):
+    def _run(
+        self,
+        org,
+        usage,
+        meter_error=None,
+        at=None,
+        formula="last",
+        fetched=None,
+        stale=None,
+    ):
         """Run the throttle check with usage and clock pinned; return the meter mock.
+
+        ``stale`` is a copy of the organization loaded earlier, checked as the
+        sweep checks its batch copy instead of re-reading the record.
 
         ``fetched`` is what Stripe answers should the check re-read the
         subscription (a stale metered period); by default Stripe is
@@ -143,7 +160,10 @@ class MeteredThrottleTestCase(TestCase):
                 new=AsyncMock(side_effect=meter_error),
             ) as mock_meter,
         ):
-            _check(org.id, bypass_cache=True)
+            if stale is None:
+                _check(org.id, bypass_cache=True)
+            else:
+                _check_copy(stale)
         self.fetched = fetch
         self.counted = counts.await_args.args[1:] if counts.await_args else None
         return mock_meter
@@ -170,6 +190,13 @@ class MeteredThrottleTestCase(TestCase):
         )
         sub.items.data = items
         return sub
+
+    @staticmethod
+    def _load(org):
+        """A copy of the organization as the sweep loads its batch."""
+        return Organization.objects.select_related(
+            "stripe_primary_subscription__price__product"
+        ).get(id=org.id)
 
     def _throttle(self, org):
         return Organization.objects.get(id=org.id).event_throttle_rate
@@ -341,6 +368,39 @@ class MeteredThrottleTestCase(TestCase):
         org.save(update_fields=["overage_spend_cap_cents"])
         mock_meter = self._run(org, 130_000)
         self.assertEqual(self._sent(mock_meter), 30_000)
+
+    def test_cap_lowered_after_the_sweep_loaded_bills_the_new_cap(self):
+        # The sweep loads its batch, the owner lowers the cap, then the sweep
+        # reaches the org. Reporting from the stale cap would let the floor
+        # lock the old figure in for the rest of the cycle.
+        org, _ = self._make_org()
+        stale = self._load(org)
+        org.overage_spend_cap_cents = 500  # 33,333 affordable units
+        org.save(update_fields=["overage_spend_cap_cents"])
+        mock_meter = self._run(org, 150_000, stale=stale)
+        self.assertEqual(self._sent(mock_meter), 33_333)
+        org.refresh_from_db()
+        self.assertEqual(org.overage_last_reported_units, 33_333)
+
+    def test_switched_off_after_the_sweep_loaded_reports_nothing(self):
+        org, _ = self._make_org()
+        stale = self._load(org)
+        org.metered_billing_enabled = False
+        org.save(update_fields=["metered_billing_enabled"])
+        self._run(org, 150_000, stale=stale).assert_not_awaited()
+        org.refresh_from_db()
+        self.assertIsNone(org.overage_last_reported_at)
+
+    def test_cap_lowered_after_the_sweep_loaded_keeps_billed_usage(self):
+        # The fresh cap still can't retract what was already billed.
+        org, _ = self._make_org()
+        self._run(org, 150_000)  # 50,000 reported
+        stale = self._load(org)
+        org.overage_spend_cap_cents = 500
+        org.save(update_fields=["overage_spend_cap_cents"])
+        self._run(org, 160_000, stale=stale).assert_not_awaited()
+        org.refresh_from_db()
+        self.assertEqual(org.overage_last_reported_units, 50_000)
 
     def test_wrong_high_figure_is_corrected_by_the_next_sweep(self):
         """Every report is recomputed from current data, so whatever put a

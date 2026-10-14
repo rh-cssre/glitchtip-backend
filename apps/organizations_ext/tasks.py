@@ -248,15 +248,16 @@ async def _report_overage(
     def in_cycle(at):
         return at is not None and cycle_start <= at < cycle_end
 
-    def figure(last_units: int, last_at) -> int:
+    def figure(cap_units: int, last_units: int, last_at) -> int:
         return billable_units(
             overage_units, cap_units, last_units, last_at, cycle_start, cycle_end
         )
 
     # The caller's copy of the record is enough to know nothing new is due,
-    # which is the common case; a stale copy only errs toward the locked re-read.
+    # which is the common case; a stale copy only errs toward the locked re-read,
+    # except a cap raised since, which waits for the check its save enqueues.
     if in_cycle(org.overage_last_reported_at) and (
-        figure(org.overage_last_reported_units, org.overage_last_reported_at)
+        figure(cap_units, org.overage_last_reported_units, org.overage_last_reported_at)
         == org.overage_last_reported_units
     ):
         return
@@ -265,10 +266,23 @@ async def _report_overage(
     if not await cache.aadd(lock_key, "1", 60):
         return
     try:
-        last_units, last_at = await Organization.objects.values_list(
-            "overage_last_reported_units", "overage_last_reported_at"
+        # The sweep's batch copy can predate the owner lowering the cap or
+        # switching overage off, and a figure sent from it is locked in by the
+        # floor for the rest of the cycle, so the decision is re-read here too.
+        (
+            last_units,
+            last_at,
+            cap_cents,
+            enabled,
+        ) = await Organization.objects.values_list(
+            "overage_last_reported_units",
+            "overage_last_reported_at",
+            "overage_spend_cap_cents",
+            "metered_billing_enabled",
         ).aget(id=org.id)
-        units = figure(last_units, last_at)
+        if not enabled:
+            return
+        units = figure(units_for_budget(cap_cents), last_units, last_at)
         if in_cycle(last_at):
             # Two measurements in the same second have no defined order at
             # Stripe, so only a strictly later one goes; and an unchanged figure
