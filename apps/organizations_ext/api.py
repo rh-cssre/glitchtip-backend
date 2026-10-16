@@ -206,6 +206,16 @@ async def get_organization_member(
     )
 
 
+def check_role_ceiling(actor_role: int, *roles: int) -> None:
+    """Refuse to grant a role above the caller's, or act on a member holding one."""
+    if above := [role for role in roles if role > actor_role]:
+        raise HttpError(
+            403,
+            f"Permission denied. Your role ({OrganizationUserRole(actor_role).label}) "
+            f"can't grant or manage the {OrganizationUserRole(max(above)).label} role.",
+        )
+
+
 @router.post(
     "organizations/{slug:organization_id_or_slug}/members/",
     response={201: OrganizationUserInviteSchema},
@@ -230,7 +240,11 @@ async def create_organization_member(
         # invites; acceptance is gated by the invite token instead.
         raise HttpError(403, "User must have a verified email address")
 
-    organization = await aget_object_or_404(qs)
+    organization = await aget_object_or_404(
+        annotate_actor_role(qs, request.auth.user_id, "pk")
+    )
+    role = OrganizationUserRole.from_string(payload.org_role)
+    check_role_ceiling(organization.actor_role, role)
     email = payload.email
     if (
         not await ais_user_registration_open()
@@ -258,13 +272,16 @@ async def create_organization_member(
     member, created = await OrganizationUser.objects.aget_or_create(
         email=email,
         organization=organization,
-        defaults={"role": OrganizationUserRole.from_string(payload.org_role)},
+        defaults={"role": role},
     )
     if not created and not payload.reinvite:
         raise HttpError(
             409,
             f"The user {email} is already invited",
         )
+    if not created:
+        # A reinvite resends the pending invite at the role it already holds.
+        check_role_ceiling(organization.actor_role, member.role)
     teams = [
         team
         async for team in Team.objects.filter(
@@ -309,10 +326,12 @@ async def delete_organization_member(
     is_self = org_user.user_id == user_id
     if is_self and org_user.is_owner:
         raise HttpError(400, "User is organization owner. Transfer ownership first.")
-    if not is_self and org_user.actor_role < OrganizationUserRole.MANAGER:
-        raise HttpError(
-            403, "Removing another member requires the manager role or above."
-        )
+    if not is_self:
+        if org_user.actor_role < OrganizationUserRole.MANAGER:
+            raise HttpError(
+                403, "Removing another member requires the manager role or above."
+            )
+        check_role_ceiling(org_user.actor_role, org_user.role)
     try:
         await org_user.adelete()
     except IntegrityError as err:
@@ -342,9 +361,16 @@ async def update_organization_member(
 ):
     """Update member role within organization"""
     member = await aget_object_or_404(
-        select_organization_user_details(qs).prefetch_related("teams"), id=member_id
+        annotate_actor_role(
+            select_organization_user_details(qs).prefetch_related("teams"),
+            request.auth.user_id,
+            "organization_id",
+        ),
+        id=member_id,
     )
-    member.role = OrganizationUserRole.from_string(payload.org_role)
+    role = OrganizationUserRole.from_string(payload.org_role)
+    check_role_ceiling(member.actor_role, member.role, role)
+    member.role = role
     # Disallow an ownerless organization
     if (
         member.role < OrganizationUserRole.OWNER
