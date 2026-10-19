@@ -1,0 +1,489 @@
+# 7.0 (Unreleased)
+
+- Change: GlitchTip runs as a single process. The web/worker split is gone: one granian ASGI server hosts HTTP, the task worker and the scheduler, and scaling means running more replicas of that same process. **Action required** for installs that ran separate web and worker deployments: collapse them into one deployment of `bin/start.sh`, which needs no arguments; every replica consumes the task queue. A leftover worker is refused rather than quietly turned into a second web server that also runs migrations: `bin/start.sh` exits with an error when `SERVER_ROLE` names anything but `web` or `all_in_one`, or on a Heroku `worker*` dyno, and `bin/run-worker.sh` now only prints that message and exits. `bin/run-web.sh` and `bin/run-granian.sh` remain as shims that run `bin/start.sh` and will be removed in a later release; the `bin/run-celery.sh`, `bin/run-celery-with-beat.sh` and `bin/run-beat.sh` stubs are gone. `IS_WORKER`, `GLITCHTIP_EMBED_WORKER` and `SERVER_ROLE` no longer do anything and log a warning at startup when set — except `GLITCHTIP_EMBED_WORKER=true` and `SERVER_ROLE=all_in_one`, which describe what now happens anyway, so the published Helm chart and sample compose file work unchanged. Database initialization on start is safe with any number of replicas starting at once (`init_database` takes an advisory lock); set `SKIP_INIT=true` if migrations run as a separate pre-deploy step (`bin/run-migrate.sh`). `SENTRY_SERVICE_NAME` defaults to `glitchtip` rather than `glitchtip-web` or `glitchtip-worker`.
+- Change: WSGI serving is removed. `glitchtip/wsgi.py` (deprecated since 6.1.7), `bin/run-uwsgi.sh`, the `uWSGI` and `uwsgi-chunked` dependencies, the `WSGI_APPLICATION` setting and the `USE_ASYNC_SERVER` switch are gone, and libxml2 leaves the runtime image with them. A deployment that points its server at `glitchtip.wsgi:application` must switch to `glitchtip.asgi:application` under granian, which is what the Docker image already runs. `USE_ASYNC_SERVER` logs a warning at startup if still set. `DATABASE_CONN_MAX_AGE` is removed with it: persistent connections are a WSGI-era setting, and a non-zero value was actively harmful here — it skipped the pool configuration, discarding every `DATABASE_POOL_*` setting and leaving the driver on its own built-in pool size. Connections are now always pooled, and setting the variable to anything but `0` logs a warning. Tracing now drops transactions for static-file paths as intended; the rule that suppressed them read a WSGI-only key and never matched under ASGI.
+- Change: PostgreSQL 15 is the minimum supported version, and this release enforces it. Django 6.1 dropped PostgreSQL 14, so a connection to an older server now fails instead of working unsupported. This replaces the 6.2.5 note that PostgreSQL 14 remained supported. Upgrade PostgreSQL first — GlitchTip 6.x runs on 15, and CI's minimum lane has tested 15 since 6.2.5 — then upgrade GlitchTip.
+- Change: Upgrading to 7.0 requires a 6.x install. Migration history is squashed at the state that shipped in 6.0.3, and migrations whose only effect was on data written by 5.x or early 6.x releases are removed, so a database whose history stops at 5.x or earlier has no path forward. Upgrade to the latest 6.x release, let it migrate, then upgrade to 7.0. The jump straight from 5.x is not blocked up front and can fail partway through, leaving migrations to finish by hand, so do not skip the intermediate release. Fresh installs are unaffected.
+- Change: Legacy environment variable aliases are retired. A retired name is now ignored, with a warning at startup naming its replacement; nothing refuses to start, so **check your configuration before upgrading**. For the retention variables the fallback deletes data: an ignored value means retention drops to its default and the next maintenance run removes anything older. Renamed: `GLITCHTIP_MAX_EVENT_LIFE_DAYS` → `GLITCHTIP_RETENTION_DAYS`, `GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS` → `GLITCHTIP_TRANSACTION_RETENTION_DAYS`, `GLITCHTIP_MAX_UPTIME_CHECK_LIFE_DAYS` → `GLITCHTIP_UPTIME_RETENTION_DAYS`, `GLITCHTIP_MAX_FILE_LIFE_DAYS` → `GLITCHTIP_FILE_RETENTION_DAYS`, `GLITCHTIP_LOGS_COLD_DAYS` → `GLITCHTIP_LOG_RETENTION_DAYS`, `GLITCHTIP_EVENTS_HOT_DAYS` → `GLITCHTIP_EVENT_HOT_DAYS`, `GLITCHTIP_LOGS_HOT_DAYS` → `GLITCHTIP_LOG_HOT_DAYS`, and `ENABLE_OPEN_USER_REGISTRATION` → `ENABLE_ORGANIZATION_CREATION`. The old registration name used to override the new one, so an install that set only the old name must set `ENABLE_ORGANIZATION_CREATION` to keep its current behavior. Still accepted and unchanged: `GLITCHTIP_DOMAIN` (alongside `GLITCHTIP_URL` and `APP_URL`), `FORCE_SCRIPT_NAME` (alongside `BASE_PATH`), and the `REDIS_*` aliases for `VALKEY_*`.
+- Change: An organization slug can no longer be only digits, so that an all-digit segment in an API path can be read as an organization id without ever naming a second organization. An organization whose name is only digits now gets a `-1` suffix on its slug, the same as a reserved word, and the database rejects an all-digit slug however it is set. The migration renames every existing all-digit slug, deleted organizations included, to the first free `-N` suffix (`2024` becomes `2024-1`) and prints each organization id with its old and new slug. **Breaking:** links, bookmarks, CLI or CI configuration and API scripts that use a renamed slug must be updated to the new one; nothing redirects from the old slug.
+- Perf: Org-scoped API routes check membership and role in the same query that fetches their data, instead of looking the organization up first. This covers every route with an organization in its path except the three public ones. Those routes also accept the organization's numeric id in place of its slug (`/api/0/organizations/42/...`). Slug URLs work unchanged, and the all-digit slug rule above keeps the two from ever naming different organizations.
+- Change: Role and scope checks are now consistent across org-scoped routes, which tightens several. **Breaking** for members and API tokens that relied on the old behavior. Deleting an organization needs the owner role; managers could before. Renaming a team, updating a project, creating a client key and hiding an environment need admin or above, as do creating, updating and testing a project alert — members on one of the project's teams could create an alert, and update and test had no role check. Creating a source code repository needs manager or above. Uptime routes had no role or scope check: reads now need `org:read`, and creating, editing or deleting a monitor or a status page needs `project:write` (admin or above), so members can no longer do it. Billing routes, which had no scope check either, take `org:read` or `org:admin`, and issue stats take `event:read`. An API token now authorizes a request only through scopes its user's role also holds, so a member's token carrying only a write scope the member role lacks (`member:admin`, or `team:write` without `team:read`) can no longer remove its own user or join an open team.
+- Change: Permission failures on org-scoped routes say what is missing. A member without the role a route needs gets a 403 naming the required role, where most routes answered 404. A non-member still gets a 404, now with the body `Organization not found.` rather than `Not Found`. Soft-deleted issues, and the issues and alerts of a soft-deleted project, are 404 on these routes.
+- Change: The debug file and chunk upload routes match organization slugs exactly instead of lowercasing them first, like every other route. A `sentry-cli` configuration whose `org` differs from the real slug only in case now gets a 404 and must use the slug as shown in GlitchTip. Project slugs on these routes are still matched case-insensitively.
+- Change: `X-Forwarded-For` is only read from trusted proxies. `TRUSTED_PROXIES` used to default to `*`, which took the first address in the header, so any client could choose the address that login, signup and password-reset rate limits are keyed on. The default is now `private`: proxies on private, loopback, link-local and carrier-grade NAT addresses are trusted, and the header is read from the right, skipping trusted proxies, so the address a trusted proxy recorded is used rather than one the client wrote. Setting `TRUSTED_PROXIES` replaces the default (loopback stays trusted) and accepts addresses, networks and the keywords `private`, `loopback` and `cloudflare`. `X-Forwarded-Proto` is still honoured from any proxy, so https detection is unchanged. **Action recommended** behind Cloudflare: set `TRUSTED_PROXIES=cloudflare,private`; behind another proxy with public addresses, list its ranges plus `private`. Until then users behind the same proxy address share one rate limit, and GlitchTip logs a warning. The startup banner shows the setting, and the log lists the proxies seen. `TRUSTED_PROXIES=*` keeps the old behaviour.
+- Change: The API no longer adapts events stored in the pre-5.2.0 shape, where `exception` and `breadcrumbs` were a bare list rather than `{"values": [...]}`. Such an event can only survive on an install that ingested it under 5.1 or earlier and kept it through all of 6.x; it now renders without its exception or breadcrumbs section, and logs a warning, rather than failing.
+- Change: The Rust ingest pipeline now serves every `POST /api/<project_id>/envelope/` unconditionally; the `GLITCHTIP_RUST_INGEST` environment variable is removed and ignored if set. The flag shipped as an opt-in while the Rust path was validated against the Python view — an interleaved A/B benchmark and a golden parity suite covered CPU, memory, and observable behavior — and keeping both arms meant every envelope behavior existed twice. The Django view remains only as the pipeline's documented fallback: envelopes carrying an SDK minidump attachment are handed back to it before any side effect, because turning a minidump into an event is implemented in Python (the `minidump` package plus the Python ingest schema) and has not been ported. Minidump processing is still basic (see the minidump entry below); the handback keeps it on the Python side until it is ported. One behavior change for installs that never enabled the flag: an envelope whose only credential is the envelope-header `dsn` field is now authenticated from that header and ingested, where the Python view read only the query string and auth headers and answered 403. Requires Valkey/Redis (the default) or, on `VALKEY_URL=""` installs, the database cache and broker the Rust path already supports — the same stacks as before, since gt_rust was already a hard dependency. Setting the variable now logs a warning at startup so an operator who had deliberately turned it off learns the setting is inert rather than discovering the change in traffic. One unrelated response-shape tidy-up rides along: `POST /api/<project_id>/store/` no longer returns the always-null `task_id` field, which was a debug placeholder nothing ever populated.
+- Change: Source the debug-symbol toolchain (native symbolication, JS sourcemap remapping, ProGuard deobfuscation, C++ demangling) from `gt_rust.symbolic` instead of the `symbolic` and `cxxfilt` PyPI packages, which are removed as dependencies. The functionality is the same Rust crates either way — the `symbolic` wheel wraps them through cffi, while the already-required glitchtip-rust wheel now exposes the same API surface through its single PyO3 extension — so the swap removes a second ~19 MB native runtime, a cffi layer, and two wheels from the dependency tree with almost no behavior change. It also puts the memory-heavy operations (building a `SourceMapCache` or symcache parses tens of MB of transient native memory per bundle) behind an interface GlitchTip controls, where they can later be bounded or streamed without touching the call sites. The visible deltas are all display improvements: demangling now covers MSVC and Rust v0 symbols and strips the hash suffix from Rust legacy ones (`cxxfilt` passed all three through mangled), and ProGuard remaps infer a frame's file name from its class where the mapping lacks file info. One incidental fix: `Archive.from_bytes` in the cffi package borrows a buffer it does not keep alive (the reason GlitchTip only ever used `Archive.open`); the replacement copies its input.
+- Change: Symbolication no longer re-reads and re-parses uploaded sourcemaps, native debug files and ProGuard mappings for every event, which is where most of the memory spikes behind out-of-memory restarts of busy installs came from, and memory use during ingest drops accordingly. Each upload is now processed once, when the first event needs it, into a compact lookup cache kept next to the uploads in file storage (under `uploads/symbolcache/`); uploads with the same content share one cache, and later events reuse it. Nothing needs configuring, and caches are removed along with the uploads they were built from. Two things to expect after upgrading: while a newly uploaded file's cache is being built, which takes a few seconds, the first events that need it may be stored unsymbolicated, and such an event can open an issue of its own, separate from the one its symbolicated successors group into. And some existing issues regroup once, because their events are now symbolicated where they were not, or differently (see the fixes below) — notably Android issues from apps with uploaded ProGuard mappings, which have not been applied since 6.0.8. The wait for a cache is also shared by each batch of incoming events, so a batch that needs many newly uploaded files at once waits a few seconds in all, not a few seconds per file: past that, its events are stored unsymbolicated while the caches finish building. An event with no native frames no longer reads any native debug file (#512), and native events without `debug_meta` try only a project's newest few debug files instead of all of them. An Android event that names its ProGuard mapping is deobfuscated with that mapping only: if it was never uploaded, the frames stay obfuscated rather than being tried against other builds' mappings. Very large uploads (a ProGuard mapping over 50 MB, for one; less in a container with a small memory limit, so that processing one cannot exhaust it) are skipped, with a log line, and their events stored unsymbolicated.
+- Change: Objects read from S3 or Google Cloud Storage that are larger than 4 MB are spooled to a temporary file instead of being held in memory whole, which bounds memory when reading large uploads. This needs a writable temporary directory; on a read-only root filesystem without one, objects are held in memory as before, and a warning is logged at startup.
+- Change: Static files are served compressed again, and by the ASGI app rather than granian's file mount. GlitchTip shipped WhiteNoise as a dependency for years without it ever handling a request in the released image: the entrypoint set granian's `--static-path-mount` whenever a collected `static/` directory existed, which is always the case there, and setting it removed WhiteNoise from the middleware list. Granian has no compression support, so every asset went out uncompressed -- the main bundle at 67 KB where 16 KB was available -- and one expiry covered the whole tree, so a content-hashed bundle that could be cached forever was treated like a file that changes on every release. `/static/` is now answered by ServeStatic, an ASGI application above Django, so a static hit never builds a Django request, and the file is handed to the server by path rather than read in Python, so it costs no filesystem call and no thread; `collectstatic` writes a brotli and a gzip copy beside each file and ServeStatic hands out whichever the client accepts. Content-hashed bundles, and the source map beside each, are marked `immutable`; everything that keeps its name across a release keeps a one-hour TTL, so an upgrade cannot pin a client to a stale copy. Django's own responses -- the single-page app's `index.html` and every API reply -- are now compressed too, which covers the half ServeStatic does not. Those are built per request, so they are compressed per request: brotli for the browsers that accept it, gzip for anything that does not. Brotli at the quality used here produced a smaller body than Django's gzip default for a little under half the processor time, so this costs less CPU per response than sending them uncompressed did to serialize. A cold first load drops from 126 KB to 31 KB. None of this needs configuring, and a CDN or compressing proxy in front still works as before. Two notes for operators: `STATICFILES_STORAGE` pinned to a `whitenoise.storage.*` backend is translated to the ServeStatic equivalent with a deprecation warning rather than refusing to start, but should be updated because the translation goes away on the next major; and `GRANIAN_STATIC_PATH_MOUNT` still hands `/static/` back to granian for anyone who wants that instead.
+- Change: The all-in-one image no longer recycles a web worker when its resident memory grows. It previously set granian's `GRANIAN_WORKERS_MAX_RSS` to half the container's memory limit (floor 1024 MiB, or 2048 MiB with no limit set), on the reasoning that a long-lived worker accumulates fragmentation and a restart is cheap. Both halves of that turned out to be wrong. A memory-triggered respawn fires at peak RSS by definition — granian starts the replacement while the old worker is still serving and still holding its peak — so the overlap needs the threshold plus a whole second worker to fit inside the limit, which at a threshold of half the limit it cannot: the container OOMs at exactly the moment the mechanism decides to protect it, and the killed worker takes its in-flight task batch with it. The floor made this worse on the smallest installs, which are the ones a memory cap is for: at a 2 GiB limit the threshold was 1 GiB and the overlap wanted ~2 GiB, while at a 1 GiB limit the threshold exceeded the limit and could never fire at all, so the setting was harmful at one common size and inert at another and behaved as intended only above about 4 GiB. Meanwhile the accumulation it was built for is no longer there to find. Resident memory on a busy install is dominated by bursts that scale with event volume and worker concurrency, not by a ratchet: measured over 17 hours with recycling off, the hourly *minimum* stayed flat at roughly 500 MB from the first hour to the last while peaks came and went, and granian's resource monitor defaults to respawning after a single 30-second sample over the threshold, so what it actually detected was a busy worker. Two consequences for operators. Reported memory will look higher than on previous releases, because the old default truncated the measurement rather than the usage — on the install this was measured on, p95 resident memory went from about 1.1 GB to about 2.7 GB with a peak of 3.4 GB, all of it burst, none of it retained. Size the container for the burst, and note that the burst scales with the knobs that bound concurrent work (`VTASKS_CONCURRENCY`, `VTASKS_INGEST_CONCURRENCY`, `VTASKS_INGEST_BATCH_COUNT`) rather than with uptime — an install ingesting a handful of events an hour never reaches these levels regardless of how long it runs. Operators who want a recycling backstop anyway should prefer age to memory: `GRANIAN_WORKERS_LIFETIME` (seconds) respawns on a timer, which lands at the worker's average footprint instead of its peak and so needs roughly one extra worker of headroom rather than twice a threshold. Setting `GRANIAN_WORKERS_MAX_RSS` still works and restores the old shape; pair it with `GRANIAN_RSS_SAMPLES` above 1 so a single burst is not a trigger. The kill timeout the image sets (60s) is unchanged and still bounds the overlap whenever a respawn does happen.
+- Change: Once an organization has opted into overage billing, its usage window — the period events are counted in, throttled against and billed for — is the metered subscription item's own Stripe billing period rather than the base plan's period or, on annual plans, the virtual month GlitchTip computes from it. Stripe files a meter event under the period of the item that contains the event's timestamp, so with a `last` meter the only window a cycle-to-date total is correct in is that item's period; counted over any other window, a total that outlives the item's period lands in the next one as if it were that period's own and bills those events twice. In Stripe test mode an item attached part-way through a month to an annual subscription was given the anchor-aligned month as its first period, so the two windows were observed to coincide and nothing changes where they do; the point is that GlitchTip no longer assumes it, and takes the period Stripe reports for the item wherever that turns out to be. The period is stored from every path that sees the item (the subscription webhook, the nightly sync, and the enable request itself, so the first re-check bills against it), and when it has run out before the renewal webhook lands, the throttle check re-reads the subscription from Stripe rather than advancing the period locally, at most once every ten minutes per subscription; a failed refresh leaves the window stale, which reports nothing, as before, and an item whose period has never been recorded is throttled but not reported until it is. The nightly sync refreshes any metered period more than two days stale as a backstop. The item's period applies whether or not overage is currently switched on: the item stays attached across a disable, so toggling never moves the window or hands out a fresh quota. The usage endpoints, the billing page's cycle dates and the overage status card all read the same window, and earlier periods on those endpoints step back a month at a time from it. Organizations without a metered item are unaffected.
+- Change: Overage usage is now reported to Stripe as the cycle-to-date total against a Billing Meter that aggregates by `last`, replacing the per-subscription counter that sent increments to a `sum` meter. The counter was the source of every overcharge path in the design: any state it lost — a replacement subscription, a rolled-back write, a renewal racing a sweep — meant re-sending units Stripe already held, and the guards around it (write-ahead, conditional rollback, identifiers keyed on the counter) each closed one route and left the next. Keying the counter to the organization instead of the subscription would not have closed it either: the cycle anchor still came from the primary subscription, so a replacement whose period started even seconds later — the checkout-race case — read as a rollover, reset the counter, and re-billed the whole cycle under a fresh identifier. With `last` there is nothing to re-bill: a retry, a concurrent sweep, or a replacement subscription all restate the same figure, and every failure leaves Stripe holding at most what was measured. Stripe files each event under the period containing its timestamp and, within a period, keeps the latest (verified, not assumed), so the measurement time is sent rather than the send time and a slow sweep can never overtake a fresher one. Every report is recomputed from current data and nothing previously sent is an input to it, so a wrong figure, whatever put it there, is replaced by the next sweep restating the right one, downwards included. Two inputs are held for the cycle rather than the figure itself. The spend cap is floored at what the cycle has already billed, so lowering it stops further growth without retracting billed usage, while a lower true total still goes out. And overage is measured against the largest quota the plan has held during the cycle, so a mid-cycle downgrade cannot turn usage that was within quota when it happened into billable overage; an upgrade likewise covers the whole cycle and forgives overage accrued under the smaller plan. The remaining state is a record on the organization of the last figure sent, used only to skip unchanged, same-second, or out-of-order reports, and of that cycle quota. Two guards ride along. Because these totals into a `sum` meter would compound on every sweep, the sweep reads the meter's formula from Stripe (cached) and refuses to report to anything but `last`, and both `provision_overage_billing` and its `--verify` fail on a `sum` meter; a fresh meter is provisioned under the event name `glitchtip_overage_events_total` so nothing can land on the old one. And because a Stripe meter aggregates per customer, two subscriptions each carrying the metered price both bill the same usage (also verified against Stripe); enabling overage is now refused when another subscription on the account already has the metered item. A measurement outside the local billing period is dropped in both directions: the local period dates lag Stripe's by a webhook, and a check that ran just after a boundary while still counting the old cycle would otherwise file the old cycle's whole total under the new period. This release assumes no customer is yet being invoiced for overage under the previous meter, which holds for the hosted service. An install that was must do a cutover, since a price's meter is fixed: create a metered price on the overage product bound to the new `last` meter (`provision_overage_billing` does this in test mode), archive the old price, and for each subscription remove the old metered item with `clear_usage` and attach the new one before the next period boundary — leaving both attached bills the cutover cycle twice.
+- Fix: Link crash-report embed dialog submissions to their issue. `submit_embed_error_page` looked up the associated event by `IssueEvent.id`, the server-generated UUIDv7 primary key, when the `eventId` query param it receives is always the SDK's client-generated `event_id` (the same value `Sentry.lastEventId()` returns and the ingest endpoint echoes back as `{"id": ...}`). The two are unrelated UUIDs, so the lookup essentially never matched and `UserReport.issue_id` stayed `NULL` for effectively every report submitted through the embed dialog. The lookup now filters on `event_id`, scoped to the requesting organization and the last week of events so it stays cheap on a large, partitioned table, matching the bounded query the SDK-feedback ingestion path (`tasks.ingest_user_report`) already uses.
+- Change: On billing-enabled installs, enabling overage no longer converts a classic-mode Stripe subscription to flexible billing mode first; the metered item is attached directly, so every active subscription must already be in flexible mode.
+- Change: The S3-compatible server used for local development and CI is Garage instead of MinIO, whose open-source server is archived upstream and no longer published. `compose.minio.yml` is replaced by `compose.s3.yml`. Production object storage configuration is unaffected.
+- Security: Bound minidump parsing. The `minidump` package trusts every count a file claims, so a few crafted bytes sent to `POST /api/<project_id>/minidump/`, or attached to an envelope as `event.minidump`, could make it allocate gigabytes and get the process OOM-killed; since 7.0 runs the web server, task worker and scheduler in one process, that took all three down. The header, stream directory, thread list and module list are now checked against the file size before parsing, and the streams GlitchTip never reads are skipped. A malformed minidump is answered with 400 on the minidump endpoint and dropped from an envelope. Well-formed minidumps ingest as before.
+- Security: Cap uptime monitors per organization on billing-enabled installs. Monitor creation was unbounded and `Monitor.interval` accepts one second, so a single account could stand up an arbitrary number of monitors aimed at one third-party URL and have the check dispatcher send them traffic on a schedule — traffic the abuser pays for once, at signup, rather than per request as event ingestion charges. The billing throttle that eventually stops an over-quota organization is no defense here: uptime checks are weighted at a tenth of an event, nothing on the check path triggers the fast per-organization throttle re-check (only event ingestion and Stripe webhooks do), and the periodic sweep that would catch an organization sending no events at all runs every four hours. A hundred monitors at a one-second interval exhaust the free tier's monthly quota in under two minutes and then keep running for the rest of that window. The ceiling is now enforced when a monitor is created, where it costs one COUNT. Plans set their own through an `uptime_monitors` Stripe product metadata value, the way `events` already carries the event quota; where a plan sets none, a built-in default of 100 applies. Self-hosted installs stay uncapped: billing being off means the operator chose who holds an account and can remove one, which is the control a hosted install does not have over an anonymous signup.
+- Feat: Authenticate to AWS RDS with IAM tokens instead of a database password. Set `DATABASE_IAM_AUTH=true`; a short-lived token is minted for each new physical connection, so pool growth and connection recycling keep working past the token's 15-minute lifetime, and any password in `DATABASE_URL` is ignored for the covered aliases. `DATABASE_IAM_AUTH_ALIASES` (default `default`) selects which database aliases use it — PgBouncer cannot validate an IAM token, so leave out any alias that connects through it; RDS Proxy works. IAM aliases require a verified TLS connection (`sslmode=verify-full` by default) unless `DATABASE_IAM_ALLOW_UNVERIFIED_TLS=true`; `DATABASE_SSLMODE` and `DATABASE_SSLROOTCERT` configure TLS with or without IAM auth. The region is taken from the RDS endpoint hostname.
+- Feat: `DATABASE_PREPARE_THRESHOLD` controls server-side prepared statements. The default, `5`, keeps the existing behavior (prepare a statement after five uses), which saves database CPU on the ingest path. Set it to `off` behind a transaction-mode connection pooler that cannot track prepared statements (PgBouncer needs 1.21+ with `max_prepared_statements`), or where migrations run while the previous release is still serving, which can otherwise fail requests with `cached plan must not change result type` until connections recycle. Any other integer prepares after that many uses; `0` prepares on first use.
+- Feat: The MCP server is ported to MCP SDK v2 and reports the GlitchTip version in its initialize handshake. `get_event` and `get_latest_event` now return a lean, size-bounded payload: stack-frame local variables and request bodies are left out by default, and an event over the budget sheds system frames, breadcrumb data, older breadcrumbs and long strings in that order, always keeping the exception and crash-site frames. A `_meta` block says what was omitted, and the new `get_event_detail` tool fetches an omitted section on request.
+- Feat: Filter alerts by environment. A project alert can name the environments it applies to; events and uptime monitors from other environments do not trigger it. Leaving the list empty matches every environment, as before.
+- Feat: Add a Slack alert recipient that sends Block Kit formatted messages to a Slack incoming webhook, for both issue and uptime alerts.
+- Feat: Sort uptime monitors by name, creation date, project or status, ascending or descending.
+- Fix: Listing an organization's uptime status pages returns only that organization's pages. It returned the status pages of every organization the user belongs to.
+- Fix: Apply an organization's or project's event throttle once per request rather than twice, which is what a partial rate was doing and why one never dropped the share it names. The rate is sampled when the request arrives, against the rates held in the block cache, and the request that got past that sampling then read the same rates back from the database and was sampled against them again. Two samplings of one rate compound: a rate set to drop half its events dropped about three quarters, one set to drop a tenth dropped about a fifth, and each extra drop cost a full project lookup before it happened. Only the second sampling is removed, and only where the database reports the rates the request was already sampled against; where the two disagree both are applied to the one request that observes the change, so a rate that has just been raised takes effect immediately rather than up to thirty seconds later. A rate cleared back to zero now also drops its cache entry, which was previously left to expire and went on dropping events until a request happened to get past it. Both ingest authentication paths had it, so this covers the sentry-protocol endpoints and the native OTLP ones alike. A rate of 100 was never affected, since it rejects outright rather than sampling.
+- Fix: Reject events from a switched-off project out of the ingest block cache, as was intended, instead of re-querying the database for every one. An organization with `is_accepting_events` unset, or an organization or project at a 100% throttle, had its block cached under a one-letter marker that the reader turned back into a throttle rate of zero percent — that is, into no throttle at all — so the cache entry was written on every request and acted on by none. The rejection itself was never in doubt, since the database row that follows says the same thing; what was lost is the cheap rejection the cache exists for, which is the whole defense when the traffic being rejected is a flood. The OTLP and Rust ingest paths were written later and already cache the blocked case as the 100% throttle it is; the endpoints still authenticated in Python — `store`, `security`, `minidump`, and the envelope view the Rust pipeline hands minidumps back to — now do the same. Two details ride along: a 100% throttle is stated to reject rather than left to a sampling bound that happens never to exceed it, and a blocked project now quotes one `Retry-After` (600 seconds) however the rejection was reached, where the curve would otherwise have returned 797 for a rejection served from cache and 600 for the same condition read from the database. A project id now keys that cache by its value rather than as the request spelled it. The `store` and `security` routes capture it as text, so `7`, `007` and ` 7 ` arrived as written while naming one project, and each spelling took its own cache entry — enough to walk past a block indefinitely, one fresh project lookup per spelling, which is the cost the cache is there to avoid. The same normalization answers 400 rather than 500 for an id that is not a number at all, including a digit string long enough to trip CPython's integer conversion limit. Unchanged for anyone not blocked, and a block still clears within the same 30 seconds as before.
+- Fix: Finish making the importer follow pagination, and repair the `import` management command. Following a `Link` header meant deciding what to do about the absolute URL inside it, and the previous release refused any that did not match the origin the operator typed — sound in intent, but a server builds that URL from the public address it is *configured* with rather than the address the request arrived on, so a reverse proxy, a port-forward, or plain http in front of an https-configured install is enough to make the two differ and abort the import. Verified against a sentry 9.1.2 instance, whose pagination links name its configured public URL: reached by that name the import completed, reached by its address and port the same import failed. Worse, it failed only once a collection crossed a page boundary, so an install small enough to fit in one page imported cleanly and a real one did not. The link's path and query are now re-anchored onto the origin already being read, which is strictly the stronger guarantee — the auth token cannot leave the operator's origin even if a remote asks it to, rather than being compared against a host the remote chose. A remote that advertises a next link on every page, marking the end only by pointing back at a page already fetched, now ends the walk there instead of being crawled to the page cap; a page that is not the list of results it should be is reported instead of silently discarding everything collected before it; and a failed import answers 400 naming the reason rather than 500. Separately, the `import` management command could not import a single member: it is the only caller that creates users, and resolving one issued a query the wrong way for an async caller, so it raised `SynchronousOnlyOperation` partway through and left the organization written but empty. It is also the only path that brings user accounts across, the web importer recording members without them, so nothing that used it worked. The query now runs once for the whole set rather than once per member. Its existing test missed this by answering the members endpoint with an empty list, which returns before the loop.
+- Fix: Don't let one log event with a malformed timestamp fail every log batched with it. Log ingestion parsed client-supplied timestamps unguarded, so a numeric value outside datetime's representable range — observed live as a client sending epoch milliseconds where seconds belong, which parses as year 58575 and raises `ValueError: year must be in 1..9999` — escaped the worker task and failed the whole ingest batch, sending up to 25 unrelated projects' log submissions to the dead-letter queue with no retry, repeatedly for as long as the client kept logging. Obvious unit mistakes (milli/micro/nanoseconds — anything past roughly year 5138 as seconds) are now rescaled to seconds and ingested at their intended time, since the existing one-day drift window proves intent unambiguously; anything still unparseable rejects that single log through the same counter the drift check uses, and the rest of the batch processes normally. Review of the fix found and closed the remaining ways one hostile log could still fail its batch: a naive ISO timestamp string parsed successfully but raised in the timezone-aware drift comparison (now read as UTC); an OTel `severity_number` outside the smallint column's range failed the batch at insert (now stored as NULL); and a NUL character anywhere in a log's text fields or attributes failed the batch's COPY, since PostgreSQL rejects NUL in text and jsonb outright (now stripped).
+- Fix: Detect the container CPU quota on cgroup v1 hosts when sizing `MALLOC_ARENA_MAX`. The startup tuning read only cgroup v2's `cpu.max` and otherwise fell back to `nproc`, which reports the host's CPU count rather than the container's share — the exact failure the setting exists to prevent, so on a v1 host (still the default on some older distributions) a small container on a large machine got an arena cap of twice the host's cores and could hold far more per-thread arena memory than intended. It now reads `cpu.cfs_quota_us` and `cpu.cfs_period_us` before falling back.
+- Fix: Bulk issue merges and updates keep the selection they were given (#507). Background batches rebuilt their filters without the id, project and date restrictions, so a merge of selected issues could absorb unrelated issues from elsewhere in the organization, and the merge task could loop indefinitely. Filters are now preserved, batches advance, events left behind by the immediate batch are moved, and a merge whose selection spans more than one project is rejected with 400.
+- Fix: Validate ProGuard mapping uploads with a cheap structural check instead of building the full mapping index. The old check parsed the whole file into memory (about 190 MB for a large Android mapping file, enough to get a small container OOM-killed on upload) while accepting almost any text as a valid mapping.
+- Fix: ProGuard mappings uploaded with `sentry-cli upload-proguard` 3.x (which uploads in chunks) are stored. They were rejected as unsupported debug files while the CLI reported success, so they never took effect. A file the server cannot use now makes the upload report an error.
+- Fix: ProGuard mappings are used again. The debug file query that skips source bundles dropped every row without a `kind` in its data, which is every uploaded mapping, so Android stack traces have stayed obfuscated since 6.0.8.
+- Fix: Deobfuscated ProGuard frames get their real line number, rather than keeping the obfuscated one (which also showed the wrong source context). Methods R8 inlined come back as all their frames instead of only the innermost, and `abs_path` follows the remapped file name.
+- Fix: Windows (PE/PDB) crashes with `debug_meta` are symbolicated. The event's debug id lost the PDB age, so it never matched the uploaded PDB.
+- Fix: Native frames from Windows builds get source context from an uploaded source bundle. A bundle stores a file recorded as `C:\src\app.cpp` as `files/C/src/app.cpp`, and the lookup never asked for that name.
+- Fix: Every architecture of a universal (fat) Mach-O or dSYM upload is used. Only the first slice, usually x86_64, was recorded, so crashes on the others, arm64 among them, stayed unsymbolicated. A universal file uploaded before this release keeps only its first slice until it is deleted and uploaded again.
+- Fix: Native caller frames show the line of the call rather than the line after it. Their return addresses are now looked up one byte back, as symbolizers do.
+- Fix: Estimate a native image base (for frames with neither `debug_meta` nor `image_addr`, as Flutter on Android sends) on a page boundary, with the first frames all tried as anchors. The old estimate was usually off by the first frame's offset within its page. It also applied its best guess even when that matched almost nothing, writing wrong symbols such as `_init` at line 0. Now a base must fit most frames, and no other base may fit as many; otherwise (as in dense Dart AOT symbol tables, where every nearby base fits) the frames stay unresolved rather than guessed.
+- Fix: Symbolicate every exception of a chained native or ProGuard exception, not only the first.
+- Fix: A JavaScript frame whose URL starts with `webpack:` no longer fails its whole ingest batch with a `TypeError`.
+- Fix: Sourcemaps: a bundle matched by debug id wins over one matched only by file name, and one event's `debug_meta` can no longer make another event in the same ingest batch be symbolicated against a bundle it never named. Context lines from CRLF sources no longer keep a trailing `\r`.
+- Fix: Use the image base address the SDK reports in `debug_meta.images` (matched by debug id) for native symbolication instead of estimating it, which fixes wrong frames on Flutter Android crashes.
+- Fix: Bound cold-storage memory in the span rollup. The hourly rollup computed percentiles with `approx_quantile`, whose per-group state DuckDB does not count against its memory limit; with near-unique span descriptions this reached several GiB. It now uses exact `quantile_disc`, which is bounded, faster and more accurate.
+- Fix: Cold-storage reads and writes over S3 sign requests with an explicit region (boto3's, falling back to `us-east-1`). DuckDB could otherwise sign with an empty region, which permissive S3-compatible servers accept and stricter ones reject as `AuthorizationHeaderMalformed`.
+- Fix: Deliver uptime alerts to Feishu (Lark) recipients, with cards for both the down and recovery states. Test notifications worked, but uptime state changes never reached the channel.
+- Fix: On billing-enabled installs, stop sending a form-encoded content type to Stripe's v2 API, which accepts only JSON. The meter-error webhook's event fetch and `provision_overage_billing --verify`'s event-destination check both failed with 415.
+- Fix: On billing-enabled installs, an organization that cancels and then resubscribes no longer keeps overage state from the canceled subscription. The canceled subscription's webhook could arrive after the new one was already primary, so neither branch ran and the metered item and opt-in were left pointing at a dead subscription.
+- Fix: On billing-enabled installs, the nightly Stripe sync logs an error naming any customer whose non-canceled subscriptions carry the metered overage price more than once. A Stripe meter aggregates per customer, so each such subscription bills the whole usage. Enabling overage already refuses to create this state; the sync is the backstop for one created elsewhere.
+- Fix: On billing-enabled installs, Stripe Checkout now refuses an organization that already has an active paid subscription. Checkout creates a new subscription rather than changing the existing one, so a paid organization upgrading through it ended up with two active subscriptions and was billed both base plans; plan changes for paid organizations go through the billing portal, which changes the plan in place.
+- Fix: On billing-enabled installs, the overage status endpoint now returns `reportedCostCents`, the cost of the usage already sent to Stripe this period. Switching overage off stops further reporting but not the invoice for the figure already filed, and the only cost field until now was gated on overage being active, so the subscription page showed nothing where an invoice was still coming. The field is zero when nothing was sent this period or the metered item is no longer attached.
+- Deps: Django 6.1, with django-async-backend 6.1 alongside it (the async ORM tracks Django's minor version), glitchtip-rust 0.11 and django-vpg 0.6. Two effects an operator can see: PostgreSQL 15 is now required, as above, and `psycopg-binary` leaves the dependency tree. psycopg is used only as a library (SQL composition and JSON parameter wrappers), with no database I/O through it, so the pure-Python build against the system libpq is enough; the Docker image already ships libpq, but a checkout run outside it now needs libpq installed.
+- Deps: django-vtasks 3.2.0. The scheduler no longer stops for the life of the process on a transient broker error (which silently stopped all issue alerts), the periodic rescue sweep no longer dead-letters healthy in-flight tasks on the Valkey backend, and retries back off exponentially instead of logging a traceback every second during a broker outage.
+- Deps: Refresh the lockfile to the latest compatible versions, including django-ipware 8 (the project already asked for `~=8.0`, but the lock still resolved 7.x), sentry-sdk 2.70, django-ninja 1.7 and mcp 2.2. Client IP resolution is unchanged: django-ipware 8's new default algorithm trusts CDN client-IP headers and skips private leading `X-Forwarded-For` hops, so `IPWARE_ALGORITHM` is pinned to `legacy`, the rules the Rust envelope path also follows.
+
+# 6.2.6
+
+- Fix: Actually ship glitchtip-rust 0.9.0 — the previous release raised no floor and its lockfile still resolved 0.8.0. The 0.8.0 wheel embeds django-vpg 0.3.1, whose buffer-size cap resets a connection's read buffer to zero capacity instead of a small floor when trimming after a response over 512 KiB. A zero-capacity buffer makes tokio's framed reader reserve one byte per read, so from the first large response onward that connection read a few bytes per syscall, decoded its replies as a storm of tiny per-message allocations (steady native-heap churn on every busy install), and could hang inside statement preparation with a transaction open when the reply channel backed up. One large result set was enough to degrade a pooled connection for its lifetime, so under real traffic the whole pool converged on this state. glitchtip-rust 0.9.0 pins django-vpg 0.4.0, which trims to an 8 KiB floor. The bump also carries 0.9.0's other changes: a short in-process cache of negative project-auth lookups on the Rust ingest path (un-blocking a project can now lag by up to five seconds), expanded PII-scrub recall for installs with scrubbing enabled (a `creds` token and the `errors` section), and django-vpg 0.4.0's oid/regclass codec and text-format string binding.
+- Perf: Bound the ingest queue's peak memory by draining backlogs in smaller batches (25 tasks, was 100) on a dedicated concurrency lane (12, new — it previously shared the global worker semaphore, where one 100-task batch consumed a single permit). A fetched batch holds every task's payload in memory until the batch finishes, so the worst case while draining a deep backlog is ≈ worker_concurrency × batch-size payloads resident at once: at 100-task batches a worker could hold thousands of event envelopes simultaneously (`VTASKS_CONCURRENCY` × 100), and a benchmark draining a 7,200-task backlog of realistically sized envelopes at 35 shared permits peaked at 943 MB — a level it never returned from, since the allocator keeps the high-water mark. The same benchmark at 25 × 12 drained the same backlog in the same time at the same throughput with a 254 MB peak. Tunable via `VTASKS_INGEST_BATCH_COUNT` and `VTASKS_INGEST_CONCURRENCY`. Note the dedicated lane adds to total worker concurrency (`VTASKS_CONCURRENCY` + 12), so an install that sized `DATABASE_POOL_MAX_SIZE` to exactly its worker concurrency should account for the extra 12 potential concurrent tasks.
+- Perf: Promote spans to cold storage in batches of 20,000 rows per organization, down from 100,000. The promotion task materializes its whole batch as Python objects before converting to Arrow, so batch size is that task's peak-memory bound — at 100,000 rows a single busy organization cost a few hundred MB of transient memory every five-minute run, and repeated runs ratcheted the process's resident memory toward its recycling threshold. Truncated runs already re-enqueue themselves, so a backlogged organization drains at the same rate in more, smaller steps.
+
+# 6.2.5
+
+- Security: Bound artifact bundle (debug file and sourcemap) extraction, which previously guarded against path traversal but capped nothing else. A zip's compression ratio has no ceiling, so a small authenticated upload could expand without limit onto the worker's local disk and take unrelated work on that pod down with it. Total expanded bytes and entry count are now capped via `GLITCHTIP_MAX_UNZIPPED_ARCHIVE_SIZE` (512 MB) and `GLITCHTIP_MAX_ARCHIVE_MEMBERS` (10,000); these bound uploaded archives only and are separate from `GLITCHTIP_MAX_UNZIPPED_PAYLOAD_SIZE`, which bounds ingest request bodies. The byte cap is spent on bytes actually written rather than on the sizes the archive declares for itself, since whoever built the archive controls those. Both caps are also checked against the archive *before* it is opened: reading a zip's central directory builds an entry object per member, about 540 bytes of memory against 88 bytes of archive, so an archive that is almost all directory relocated the same denial of service from the worker's disk to its RAM — a 2,000,000-entry archive spent 1,128 MiB inside the open call before a post-open cap could look at it, and now costs 0.1 MiB. Breaching either cap removes everything the call wrote and surfaces as an ERROR assemble status rather than a 500.
+- Security: One connect-time SSRF guard for every outbound request to a user-influenced URL. Social login (organization-managed OIDC providers, whose server URL and discovery-document endpoints an organization manager controls) had its own check that disagreed with the one webhooks and uptime monitors use; both now share it, and it also refuses IP-literal hosts. The shared rule blocks every address that is not globally routable, which newly includes `100.64.0.0/10` (carrier-grade NAT, also the Tailscale range) and IPv6 forms that embed an internal IPv4 address (`::ffff:169.254.169.254`, NAT64 `64:ff9b::a9fe:a9fe`). **Action required** for uptime monitors or webhooks aimed at a Tailscale or other CGNAT address: set `GLITCHTIP_UPTIME_ALLOW_PRIVATE_IPS` / `GLITCHTIP_ALLOW_PRIVATE_IPS`. Through an outbound proxy (`PROXY_ENV`), the configured proxy is allowed even on a private address, and the target becomes the proxy's to police.
+- Security: While `SOCIAL_AUTH_BLOCK_PRIVATE_IPS` is on (the default for billing-enabled and open-organization installs), id_token login — `POST /_allauth/browser/v1/auth/provider/token` and Google One Tap — is refused with an invalid-token error. Those endpoints fetch the identity provider's keys over a path the SSRF guard does not cover. The GlitchTip frontend's redirect-based social login is unaffected.
+- Change: The `anymail` Django app is installed only when `EMAIL_BACKEND` is an Anymail backend, so SMTP and email-less installs don't load it at startup. Anymail backends work as before.
+- Fix: Don't let one bad file abort an entire artifact bundle upload. An entry with neither a release nor a debug-id produced a row Postgres rejects outright, and `debug-id` is a client-supplied manifest header reaching a UUID field, so an empty string, an unparseable value, or a non-string type raised on insert — aborting the whole assemble task even when a release was set. Every other bundle in the same upload was lost, the assemble status never reached `ok`, and the scratchpad and bundle file were never cleaned up. Debug ids are now parsed once into canonical form (two spellings of one uuid no longer reach the upsert as distinct keys but the same row), an unusable one is treated as absent, unstorable entries are skipped with one aggregate warning, and file cleanup happens after the inserts succeed.
+- Fix: Restore native symbolication for events whose frames carry `instruction_addr` but no `image_addr` or `debug_meta` — precisely the case the image-base estimation exists to serve. The probe called `next()` on `SymCache.lookup()`, which returns a list rather than an iterator, so it raised on the first loop iteration; the broad handler around symbolication swallowed it and silently gave up, once per candidate debug file. With the probe actually running, three further faults surfaced and are fixed: a frame below the estimated base (or with no `instruction_addr`, reported as address 0) made the offset negative and, because the lookup takes an unsigned address, dropped the entire stacktrace rather than that one frame; scoring a candidate base cost one symbol-cache lookup per frame with the event payload deciding how many frames there are, so it now scores against a bounded sample; and a negative candidate base stops the search instead of continuing, since the offset only grows.
+- Fix: Don't wedge a span-compaction date on an input file that has vanished. Compaction builds its input list from a directory listing and deletes the source only after the copy returns, so an object removed between the listing and the read — by a retention sweep or an object-store lifecycle rule — made the copy raise, skipped the cleanup, and left the next run to list the same missing key and fail identically. The date could never roll, and the failure repeated every run indefinitely, taking the remaining hours of that organization and date with it. Compaction now re-checks its inputs against the storage backend on the error path only, drops the ones that are genuinely gone, and copies again; if every input is gone the directory is simply cleaned up. A healthy pass costs no extra requests.
+- Fix: Repair a hash partition set that is missing a bucket, instead of leaving it unroutable. Partition maintenance declined to touch any range partition whose hash children sit at a modulus other than the configured `PARTITION_HASH_BUCKETS`, on the reasoning that such a set already tiles the whole keyspace — true only once it is complete. A set missing a remainder tiles none of that gap, and events from organizations hashing there are rejected outright. Maintenance now fills the gap at the modulus the set already uses, which cannot overlap its existing children, and says so at warning level rather than info. Lowering the configured bucket count makes every pre-existing partition take this path, so the previous behavior would have retired self-healing for exactly the partitions that still needed it.
+- Fix: Leave a range partition alone when it was created as a plain leaf rather than sub-partitioned by hash. Adding hash children to one raised `42P17` and aborted the whole maintenance run, so tables processed later in the run silently went without their partitions.
+- Fix: Archive log partitions containing multi-line log bodies. The database driver's `COPY ... TO STDOUT` iterator framed the stream on physical newlines, so a body with a raw newline in it (a stack trace, a multi-line message) was cut in half at an archival chunk boundary — failing the entire partition with a CSV field-count error and leaving it in hot storage indefinitely. Fixed in django-vpg 0.3.2, which yields the server's per-row chunks unaltered as psycopg does. Partitions stranded by this archive normally on the next maintenance run. (This was listed under 6.2.3 in error — it landed after that tag was cut, so it ships in this release instead.)
+- Fix: On billing-enabled installs, honor Stripe's `active` flag for products and prices, so a plan or price archived in Stripe stops being sold. Archive status was read off the Stripe payload and thrown away, reaching the database only as absence from the nightly product listing. Two things followed from that: the `product.created`/`product.updated` webhook ignored `active` entirely, so archiving a product refreshed its row instead of retiring it and a later update event could resurrect a row the nightly sync had already pruned; and prices were never pruned at all, so a price archived under a still-live product lingered locally and stayed purchasable, with checkout and subscription creation accepting the local row and then failing inside Stripe. Both models now store `active`, the nightly sync lists archived products rather than filtering them out at the Stripe API so the flag is recorded rather than inferred, and the plan list, checkout, and subscription creation all exclude inactive rows — an archived price now 404s at checkout instead of erroring at Stripe, and archiving takes effect within seconds of the webhook rather than at the next nightly run. Archived rows are kept rather than deleted: grandfathered subscriptions still point at them and must keep rendering. `active` is a separate axis from `is_public`, which marks a current price that simply isn't offered publicly (non-profit, grandfathered); those remain purchasable by price id. The product field mapping is now shared by the sync and the webhook so the two cannot drift, which also fixes the webhook silently dropping a product's `sso=true` metadata and leaving an organization's plan without the per-organization SSO entitlement until the next nightly sync.
+- Perf: Order and index uptime monitor checks by their UUIDv7 `id` rather than by a separate `start_check` timestamp. `uptime_monitorcheck` is RANGE partitioned on `id` and HASH sub-partitioned on `organization_id`, but every read of it sorted by `start_check` — not the partition key — so PostgreSQL could not plan an ordered Append and had to Merge Append instead, opening an index scan on every partition just to discover which one held the newest row. The monitors page therefore did roughly one index descent per partition per monitor and got steadily slower as retention accumulated partitions; on a 360-leaf, 6.8M-row reproduction a 50-monitor page went from 4,500 index searches to 50. Sorting by `id` selects the same rows, because `id` is now minted from the moment a check starts rather than defaulting to insert time, so per monitor the two sequences agree. The full `(monitor, is_change, start_check)` index is replaced by a `(monitor, id)` index restricted to rows where `is_change` is true: up/down transitions are 0.03–0.6% of rows in practice, so indexing every check for a filter almost nothing matches cost more than the heap it covered.
+- Perf: Uptime check range partitions are now weekly rather than daily, and the monitors page fetches checks for a single organization instead of naming one per monitor. A partitioned table's cost is paid in relation locks, and locks scale with the number of RANGE nodes rather than with the rows in them — one monitors page load takes a lock per partition it plans over. Measured on a reproduction at 90-day retention, daily partitions cost 1,946 locks at 4 hash buckets and 6,602 at 16, against a stock cluster's nominally 6,400-entry shared lock table (`max_locks_per_transaction` × `max_connections`) that every backend draws from, so on a wider install a single page load could exhaust it and fail unrelated transactions, event ingestion included. Weekly partitions bring the same query to 118 locks, and naming one `organization_id` lets the planner prune the hash dimension at plan time instead of deferring it to execution — worth 6,602 locks down to 782 on its own. Uptime check volume is orders of magnitude below event volume, so daily granularity only ever bought a finer retention boundary; a week's checks may now be kept up to 7 days past `GLITCHTIP_UPTIME_RETENTION_DAYS` before their partition is dropped.
+- Change: Upgrading rebuilds the uptime check table and discards existing check history. `MonitorCheck.start_check` is dropped as a column — a check now stores one instant, the timestamp already carried inside its UUIDv7 `id`, plus `response_time` as the duration. `start_check` remains as a model property and an unchanged API field, read back out of the `id`, so API clients and the frontend see no difference. The point is that `id` is the partition key, so making it the only temporal column means a time-based query on this table can no longer be written without also pruning partitions. The migration drops every existing partition before altering the parent, one statement at a time so locks never accumulate: `DROP COLUMN` recursing a full partition tree was measured at 3,337 locks on a 1,568-leaf install, over half a default cluster's shared lock table, and keeping a window of history would leave daily partitions overlapping the weekly ones created in their place. Uptime alerting is unaffected — a monitor's up/down state, last change, and consecutive-failure counter live on `uptime_monitor`, and the checker never reads `MonitorCheck`. Do not run `resync_monitor_cache` after upgrading: it rebuilds those cached fields from check history, which this migration has just cleared. Because the column is dropped rather than deprecated, the previous release's code cannot write a check once the migration has run: on a deployment that keeps old pods serving while the migration applies, uptime checks recorded by not-yet-replaced pods fail with `column "start_check" does not exist` until the rollout completes. The window is self-healing and confined to check recording — monitor state and alerting are unaffected — but on a multi-replica install expect a gap in check history spanning the rollout.
+- Change: Default `PARTITION_HASH_BUCKETS` from 4 to 2. Two is the smallest bucket count that still sub-partitions by organization, so hash pruning stays observable in development — a query that forgets to filter on `organization_id` shows up as twice the partitions, where a single bucket would hide it entirely. An install with one organization, which is what this default is for, hashes every row into one bucket either way: the same leaf holds the same rows at the same size, and the change only removes two permanently empty partitions. What those empty partitions cost is locks. Every partition, and every index on it, takes a lock slot in work PostgreSQL cannot narrow to one organization — retention sweeps, cold-storage archival, `ALTER TABLE` on a parent, `DROP ... CASCADE` — and that lock table is shared by the whole instance, so exhausting it fails event ingestion and not only queries. Organization-scoped queries are unaffected; they lock one hash leaf per time partition at any modulus. Existing partitions keep their current modulus, and a table holding both is correct. Retention and the number of indexes per table dominate this budget, so any install keeping months of events in PostgreSQL should raise `max_locks_per_transaction` — 512 is a reasonable floor — whatever the bucket count.
+- Change: PostgreSQL 14 remains supported and documented, but the version CI exercises on its minimum lane is now 15. Django 6.1 drops PostgreSQL 14, so the tested floor moves ahead of that upgrade rather than discovering the problem during it.
+- Deps: django-vpg 0.3.2 (`COPY ... TO STDOUT` yields the server's per-row chunks unaltered, matching psycopg). Django is now pinned below 6.1 (`>=6.0,<6.1`), along with django-async-backend, rather than relying on `~=6.0` — which permits 6.1 and would let a routine lockfile refresh pull it in. Django 6.1 breaks the async ORM outright: django-async-backend ships a fork of Django's `SQLCompiler`, and 6.1's `Col.as_sql` calls a `quote_name` the fork does not define, so every async ORM query raises. Moving to 6.1 is now a deliberate edit rather than a side effect. The django-ninja floor is raised to 1.6, which is where `ninja.Status` was introduced; the declared floor had been below what the code actually imports since `Status` was first adopted, so a 1.5.x resolution would fail at startup. Resolved versions are unchanged.
+
+# 6.2.3
+
+- Security: Fix an SSRF bypass where an authenticated user could reach internal addresses through uptime monitors, webhook alert recipients, or the project importer by pointing them at a public URL that redirects to an internal IP (or via DNS rebinding). Outbound requests now validate the address actually connected to; uptime checks and the importer re-validate every redirect hop, and webhook delivery no longer follows redirects at all. The importer also rejects internal URLs at submission time. Still governed by the existing `GLITCHTIP_ALLOW_PRIVATE_IPS` / `GLITCHTIP_UPTIME_ALLOW_PRIVATE_IPS` opt-outs. Reported by GitLab user ngit-tm.
+- Feat: Per-organization custom SSO — organization managers can connect their own OpenID Connect identity provider (with a one-step Google preset) via a new social-apps management API and sign users in on a per-organization login page (`/login/<org slug>`). Responses include the callback URL to register at the IdP; client secrets are write-only. Signing in through an organization's provider grants membership, so it also acts as an implicit invitation. On billing-enabled installs, creation requires a plan whose Stripe product carries `sso=true` metadata. Organization-supplied IdP URLs are SSRF-guarded: https-only public hosts at write time, plus `SOCIAL_AUTH_BLOCK_PRIVATE_IPS` (default-on whenever non-admin organization managers can exist) refusing social-auth outbound requests to private addresses at connect time.
+- Feat: Rust ingest no longer requires Valkey. With `GLITCHTIP_RUST_INGEST` on and no `VALKEY_URL`, the ingest path runs its block/dedupe cache against the database cache table and enqueues work through the Postgres task broker, all on the shared connection pool.
+- Feat: Block emptying a live organization of its members at the database level with a deferred constraint trigger, closing bypasses of the Python-level owner checks. Also fix the account-deletion owner check so the sole owner of one organization can no longer delete their account through a plain membership in another and orphan the organization they own.
+- Feat: Support Scaleway as an email provider.
+- Fix: Isolate the error-reporting scope per request on the Rust ingest path and per task in the worker. An all-in-one process runs requests, the embedded worker and the scheduler on one event loop, so reports an operator sends to their own error tracker previously carried whatever breadcrumbs the process last accumulated — another task's SQL on a task failure, uptime-check queries on an ingest error. Each report now carries only its own trail, plus the request (method/path/query, ingest keys filtered) or task (name/queue/id) that produced it.
+- Fix: Don't 500 on priority-sorted issue-list pagination.
+- Fix: Reject event submissions whose project id exceeds the BIGINT range with a 4xx before querying, instead of erroring inside the database driver.
+- Perf: Stream chunk-upload (debug file and sourcemap upload) decompression in capped 64 KiB reads off the event loop, spooling large chunks to disk instead of the process heap — a gzip bomb now aborts mid-inflate instead of expanding into RSS, and oversized compressed input is rejected before any inflation. The decompressed content's SHA-1 is verified against the client-supplied chunk name (the cross-organization deduplication key, previously trusted unverified), and invalid gzip or a checksum mismatch now returns 400 instead of 500.
+- Change: Drop `authorize_url` from social app payloads and the public `/api/settings/` response. Nothing consumed it, and serializing it fanned an anonymous settings request out into one OIDC discovery fetch per configured app; both settings endpoints now make no outbound requests at all.
+- Deps: glitchtip-rust 0.8.0 (the Postgres driver is now the embedded django-vpg; optional-Valkey ingest init), django-vtasks 3.1.0 (`VTASKS_TASK_CONTEXT` per-task context hook), Alpine 3.24 base image.
+
+# 6.2.2
+
+- Change: The Rust PostgreSQL driver (`gt_rust.django_backend`) is now the only database engine (the internal `DATABASE_ENGINE` opt-in flag is removed). psycopg remains installed as a library (SQL composition, JSON parameter wrappers) but no database I/O flows through it. Operator-facing difference from the psycopg engine: `DATABASE_CONN_MAX_AGE > 0` no longer yields unpooled persistent connections — the Rust driver always pools internally. (Empty database HOST means the local unix socket, matching psycopg, as of glitchtip-rust 0.6.1.)
+- Feat: django-vtasks 3.0 — `run_after` delayed tasks are honored, orphan rescue is safe with multiple workers per host (liveness markers), unique-task keys are stable across processes, and the embedded worker stops on SIGTERM even when the server's request drain hangs.
+- Fix: granian 2.7.9 — fixes an upstream memory leak in async application calls (2.7.7) and a WSGI threadpool starvation bug (2.7.9).
+- Fix: Default `GRANIAN_WORKERS_KILL_TIMEOUT` to 60s (still overridable) so a worker that ignores SIGTERM is force-killed instead of staying resident at full RSS alongside its replacement — which, with the RSS recycler set to 50% of the cgroup limit, could park an all-in-one container at ~2x the threshold until the cgroup OOM killer intervened.
+- Fix: Don't wedge ASGI lifespan shutdown when a mounted sub-app's lifespan task crashes or exits early; a broken sub-app now degrades to a reported startup failure instead of a worker that never exits (which would keep two workers pinned at ~2x RSS).
+- Fix: Preload the parent issue's search-index and resolved-release relations when serializing events for MCP, so `get_event` doesn't trigger a lazy synchronous ORM query on the async path.
+- Deps: glitchtip-rust 0.6.1 (DB-API `Binary` constructor, libpq-parity empty-host default, warnings for dropped connection OPTIONS), django-vtasks 3.0.0, granian 2.7.9.
+
+# 6.2.1
+
+- Feat: Optional server-side PII scrubbing at ingest — a last-line-of-defense scrubber that redacts secrets and sensitive data from events and logs before they are enqueued or persisted, for operators who cannot rely on every client SDK being configured to scrub.
+- Feat: Serve the whole envelope ingest endpoint (auth through enqueue) in Rust behind the `GLITCHTIP_RUST_INGEST` flag.
+- Feat: Opt-in Rust PostgreSQL driver via the `DATABASE_ENGINE` env var (default unchanged); set `DATABASE_ENGINE=gt_rust.django_backend` to run the ORM on gt_rust's driver, sharing one Tokio pool for sync and async.
+- Feat: Run the Django cache and django-vtasks through the gt_rust Valkey driver so cache, tasks, Postgres, and ingest share a single Tokio runtime and one multiplexed Valkey connection.
+- Feat: Opt-in metered overage billing on top of subscription plans, with a configurable overage cap and webhook surfacing of async meter-ingestion failures.
+- Feat: Switch to django-allauth-async for native-asyncio authentication flows.
+- Feat: Add async organization ownership transfer (`achange_owner`) and use it in the set-owner endpoint.
+- Feat: Periodically clean up orphaned FileBlobs.
+- Feat: Support Mattermost webhook alert recipients.
+- Feat: Accept Breakpad-format debug IDs in NativeDebugImage.
+- Perf: Parse each JavaScript sourcemap once per event instead of once per stack frame, eliminating worker CPU spikes when ingesting events with large sourcemaps.
+- Perf: Stream event and log batches to Postgres with COPY on both database drivers, batch-encoding rows via the driver's writer.
+- Perf: Recycle pooled database connections with a configurable `max_lifetime` to bound per-connection memory growth.
+- Perf: Periodically return freed memory to the OS (malloc_trim) in every server process.
+- Perf: Fan out alert notification recipients concurrently.
+- Perf: Reduce Sentry SDK memory overhead under ASGI and Python 3.14, and drop deprecated `.dict()` and per-request `asyncio.iscoroutinefunction` churn on hot paths.
+- Perf: Keep the MCP SDK off the default web boot path and keep the unknown-user login dummy hash off the event loop.
+- Fix: Stop a duplicate `timeout` kwarg from breaking social login.
+- Fix: Drop poison messages from batched ingest tasks instead of failing the whole batch.
+- Fix: Concatenate multi-chunk blobs in order during file assembly.
+- Fix: Strip NUL bytes from the transaction group key before lookup.
+- Fix: Bucket transaction usage by received (ingestion) time rather than client-supplied time.
+- Fix: Skip hash-child partition creation when the existing modulus differs, and bail on non-hash children.
+- Fix: Recycle stale database connections for the mounted MCP sub-app.
+- Fix: Cap the aiohttp default request timeout at 30s (Stripe at 10s).
+- Fix: Harden FileBlob cleanup deletes and cap them at 10k per run.
+- Security: Warn MCP agents that returned event data is untrusted, DSN-submitted input.
+- Deps: symbolic 13.9.0, glitchtip-rust 0.5.0, django-allauth-async 65.16.1.7, django-organizations 2.7, django-vcache 3.0, model-bakery-async 1.23.
+
+# 6.2.0
+
+- Feat: Native OTLP/HTTP logs ingestion endpoint (POST /v1/logs), with request-body decompression handled in Rust.
+- Feat: Decouple the issue search index from the Issue row — drop `Issue.search_vector` in favor of a partition-pruned `IssueIndex` leaf for faster, partition-aware search.
+- Feat: Add a configurable consecutive-failure threshold before uptime alerts fire.
+- Feat: Fingerprint unknown envelope item types per type during ingest, and ignore `trace_metric` items.
+- Feat: Send a welcome email on support-license activation.
+- Perf: Move all ingest request-body decompression (gzip/deflate/br/zstd) into the Rust core and drop the Python decompression middleware.
+- Fix: Weight uptime checks at 0.1 to match logs in quota accounting, including past-period usage; make usage event weighting a single source of truth.
+- Fix: Assorted Stripe/billing fixes — consistent usage window for self-hosted and free-tier orgs, contiguous historical free-tier billing cycles at month boundaries, clear the primary subscription on cancel, deactivate the subscription on organization delete, and let the `GLITCHTIP_LICENSE_KEY` env var override the stored DB row.
+- Fix: Resolve cursor position through relation paths in API pagination so ordering is correct when sorting by a related field.
+- Fix: Reassemble multi-chunk debug information files in order.
+- Fix: Widen the uptime monitor interval column to fit its 86400-second max, and cap the consecutive-down counter to prevent smallint overflow.
+- Fix: Derive the `SpanStaging` id from server (ingestion) time so retention stays a metadata-only partition drop.
+- Deps: django-async-backend 6.0.7, symbolic 13.3.0, glitchtip-rust 0.2.1.
+
+# 6.1.9
+
+- Feat: Support running with email disabled when SMTP is unconfigured; show the active email transport on the startup banner.
+- Feat: Add an instance support-link API endpoint.
+- Fix: Accept an empty event_id in the envelope header during ingest.
+- Perf: Reduce async event-ingest worker CPU by collapsing each raw-SQL helper to a single sync_to_async hop (was up to four) on the default sync path.
+- Deps: django-vtasks 2.1.2, django-vcache 2.2.0.
+
+# 6.1.8
+
+- Refactor: Make django-async-backend the only database engine and remove the USE_ASYNC_BACKEND opt-in flag along with its sync-fallback shim layer. The async backend is now always active; sync ORM, migrations, and admin paths are unaffected.
+- Fix: Prevent "Cannot open a new connection in an atomic block" / TransactionManagementError during concurrent async event ingest by running issue creation in a single transaction instead of holding it open across an await
+
+# 6.1.7
+
+- Security: Require the requesting user's own admin role to delete projects, DSN keys, and teams. A logged-in non-admin organization member could previously delete these within their own organization, because the role check matched any admin in the org rather than the caller (reported by Gumbraise).
+- Security: Validate outbound webhook URLs to block SSRF.
+- Security: Hash OAuth refresh and access tokens at rest, and restore the proactive access-token cache purge on revoke.
+- Security: Derive cookie Secure flags from the site URL and warn on unsafe defaults.
+- Feat: Assign issues to organization members or teams.
+- Feat: Add Feishu (Lark) webhook alert recipient.
+- Perf: Switch event-ingest and uptime-stats hot-path bulk writes from VALUES to UNNEST.
+- Perf: Hour-tiered, idempotent span cold storage with bounded reads and rollup recovery.
+- Perf: Cache the OIDC discovery document instead of fetching it per request.
+- Perf: Batch invalid-DSN block-cache lookups into a single MGET and scope them by (project, key).
+- Perf: Skip the hstore OID lookup on every new database connection.
+- Fix: Persist raw JavaScript stack traces only when sourcemaps remap frames; improve best-stacktrace selection and iOS event context.
+- Fix: Replace the 4 GB DATA_UPLOAD_MAX_MEMORY_SIZE workaround with a sized default.
+- Fix: Assorted Stripe billing fixes.
+- Deps: django-async-backend 6.0.6, symbolic 13.1.1, pydantic 2.13.3, django-anymail 15, django-prometheus 2.5.0, django-stubs 6.0.3, plus routine boto3, ruff, granian, and ipython updates.
+
+# 6.1.6
+
+- Feat: Accept API tokens as a fallback for MCP endpoint auth (for clients without full OAuth DCR support)
+- Fix: Detect ValkeyCache backend case-insensitively, restoring the issue-id SET optimization in alert/event processing
+- Fix: Cap Parquet row group size and drop ORDER BY in span chunk compaction to prevent DuckDB OOM on wide spans
+- Deps: pydantic 2.13.2, symbolic 12.18.1, django-allauth 65.16.1, sentry-sdk 2.58.0, boto3 1.42.91
+
+# 6.1.5
+
+- Feat: Accept ISO-8601 timestamps in log envelope items
+- Feat: Add TLS env vars for Valkey (VALKEY_SSL_CA_CERTS, etc.)
+- Feat: Return multiple prices and marketing features from Stripe products API
+- Fix: Symbolicate obfuscated Flutter Android stack traces
+- Fix: Reduce cold storage read memory by narrowing date range and cleaning corrupt files
+- Fix: Log warning instead of silently passing on corrupt parquet file delete failure
+- Fix: Tolerate malformed parameterized log messages in ingest
+- Fix: Prune partitions in uptime heartbeat existence check
+- Fix: Simplify cache config — VALKEY_URL is the single source of truth
+- Fix: Register promote_spans/compact_span_chunks as sync tasks
+- Refactor: Make promote_spans, compact_span_chunks, and _write_chunk_parquet async-native
+- Deps: Django 6.0.4, django-allauth 65.16.0, django-vcache >=2.1.1, duckdb 1.5.2, sentry-sdk 2.57.0
+
+# 6.1.4
+
+- Feat: Add subscription usage endpoints with daily breakdown and previous period comparison
+- Feat: Return weighted log event counts in subscription usage API
+- Feat: Populate IssueAggregate in make_sample_issues command
+- Fix: Resolve three production ingest errors (profile_chunk envelope type, None stacktrace guard, NUL bytes in span fields)
+- Fix: Use keyword arg for AuthenticationError to avoid string status_code crash
+- Fix: Events count API now respects retention days setting
+- Fix: Iterate cold storage files newest-first with early exit to prevent DuckDB OOM on limit queries
+- Fix: Sort resource data before upsert to prevent deadlocks
+- Perf: Add org_date indexes and parallelize daily stats queries
+- Deps: Upgrade django-vtasks to v2.1.0
+
+# 6.1.3
+
+- Fix: Return 413 response for oversized request data instead of unhandled exception
+- Fix: Sort uptime stats upsert by org_id to prevent deadlock
+- Fix: Cap DuckDB threads and memory to prevent VmPeak explosion; auto-detect from cgroup CPU quota
+- Fix: Convert remaining sync views to async
+- Fix: Replace server-side cursor with batched iteration in throttle check (PgBouncer compatible)
+- Fix: Auto-set GRANIAN_WORKERS_MAX_RSS to bound memory fragmentation
+- Fix: Split event count queries to prevent shared memory exhaustion
+- Fix: Increase MCP OAuth access token lifetime to 8 hours
+- Fix: Handle duplicate release creation with get_or_create
+- Fix: Set ERROR status on artifact assembly failures instead of raising
+- Feat: Show event counts on org admin detail page
+- Feat: Populate hourly stats in make_sample_* commands
+- Feat: Add billing cycle dates to created subscriptions
+- Perf: Convert hot-path ORM queries to raw SQL in event ingest
+- Refactor: Consolidate org admin into single registration
+
+# 6.1.1
+
+- Fix: Batch-delete partitioned tables before org/project/issue cascade delete to avoid exhausting PostgreSQL shared lock table
+- Fix: Break infinite loop in release cleanup when concurrent FK insert causes repeated IntegrityError
+- Fix: Break infinite loop in issue cleanup on IntegrityError (same pattern as release cleanup)
+- Fix: Project deletion now correctly awaits async batch-delete functions (previously created coroutines that were never awaited)
+
+# 6.1.0
+
+- Feat: Enable logs ingestion by default (set `GLITCHTIP_ENABLE_LOGS=false` to disable)
+- Fix: Serialize status page monitors as dicts for cache compatibility
+- Fix: Improve OpenAPI spec correctness for TypeScript type generation
+- Perf: Skip unnecessary middleware for ingest endpoints
+- Perf: Cap glibc malloc arenas based on cgroup CPU limit
+- Refactor: Convert all tasks from sync to async
+- Refactor: Resolve cold storage backend lazily instead of at availability check
+
+# 6.0.11
+
+- Fix: Resolve maintenance statement timeouts by routing all cleanup functions through maintenance DB alias
+- Fix: Replace django_valkey imports with django-vcache raw client
+- Fix: Reduce sentry SDK memory overhead by disabling unused integrations
+- Fix: Move MCP OAuth endpoints under /mcp prefix to avoid SPA route conflicts
+- Fix: Migrate span promotion writes from DuckDB to arro3
+- Fix: Detect container memory limit for DuckDB default
+- Feat: Add time/host/environment filters to MCP tools for post-deploy observability
+- Refactor: Remove requests-mock dependency, remove cgroup v1 fallback from DuckDB memory detection
+- Deps: Update django-vcache to v2.0.0 (Rust-based driver, replaces valkey-py)
+
+# 6.0.10
+
+- Feat: Implement Debug Files list endpoint (GET /projects/{org}/{project}/files/dsyms/)
+- Feat: Use arro3 for all Parquet writes, keep DuckDB for reads only
+- Feat: Add org_slug filter and uuid4 cold fallback to MCP get_event
+- Fix: Handle concurrent FK insert during release cleanup
+- Fix: Replace cache_page with selective caching on status page
+- Fix: Clamp UUIDv7 timestamp to valid 48-bit range
+- Fix: Handle unmatched quotes in issue search query
+- Fix: Delete existing S3 file before save to prevent filename collision
+- Fix: Use SOH quote char for CSV archival and retry deadlocked detach
+- Fix: Always set DuckDB memory limit and auto-detect temp directory
+- Fix: Check partition existence via pg_tables instead of catching exception
+- Fix: Add organization_id pruning to latest event query, handle missing partitions
+- Fix: Use cached read connection for parquet rewrites, add malloc_trim
+- Fix: Reduce overhead in cleanup_orphaned_fileblobs
+- Perf: Cold storage robustness improvements
+
+# 6.0.9
+
+- Feat: Add Repository model with list/create API; link to Release and Issue models; add GET /issues/{id}/commits/ endpoint
+- Feat: Convert webhook alert notifications from synchronous to async for improved reliability
+- Feat: Add optional MAINTENANCE_DATABASE_URL for elevated DDL connections
+- Fix: Annual Stripe subscription billing cycle was reset to month 1 on every nightly sync
+- Fix: Annual billing cycle boundaries now anchored to period_start to prevent date drift on month-end subscription dates
+- Fix: Search issues and event detail endpoints now fall back to sentry SDK event_id
+- Fix: Use DETACH PARTITION CONCURRENTLY to avoid partition management deadlocks
+- Fix: Split performance V3 migration to avoid exceeding max_locks_per_transaction
+- Fix: Double slash in base href when BASE_PATH is set
+- Fix: Accept trailing slash on internal health endpoint
+- Fix: Resolve native debug symbols by address without requiring a function name match
+- Perf: Denormalize latest_is_up and last_change onto uptime Monitor to reduce query load
+- Improved stability for experimental features not yet enabled by default (cold storage, MCP server)
+
+# 6.0.8
+
+- Feat: Add minidump ingestion for native crash reporting
+- Feat: Add JVM source context support for Java/Kotlin stack traces
+- Feat: Add SourceMapCache for improved source map resolution
+- Feat: Track first and latest release per issue; support "resolve in next release"
+- Fix: Don't reopen resolved issues when the incoming event has no release
+- Fix: Security hardening — SSRF protection in uptime monitoring, path traversal in artifact assembly
+- Fix: Filter out projects belonging to soft-deleted organizations
+- Fix: Set event_processed flag for transactions in envelope view
+- Fix: Weight transactions at 1:1 parity with issue events for quota accounting
+- Fix: Use per-type retention for hourly stat partition cleanup
+- Fix: Remove misleading CORS_ORIGIN_ALLOW_ALL warning
+- Fix: Various debug information file (DIF) pipeline fixes
+- Improved stability for experimental features not yet enabled by default (logs, cold storage, performance monitoring v2, MCP server)
+
+# 6.0.7
+
+- Feat: Add MCP (Model Context Protocol) server with OAuth 2.0 authorization
+- Feat: Add native alert support for Microsoft Teams, Zulip, and ntfy
+- Feat: Add test alert endpoint with optional recipient filter
+- Feat: Add optional uptime monitoring toggle and enabled_features settings API
+- Feat: Add deploy/commit APIs and fix release file size
+- Feat: Add release retention cleanup (365-day default)
+- Feat: Add InternalTransport to prevent self-DOS when SENTRY_DSN points to self
+- Feat: Add bootstrap_dev management command for dev environment setup
+- Feat: Add `GLITCHTIP_CHUNK_UPLOAD_USE_RELATIVE_URL` setting for sourcemap upload
+- Feat: Logs ingestion support (disabled by default, enable with `ENABLE_LOGS`)
+- Feat: Optional DuckDB cold storage for issue events (disabled by default)
+- Fix: Bump django-vtasks to 1.0.3 (zstd thread-safety SIGSEGV fix)
+- Fix: Coerce non-string fingerprint values to strings during ingest
+- Fix: Handle delete alert preference when no alert exists
+- Fix: Use project_id instead of slug in difs_assemble to avoid MultipleObjectsReturned
+- Fix: Add replay_video to IgnoredItemType for React Native SDK envelopes
+- Fix: Fix AttributeError in IssueEventSchema resolve_tags when tags are not a dict (Fixes #212)
+- Fix: Convert span_id to signed bigint to prevent overflow
+- Fix: Establish is_change baseline when partition retention prunes uptime change records
+- Fix: Don't forward ASGI lifespan to Django in web-only mode
+- Fix: Wire update_subscription_cycles into nightly maintenance
+- Fix: Handle None blob size in assemble
+- Fix: Allow project:write and project:admin scopes to list alerts
+- Refactor: Remove dead code and add vulture CI check
+
+# 6.0.6
+
+- Fix: Debug information file assembly now works with object storage backends (S3, GCS, DigitalOcean Spaces)
+- Fix: Clean up alerts notification M2M table during issue maintenance to prevent ForeignKey violations
+- Fix: Handle ServerDisconnectedError as network error in uptime checks
+- Fix: Silently discard binary-corrupted envelope item headers
+- Perf: Optimize maintenance cleanup queries for partitioned tables (file cleanup, issue cleanup, transaction group cleanup)
+- Perf: Drop unused varchar_pattern_ops index on TagValue.value
+- Refactor: Align ORM model state with actual SQL schema for IssueTag and TransactionEvent
+- Disable WebSocket handling in granian (not used by GlitchTip)
+- Increase default decompressed payload size limit from 2.5 MB to 5 MB
+
+# 6.0.5
+
+- Feat: Ingest Sentry SDK feedback and user_report envelope items, stored as UserReport (fixes #107)
+- Fix: Maintenance cleanup no longer times out on large partitioned tables
+- Fix: Coerce non-string logentry params and strip NUL bytes from event text fields
+- Fix: Correct organization user scopes on organization retrieve
+- Fix: Check for missing chunks in artifact bundle assemble
+- Fix: Allow blank/null options field in User model
+- Fix: Remove stale `received` column reference from `import_legacy_events`
+- Fix: Remove per-organization label from projects metric to reduce cardinality
+- Perf: Add organization_id filter to uptime MonitorCheck queries for partition pruning
+- Add SKIP_INIT env var to all-in-one script
+
+# 6.0.0
+
+- Fix: Truncate oversized stack trace frame `vars` on ingestion to prevent 2MB+ event payloads from recursive error capture
+- Upgrade to Django 6.0
+- Switch Celery to django-vtasks
+- Switch Cache to django-vcache
+- Add optional READ_ONLY_DATABASE_URL
+- Ingest optimizations around bulk queries
+- Use port 8000 more consistently instead of sometimes port 8080
+- Remove gunicorn and uvicorn. Please use granian. uwsgi still included for compatibility.
+- Add TRUSTED_PROXIES env var (defaults to "*") for granian support.
+- Remove unused SetRemoteAddrFromForwardedFor middleware (was never enabled)
+- Optional metrics endpoint is now just "/metrics" and not in openapi schema
+- Improve sourcemap compatibility by fixing an issue where some sentry sdk tools did not follow redirects
+- Add backend support to event threads interface. Notably, this enables stacktraces to show up when using Swift.
+- Switch to uuid7 primary id for events. Maintain existing sentry-sdk sent event id compatibility. This enables faster fetching of events, as partition table is known by uuid7 time.
+- Database column alignment optimizations
+- Unify Postgres Partitioning strategy. Remove support for pg-partman. Remove django-postgres-extras. Custom GlitchTip PartitionManager handles partitions.
+- All-in-one GlitchTip (combined web+worker process) is now considered stable
+
+# v5.2.0
+
+- DISABLE_SERVER_SIDE_CURSORS now defaults to True but setting to False will be respected
+
+# v5.1.0
+
+- Fix: Performance transaction group method no longer nullable, which in rare conditions could lead to duplicate and invalid groups
+- Fix: Reject transaction events that are older than GLITCHTIP_MAX_TRANSACTION_EVENT_LIFE_DAYS
+
+# v5.0.7
+
+- Fix: Return 400 status instead of 500 when wizard hash is empty
+- Fix: Unhandled RequestDataTooBig exception
+- Increase aiohttp header size allowance to 16380 bytes and handle errors around unexpected header size gracefully
+
+# v5.0.6
+
+- Better tsvector trim
+
+# v5.0.5
+
+- Implement throttling for organization invite by email
+
+# v5.0.0
+
+## Breaking changes
+
+- Require Postgresql 14+, dropping support for Postgresql 13.
+- Squash and delete very old migrations. Upgrades from GlitchTip 3.x and below are not supported. Upgrade to 4.x first.
+
+## Other changes
+
+- Django 5.2
+
+# v4.2.9
+
+- Remove djstripe and stripe module, which use excessive ram. Replaced by our own stripe sync implementation.
+- You may now set env var `GLITCHTIP_INSTANCE_NAME` to set a name that appears at login/register to help identify your server
+- Celery 5.5
+- Django Ninja 1.4
+- Fix [bug](https://gitlab.com/glitchtip/glitchtip-backend/-/merge_requests/1454) in StatsV2Schema
+- Fix several sentry api incompatibility [issues](https://gitlab.com/glitchtip/glitchtip-backend/-/merge_requests/1421).
+- Add more content to issue search index
+- Add OrganizationSocialApp, configurable in django admin, that allows Organizations to be associated to SocialApps and automatically assign users who log in with the associated SocialApp to the Organization. Signals currently disabled.
+
+# v4.2.5
+
+- Fix for event query params not displaying on frontend
+- Adds initial custom stripe webhook integration (not yet used but visible in django admin)
+
+# v4.2.4
+
+- Initial custom stripe integration (not yet used but visible in django admin)
+- Consistency fixes around how api ids are handled
+- openapi spec fixes
+
+# v4.2.1
+
+- Critical fix for static file locations
+
+# v4.2.0 (Broken, do not run)
+
+- Support sentry sdk artifact bundles for source map support, including debug id mappings. Improves source map support for various sentry sdk integrations. Source maps no longer require a release. Users may need to reupload existing source maps.
+- GLITCHTIP_MAX_FILE_LIFE_DAYS now defaults to GLITCHTIP_MAX_EVENT_LIFE_DAYS (instead of 2 x event life).
+- Add organization and projects throttle. Can be set in Django admin.
+
+# v4.1.5
+
+- Upgrade to django-allauth 65.0.0
+- Upgrade Python to 3.13
+- Use connection pooling by default, unless max conn age is set
+
+# v4.1.4
+
+- Fix bug where release names with special chars did not allow release assemble to work
+
+# v4.1.3
+
+- Optimize alert sending logic to only consider recently ingested issues
+- Fixed https://gitlab.com/glitchtip/glitchtip-backend/-/issues/260
+
+# 4.1.2
+
+- Save performance transaction data in bulk, instead of one at a time
+- Fix migration that would fail in Postgres 13, which we still aim to support
+
+# 4.1.0
+
+- Remove event migration tool from 3.x. To migrate event data from 3.x to 4.1, first upgrade to 4.0.12. If event data doesn't need migrated, it's safe to upgrade from 3.x to any 4.x version.
+- Migrate MFA to django-allauth
+- Upgrade to django 5.1
+- Add support for django postgres pooling via env vars DATABASE_POOL, DATABASE_POOL_MIN_SIZE, and DATABASE_POOL_MAX_SIZE
