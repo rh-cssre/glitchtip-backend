@@ -1,0 +1,326 @@
+import gzip
+import os
+import tempfile
+from pathlib import Path
+
+import brotli
+from django.test import SimpleTestCase, override_settings
+
+from glitchtip.asgi import _is_hashed_asset, serve_static
+
+
+class MockASGIApp:
+    """Stands in for the Django application ServeStatic delegates to."""
+
+    def __init__(self):
+        self.called = False
+
+    async def __call__(self, scope, receive, send):
+        self.called = True
+
+
+PATHSEND = {"http.response.pathsend": {}}
+
+# Filled by each request() call, so a test can assert which path answered it.
+message_types: list[str] = []
+
+
+async def request(
+    app, path, accept_encoding=None, extensions=None, method="GET", extra_headers=()
+):
+    """Drive one GET through an ASGI app and return (status, headers, body).
+
+    ``extensions`` models what the ASGI server advertises. The default is a
+    server offering nothing, i.e. the streaming path.
+    """
+    headers = [(k.encode(), v.encode()) for k, v in extra_headers]
+    if accept_encoding is not None:
+        headers.append((b"accept-encoding", accept_encoding.encode()))
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": method,
+        "path": path,
+        "extensions": extensions or {},
+        "raw_path": path.encode(),
+        "query_string": b"",
+        "root_path": "",
+        "scheme": "http",
+        "headers": headers,
+        "client": ("127.0.0.1", 1),
+        "server": ("127.0.0.1", 8000),
+    }
+    messages = []
+
+    async def receive():
+        return {"type": "http.disconnect"}
+
+    async def send(message):
+        messages.append(message)
+
+    await app(scope, receive, send)
+    message_types.clear()
+    message_types.extend(m["type"] for m in messages)
+    if not messages:
+        return None, {}, b""
+    start = messages[0]
+    # A pathsend response names a file instead of carrying bytes; read it here
+    # so a test can compare the two paths byte for byte.
+    body = b"".join(m.get("body", b"") for m in messages[1:])
+    for message in messages[1:]:
+        if message["type"] == "http.response.pathsend":
+            body = Path(message["path"]).read_bytes()
+    return (
+        start["status"],
+        {k.decode().lower(): v.decode() for k, v in start["headers"]},
+        body,
+    )
+
+
+class HashedAssetTestCase(SimpleTestCase):
+    """The build's own bundles are the only thing cached forever."""
+
+    def test_hashed_bundles_at_the_tree_root_are_immutable(self):
+        for url in (
+            "/static/main-KVU4SSHB.js",
+            # A wider hash: the build mixes widths within one release.
+            "/static/chunk-B0tvkw2C2.js",
+            "/static/styles-4VN2AIF7.css",
+            # The source map beside a bundle carries the same hash.
+            "/static/main-KVU4SSHB.js.map",
+        ):
+            with self.subTest(url=url):
+                self.assertTrue(_is_hashed_asset("", url))
+
+    def test_stable_names_are_not_immutable(self):
+        for url in (
+            # Everything under a subdirectory, hashed-looking or not: these
+            # keep their names across a release, so caching one forever would
+            # pin a client to a stale copy.
+            "/static/assets/i18n/messages.fr.json",
+            "/static/assets/fonts/material-symbols.woff2",
+            "/static/admin/css/base.css",
+            "/static/main-KVU4SSHB.js/../../evil.js",
+            # No hash at all.
+            "/static/index.html",
+            "/static/favicon.ico",
+            # Word-shaped names of the same length as a hash. `immutable` is
+            # the one header a deploy cannot take back, so a file an operator
+            # dropped into the tree by hand must not match on shape alone.
+            "/static/main-override.css",
+            "/static/vendor-analytics.js",
+            "/static/runtime-polyfill.js",
+        ):
+            with self.subTest(url=url):
+                self.assertFalse(_is_hashed_asset("", url))
+
+
+class StaticRootTestCase(SimpleTestCase):
+    """Production serves the collected tree, precompressed copies and all."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name)
+        self.bundle = b"console.log('x');" * 100
+        (root / "main-ABCDEFGH.js").write_bytes(self.bundle)
+        (root / "main-ABCDEFGH.js.br").write_bytes(brotli.compress(self.bundle))
+        (root / "main-ABCDEFGH.js.gz").write_bytes(gzip.compress(self.bundle))
+        (root / "index.html").write_bytes(b"<!doctype html><html></html>")
+        (root / "assets").mkdir()
+        (root / "assets" / "messages.json").write_bytes(b'{"hello": "world"}')
+        self.inner = MockASGIApp()
+        with override_settings(DEBUG=False, STATIC_ROOT=str(root)):
+            self.app = serve_static(self.inner)
+
+    async def test_the_smallest_acceptable_copy_is_served(self):
+        decoders = {
+            "gzip, deflate, br, zstd": ("br", brotli.decompress),
+            "gzip, deflate": ("gzip", gzip.decompress),
+            None: (None, lambda body: body),
+        }
+        for accept, (expected, decode) in decoders.items():
+            with self.subTest(accept_encoding=accept):
+                status, headers, body = await request(
+                    self.app, "/static/main-ABCDEFGH.js", accept
+                )
+                self.assertEqual(status, 200)
+                self.assertEqual(headers.get("content-encoding"), expected)
+                self.assertEqual(headers["vary"], "Accept-Encoding")
+                self.assertEqual(decode(body), self.bundle)
+
+    async def test_the_hashed_bundle_is_cached_forever(self):
+        _, headers, _ = await request(self.app, "/static/main-ABCDEFGH.js", "br")
+        self.assertIn("immutable", headers["cache-control"])
+
+    async def test_a_stable_name_keeps_the_short_ttl(self):
+        _, headers, _ = await request(self.app, "/static/assets/messages.json", "gzip")
+        self.assertEqual(headers["cache-control"], "max-age=3600, public")
+
+    async def test_a_precompressed_copy_is_not_addressable_on_its_own(self):
+        """Serving main.js.br as its own URL would hand the client brotli
+        bytes labelled as JavaScript."""
+        await request(self.app, "/static/main-ABCDEFGH.js.br", "gzip")
+        self.assertTrue(self.inner.called)
+
+    async def test_an_unknown_path_falls_through_to_django(self):
+        await request(self.app, "/api/0/organizations/", "gzip")
+        self.assertTrue(self.inner.called)
+
+    async def test_every_static_response_carries_nosniff(self):
+        """MIDDLEWARE never runs for a file served here, so the headers it
+        would have set have to be set at this layer instead."""
+        _, headers, _ = await request(self.app, "/static/main-ABCDEFGH.js", "br")
+        self.assertEqual(headers["x-content-type-options"], "nosniff")
+
+    async def test_html_in_the_static_tree_cannot_be_framed(self):
+        """collectstatic copies the SPA's index.html into the tree. That copy
+        boots the real, session-authenticated app from the app's own origin, so
+        without these headers it is a frameable, CSP-free second front door."""
+        _, headers, _ = await request(self.app, "/static/index.html", "gzip")
+        self.assertEqual(headers["x-frame-options"], "DENY")
+        self.assertEqual(headers["content-security-policy"], "frame-ancestors 'none'")
+
+
+class PathSendTestCase(SimpleTestCase):
+    """A server that advertises http.response.pathsend gets the file named
+    rather than read: Python makes no filesystem call for the body at all."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name)
+        self.bundle = b"console.log('x');" * 100
+        (root / "main-ABCDEFGH.js").write_bytes(self.bundle)
+        (root / "main-ABCDEFGH.js.br").write_bytes(brotli.compress(self.bundle))
+        (root / "main-ABCDEFGH.js.gz").write_bytes(gzip.compress(self.bundle))
+        self.inner = MockASGIApp()
+        with override_settings(DEBUG=False, STATIC_ROOT=str(root)):
+            self.app = serve_static(self.inner)
+
+    async def test_the_file_is_named_not_read(self):
+        _, _, body = await request(
+            self.app, "/static/main-ABCDEFGH.js", "br", extensions=PATHSEND
+        )
+        self.assertEqual(
+            message_types, ["http.response.start", "http.response.pathsend"]
+        )
+        self.assertEqual(brotli.decompress(body), self.bundle)
+
+    async def test_a_server_without_the_extension_still_gets_the_file(self):
+        """The fallback matters: GlitchTip ships granian, but nothing stops
+        someone pointing another ASGI server at this application."""
+        status, headers, body = await request(
+            self.app, "/static/main-ABCDEFGH.js", "br"
+        )
+        self.assertIn("http.response.body", message_types)
+        self.assertNotIn("http.response.pathsend", message_types)
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["content-encoding"], "br")
+        self.assertEqual(brotli.decompress(body), self.bundle)
+
+    async def test_both_paths_produce_the_same_response(self):
+        for accept in ("br, gzip", "gzip", None):
+            with self.subTest(accept_encoding=accept):
+                streamed = await request(self.app, "/static/main-ABCDEFGH.js", accept)
+                named = await request(
+                    self.app, "/static/main-ABCDEFGH.js", accept, extensions=PATHSEND
+                )
+                self.assertEqual(streamed, named)
+
+    async def test_responses_pathsend_cannot_express_fall_back(self):
+        """pathsend sends a whole file and nothing else, so anything needing a
+        different body or status has to come from the library."""
+        _, headers, _ = await request(self.app, "/static/main-ABCDEFGH.js", "br")
+        cases = {
+            "range": ({"extra_headers": (("range", "bytes=0-9"),)}, 206),
+            "conditional": (
+                {"extra_headers": (("if-none-match", headers["etag"]),)},
+                304,
+            ),
+            "head": ({"method": "HEAD"}, 200),
+        }
+        for name, (kwargs, expected_status) in cases.items():
+            with self.subTest(case=name):
+                status, _, _ = await request(
+                    self.app,
+                    "/static/main-ABCDEFGH.js",
+                    "br",
+                    extensions=PATHSEND,
+                    **kwargs,
+                )
+                self.assertEqual(status, expected_status)
+                self.assertNotIn("http.response.pathsend", message_types)
+
+    async def test_development_does_not_use_pathsend(self):
+        """Dev resolves per request against the finders, so there is no startup
+        index to name a file from."""
+        with tempfile.TemporaryDirectory() as source:
+            (Path(source) / "logo.svg").write_bytes(b"<svg/>")
+            with override_settings(DEBUG=True, STATICFILES_DIRS=[source]):
+                app = serve_static(MockASGIApp())
+                status, _, body = await request(
+                    app, "/static/logo.svg", "br", extensions=PATHSEND
+                )
+        self.assertEqual(status, 200)
+        self.assertEqual(body, b"<svg/>")
+        self.assertNotIn("http.response.pathsend", message_types)
+
+
+class DebugFindersTestCase(SimpleTestCase):
+    """Dev has no collected tree: `docker compose up` never runs collectstatic,
+    so the admin, allauth and SPA assets have to come off the finders."""
+
+    async def test_files_are_served_without_collectstatic(self):
+        with tempfile.TemporaryDirectory() as source:
+            (Path(source) / "logo.svg").write_bytes(b"<svg/>")
+            inner = MockASGIApp()
+            with override_settings(DEBUG=True, STATICFILES_DIRS=[source]):
+                app = serve_static(inner)
+                status, headers, body = await request(app, "/static/logo.svg", "gzip")
+        self.assertEqual(status, 200)
+        self.assertEqual(body, b"<svg/>")
+        self.assertEqual(headers["cache-control"], "max-age=0, public")
+        self.assertFalse(inner.called)
+
+    async def test_a_file_added_after_startup_is_picked_up(self):
+        """The frontend gets rebuilt while the server is running."""
+        with tempfile.TemporaryDirectory() as source:
+            inner = MockASGIApp()
+            with override_settings(DEBUG=True, STATICFILES_DIRS=[source]):
+                app = serve_static(inner)
+                (Path(source) / "late.css").write_bytes(b"body{}")
+                status, _, body = await request(app, "/static/late.css", "gzip")
+        self.assertEqual(status, 200)
+        self.assertEqual(body, b"body{}")
+
+    async def test_a_symlink_out_of_a_static_dir_is_refused(self):
+        """Registering the finders' directories, rather than delegating to
+        finders.find(), is what keeps ServeStatic's containment check -- and
+        that check is the only thing that resolves symlinks. A link inside a
+        static directory pointing outside it must not be served."""
+        with (
+            tempfile.TemporaryDirectory() as source,
+            tempfile.TemporaryDirectory() as outside,
+        ):
+            secret = Path(outside) / "secret.txt"
+            secret.write_bytes(b"not static")
+            os.symlink(secret, Path(source) / "link.txt")
+            inner = MockASGIApp()
+            with override_settings(DEBUG=True, STATICFILES_DIRS=[source]):
+                app = serve_static(inner)
+                status, _, body = await request(app, "/static/link.txt", "gzip")
+        self.assertIsNone(status)
+        self.assertNotIn(b"not static", body)
+        self.assertTrue(inner.called)
+
+    async def test_nothing_in_development_is_cached(self):
+        """Including the hashed bundles: a dev build can be configured not to
+        hash, and a rebuild under the same name has to show up on reload."""
+        with tempfile.TemporaryDirectory() as source:
+            (Path(source) / "main-ABCDEFGH.js").write_bytes(b"x")
+            with override_settings(DEBUG=True, STATICFILES_DIRS=[source]):
+                app = serve_static(MockASGIApp())
+                _, headers, _ = await request(app, "/static/main-ABCDEFGH.js", "gzip")
+        self.assertEqual(headers["cache-control"], "max-age=0, public")
