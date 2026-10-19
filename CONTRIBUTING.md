@@ -4,6 +4,8 @@ You are encouraged to submit issues and merge requests.
 
 A good issue includes reproducible steps for bugs. Clear use cases for feature requests.
 
+Please don't ask when a fix or feature will be released. See our [release timing policy](https://gitlab.com/glitchtip/glitchtip/-/blob/master/CONTRIBUTING.md#release-timing).
+
 A good merge request includes a unit test demonstrating how a bug exists and is fixed with your change. Out of caution, contributors must not view or be familiar with proprietary Sentry code. Our codebase borrows code and ideas from Sentry when it was open source. We provide a fork of the last open source version of sentry [here](https://gitlab.com/glitchtip/sentry-open-source). You may and should read, understand, and copy open source Sentry code. While Sentry's current code is on GitHub, it would violate their proprietary license to use it.
 
 # Adding larger features and Python dependencies
