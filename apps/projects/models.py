@@ -1,0 +1,268 @@
+from urllib.parse import urlparse
+from uuid import uuid4
+
+from django.conf import settings
+from django.core.validators import MaxValueValidator
+from django.db import models
+from django.db.models import Count, Q, QuerySet
+from django.db.models.functions import Cast
+from django.utils.text import slugify
+from django_extensions.db.fields import AutoSlugField
+
+from apps.observability.utils import clear_metrics_cache
+from glitchtip.base_models import (
+    AggregationModel,
+    CreatedModel,
+    OrgScopedModel,
+    SoftDeleteManager,
+    SoftDeleteModel,
+)
+
+
+class ProjectSoftDeleteManager(SoftDeleteManager):
+    def get_queryset(self):
+        return super().get_queryset().filter(organization__is_deleted=False)
+
+
+class Project(OrgScopedModel, CreatedModel, SoftDeleteModel):
+    """
+    Projects are permission based namespaces which generally
+    are the top level entry point for all data.
+    """
+
+    org_field = "organization_id"
+
+    slug = AutoSlugField(populate_from=["name", "organization_id"], max_length=50)
+    name = models.CharField(max_length=64)
+    organization = models.ForeignKey(
+        "organizations_ext.Organization",
+        on_delete=models.CASCADE,
+        related_name="projects",
+    )
+    platform = models.CharField(max_length=64, blank=True, null=True)
+    first_event = models.DateTimeField(null=True)
+    scrub_ip_addresses = models.BooleanField(
+        default=True,
+        help_text="Should project anonymize IP Addresses",
+    )
+    event_throttle_rate = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MaxValueValidator(100)],
+        help_text="Probability (in percent) on how many events are throttled. Used for throttling at project level",
+    )
+    scrub_config = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Server-side PII scrubbing config applied at ingest. See "
+            "apps.event_ingest.pii_scrubber.ScrubConfig for the accepted keys "
+            "(enabled, sensitive_keys, safe_keys, scrub_emails, ...). Null "
+            "falls back to the GLITCHTIP_PII_SCRUB_DEFAULT setting."
+        ),
+    )
+    undeleted_objects = ProjectSoftDeleteManager()
+
+    class Meta:
+        unique_together = (("organization", "slug"),)
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def annotate_is_member(cls, queryset: QuerySet, user_id: int):
+        """Add is_member boolean annotate to Project queryset"""
+        return queryset.annotate(
+            is_member=Cast(
+                Cast(  # Postgres can cast int to bool, but not bigint to bool
+                    Count(
+                        "teams__members",
+                        filter=Q(teams__members__user_id=user_id),
+                        distinct=True,
+                    ),
+                    output_field=models.IntegerField(),
+                ),
+                output_field=models.BooleanField(),
+            ),
+        )
+
+    def save(self, *args, **kwargs):
+        first = False
+        if not self.pk:
+            first = True
+        super().save(*args, **kwargs)
+        if first:
+            clear_metrics_cache()
+            ProjectKey.objects.create(project=self)
+
+    def delete(self, *args, **kwargs):
+        """Mark the record as deleted instead of deleting it"""
+        # avoid circular import
+        from apps.projects.tasks import delete_project
+
+        super().delete(*args, **kwargs)
+        delete_project.enqueue(self.pk)
+
+    def force_delete(self, *args, **kwargs):
+        """Delete the project from the database.
+
+        Callers must batch-delete partitioned tables (IssueEvent, LogEvent,
+        Issues) *before* calling this to avoid exhausting PostgreSQL's shared
+        lock table.  The delete_project task handles this.
+        """
+        super().force_delete(*args, **kwargs)
+        clear_metrics_cache()
+
+    def slugify_function(self, content):
+        """
+        Make the slug the project name. Validate uniqueness with both name and org id.
+        This works because when it runs on organization_id it returns an empty string.
+        """
+        reserved_words = ["new"]
+
+        slug = ""
+        if isinstance(content, str):
+            slug = slugify(self.name)
+            if slug in reserved_words:
+                slug += "-1"
+        return slug
+
+
+class ProjectCounter(models.Model):
+    """
+    Counter for issue short IDs
+    - Unique per project
+    - Autoincrements on each new issue
+    - Separate table for performance
+    """
+
+    project = models.OneToOneField(Project, on_delete=models.CASCADE)
+    value = models.PositiveIntegerField()
+
+
+class ProjectKey(OrgScopedModel, CreatedModel):
+    """Authentication key for a Project"""
+
+    org_field = "project__organization_id"
+    undeleted_through = ("project",)
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    is_active = models.BooleanField(default=True)
+    name = models.CharField(max_length=64, blank=True)
+    public_key = models.UUIDField(default=uuid4, unique=True, editable=False)
+    rate_limit_count = models.PositiveSmallIntegerField(blank=True, null=True)
+    rate_limit_window = models.PositiveSmallIntegerField(blank=True, null=True)
+    data = models.JSONField(blank=True, null=True)
+
+    def __str__(self):
+        return str(self.public_key)
+
+    @classmethod
+    def from_dsn(cls, dsn: str):
+        urlparts = urlparse(dsn)
+
+        public_key = urlparts.username
+        project_id = urlparts.path.rsplit("/", 1)[-1]
+
+        try:
+            return ProjectKey.objects.get(public_key=public_key, project=project_id)
+        except ValueError as err:
+            # ValueError would come from a non-integer project_id,
+            # which is obviously a DoesNotExist. We catch and rethrow this
+            # so anything downstream expecting DoesNotExist works fine
+            raise ProjectKey.DoesNotExist(
+                "ProjectKey matching query does not exist."
+            ) from err
+
+    @property
+    def public_key_hex(self):
+        """The public key without dashes"""
+        return self.public_key.hex
+
+    def dsn(self):
+        return self.get_dsn()
+
+    def get_dsn(self):
+        urlparts = settings.GLITCHTIP_URL
+
+        # If we do not have a scheme or domain/hostname, dsn is never valid
+        if not urlparts.netloc or not urlparts.scheme:
+            return ""
+
+        host = urlparts.netloc + urlparts.path
+        return f"{urlparts.scheme}://{self.public_key_hex}@{host}/{self.project_id}"
+
+    def get_dsn_security(self):
+        urlparts = settings.GLITCHTIP_URL
+
+        if not urlparts.netloc or not urlparts.scheme:
+            return ""
+
+        host = urlparts.netloc + urlparts.path
+        return (
+            f"{urlparts.scheme}://{host}/api/{self.project_id}/security/"
+            f"?glitchtip_key={self.public_key_hex}"
+        )
+
+
+class ProjectStatisticBase(AggregationModel):
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
+    organization = models.ForeignKey(
+        "organizations_ext.Organization", on_delete=models.CASCADE
+    )
+    pk = models.CompositePrimaryKey("project", "organization", "date")
+
+    class Meta:
+        abstract = True
+
+
+class TransactionEventProjectHourlyStatistic(ProjectStatisticBase):
+    pass
+
+
+class IssueEventProjectHourlyStatistic(ProjectStatisticBase):
+    pass
+
+
+class LogProjectHourlyStatistic(ProjectStatisticBase):
+    """
+    Hourly log statistics per project, broken down by level, service bucket,
+    and environment bucket.
+
+    Both buckets are hashes (0-255) of their respective names that cap row growth.
+    See apps.logs.models.compute_hash_bucket for details.
+    """
+
+    level = models.PositiveSmallIntegerField()
+    service_bucket = models.PositiveSmallIntegerField(
+        default=0, help_text="Hash bucket for service name (0-255)"
+    )
+    environment_bucket = models.PositiveSmallIntegerField(
+        default=0, help_text="Hash bucket for environment name (0-255)"
+    )
+    pk = models.CompositePrimaryKey(
+        "project",
+        "organization",
+        "date",
+        "level",
+        "service_bucket",
+        "environment_bucket",
+    )
+
+
+class ProjectAlertStatus(models.IntegerChoices):
+    OFF = 0, "off"
+    ON = 1, "on"
+
+
+class UserProjectAlert(models.Model):
+    """
+    Determine if user alert notifications should always happen, never, or defer to default
+    Default is stored as the lack of record.
+    """
+
+    user = models.ForeignKey("users.User", on_delete=models.CASCADE)
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
+    status = models.PositiveSmallIntegerField(choices=ProjectAlertStatus.choices)
+
+    class Meta:
+        unique_together = ("user", "project")
