@@ -42,19 +42,21 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
             self.url.lstrip("htps:/"), self.auth_token, self.org_name
         )
 
-    def set_mocks(self, m, org_users=None):
+    def set_mocks(
+        self, m, org_users=None, project=test_project, team_id="1", key=test_key
+    ):
         m.get(self.url + "/api/0/", payload={"user": {"username": "foo"}})
         m.get(self.url + self.importer.organization_url, payload={"id": 1})
         m.get(self.url + self.importer.organization_users_url, payload=org_users or [])
-        m.get(self.url + self.importer.projects_url, payload=[test_project])
-        m.get(self.url + "/api/0/projects/org/project/keys/", payload=[test_key])
+        m.get(self.url + self.importer.projects_url, payload=[project])
+        m.get(self.url + "/api/0/projects/org/project/keys/", payload=[key])
         m.get(
             self.url + self.importer.teams_url,
             payload=[
                 {
-                    "id": "1",
+                    "id": team_id,
                     "slug": "team",
-                    "projects": [test_project],
+                    "projects": [project],
                 }
             ],
         )
@@ -246,21 +248,75 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
             ).exists()
         )
 
-    @mock_aiohttp()
-    def test_view(self, m):
+    def log_in(self):
         self.create_logged_in_user()
         self.organization.slug = self.org_name
         self.organization.save()
+
+    def post_import(self):
+        return self.client.post(
+            reverse("api:importer"),
+            {
+                "url": self.url,
+                "authToken": self.auth_token,
+                "organizationSlug": self.org_name,
+            },
+            content_type="application/json",
+        )
+
+    @mock_aiohttp()
+    def test_view(self, m):
+        self.log_in()
         self.set_mocks(m)
-        url = reverse("api:importer")
-        data = {
-            "url": self.url,
-            "authToken": self.auth_token,
-            "organizationSlug": self.org_name,
-        }
-        res = self.client.post(url, data, content_type="application/json")
+        res = self.post_import()
         self.assertEqual(res.status_code, 200)
-        self.assertTrue(Team.objects.filter(slug="team").exists())
+        self.assertTrue(
+            Project.objects.filter(
+                organization=self.organization,
+                slug=test_project["slug"],
+                teams__slug="team",
+                projectkey__public_key=test_key["public"],
+            ).exists()
+        )
+
+    @mock_aiohttp()
+    def test_view_writes_only_to_the_importing_org(self, m):
+        """Remote ids never select a row; rows are matched by slug in this org."""
+        other_org = baker.make("organizations_ext.Organization")
+        other_project = baker.make("projects.Project", organization=other_org)
+        other_slug = other_project.slug
+        other_team = baker.make("teams.Team", organization=other_org, slug="team")
+        other_member = other_org.add_user(baker.make("users.User"))
+        other_org.add_user(baker.make("users.User"))
+        self.log_in()
+        self.set_mocks(
+            m,
+            org_users=[{**test_org_user, "id": str(other_member.id)}],
+            project={**test_project, "id": str(other_project.id)},
+            team_id=str(other_team.id),
+            key={**test_key, "projectId": other_project.id},
+        )
+
+        res = self.post_import()
+
+        self.assertEqual(res.status_code, 200)
+        for row in (other_project, other_team, other_member):
+            row.refresh_from_db()
+            self.assertEqual(row.organization_id, other_org.id)
+        self.assertEqual(other_project.slug, other_slug)
+        self.assertTrue(
+            Project.objects.filter(
+                organization=self.organization,
+                slug=test_project["slug"],
+                teams__organization=self.organization,
+                projectkey__public_key=test_key["public"],
+            ).exists()
+        )
+        self.assertTrue(
+            OrganizationUser.objects.filter(
+                organization=self.organization, email=test_org_user["email"]
+            ).exists()
+        )
 
     @mock_aiohttp()
     async def test_invalid_org(self, m):

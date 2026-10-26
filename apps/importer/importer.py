@@ -28,6 +28,24 @@ from .exceptions import ImporterException
 MAX_IMPORTER_PAGES = 100
 
 
+# Web imports match rows inside the importing org and never take the remote's ids.
+class ScopedOrganizationUserResource(OrganizationUserResource):
+    class Meta(OrganizationUserResource.Meta):
+        fields = ("user", "organization", "role", "email")
+
+
+class ScopedProjectResource(ProjectResource):
+    class Meta(ProjectResource.Meta):
+        fields = ("created", "slug", "name", "organization", "platform")
+        import_id_fields = ("organization", "slug")
+
+
+class ScopedTeamResource(TeamResource):
+    class Meta(TeamResource.Meta):
+        fields = ("slug", "created", "organization", "projects", "members")
+        import_id_fields = ("organization", "slug")
+
+
 class GlitchTipImporter:
     """
     Generic importer tool to use with cli or web
@@ -49,6 +67,7 @@ class GlitchTipImporter:
         self.create_users = create_users
         self.organization_slug = organization_slug
         self.organization_id = None
+        self.keep_ids = False
         self.organization_url = reverse(
             "api:get_organization", args=[self.organization_slug]
         )
@@ -63,6 +82,8 @@ class GlitchTipImporter:
     async def run(self, organization_id=None):
         """Set organization_id to None to import (superuser only)"""
         if organization_id is None:
+            # A whole-instance migration keeps ids, so DSN project ids still work.
+            self.keep_ids = True
             await self.import_organization()
         else:
             self.organization_id = organization_id
@@ -163,7 +184,11 @@ class GlitchTipImporter:
         await sync_to_async(resource.import_data)(dataset, raise_errors=True)
 
     async def import_organization_users(self):
-        resource = OrganizationUserResource()
+        resource = (
+            OrganizationUserResource()
+            if self.keep_ids
+            else ScopedOrganizationUserResource()
+        )
         org_users = await self.get(self.url + self.organization_users_url)
         if not org_users:
             return
@@ -200,59 +225,58 @@ class GlitchTipImporter:
         dataset.dict = org_users
         await sync_to_async(resource.import_data)(dataset, raise_errors=True)
 
+    async def local_project_ids(self, slugs: list[str]) -> dict[str, int]:
+        return {
+            slug: pk
+            async for slug, pk in Project.objects.filter(
+                organization_id=self.organization_id, slug__in=slugs
+            ).values_list("slug", "pk")
+        }
+
     async def import_projects(self):
-        project_resource = ProjectResource()
+        project_resource = (
+            ProjectResource() if self.keep_ids else ScopedProjectResource()
+        )
         project_key_resource = ProjectKeyResource()
         projects = await self.get(self.url + self.projects_url)
-        project_keys = []
+        keys_by_slug = {}
         for project in projects:
             project["organization"] = self.organization_id
-            keys = await self.get(
+            keys_by_slug[project["slug"]] = await self.get(
                 self.url
                 + reverse(
                     "api:list_project_keys",
                     args=[self.organization_slug, project["slug"]],
                 )
             )
-            for key in keys:
-                key["project"] = project["id"]
-                key["public_key"] = key["public"]
-            project_keys += keys
         dataset = tablib.Dataset()
         dataset.dict = projects
         await sync_to_async(project_resource.import_data)(dataset, raise_errors=True)
-        owned_project_ids = [
-            pk
-            async for pk in Project.objects.filter(
-                organization_id=self.organization_id,
-                pk__in=[d["projectId"] for d in project_keys],
-            ).values_list("pk", flat=True)
-        ]
-        project_keys = list(
-            filter(lambda key: key["projectId"] in owned_project_ids, project_keys)
-        )
+        project_ids = await self.local_project_ids(list(keys_by_slug))
+        project_keys = []
+        for slug, keys in keys_by_slug.items():
+            if slug not in project_ids:
+                continue
+            for key in keys:
+                key["project"] = project_ids[slug]
+                key["public_key"] = key["public"]
+                project_keys.append(key)
+        if not project_keys:
+            return
         dataset.dict = project_keys
         await sync_to_async(project_key_resource.import_data)(
             dataset, raise_errors=True
         )
 
     async def import_teams(self):
-        resource = TeamResource()
+        resource = TeamResource() if self.keep_ids else ScopedTeamResource()
         teams = await self.get(self.url + self.teams_url)
         for team in teams:
             team["organization"] = self.organization_id
-            team["projects"] = ",".join(
-                map(
-                    str,
-                    [
-                        pk
-                        async for pk in Project.objects.filter(
-                            organization_id=self.organization_id,
-                            pk__in=[int(d["id"]) for d in team["projects"]],
-                        ).values_list("id", flat=True)
-                    ],
-                )
+            project_ids = await self.local_project_ids(
+                [d["slug"] for d in team["projects"]]
             )
+            team["projects"] = ",".join(map(str, project_ids.values()))
             team_members = await self.get(
                 self.url
                 + reverse(
