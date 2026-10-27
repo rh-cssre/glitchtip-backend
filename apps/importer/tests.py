@@ -319,6 +319,41 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
         )
 
     @mock_aiohttp()
+    def test_view_caps_roles_and_skips_existing_members(self, m):
+        """An import can't grant above the importer's role, or edit a member."""
+        self.log_in()
+        self.org_user.role = OrganizationUserRole.MANAGER
+        self.org_user.save()
+        invite = baker.make(
+            "organizations_ext.OrganizationUser",
+            organization=self.organization,
+            email="invited@example.com",
+            role=OrganizationUserRole.MEMBER,
+        )
+        self.set_mocks(
+            m,
+            org_users=[
+                {**test_org_user, "email": email}
+                for email in ("new@example.com", invite.email, self.user.email)
+            ],
+        )
+
+        res = self.post_import()
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(
+            OrganizationUser.objects.get(email="new@example.com").role,
+            OrganizationUserRole.MANAGER,
+        )
+        invite.refresh_from_db()
+        self.assertEqual(invite.role, OrganizationUserRole.MEMBER)
+        self.org_user.refresh_from_db()
+        self.assertEqual(self.org_user.role, OrganizationUserRole.MANAGER)
+        self.assertFalse(
+            OrganizationUser.objects.filter(email=self.user.email).exists()
+        )
+
+    @mock_aiohttp()
     async def test_invalid_org(self, m):
         """An import the caller may not perform never reaches the remote.
 

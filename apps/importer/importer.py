@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
 
 import aiohttp
@@ -46,6 +47,26 @@ class ScopedTeamResource(TeamResource):
         import_id_fields = ("organization", "slug")
 
 
+@dataclass(frozen=True)
+class ImportResources:
+    org_user: type[OrganizationUserResource]
+    project: type[ProjectResource]
+    team: type[TeamResource]
+    scoped: bool
+
+
+# A whole-instance migration keeps ids, so DSN project ids still work.
+INSTANCE_RESOURCES = ImportResources(
+    OrganizationUserResource, ProjectResource, TeamResource, scoped=False
+)
+SCOPED_RESOURCES = ImportResources(
+    ScopedOrganizationUserResource,
+    ScopedProjectResource,
+    ScopedTeamResource,
+    scoped=True,
+)
+
+
 class GlitchTipImporter:
     """
     Generic importer tool to use with cli or web
@@ -53,8 +74,8 @@ class GlitchTipImporter:
     If used by a non server admin, it's important to assume all incoming
     JSON is hostile and not from a real GT server. Foreign Key ids could be
     faked and used to elevate privileges. Always confirm new data is associated with
-    appropriate organization. Also assume user is at least an org admin, no need to
-    double check permissions when creating assets within the organization.
+    appropriate organization. Imported member roles are capped at max_role, the
+    importing user's own role.
 
     create_users should be False unless running as superuser/management command
     """
@@ -67,7 +88,8 @@ class GlitchTipImporter:
         self.create_users = create_users
         self.organization_slug = organization_slug
         self.organization_id = None
-        self.keep_ids = False
+        self.resources = SCOPED_RESOURCES
+        self.max_role = OrganizationUserRole.OWNER
         self.organization_url = reverse(
             "api:get_organization", args=[self.organization_slug]
         )
@@ -79,11 +101,11 @@ class GlitchTipImporter:
         )
         self.teams_url = reverse("api:list_teams", args=[self.organization_slug])
 
-    async def run(self, organization_id=None):
+    async def run(self, organization_id=None, max_role=OrganizationUserRole.OWNER):
         """Set organization_id to None to import (superuser only)"""
+        self.max_role = max_role
         if organization_id is None:
-            # A whole-instance migration keeps ids, so DSN project ids still work.
-            self.keep_ids = True
+            self.resources = INSTANCE_RESOURCES
             await self.import_organization()
         else:
             self.organization_id = organization_id
@@ -184,12 +206,10 @@ class GlitchTipImporter:
         await sync_to_async(resource.import_data)(dataset, raise_errors=True)
 
     async def import_organization_users(self):
-        resource = (
-            OrganizationUserResource()
-            if self.keep_ids
-            else ScopedOrganizationUserResource()
-        )
+        resource = self.resources.org_user()
         org_users = await self.get(self.url + self.organization_users_url)
+        if self.resources.scoped:
+            org_users = await self.new_members(org_users)
         if not org_users:
             return
         if self.create_users:
@@ -216,7 +236,9 @@ class GlitchTipImporter:
 
         for org_user in org_users:
             org_user["organization"] = self.organization_id
-            org_user["role"] = OrganizationUserRole.from_string(org_user["role"])
+            org_user["role"] = min(
+                OrganizationUserRole.from_string(org_user["role"]), self.max_role
+            )
             if self.create_users:
                 org_user["user"] = user_ids_by_email.get(org_user["user"]["email"])
             else:
@@ -224,6 +246,22 @@ class GlitchTipImporter:
         dataset = tablib.Dataset()
         dataset.dict = org_users
         await sync_to_async(resource.import_data)(dataset, raise_errors=True)
+
+    async def new_members(self, org_users: list[dict]) -> list[dict]:
+        """Drop rows for emails already in the org; an import never edits a member."""
+        emails = [org_user.get("email") for org_user in org_users]
+        taken = {
+            email
+            async for pair in OrganizationUser.objects.filter(
+                organization_id=self.organization_id
+            )
+            .filter(Q(email__in=emails) | Q(user__email__in=emails))
+            .values_list("email", "user__email")
+            for email in pair
+        }
+        return [
+            org_user for org_user in org_users if org_user.get("email") not in taken
+        ]
 
     async def local_project_ids(self, slugs: list[str]) -> dict[str, int]:
         return {
@@ -234,9 +272,7 @@ class GlitchTipImporter:
         }
 
     async def import_projects(self):
-        project_resource = (
-            ProjectResource() if self.keep_ids else ScopedProjectResource()
-        )
+        project_resource = self.resources.project()
         project_key_resource = ProjectKeyResource()
         projects = await self.get(self.url + self.projects_url)
         keys_by_slug = {}
@@ -269,7 +305,7 @@ class GlitchTipImporter:
         )
 
     async def import_teams(self):
-        resource = TeamResource() if self.keep_ids else ScopedTeamResource()
+        resource = self.resources.team()
         teams = await self.get(self.url + self.teams_url)
         for team in teams:
             team["organization"] = self.organization_id
