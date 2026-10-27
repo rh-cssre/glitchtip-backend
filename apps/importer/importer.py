@@ -275,6 +275,23 @@ class GlitchTipImporter:
         project_resource = self.resources.project()
         project_key_resource = ProjectKeyResource()
         projects = await self.get(self.url + self.projects_url)
+        # import_id_fields other than "id" need headers, so an empty list raises.
+        if not projects:
+            return
+        if self.resources.scoped and (
+            deleted := [
+                slug
+                async for slug in Project.objects.filter(
+                    organization_id=self.organization_id,
+                    slug__in=[project["slug"] for project in projects],
+                    is_deleted=True,
+                ).values_list("slug", flat=True)
+            ]
+        ):
+            raise ImporterException(
+                "Deleted projects with these slugs are still being removed: "
+                f"{', '.join(deleted)}. Retry once they are gone."
+            )
         keys_by_slug = {}
         for project in projects:
             project["organization"] = self.organization_id
@@ -307,6 +324,8 @@ class GlitchTipImporter:
     async def import_teams(self):
         resource = self.resources.team()
         teams = await self.get(self.url + self.teams_url)
+        if not teams:
+            return
         for team in teams:
             team["organization"] = self.organization_id
             project_ids = await self.local_project_ids(

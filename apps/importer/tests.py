@@ -354,6 +354,43 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
         )
 
     @mock_aiohttp()
+    def test_view_with_no_teams_or_no_projects(self, m):
+        self.log_in()
+        for projects in ([test_project], []):
+            with self.subTest(projects=len(projects)):
+                m.get(self.url + "/api/0/", payload={"user": {"username": "foo"}})
+                m.get(self.url + self.importer.organization_users_url, payload=[])
+                m.get(self.url + self.importer.projects_url, payload=projects)
+                m.get(
+                    self.url + "/api/0/projects/org/project/keys/", payload=[test_key]
+                )
+                m.get(self.url + self.importer.teams_url, payload=[])
+                self.assertEqual(self.post_import().status_code, 200)
+        self.assertTrue(
+            Project.objects.filter(
+                organization=self.organization, slug=test_project["slug"]
+            ).exists()
+        )
+
+    @mock_aiohttp()
+    def test_view_refuses_a_deleted_project_slug(self, m):
+        """A deleted project still holds its slug; importing into it would vanish."""
+        self.log_in()
+        deleted = baker.make(
+            "projects.Project", organization=self.organization, is_deleted=True
+        )
+        Project.objects.filter(pk=deleted.pk).update(slug=test_project["slug"])
+        self.set_mocks(m)
+
+        res = self.post_import()
+
+        self.assertEqual(res.status_code, 400)
+        self.assertIn(test_project["slug"], res.json()["detail"])
+        self.assertFalse(
+            deleted.projectkey_set.filter(public_key=test_key["public"]).exists()
+        )
+
+    @mock_aiohttp()
     async def test_invalid_org(self, m):
         """An import the caller may not perform never reaches the remote.
 
