@@ -19,6 +19,8 @@ from .importer import MAX_IMPORTER_PAGES, GlitchTipImporter
 from .schema import ImportIn
 
 test_project = {"id": "1", "slug": "project", "name": "project"}
+# Renaming a project keeps its slug, so the two often differ.
+renamed_project = {"id": "1", "slug": "backend-api", "name": "Backend"}
 test_key = {
     "id": "a" * 32,
     "public": "a" * 32,
@@ -49,7 +51,7 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
         m.get(self.url + self.importer.organization_url, payload={"id": 1})
         m.get(self.url + self.importer.organization_users_url, payload=org_users or [])
         m.get(self.url + self.importer.projects_url, payload=[project])
-        m.get(self.url + "/api/0/projects/org/project/keys/", payload=[key])
+        m.get(self.url + f"/api/0/projects/org/{project['slug']}/keys/", payload=[key])
         m.get(
             self.url + self.importer.teams_url,
             payload=[
@@ -236,13 +238,14 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
 
     @mock_aiohttp()
     def test_import_command(self, m):
-        self.set_mocks(m)
+        self.set_mocks(m, project=renamed_project)
 
         call_command("import", self.url, self.auth_token, self.org_name)
         self.assertTrue(Team.objects.filter(slug="team").exists())
         self.assertTrue(
             Project.objects.filter(
-                slug=test_project["slug"],
+                pk=renamed_project["id"],
+                slug=renamed_project["slug"],
                 teams__slug="team",
                 projectkey__public_key=test_key["public"],
             ).exists()
@@ -317,6 +320,20 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
                 organization=self.organization, email=test_org_user["email"]
             ).exists()
         )
+
+    @mock_aiohttp()
+    def test_view_keeps_the_remote_slug_when_it_differs_from_the_name(self, m):
+        """A renamed project keeps its slug, so re-imports match it and teams link."""
+        self.log_in()
+        for _ in range(2):
+            self.set_mocks(m, project=renamed_project)
+            self.assertEqual(self.post_import().status_code, 200)
+
+        imported = Project.objects.get(
+            organization=self.organization, name=renamed_project["name"]
+        )
+        self.assertEqual(imported.slug, renamed_project["slug"])
+        self.assertTrue(imported.teams.filter(slug="team").exists())
 
     @mock_aiohttp()
     def test_view_caps_roles_and_skips_existing_members(self, m):
