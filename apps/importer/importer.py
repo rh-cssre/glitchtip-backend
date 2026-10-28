@@ -6,6 +6,7 @@ import tablib
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.db.models import Q
+from django.db.models.functions import Lower
 from django.urls import reverse
 
 from apps.organizations_ext.constants import OrganizationUserRole
@@ -247,21 +248,33 @@ class GlitchTipImporter:
         dataset.dict = org_users
         await sync_to_async(resource.import_data)(dataset, raise_errors=True)
 
+    def members_by_email(self, emails: list[str | None]):
+        """This org's members whose invite or account email matches, ignoring case."""
+        lowered = {email.lower() for email in emails if email}
+        return (
+            OrganizationUser.objects.filter(organization_id=self.organization_id)
+            .annotate(email_lower=Lower("email"), user_email_lower=Lower("user__email"))
+            .filter(Q(email_lower__in=lowered) | Q(user_email_lower__in=lowered))
+        )
+
     async def new_members(self, org_users: list[dict]) -> list[dict]:
         """Drop rows for emails already in the org; an import never edits a member."""
-        emails = [org_user.get("email") for org_user in org_users]
         taken = {
             email
-            async for pair in OrganizationUser.objects.filter(
-                organization_id=self.organization_id
-            )
-            .filter(Q(email__in=emails) | Q(user__email__in=emails))
-            .values_list("email", "user__email")
+            async for pair in self.members_by_email(
+                [org_user.get("email") for org_user in org_users]
+            ).values_list("email_lower", "user_email_lower")
             for email in pair
         }
-        return [
-            org_user for org_user in org_users if org_user.get("email") not in taken
-        ]
+        new = []
+        for org_user in org_users:
+            email = (org_user.get("email") or "").lower()
+            if email in taken:
+                continue
+            if email:
+                taken.add(email)
+            new.append(org_user)
+        return new
 
     async def local_project_ids(self, slugs: list[str]) -> dict[str, int]:
         return {
@@ -342,18 +355,12 @@ class GlitchTipImporter:
                     args=[self.organization_slug, team["slug"]],
                 )
             )
-            team_member_emails = [d["email"] for d in team_members]
             team["members"] = ",".join(
                 [
                     str(i)
-                    async for i in OrganizationUser.objects.filter(
-                        organization_id=self.organization_id
-                    )
-                    .filter(
-                        Q(email__in=team_member_emails)
-                        | Q(user__email__in=team_member_emails)
-                    )
-                    .values_list("pk", flat=True)
+                    async for i in self.members_by_email(
+                        [d["email"] for d in team_members]
+                    ).values_list("pk", flat=True)
                 ]
             )
         dataset = tablib.Dataset()

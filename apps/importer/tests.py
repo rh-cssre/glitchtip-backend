@@ -45,7 +45,13 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
         )
 
     def set_mocks(
-        self, m, org_users=None, project=test_project, team_id="1", key=test_key
+        self,
+        m,
+        org_users=None,
+        project=test_project,
+        team_id="1",
+        key=test_key,
+        team_members=(),
     ):
         m.get(self.url + "/api/0/", payload={"user": {"username": "foo"}})
         m.get(self.url + self.importer.organization_url, payload={"id": 1})
@@ -62,7 +68,7 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
                 }
             ],
         )
-        m.get(self.url + "/api/0/teams/org/team/members/", payload=[])
+        m.get(self.url + "/api/0/teams/org/team/members/", payload=list(team_members))
 
     @mock_aiohttp()
     async def test_get_follows_pagination(self, m):
@@ -368,6 +374,31 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertEqual(self.org_user.role, OrganizationUserRole.MANAGER)
         self.assertFalse(
             OrganizationUser.objects.filter(email=self.user.email).exists()
+        )
+
+    @mock_aiohttp()
+    def test_view_matches_emails_ignoring_case(self, m):
+        """Foo@x.com and foo@x.com are one person: one membership, linked to teams."""
+        self.log_in()
+        shouted = self.user.email.upper()
+        self.set_mocks(
+            m,
+            org_users=[
+                {**test_org_user, "email": email}
+                for email in (shouted, "new@example.com", "NEW@example.com")
+            ],
+            team_members=[{"email": shouted}],
+        )
+
+        self.assertEqual(self.post_import().status_code, 200)
+
+        self.assertEqual(
+            OrganizationUser.objects.filter(organization=self.organization).count(), 2
+        )
+        self.assertTrue(
+            Team.objects.filter(
+                organization=self.organization, slug="team", members=self.org_user
+            ).exists()
         )
 
     @mock_aiohttp()
