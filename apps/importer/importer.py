@@ -289,20 +289,23 @@ class GlitchTipImporter:
         # import_id_fields other than "id" need headers, so an empty list raises.
         if not projects:
             return
-        if self.resources.scoped and (
-            deleted := [
-                slug
-                async for slug in Project.objects.filter(
+        if self.resources.scoped:
+            existing = {
+                slug: is_deleted
+                async for slug, is_deleted in Project.objects.filter(
                     organization_id=self.organization_id,
                     slug__in=[project["slug"] for project in projects],
-                    is_deleted=True,
-                ).values_list("slug", flat=True)
-            ]
-        ):
-            raise ImporterException(
-                "Deleted projects with these slugs are still being removed: "
-                f"{', '.join(deleted)}. Retry once they are gone."
-            )
+                ).values_list("slug", "is_deleted")
+            }
+            if deleted := [slug for slug, is_deleted in existing.items() if is_deleted]:
+                raise ImporterException(
+                    "Deleted projects with these slugs are still being removed: "
+                    f"{', '.join(deleted)}. Retry once they are gone."
+                )
+            # An import never edits a project; teams still link to it by slug.
+            projects = [p for p in projects if p["slug"] not in existing]
+            if not projects:
+                return
         for project in projects:
             project["organization"] = self.organization_id
         dataset = tablib.Dataset()

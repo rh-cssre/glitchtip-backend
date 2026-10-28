@@ -342,6 +342,19 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertTrue(imported.teams.filter(slug="team").exists())
 
     @mock_aiohttp()
+    def test_view_leaves_an_existing_project_unchanged(self, m):
+        """A project matched by slug isn't edited, but imported teams still link it."""
+        self.log_in()
+        Project.objects.filter(pk=self.project.pk).update(slug=test_project["slug"])
+        self.set_mocks(m, project={**test_project, "name": "Renamed"})
+
+        self.assertEqual(self.post_import().status_code, 200)
+
+        self.project.refresh_from_db()
+        self.assertNotEqual(self.project.name, "Renamed")
+        self.assertTrue(self.project.teams.filter(slug="team").exists())
+
+    @mock_aiohttp()
     def test_view_caps_roles_and_skips_existing_members(self, m):
         """An import can't grant above the importer's role, or edit a member."""
         self.log_in()
