@@ -269,17 +269,19 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
 
     @mock_aiohttp()
     def test_view(self, m):
+        """Web imports don't copy keys; the project keeps the one it was created with."""
         self.log_in()
         self.set_mocks(m)
         res = self.post_import()
         self.assertEqual(res.status_code, 200)
-        self.assertTrue(
-            Project.objects.filter(
-                organization=self.organization,
-                slug=test_project["slug"],
-                teams__slug="team",
-                projectkey__public_key=test_key["public"],
-            ).exists()
+        project = Project.objects.get(
+            organization=self.organization,
+            slug=test_project["slug"],
+            teams__slug="team",
+        )
+        self.assertEqual(project.projectkey_set.count(), 1)
+        self.assertFalse(
+            project.projectkey_set.filter(public_key=test_key["public"]).exists()
         )
 
     @mock_aiohttp()
@@ -297,7 +299,6 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
             org_users=[{**test_org_user, "id": str(other_member.id)}],
             project={**test_project, "id": str(other_project.id)},
             team_id=str(other_team.id),
-            key={**test_key, "projectId": other_project.id},
         )
 
         res = self.post_import()
@@ -312,7 +313,6 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
                 organization=self.organization,
                 slug=test_project["slug"],
                 teams__organization=self.organization,
-                projectkey__public_key=test_key["public"],
             ).exists()
         )
         self.assertTrue(

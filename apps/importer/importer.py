@@ -272,8 +272,6 @@ class GlitchTipImporter:
         }
 
     async def import_projects(self):
-        project_resource = self.resources.project()
-        project_key_resource = ProjectKeyResource()
         projects = await self.get(self.url + self.projects_url)
         # import_id_fields other than "id" need headers, so an empty list raises.
         if not projects:
@@ -292,32 +290,37 @@ class GlitchTipImporter:
                 "Deleted projects with these slugs are still being removed: "
                 f"{', '.join(deleted)}. Retry once they are gone."
             )
-        keys_by_slug = {}
         for project in projects:
             project["organization"] = self.organization_id
-            keys_by_slug[project["slug"]] = await self.get(
-                self.url
-                + reverse(
-                    "api:list_project_keys",
-                    args=[self.organization_slug, project["slug"]],
-                )
-            )
         dataset = tablib.Dataset()
         dataset.dict = projects
-        await sync_to_async(project_resource.import_data)(dataset, raise_errors=True)
-        project_ids = await self.local_project_ids(list(keys_by_slug))
+        await sync_to_async(self.resources.project().import_data)(
+            dataset, raise_errors=True
+        )
+        # Web-imported projects get new ids, so their DSNs change regardless;
+        # each keeps the fresh key it was created with.
+        if not self.resources.scoped:
+            await self.import_project_keys([project["slug"] for project in projects])
+
+    async def import_project_keys(self, slugs: list[str]):
+        project_ids = await self.local_project_ids(slugs)
         project_keys = []
-        for slug, keys in keys_by_slug.items():
+        for slug in slugs:
             if slug not in project_ids:
                 continue
+            keys = await self.get(
+                self.url
+                + reverse("api:list_project_keys", args=[self.organization_slug, slug])
+            )
             for key in keys:
                 key["project"] = project_ids[slug]
                 key["public_key"] = key["public"]
                 project_keys.append(key)
         if not project_keys:
             return
+        dataset = tablib.Dataset()
         dataset.dict = project_keys
-        await sync_to_async(project_key_resource.import_data)(
+        await sync_to_async(ProjectKeyResource().import_data)(
             dataset, raise_errors=True
         )
 
