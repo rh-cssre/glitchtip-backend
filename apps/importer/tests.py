@@ -355,7 +355,10 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
 
     @mock_aiohttp()
     def test_view_leaves_an_existing_project_unchanged(self, m):
-        """A project matched by slug isn't edited, but imported teams still link it."""
+        """A project matched by slug isn't edited, or linked to an imported team.
+
+        A linked team's members would start getting the project's alerts.
+        """
         self.log_in()
         Project.objects.filter(pk=self.project.pk).update(slug=test_project["slug"])
         self.set_mocks(m, project={**test_project, "name": "Renamed"})
@@ -364,7 +367,10 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
 
         self.project.refresh_from_db()
         self.assertNotEqual(self.project.name, "Renamed")
-        self.assertTrue(self.project.teams.filter(slug="team").exists())
+        self.assertTrue(
+            Team.objects.filter(organization=self.organization, slug="team").exists()
+        )
+        self.assertFalse(self.project.teams.filter(slug="team").exists())
 
     @mock_aiohttp()
     def test_view_leaves_an_existing_team_unchanged(self, m):

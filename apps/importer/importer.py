@@ -92,6 +92,7 @@ class GlitchTipImporter:
         self.organization_id = None
         self.resources = SCOPED_RESOURCES
         self.max_role = OrganizationUserRole.OWNER
+        self.created_project_slugs: set[str] = set()
         self.organization_url = reverse(
             "api:get_organization", args=[self.organization_slug]
         )
@@ -303,10 +304,11 @@ class GlitchTipImporter:
                     "Deleted projects with these slugs are still being removed: "
                     f"{', '.join(deleted)}. Retry once they are gone."
                 )
-            # An import never edits a project; teams still link to it by slug.
+            # An import never edits a project, or links an imported team to one.
             projects = [p for p in projects if p["slug"] not in existing]
             if not projects:
                 return
+            self.created_project_slugs = {project["slug"] for project in projects}
         for project in projects:
             project["organization"] = self.organization_id
         dataset = tablib.Dataset()
@@ -360,9 +362,10 @@ class GlitchTipImporter:
                 return
         for team in teams:
             team["organization"] = self.organization_id
-            project_ids = await self.local_project_ids(
-                [d["slug"] for d in team["projects"]]
-            )
+            slugs = [d["slug"] for d in team["projects"]]
+            if self.resources.scoped:
+                slugs = [slug for slug in slugs if slug in self.created_project_slugs]
+            project_ids = await self.local_project_ids(slugs)
             team["projects"] = ",".join(map(str, project_ids.values()))
             team_members = await self.get(
                 self.url
