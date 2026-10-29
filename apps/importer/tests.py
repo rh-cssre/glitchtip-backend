@@ -19,6 +19,8 @@ from .importer import MAX_IMPORTER_PAGES, GlitchTipImporter
 from .schema import ImportIn
 
 test_project = {"id": "1", "slug": "project", "name": "project"}
+# Renaming a project keeps its slug, so the two often differ.
+renamed_project = {"id": "1", "slug": "backend-api", "name": "Backend"}
 test_key = {
     "id": "a" * 32,
     "public": "a" * 32,
@@ -42,23 +44,31 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
             self.url.lstrip("htps:/"), self.auth_token, self.org_name
         )
 
-    def set_mocks(self, m, org_users=None):
+    def set_mocks(
+        self,
+        m,
+        org_users=None,
+        project=test_project,
+        team_id="1",
+        key=test_key,
+        team_members=(),
+    ):
         m.get(self.url + "/api/0/", payload={"user": {"username": "foo"}})
         m.get(self.url + self.importer.organization_url, payload={"id": 1})
         m.get(self.url + self.importer.organization_users_url, payload=org_users or [])
-        m.get(self.url + self.importer.projects_url, payload=[test_project])
-        m.get(self.url + "/api/0/projects/org/project/keys/", payload=[test_key])
+        m.get(self.url + self.importer.projects_url, payload=[project])
+        m.get(self.url + f"/api/0/projects/org/{project['slug']}/keys/", payload=[key])
         m.get(
             self.url + self.importer.teams_url,
             payload=[
                 {
-                    "id": "1",
+                    "id": team_id,
                     "slug": "team",
-                    "projects": [test_project],
+                    "projects": [project],
                 }
             ],
         )
-        m.get(self.url + "/api/0/teams/org/team/members/", payload=[])
+        m.get(self.url + "/api/0/teams/org/team/members/", payload=list(team_members))
 
     @mock_aiohttp()
     async def test_get_follows_pagination(self, m):
@@ -234,33 +244,244 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
 
     @mock_aiohttp()
     def test_import_command(self, m):
-        self.set_mocks(m)
+        self.set_mocks(m, project=renamed_project)
 
         call_command("import", self.url, self.auth_token, self.org_name)
         self.assertTrue(Team.objects.filter(slug="team").exists())
         self.assertTrue(
             Project.objects.filter(
-                slug=test_project["slug"],
+                pk=renamed_project["id"],
+                slug=renamed_project["slug"],
                 teams__slug="team",
                 projectkey__public_key=test_key["public"],
             ).exists()
         )
 
-    @mock_aiohttp()
-    def test_view(self, m):
+    def log_in(self):
         self.create_logged_in_user()
         self.organization.slug = self.org_name
         self.organization.save()
+
+    def post_import(self):
+        return self.client.post(
+            reverse("api:importer"),
+            {
+                "url": self.url,
+                "authToken": self.auth_token,
+                "organizationSlug": self.org_name,
+            },
+            content_type="application/json",
+        )
+
+    @mock_aiohttp()
+    def test_view(self, m):
+        """Web imports don't copy keys; the project keeps the one it was created with."""
+        self.log_in()
         self.set_mocks(m)
-        url = reverse("api:importer")
-        data = {
-            "url": self.url,
-            "authToken": self.auth_token,
-            "organizationSlug": self.org_name,
-        }
-        res = self.client.post(url, data, content_type="application/json")
+        res = self.post_import()
         self.assertEqual(res.status_code, 200)
-        self.assertTrue(Team.objects.filter(slug="team").exists())
+        project = Project.objects.get(
+            organization=self.organization,
+            slug=test_project["slug"],
+            teams__slug="team",
+        )
+        self.assertEqual(project.projectkey_set.count(), 1)
+        self.assertFalse(
+            project.projectkey_set.filter(public_key=test_key["public"]).exists()
+        )
+
+    @mock_aiohttp()
+    def test_view_writes_only_to_the_importing_org(self, m):
+        """Remote ids never select a row; rows are matched by slug in this org."""
+        other_org = baker.make("organizations_ext.Organization")
+        other_project = baker.make("projects.Project", organization=other_org)
+        other_slug = other_project.slug
+        other_team = baker.make("teams.Team", organization=other_org, slug="team")
+        other_member = other_org.add_user(baker.make("users.User"))
+        other_org.add_user(baker.make("users.User"))
+        self.log_in()
+        self.set_mocks(
+            m,
+            org_users=[{**test_org_user, "id": str(other_member.id)}],
+            project={**test_project, "id": str(other_project.id)},
+            team_id=str(other_team.id),
+        )
+
+        res = self.post_import()
+
+        self.assertEqual(res.status_code, 200)
+        for row in (other_project, other_team, other_member):
+            row.refresh_from_db()
+            self.assertEqual(row.organization_id, other_org.id)
+        self.assertEqual(other_project.slug, other_slug)
+        self.assertTrue(
+            Project.objects.filter(
+                organization=self.organization,
+                slug=test_project["slug"],
+                teams__organization=self.organization,
+            ).exists()
+        )
+        self.assertTrue(
+            OrganizationUser.objects.filter(
+                organization=self.organization, email=test_org_user["email"]
+            ).exists()
+        )
+
+    @mock_aiohttp()
+    def test_view_keeps_the_remote_slug_when_it_differs_from_the_name(self, m):
+        """A renamed project keeps its slug, so re-imports match it and teams link."""
+        self.log_in()
+        for _ in range(2):
+            self.set_mocks(m, project=renamed_project)
+            self.assertEqual(self.post_import().status_code, 200)
+
+        imported = Project.objects.get(
+            organization=self.organization, name=renamed_project["name"]
+        )
+        self.assertEqual(imported.slug, renamed_project["slug"])
+        self.assertTrue(imported.teams.filter(slug="team").exists())
+
+    @mock_aiohttp()
+    def test_view_does_not_keep_a_reserved_slug(self, m):
+        self.log_in()
+        self.set_mocks(m, project={"id": "1", "slug": "new", "name": "Backend"})
+
+        self.assertEqual(self.post_import().status_code, 200)
+
+        self.assertEqual(
+            Project.objects.get(organization=self.organization, name="Backend").slug,
+            "backend",
+        )
+
+    @mock_aiohttp()
+    def test_view_leaves_an_existing_project_unchanged(self, m):
+        """A project matched by slug isn't edited, or linked to an imported team.
+
+        A linked team's members would start getting the project's alerts.
+        """
+        self.log_in()
+        Project.objects.filter(pk=self.project.pk).update(slug=test_project["slug"])
+        self.set_mocks(m, project={**test_project, "name": "Renamed"})
+
+        self.assertEqual(self.post_import().status_code, 200)
+
+        self.project.refresh_from_db()
+        self.assertNotEqual(self.project.name, "Renamed")
+        self.assertTrue(
+            Team.objects.filter(organization=self.organization, slug="team").exists()
+        )
+        self.assertFalse(self.project.teams.filter(slug="team").exists())
+
+    @mock_aiohttp()
+    def test_view_leaves_an_existing_team_unchanged(self, m):
+        """Importing would replace a matched team's members and projects."""
+        self.log_in()
+        self.team.slug = "team"
+        self.team.save()
+        self.team.members.add(self.org_user)
+        self.set_mocks(m)
+
+        self.assertEqual(self.post_import().status_code, 200)
+
+        self.assertEqual(list(self.team.members.all()), [self.org_user])
+        self.assertEqual(list(self.team.projects.all()), [self.project])
+
+    @mock_aiohttp()
+    def test_view_caps_roles_and_skips_existing_members(self, m):
+        """An import can't grant above the importer's role, or edit a member."""
+        self.log_in()
+        self.org_user.role = OrganizationUserRole.MANAGER
+        self.org_user.save()
+        invite = baker.make(
+            "organizations_ext.OrganizationUser",
+            organization=self.organization,
+            email="invited@example.com",
+            role=OrganizationUserRole.MEMBER,
+        )
+        self.set_mocks(
+            m,
+            org_users=[
+                {**test_org_user, "email": email}
+                for email in ("new@example.com", invite.email, self.user.email)
+            ],
+        )
+
+        res = self.post_import()
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(
+            OrganizationUser.objects.get(email="new@example.com").role,
+            OrganizationUserRole.MANAGER,
+        )
+        invite.refresh_from_db()
+        self.assertEqual(invite.role, OrganizationUserRole.MEMBER)
+        self.org_user.refresh_from_db()
+        self.assertEqual(self.org_user.role, OrganizationUserRole.MANAGER)
+        self.assertFalse(
+            OrganizationUser.objects.filter(email=self.user.email).exists()
+        )
+
+    @mock_aiohttp()
+    def test_view_matches_emails_ignoring_case(self, m):
+        """Foo@x.com and foo@x.com are one person: one membership, linked to teams."""
+        self.log_in()
+        shouted = self.user.email.upper()
+        self.set_mocks(
+            m,
+            org_users=[
+                {**test_org_user, "email": email}
+                for email in (shouted, "new@example.com", "NEW@example.com")
+            ],
+            team_members=[{"email": shouted}],
+        )
+
+        self.assertEqual(self.post_import().status_code, 200)
+
+        self.assertEqual(
+            OrganizationUser.objects.filter(organization=self.organization).count(), 2
+        )
+        self.assertTrue(
+            Team.objects.filter(
+                organization=self.organization, slug="team", members=self.org_user
+            ).exists()
+        )
+
+    @mock_aiohttp()
+    def test_view_with_no_teams_or_no_projects(self, m):
+        self.log_in()
+        for projects in ([test_project], []):
+            with self.subTest(projects=len(projects)):
+                m.get(self.url + "/api/0/", payload={"user": {"username": "foo"}})
+                m.get(self.url + self.importer.organization_users_url, payload=[])
+                m.get(self.url + self.importer.projects_url, payload=projects)
+                m.get(
+                    self.url + "/api/0/projects/org/project/keys/", payload=[test_key]
+                )
+                m.get(self.url + self.importer.teams_url, payload=[])
+                self.assertEqual(self.post_import().status_code, 200)
+        self.assertTrue(
+            Project.objects.filter(
+                organization=self.organization, slug=test_project["slug"]
+            ).exists()
+        )
+
+    @mock_aiohttp()
+    def test_view_refuses_a_deleted_project_slug(self, m):
+        """A deleted project still holds its slug; importing into it would vanish."""
+        self.log_in()
+        deleted = baker.make(
+            "projects.Project", organization=self.organization, is_deleted=True
+        )
+        Project.objects.filter(pk=deleted.pk).update(slug=test_project["slug"])
+        self.set_mocks(m)
+
+        res = self.post_import()
+
+        self.assertEqual(res.status_code, 400)
+        self.assertIn(test_project["slug"], res.json()["detail"])
+        self.assertFalse(
+            deleted.projectkey_set.filter(public_key=test_key["public"]).exists()
+        )
 
     @mock_aiohttp()
     async def test_invalid_org(self, m):

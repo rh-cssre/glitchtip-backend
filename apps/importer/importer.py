@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
 
 import aiohttp
@@ -5,6 +6,7 @@ import tablib
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.db.models import Q
+from django.db.models.functions import Lower
 from django.urls import reverse
 
 from apps.organizations_ext.constants import OrganizationUserRole
@@ -15,6 +17,7 @@ from apps.organizations_ext.resources import (
 )
 from apps.projects.models import Project
 from apps.projects.resources import ProjectKeyResource, ProjectResource
+from apps.teams.models import Team
 from apps.teams.resources import TeamResource
 from apps.users.models import User
 from apps.users.resources import UserResource
@@ -28,6 +31,44 @@ from .exceptions import ImporterException
 MAX_IMPORTER_PAGES = 100
 
 
+# Web imports match rows inside the importing org and never take the remote's ids.
+class ScopedOrganizationUserResource(OrganizationUserResource):
+    class Meta(OrganizationUserResource.Meta):
+        fields = ("user", "organization", "role", "email")
+
+
+class ScopedProjectResource(ProjectResource):
+    class Meta(ProjectResource.Meta):
+        fields = ("created", "slug", "name", "organization", "platform")
+        import_id_fields = ("organization", "slug")
+
+
+class ScopedTeamResource(TeamResource):
+    class Meta(TeamResource.Meta):
+        fields = ("slug", "created", "organization", "projects", "members")
+        import_id_fields = ("organization", "slug")
+
+
+@dataclass(frozen=True)
+class ImportResources:
+    org_user: type[OrganizationUserResource]
+    project: type[ProjectResource]
+    team: type[TeamResource]
+    scoped: bool
+
+
+# A whole-instance migration keeps ids, so DSN project ids still work.
+INSTANCE_RESOURCES = ImportResources(
+    OrganizationUserResource, ProjectResource, TeamResource, scoped=False
+)
+SCOPED_RESOURCES = ImportResources(
+    ScopedOrganizationUserResource,
+    ScopedProjectResource,
+    ScopedTeamResource,
+    scoped=True,
+)
+
+
 class GlitchTipImporter:
     """
     Generic importer tool to use with cli or web
@@ -35,8 +76,8 @@ class GlitchTipImporter:
     If used by a non server admin, it's important to assume all incoming
     JSON is hostile and not from a real GT server. Foreign Key ids could be
     faked and used to elevate privileges. Always confirm new data is associated with
-    appropriate organization. Also assume user is at least an org admin, no need to
-    double check permissions when creating assets within the organization.
+    appropriate organization. Imported member roles are capped at max_role, the
+    importing user's own role.
 
     create_users should be False unless running as superuser/management command
     """
@@ -49,6 +90,9 @@ class GlitchTipImporter:
         self.create_users = create_users
         self.organization_slug = organization_slug
         self.organization_id = None
+        self.resources = SCOPED_RESOURCES
+        self.max_role = OrganizationUserRole.OWNER
+        self.created_project_slugs: set[str] = set()
         self.organization_url = reverse(
             "api:get_organization", args=[self.organization_slug]
         )
@@ -60,9 +104,11 @@ class GlitchTipImporter:
         )
         self.teams_url = reverse("api:list_teams", args=[self.organization_slug])
 
-    async def run(self, organization_id=None):
+    async def run(self, organization_id=None, max_role=OrganizationUserRole.OWNER):
         """Set organization_id to None to import (superuser only)"""
+        self.max_role = max_role
         if organization_id is None:
+            self.resources = INSTANCE_RESOURCES
             await self.import_organization()
         else:
             self.organization_id = organization_id
@@ -163,8 +209,10 @@ class GlitchTipImporter:
         await sync_to_async(resource.import_data)(dataset, raise_errors=True)
 
     async def import_organization_users(self):
-        resource = OrganizationUserResource()
+        resource = self.resources.org_user()
         org_users = await self.get(self.url + self.organization_users_url)
+        if self.resources.scoped:
+            org_users = await self.new_members(org_users)
         if not org_users:
             return
         if self.create_users:
@@ -191,7 +239,9 @@ class GlitchTipImporter:
 
         for org_user in org_users:
             org_user["organization"] = self.organization_id
-            org_user["role"] = OrganizationUserRole.from_string(org_user["role"])
+            org_user["role"] = min(
+                OrganizationUserRole.from_string(org_user["role"]), self.max_role
+            )
             if self.create_users:
                 org_user["user"] = user_ids_by_email.get(org_user["user"]["email"])
             else:
@@ -200,59 +250,123 @@ class GlitchTipImporter:
         dataset.dict = org_users
         await sync_to_async(resource.import_data)(dataset, raise_errors=True)
 
+    def members_by_email(self, emails: list[str | None]):
+        """This org's members whose invite or account email matches, ignoring case."""
+        lowered = {email.lower() for email in emails if email}
+        return (
+            OrganizationUser.objects.filter(organization_id=self.organization_id)
+            .annotate(email_lower=Lower("email"), user_email_lower=Lower("user__email"))
+            .filter(Q(email_lower__in=lowered) | Q(user_email_lower__in=lowered))
+        )
+
+    async def new_members(self, org_users: list[dict]) -> list[dict]:
+        """Drop rows for emails already in the org; an import never edits a member."""
+        taken = {
+            email
+            async for pair in self.members_by_email(
+                [org_user.get("email") for org_user in org_users]
+            ).values_list("email_lower", "user_email_lower")
+            for email in pair
+        }
+        new = []
+        for org_user in org_users:
+            email = (org_user.get("email") or "").lower()
+            if email in taken:
+                continue
+            if email:
+                taken.add(email)
+            new.append(org_user)
+        return new
+
+    async def local_project_ids(self, slugs: list[str]) -> dict[str, int]:
+        return {
+            slug: pk
+            async for slug, pk in Project.objects.filter(
+                organization_id=self.organization_id, slug__in=slugs
+            ).values_list("slug", "pk")
+        }
+
     async def import_projects(self):
-        project_resource = ProjectResource()
-        project_key_resource = ProjectKeyResource()
         projects = await self.get(self.url + self.projects_url)
-        project_keys = []
+        # import_id_fields other than "id" need headers, so an empty list raises.
+        if not projects:
+            return
+        if self.resources.scoped:
+            existing = {
+                slug: is_deleted
+                async for slug, is_deleted in Project.objects.filter(
+                    organization_id=self.organization_id,
+                    slug__in=[project["slug"] for project in projects],
+                ).values_list("slug", "is_deleted")
+            }
+            if deleted := [slug for slug, is_deleted in existing.items() if is_deleted]:
+                raise ImporterException(
+                    "Deleted projects with these slugs are still being removed: "
+                    f"{', '.join(deleted)}. Retry once they are gone."
+                )
+            # An import never edits a project, or links an imported team to one.
+            projects = [p for p in projects if p["slug"] not in existing]
+            if not projects:
+                return
+            self.created_project_slugs = {project["slug"] for project in projects}
         for project in projects:
             project["organization"] = self.organization_id
-            keys = await self.get(
-                self.url
-                + reverse(
-                    "api:list_project_keys",
-                    args=[self.organization_slug, project["slug"]],
-                )
-            )
-            for key in keys:
-                key["project"] = project["id"]
-                key["public_key"] = key["public"]
-            project_keys += keys
         dataset = tablib.Dataset()
         dataset.dict = projects
-        await sync_to_async(project_resource.import_data)(dataset, raise_errors=True)
-        owned_project_ids = [
-            pk
-            async for pk in Project.objects.filter(
-                organization_id=self.organization_id,
-                pk__in=[d["projectId"] for d in project_keys],
-            ).values_list("pk", flat=True)
-        ]
-        project_keys = list(
-            filter(lambda key: key["projectId"] in owned_project_ids, project_keys)
+        await sync_to_async(self.resources.project().import_data)(
+            dataset, raise_errors=True
         )
+        # Web-imported projects get new ids, so their DSNs change regardless;
+        # each keeps the fresh key it was created with.
+        if not self.resources.scoped:
+            await self.import_project_keys([project["slug"] for project in projects])
+
+    async def import_project_keys(self, slugs: list[str]):
+        project_ids = await self.local_project_ids(slugs)
+        project_keys = []
+        for slug in slugs:
+            if slug not in project_ids:
+                continue
+            keys = await self.get(
+                self.url
+                + reverse("api:list_project_keys", args=[self.organization_slug, slug])
+            )
+            for key in keys:
+                key["project"] = project_ids[slug]
+                key["public_key"] = key["public"]
+                project_keys.append(key)
+        if not project_keys:
+            return
+        dataset = tablib.Dataset()
         dataset.dict = project_keys
-        await sync_to_async(project_key_resource.import_data)(
+        await sync_to_async(ProjectKeyResource().import_data)(
             dataset, raise_errors=True
         )
 
     async def import_teams(self):
-        resource = TeamResource()
+        resource = self.resources.team()
         teams = await self.get(self.url + self.teams_url)
+        if not teams:
+            return
+        if self.resources.scoped:
+            existing = {
+                slug
+                async for slug in Team.objects.filter(
+                    organization_id=self.organization_id,
+                    slug__in=[team["slug"] for team in teams],
+                ).values_list("slug", flat=True)
+            }
+            # An import never edits a team; its members and projects would be replaced.
+            teams = [team for team in teams if team["slug"] not in existing]
+            if not teams:
+                return
         for team in teams:
             team["organization"] = self.organization_id
-            team["projects"] = ",".join(
-                map(
-                    str,
-                    [
-                        pk
-                        async for pk in Project.objects.filter(
-                            organization_id=self.organization_id,
-                            pk__in=[int(d["id"]) for d in team["projects"]],
-                        ).values_list("id", flat=True)
-                    ],
-                )
-            )
+            slugs = [d["slug"] for d in team["projects"]]
+            if self.resources.scoped:
+                slugs = [slug for slug in slugs if slug in self.created_project_slugs]
+            project_ids = await self.local_project_ids(slugs)
+            team["projects"] = ",".join(map(str, project_ids.values()))
             team_members = await self.get(
                 self.url
                 + reverse(
@@ -260,18 +374,12 @@ class GlitchTipImporter:
                     args=[self.organization_slug, team["slug"]],
                 )
             )
-            team_member_emails = [d["email"] for d in team_members]
             team["members"] = ",".join(
                 [
                     str(i)
-                    async for i in OrganizationUser.objects.filter(
-                        organization_id=self.organization_id
-                    )
-                    .filter(
-                        Q(email__in=team_member_emails)
-                        | Q(user__email__in=team_member_emails)
-                    )
-                    .values_list("pk", flat=True)
+                    async for i in self.members_by_email(
+                        [d["email"] for d in team_members]
+                    ).values_list("pk", flat=True)
                 ]
             )
         dataset = tablib.Dataset()

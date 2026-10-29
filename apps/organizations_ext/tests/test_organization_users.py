@@ -445,6 +445,66 @@ class OrganizationUsersTestCase(TestCase):
             await other_user.organizations_ext_organizationuser.acount(), 0
         )
 
+    async def test_manager_role_ceiling(self):
+        """A manager can't grant owner, or change or remove an owner."""
+        self.org_user.role = OrganizationUserRole.MANAGER
+        await self.org_user.asave()
+        owner = await self.organization.aadd_user(
+            await baker.amake("users.user"), role=OrganizationUserRole.OWNER
+        )
+        member = await self.organization.aadd_user(await baker.amake("users.user"))
+        own_url = self.get_org_member_detail_url(
+            self.organization.slug, self.org_user.pk
+        )
+        owner_url = self.get_org_member_detail_url(self.organization.slug, owner.pk)
+        member_url = self.get_org_member_detail_url(self.organization.slug, member.pk)
+
+        def role(value):
+            return {"orgRole": value.label.lower(), "teamRoles": []}
+
+        def invite(value):
+            return {"email": f"{value.label.lower()}@example.com", **role(value)}
+
+        for name, method, url, data, status in (
+            (
+                "invite owner",
+                "post",
+                self.members_url,
+                invite(OrganizationUserRole.OWNER),
+                403,
+            ),
+            (
+                "invite manager",
+                "post",
+                self.members_url,
+                invite(OrganizationUserRole.MANAGER),
+                201,
+            ),
+            ("promote self", "put", own_url, role(OrganizationUserRole.OWNER), 403),
+            ("demote owner", "put", owner_url, role(OrganizationUserRole.MEMBER), 403),
+            (
+                "promote member",
+                "put",
+                member_url,
+                role(OrganizationUserRole.MANAGER),
+                200,
+            ),
+            ("remove owner", "delete", owner_url, None, 403),
+        ):
+            with self.subTest(name):
+                send = getattr(self.async_client, method)
+                kwargs = {"content_type": "application/json"} if data else {}
+                res = await send(url, data, **kwargs) if data else await send(url)
+                self.assertEqual(res.status_code, status)
+
+        await owner.arefresh_from_db()
+        await self.org_user.arefresh_from_db()
+        self.assertEqual(owner.role, OrganizationUserRole.OWNER)
+        self.assertEqual(self.org_user.role, OrganizationUserRole.MANAGER)
+        self.assertFalse(
+            await OrganizationUser.objects.filter(email="owner@example.com").aexists()
+        )
+
     async def test_organization_members_set_owner(self):
         other_user = await baker.amake("users.user")
         other_org_user = await self.organization.aadd_user(other_user)
