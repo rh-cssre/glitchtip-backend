@@ -6,6 +6,8 @@ from ninja import Schema, Status
 from ninja.errors import HttpError
 from ninja.pagination import paginate
 
+from apps.organizations_ext.constants import OrganizationUserRole
+from apps.organizations_ext.queryset_utils import annotate_actor_role
 from glitchtip.api.authentication import AuthHttpRequest
 from glitchtip.api.permissions import (
     OrgScopedHttpRequest,
@@ -55,6 +57,24 @@ async def list_organization_comments(
 
 class PostCommentSchema(Schema):
     data: dict[Literal["text"], str]
+
+
+async def get_comment_for_change(
+    request: OrgScopedHttpRequest, qs: QuerySet[Comment], issue_id: int, comment_id: int
+) -> Comment:
+    """The comment, if the caller wrote it or is a manager or owner."""
+    user_id = request.auth.user_id
+    try:
+        comment = await annotate_actor_role(
+            qs, user_id, "issue__project__organization_id"
+        ).aget(issue_id=issue_id, id=comment_id)
+    except Comment.DoesNotExist:
+        raise Http404()
+    if comment.user_id != user_id and comment.actor_role < OrganizationUserRole.MANAGER:
+        raise HttpError(
+            403, "Changing another member's comment requires the manager role or above."
+        )
+    return comment
 
 
 @router.post(
@@ -150,11 +170,9 @@ async def update_organization_comment(
     comment_id: int,
     payload: PostCommentSchema,
 ):
-    try:
-        comment = await qs.select_related("user").aget(issue_id=issue_id, id=comment_id)
-    except Comment.DoesNotExist:
-        raise Http404()
-
+    comment = await get_comment_for_change(
+        request, qs.select_related("user"), issue_id, comment_id
+    )
     comment.text = payload.data["text"]
     await comment.asave()
 
@@ -194,10 +212,7 @@ async def delete_organization_comment(
     issue_id: int,
     comment_id: int,
 ):
-    try:
-        comment = await qs.aget(issue_id=issue_id, id=comment_id)
-    except Comment.DoesNotExist:
-        raise Http404()
+    comment = await get_comment_for_change(request, qs, issue_id, comment_id)
     await comment.adelete()
 
     return Status(204, None)
