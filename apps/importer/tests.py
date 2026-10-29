@@ -342,6 +342,18 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertTrue(imported.teams.filter(slug="team").exists())
 
     @mock_aiohttp()
+    def test_view_does_not_keep_a_reserved_slug(self, m):
+        self.log_in()
+        self.set_mocks(m, project={"id": "1", "slug": "new", "name": "Backend"})
+
+        self.assertEqual(self.post_import().status_code, 200)
+
+        self.assertEqual(
+            Project.objects.get(organization=self.organization, name="Backend").slug,
+            "backend",
+        )
+
+    @mock_aiohttp()
     def test_view_leaves_an_existing_project_unchanged(self, m):
         """A project matched by slug isn't edited, but imported teams still link it."""
         self.log_in()

@@ -1,7 +1,7 @@
 from django.core.validators import slug_re
 from import_export import resources
 
-from .models import Project, ProjectKey
+from .models import RESERVED_PROJECT_SLUGS, Project, ProjectKey
 
 
 class ProjectKeyResource(resources.ModelResource):
@@ -30,6 +30,7 @@ class ProjectResource(resources.ModelResource):
             and instance.slug != slug
             and slug_re.fullmatch(slug)
             and len(slug) <= Project._meta.get_field("slug").max_length
+            and slug not in RESERVED_PROJECT_SLUGS
         ):
             Project.objects.filter(pk=instance.pk).update(slug=slug)
             instance.slug = slug
