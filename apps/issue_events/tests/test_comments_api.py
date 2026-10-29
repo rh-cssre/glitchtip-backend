@@ -226,3 +226,97 @@ class OrganizationScopedCommentsApiTestCase(GlitchTipTestCase):
         )
         self.assertEqual(res.status_code, 404)
         self.assertEqual(await Comment.objects.acount(), 1)
+
+
+class CommentAuthorRuleTestCase(GlitchTipTestCase):
+    """Only the author, a manager or an owner may edit or delete a comment."""
+
+    def setUp(self):
+        self.create_user_and_project()
+        self.issue = baker.make("issue_events.Issue", project=self.project)
+        self.author = baker.make("users.User")
+        self.organization.add_user(self.author, OrganizationUserRole.MEMBER)
+
+    def url(self, name: str, comment: Comment) -> str:
+        return reverse(
+            f"api:{name}_organization_comment",
+            kwargs={
+                "organization_id_or_slug": self.organization.slug,
+                "issue_id": self.issue.id,
+                "comment_id": comment.id,
+            },
+        )
+
+    def make_comment(self, user=None) -> Comment:
+        return baker.make(
+            "issue_events.Comment", issue=self.issue, user=user, text="original"
+        )
+
+    def login_as(self, role: OrganizationUserRole):
+        user = baker.make("users.User")
+        self.organization.add_user(user, role)
+        self.client.force_login(user)
+        return user
+
+    def edit(self, comment: Comment, **headers):
+        return self.client.put(
+            self.url("update", comment),
+            {"data": {"text": "changed"}},
+            content_type="application/json",
+            **headers,
+        )
+
+    def test_author_changes_own_comment(self):
+        self.client.force_login(self.author)
+        comment = self.make_comment(self.author)
+        self.assertEqual(self.edit(comment).status_code, 200)
+        res = self.client.delete(self.url("delete", comment))
+        self.assertEqual(res.status_code, 204)
+
+    def test_other_members_comment(self):
+        for role, allowed in [
+            (OrganizationUserRole.MEMBER, False),
+            (OrganizationUserRole.ADMIN, False),
+            (OrganizationUserRole.MANAGER, True),
+            (OrganizationUserRole.OWNER, True),
+        ]:
+            with self.subTest(role=role):
+                self.login_as(role)
+                comment = self.make_comment(self.author)
+
+                res = self.edit(comment)
+                comment.refresh_from_db()
+                if allowed:
+                    self.assertEqual(res.status_code, 200)
+                    self.assertEqual(comment.text, "changed")
+                else:
+                    self.assertEqual(res.status_code, 403)
+                    self.assertIn("manager role", res.json()["detail"])
+                    self.assertEqual(comment.text, "original")
+
+                res = self.client.delete(self.url("delete", comment))
+                self.assertEqual(res.status_code, 204 if allowed else 403)
+                self.assertEqual(
+                    Comment.objects.filter(id=comment.id).exists(), not allowed
+                )
+
+    def test_comment_of_deleted_user(self):
+        comment = self.make_comment(user=None)
+        self.login_as(OrganizationUserRole.MEMBER)
+        self.assertEqual(self.edit(comment).status_code, 403)
+        self.login_as(OrganizationUserRole.MANAGER)
+        self.assertEqual(self.edit(comment).status_code, 200)
+
+    def test_token(self):
+        comment = self.make_comment(self.author)
+        for role, status in [
+            (OrganizationUserRole.MEMBER, 403),
+            (OrganizationUserRole.MANAGER, 200),
+        ]:
+            with self.subTest(role=role):
+                user = self.login_as(role)
+                self.client.logout()
+                token = baker.make("api_tokens.APIToken", user=user)
+                token.add_permission("event:write")
+                res = self.edit(comment, HTTP_AUTHORIZATION=f"Bearer {token.token}")
+                self.assertEqual(res.status_code, status)
