@@ -367,6 +367,20 @@ class ImporterTestCase(GlitchTipTestCaseMixin, TestCase):
         self.assertTrue(self.project.teams.filter(slug="team").exists())
 
     @mock_aiohttp()
+    def test_view_leaves_an_existing_team_unchanged(self, m):
+        """Importing would replace a matched team's members and projects."""
+        self.log_in()
+        self.team.slug = "team"
+        self.team.save()
+        self.team.members.add(self.org_user)
+        self.set_mocks(m)
+
+        self.assertEqual(self.post_import().status_code, 200)
+
+        self.assertEqual(list(self.team.members.all()), [self.org_user])
+        self.assertEqual(list(self.team.projects.all()), [self.project])
+
+    @mock_aiohttp()
     def test_view_caps_roles_and_skips_existing_members(self, m):
         """An import can't grant above the importer's role, or edit a member."""
         self.log_in()

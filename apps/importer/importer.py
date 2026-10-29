@@ -17,6 +17,7 @@ from apps.organizations_ext.resources import (
 )
 from apps.projects.models import Project
 from apps.projects.resources import ProjectKeyResource, ProjectResource
+from apps.teams.models import Team
 from apps.teams.resources import TeamResource
 from apps.users.models import User
 from apps.users.resources import UserResource
@@ -345,6 +346,18 @@ class GlitchTipImporter:
         teams = await self.get(self.url + self.teams_url)
         if not teams:
             return
+        if self.resources.scoped:
+            existing = {
+                slug
+                async for slug in Team.objects.filter(
+                    organization_id=self.organization_id,
+                    slug__in=[team["slug"] for team in teams],
+                ).values_list("slug", flat=True)
+            }
+            # An import never edits a team; its members and projects would be replaced.
+            teams = [team for team in teams if team["slug"] not in existing]
+            if not teams:
+                return
         for team in teams:
             team["organization"] = self.organization_id
             project_ids = await self.local_project_ids(
