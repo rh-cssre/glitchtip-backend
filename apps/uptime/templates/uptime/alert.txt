@@ -1,0 +1,12 @@
+GlitchTip Alert
+
+{{ monitor_name }} {{ status_msg }}
+{% if monitor_url %}
+URL: {{ monitor_url }}{% endif %}{% if reason %}
+Reason: {{ reason }}{% endif %}
+When: {{ object.start_check }}
+View at GlitchTip:
+{{ monitor_link }}
+
+Visit the page below to change your notification settings
+{{ project_notification_settings_link }}

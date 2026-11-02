@@ -1,16 +1,20 @@
 from django.utils.encoding import force_str
+
+from sentry.constants import MAX_CULPRIT_LENGTH
 from sentry.culprit import generate_culprit
-from sentry.utils.safe import truncatechars, get_path, trim
-from sentry.stacktraces.processing import get_crash_frame_from_event_data
 from sentry.stacktraces.functions import get_function_name_for_frame
+from sentry.stacktraces.processing import get_crash_frame_from_event_data
+from sentry.utils.safe import get_path, trim, truncatechars
+
 from .base import BaseEvent
 
 
 def get_crash_location(data):
     frame = get_crash_frame_from_event_data(
         data,
-        frame_filter=lambda x: x.get("function")
-        not in (None, "<redacted>", "<unknown>"),
+        frame_filter=lambda x: (
+            x.get("function") not in (None, "<redacted>", "<unknown>")
+        ),
     )
     if frame is not None:
         func = get_function_name_for_frame(frame, data.get("platform"))
@@ -65,9 +69,10 @@ class ErrorEvent(BaseEvent):
             return "{}: {}".format(ty, str(metadata["value"]))
 
     def get_location(self, data):
-        return force_str(
+        loc_string = force_str(
             data.get("culprit")
             or data.get("transaction")
             or generate_culprit(data)
             or ""
         )
+        return truncatechars(loc_string, MAX_CULPRIT_LENGTH)

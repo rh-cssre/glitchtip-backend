@@ -1,114 +1,360 @@
 variables:
   PROJECT_NAME: glitchtip
-  IMAGE_NAME: registry.gitlab.com/glitchtip/glitchtip-backend
-  CONTAINER_TEST_IMAGE: registry.gitlab.com/glitchtip/glitchtip-backend:$CI_BUILD_REF_NAME
   PIP_DISABLE_PIP_VERSION_CHECK: "on"
-  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-  POETRY_VIRTUALENVS_CREATE: "false"
-  POETRY_HOME: "/opt/poetry"
   POSTGRES_HOST_AUTH_METHOD: "trust"
+  UV_VERSION: 0.9
+  BASE_LAYER: trixie
+  UV_SYSTEM_PYTHON: "true"
+  UV_PYTHON_DOWNLOADS: "never"
+  UV_PROJECT_ENVIRONMENT: "/usr/local"
+  UV_CACHE_DIR: ".uv-cache"
   DEBUG: "true"
 
 include:
   - template: SAST.gitlab-ci.yml
   - template: Dependency-Scanning.gitlab-ci.yml
   - template: Secret-Detection.gitlab-ci.yml
+  # Shared AI-policy check (fork MRs must disclose AI usage). See AI_POLICY.md.
+  - project: 'glitchtip/glitchtip'
+    file: '/ci/ai-policy-check.yml'
 
 workflow:
   rules:
-    - when: always
+    # Run pipelines on pushes to default branch.
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    # Run pipelines for merge request events.
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    # Do not run pipelines for branch pushes if an MR exists.
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    # Run pipelines for branches without MR (yet).
+    - if: $CI_COMMIT_BRANCH
+    # Run pipelines for pushed tags, web UI, and schedules.
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == 'web'
+    - if: $CI_PIPELINE_SOURCE == 'schedule'
 
-test:
-  image: python:3.11
+# Lowest tested stack: Python 3.12, PostgreSQL 15, Redis.
+# PostgreSQL 15 is the minimum supported version (Django 6.1 refuses 14), so
+# this lane tests the documented floor.
+test-min:
+  image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.12-$BASE_LAYER
   variables:
     SECRET_KEY: testing
+    DATABASE_URL: "postgres://postgres:postgres@postgres:5432/postgres"
     ENABLE_TEST_API: "true"
-    ENABLE_OPEN_USER_REGISTRATION: "true"
+    ENABLE_ORGANIZATION_CREATION: "true"
+    VALKEY_URL: "redis://redis:6379"
   services:
     - postgres:15
+    - name: redis:7
+      alias: redis
   cache:
-    key: ${CI_COMMIT_REF_SLUG}
-    paths:
-      - .cache/pip
+    - key:
+        files:
+          - uv.lock
+      paths:
+        - $UV_CACHE_DIR
   script:
-    - curl -sSL https://install.python-poetry.org | python3 -
-    - $POETRY_HOME/bin/poetry install --no-interaction --no-ansi
-    - ./manage.py test
+    - uv sync --frozen --no-install-project
+    - uv run ./manage.py test
+    - uv cache prune --ci
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 
-lint:
-  image: python:3.11
+# Postgres-only lane: no Valkey at all (VALKEY_URL=""), so the Rust ingest
+# path's cache ops run against the django_cache table and enqueue goes to
+# the db_queuedtask broker. The parity suite skips itself here (broker
+# batch order); RustIngestTestCase covers the lane end-to-end.
+test-postgres-only:
+  image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.14-$BASE_LAYER
+  variables:
+    SECRET_KEY: testing
+    DATABASE_URL: "postgres://postgres:postgres@postgres:5432/postgres"
+    ENABLE_TEST_API: "true"
+    ENABLE_ORGANIZATION_CREATION: "true"
+    VALKEY_URL: ""
+  services:
+    - name: postgres:18
+      alias: postgres
+  cache:
+    - key:
+        files:
+          - uv.lock
+      paths:
+        - $UV_CACHE_DIR
   script:
-    - curl -sSL https://install.python-poetry.org | python3 -
-    - $POETRY_HOME/bin/poetry install --no-interaction --no-ansi
-    # - isort --check glitchtip not compatible with black :(
-    # - pylint --load-plugins=pylint_django --django-settings-module=glitchtip.settings --disable=R glitchtip
+    - uv sync --frozen --no-install-project
+    - uv run ./manage.py test apps.event_ingest glitchtip
+    - uv cache prune --ci
+  rules:
+    - if: $CI_PIPELINE_SOURCE != "schedule"
+
+# Latest stack: Python 3.14, PostgreSQL 18, Valkey, S3 cold storage (Garage)
+test-latest:
+  image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.14-$BASE_LAYER
+  variables:
+    SECRET_KEY: testing
+    DATABASE_URL: "postgres://postgres:postgres@postgres:5432/postgres"
+    ENABLE_TEST_API: "true"
+    ENABLE_ORGANIZATION_CREATION: "true"
+    VALKEY_URL: "redis://redis:6379"
+    GLITCHTIP_ENABLE_DUCKDB: "true"
+    # One bucket for both file uploads and cold storage; they live under
+    # disjoint prefixes (uploads/ and cold_storage/). Garage creates it on
+    # first boot from GARAGE_DEFAULT_BUCKET below.
+    AWS_STORAGE_BUCKET_NAME: glitchtip
+    GLITCHTIP_COLD_STORAGE_BUCKET: glitchtip
+    AWS_ACCESS_KEY_ID: GK00000000000000000000dev
+    AWS_SECRET_ACCESS_KEY: "0000000000000000000000000000000000000000000000000000000000000001"
+    AWS_S3_ENDPOINT_URL: "http://garage:3900"
+  services:
+    - name: postgres:18
+      alias: postgres
+    - name: valkey/valkey:9
+      alias: redis
+    # Garage with the dev config baked in (see garage/Dockerfile -- CI
+    # services cannot mount files and the upstream image has no shell).
+    # --single-node --default-bucket provisions the cluster layout, access
+    # key and bucket at startup, so there is nothing to bootstrap here.
+    - name: registry.gitlab.com/glitchtip/glitchtip-backend/garage:v2.4.1
+      alias: garage
+      command: ["/garage", "server", "--single-node", "--default-bucket"]
+      variables:
+        GARAGE_ALLOW_WORLD_READABLE_SECRETS: "true"
+        GARAGE_DEFAULT_ACCESS_KEY: GK00000000000000000000dev
+        GARAGE_DEFAULT_SECRET_KEY: "0000000000000000000000000000000000000000000000000000000000000001"
+        GARAGE_DEFAULT_BUCKET: glitchtip
+  cache:
+    - key:
+        files:
+          - uv.lock
+      paths:
+        - $UV_CACHE_DIR
+  script:
+    - uv sync --frozen --no-install-project
+    # Pre-install DuckDB extensions (mirrors Dockerfile build step)
+    - python -c "import duckdb; c=duckdb.connect(); c.install_extension('httpfs'); c.install_extension('aws'); c.close()"
+    - uv run ./manage.py test
+    - uv cache prune --ci
+  rules:
+    - if: $CI_PIPELINE_SOURCE != "schedule"
+
+e2e:
+  image: docker:29
+  services:
+    - docker:29-dind
+  variables:
+    GLITCHTIP_URL: "http://docker:8000"
+  script:
+    - apk add --no-cache python3 py3-pip bash curl
+    - python3 -m venv .venv
+    - source .venv/bin/activate
+    - pip install requests
+    - echo "Running e2e with COMPOSE_FILES=${COMPOSE_FILES}"
+    - docker compose ${COMPOSE_FILES} build
+    - docker compose ${COMPOSE_FILES} up -d --wait
+    - python3 integration_tests/test_e2e.py
+  after_script:
+    - docker compose ${COMPOSE_FILES} logs
+    - docker compose ${COMPOSE_FILES} down -v
+  rules:
+    - if: $CI_PIPELINE_SOURCE != "schedule"
+  parallel:
+    matrix:
+      # With valkey (default production-like setup)
+      - COMPOSE_FILES: "-f compose.e2e.yml"
+      # Without valkey (postgres for cache/tasks)
+      - COMPOSE_FILES: "-f compose.e2e.yml -f compose.e2e.no-valkey.yml"
+      # Migrations as a separate pre-deploy step, server started with SKIP_INIT
+      - COMPOSE_FILES: "-f compose.e2e.yml -f compose.e2e.skip-init.yml"
+
+lint:
+  image: ghcr.io/astral-sh/uv:$UV_VERSION-python3.14-$BASE_LAYER
+  script:
+    # The lockfile must match pyproject.toml: `uv sync --frozen` (as the
+    # image build runs it) would otherwise quietly install a stale lock.
+    - uv lock --check
+    # Install linters from the lockfile via `lint` dependency group
+    - uv sync --only-group lint --frozen --no-install-project
+    - uv run --no-sync ruff check glitchtip/ apps/
+    - uv run --no-sync vulture apps/ glitchtip/ vulture_whitelist.py --min-confidence 100 --exclude "*/migrations/*,glitchtip/test_runner.py,apps/organizations_ext/api.py"
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
 
 build:
-  image: docker:20
+  image: docker:29
   rules:
-    # Run only on protected branches that are not tagged and not merge requests
-    - if: '$CI_PIPELINE_SOURCE != "merge_request_event" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_TAG =~ "/^$/"'
-  services:
-    - docker:20-dind
-  script:
-    - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN registry.gitlab.com
-    - docker build -t $CONTAINER_TEST_IMAGE --build-arg IS_CI="True" .
-    - docker push $CONTAINER_TEST_IMAGE
-  rules:
-    - if: $CI_PIPELINE_SOURCE != "schedule"
-
-buildx:
-  image: docker:20-git
-  variables:
-    GIT_STRATEGY: none
-  artifacts:
-    paths:
-      - buildx
-    expire_in: 1 hour
-  services:
-    - docker:20-dind
-  script:
-    - export DOCKER_BUILDKIT=1
-    - git clone https://github.com/docker/buildx.git ./docker-buildx
-    - docker build --platform=local -o . ./docker-buildx
-  rules:
-    - if: $CI_PIPELINE_SOURCE =~ "schedule"
+    # Exclude merge requests and scheduled execution.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "schedule"
       when: never
-    - if: $CI_COMMIT_TAG =~ /^v\d+.\d+.\d+/
-
-build_arm_x86:
-  image: docker:20
-  needs:
-    - buildx
+    # Run build only on protected branches and tags (master or v0.0.0).
+    - if: $CI_COMMIT_REF_PROTECTED
   services:
-    - docker:20-dind
-  before_script:
-    - mkdir -p ~/.docker/cli-plugins
-    - mv buildx ~/.docker/cli-plugins/docker-buildx
-    - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+    - docker:29-dind
   script:
-    - wget https://gitlab.com/api/v4/projects/15449363/jobs/artifacts/$CI_COMMIT_TAG/download?job=build-assets -O assets.zip
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN registry.gitlab.com
+    - docker build -t ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME//\//-} --build-arg IS_CI="True" .
+    - docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME//\//-}
+
+# Native per-arch build smoke test on MRs and master, to catch
+# arch-specific build regressions before they reach a release tag.
+.validate_build_base:
+  image: docker:29
+  services:
+    - docker:29-dind
+  script:
+    - docker buildx create --use
+    - >-
+      docker buildx build --platform ${BUILD_PLATFORM} --load
+      -t glitchtip-validate:${CI_COMMIT_SHORT_SHA}-${BUILD_ARCH}
+      --build-arg IS_CI="True" .
+    # Smoke test: import Django + glitchtip to verify the Python and
+    # native deps stack loads on the built arch.
+    - >-
+      docker run --rm --platform ${BUILD_PLATFORM}
+      -e SECRET_KEY=ci -e DATABASE_URL=sqlite:///tmp/ci.sqlite3
+      glitchtip-validate:${CI_COMMIT_SHORT_SHA}-${BUILD_ARCH}
+      python -c "import django, glitchtip; print('django', django.get_version()); print('glitchtip OK')"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+validate_build_amd64:
+  extends: .validate_build_base
+  variables:
+    BUILD_PLATFORM: linux/amd64
+    BUILD_ARCH: amd64
+
+validate_build_arm64:
+  extends: .validate_build_base
+  tags:
+    - saas-linux-medium-arm64
+  # The arm64 runner tag is a GitLab SaaS runner that only the canonical
+  # project has. On forks it resolves to no_matching_runner and the job
+  # reports as failed without ever testing anything, so skip it there and
+  # let the amd64 job carry the build smoke test. Inherit the base rules
+  # for the canonical project.
+  rules:
+    - if: $CI_PROJECT_PATH != "glitchtip/glitchtip-backend"
+      when: never
+    - !reference [.validate_build_base, rules]
+  variables:
+    BUILD_PLATFORM: linux/arm64
+    BUILD_ARCH: arm64
+
+# Release multi-arch build. Per-arch jobs run in parallel and push
+# arch-suffixed tags; the manifest-merge job publishes the user-facing
+# tags (latest, X.Y.Z, X.Y, X) as manifest lists. Triggered only on
+# protected vX.Y.Z tags.
+
+# Pull frontend assets once and share them with both arch builds via job artifact.
+release_prepare_assets:
+  image: docker:29
+  script:
+    - apk add --no-cache wget unzip
+    - wget "https://gitlab.com/api/v4/projects/15449363/jobs/artifacts/$CI_COMMIT_TAG/download?job=build-assets" -O assets.zip
     - unzip assets.zip
     - rm assets.zip
-    - mv dist/glitchtip-frontend/* dist/
-    - rmdir dist/glitchtip-frontend/
-    - VERSION=${CI_COMMIT_REF_NAME#*v}
-    - echo "Build version $VERSION ci registry image $CI_REGISTRY_IMAGE commit ref $CI_COMMIT_REF_NAME"
-    - docker login -u ${DOCKER_CI_REGISTRY_USER} -p ${DOCKER_CI_REGISTRY_PASSWORD}
-    - docker buildx create --use
-    - docker buildx build --platform linux/arm64/v8,linux/amd64 --push -t ${DOCKER_CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_NAME} -t ${DOCKER_CI_REGISTRY_IMAGE}:latest --build-arg IS_CI="True" --build-arg GLITCHTIP_VERSION=$VERSION --build-arg COLLECT_STATIC="True" .
+    - mv dist/glitchtip-frontend/browser/* dist/
+    - rmdir dist/glitchtip-frontend/browser/
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 day
   rules:
-    - if: $CI_PIPELINE_SOURCE =~ "schedule"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
       when: never
     - if: '$CI_COMMIT_TAG =~ /^v\d+.\d+.\d+/ && $CI_COMMIT_REF_PROTECTED == "true"'
 
+.release_build_base:
+  image: docker:29
+  services:
+    - docker:29-dind
+  needs:
+    - job: release_prepare_assets
+      artifacts: true
+  script:
+    # Version parsing (e.g., v5.0.1 -> 5.0.1, 5.0, 5)
+    - VERSION_FULL=${CI_COMMIT_REF_NAME#*v}
+    - VERSION_MINOR=${VERSION_FULL%.*}
+    - VERSION_MAJOR=${VERSION_FULL%%.*}
+
+    - 'echo "Building ${BUILD_ARCH} layer for tags: ${VERSION_FULL}"'
+
+    - docker login -u ${DOCKER_CI_REGISTRY_USER} -p ${DOCKER_CI_REGISTRY_PASSWORD}
+    - docker login -u ${GITLAB_DEPLOY_USER} -p ${GITLAB_DEPLOY_TOKEN} registry.gitlab.com
+    - docker login -u ${QUAY_USER} -p ${QUAY_TOKEN} quay.io
+    - docker buildx create --use
+    - >-
+      docker buildx build --platform ${BUILD_PLATFORM} --push
+      -t ${DOCKER_CI_REGISTRY_IMAGE}:${VERSION_FULL}-${BUILD_ARCH}
+      -t registry.gitlab.com/glitchtip/glitchtip:${VERSION_FULL}-${BUILD_ARCH}
+      -t quay.io/glitchtip/glitchtip:${VERSION_FULL}-${BUILD_ARCH}
+      --build-arg IS_CI="True"
+      --build-arg GLITCHTIP_VERSION=${VERSION_FULL}
+      --build-arg COLLECT_STATIC="True" .
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v\d+.\d+.\d+/ && $CI_COMMIT_REF_PROTECTED == "true"'
+
+release_build_amd64:
+  extends: .release_build_base
+  variables:
+    BUILD_PLATFORM: linux/amd64
+    BUILD_ARCH: amd64
+
+release_build_arm64:
+  extends: .release_build_base
+  tags:
+    - saas-linux-medium-arm64
+  variables:
+    BUILD_PLATFORM: linux/arm64
+    BUILD_ARCH: arm64
+
+# `imagetools create` works registry-side, so no DinD is needed here.
+release_manifest_merge:
+  image: docker:29
+  needs:
+    - job: release_build_amd64
+      artifacts: false
+    - job: release_build_arm64
+      artifacts: false
+  script:
+    - VERSION_FULL=${CI_COMMIT_REF_NAME#*v}
+    - VERSION_MINOR=${VERSION_FULL%.*}
+    - VERSION_MAJOR=${VERSION_FULL%%.*}
+
+    - 'echo "Publishing manifest tags: latest, ${VERSION_FULL}, ${VERSION_MINOR}, ${VERSION_MAJOR}"'
+
+    - docker login -u ${DOCKER_CI_REGISTRY_USER} -p ${DOCKER_CI_REGISTRY_PASSWORD}
+    - docker login -u ${GITLAB_DEPLOY_USER} -p ${GITLAB_DEPLOY_TOKEN} registry.gitlab.com
+    - docker login -u ${QUAY_USER} -p ${QUAY_TOKEN} quay.io
+    - |
+      for REGISTRY in \
+        "${DOCKER_CI_REGISTRY_IMAGE}" \
+        "registry.gitlab.com/glitchtip/glitchtip" \
+        "quay.io/glitchtip/glitchtip"; do
+        for TAG in "latest" "${VERSION_FULL}" "${VERSION_MINOR}" "${VERSION_MAJOR}"; do
+          echo "Creating manifest ${REGISTRY}:${TAG}"
+          docker buildx imagetools create \
+            -t "${REGISTRY}:${TAG}" \
+            "${REGISTRY}:${VERSION_FULL}-amd64" \
+            "${REGISTRY}:${VERSION_FULL}-arm64"
+        done
+      done
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v\d+.\d+.\d+/ && $CI_COMMIT_REF_PROTECTED == "true"'
 
 update_deps:
-  image: renovate/renovate:latest
+  image: renovate/renovate:44
   variables:
     RENOVATE_PLATFORM: gitlab
     RENOVATE_ENDPOINT: https://gitlab.com/api/v4

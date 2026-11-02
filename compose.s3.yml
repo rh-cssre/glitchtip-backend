@@ -1,0 +1,65 @@
+# S3 overlay for testing S3-backed storage locally, served by Garage.
+# Usage: docker compose -f compose.yml -f compose.s3.yml up -d
+#
+# One bucket holds both file uploads and cold storage, which is the layout a
+# self-hoster is most likely to run: the two live under disjoint prefixes
+# (uploads/ and cold_storage/), so they share a bucket without colliding.
+#
+# `--single-node --default-bucket` makes Garage provision its own cluster
+# layout, access key and bucket from the environment on first boot, so there
+# is nothing to run before the stack is usable.
+#
+# The garage-netem one-shot service injects a small egress delay on Garage's
+# interface so storage I/O behaves like a real network object store instead
+# of a loopback (override with S3_LATENCY, e.g. S3_LATENCY="5ms 1ms").
+# It reruns on every `up`; if the garage container is restarted by other
+# means, rerun `up` to reapply the delay.
+services:
+  garage:
+    image: registry.gitlab.com/glitchtip/glitchtip-backend/garage:v2.4.1
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    environment:
+      # The baked-in config carries rpc_secret; the image has no way to chmod
+      # it to Garage's liking, so acknowledge it explicitly.
+      GARAGE_ALLOW_WORLD_READABLE_SECRETS: "true"
+      # Garage requires access key IDs to be "GK" + 24 characters, so this
+      # cannot be a friendlier string.
+      GARAGE_DEFAULT_ACCESS_KEY: GK00000000000000000000dev
+      GARAGE_DEFAULT_SECRET_KEY: "0000000000000000000000000000000000000000000000000000000000000001"
+      GARAGE_DEFAULT_BUCKET: glitchtip
+    volumes:
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    ports:
+      - "3900:3900"
+  garage-netem:
+    image: alpine:3.24
+    network_mode: "service:garage"
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      garage:
+        condition: service_started
+    command: >
+      /bin/sh -c "
+      apk add --no-cache iproute2 >/dev/null &&
+      tc qdisc replace dev eth0 root netem delay $${S3_LATENCY:-2ms} &&
+      echo netem applied: $${S3_LATENCY:-2ms};
+      "
+    environment:
+      S3_LATENCY: ${S3_LATENCY:-2ms}
+  web:
+    environment:
+      # Same bucket for both; see the note above about disjoint prefixes.
+      AWS_STORAGE_BUCKET_NAME: glitchtip
+      GLITCHTIP_COLD_STORAGE_BUCKET: glitchtip
+      AWS_ACCESS_KEY_ID: GK00000000000000000000dev
+      AWS_SECRET_ACCESS_KEY: "0000000000000000000000000000000000000000000000000000000000000001"
+      AWS_S3_ENDPOINT_URL: http://garage:3900
+      AWS_S3_USE_SSL: "False"
+      # Cold storage reads go through DuckDB, so the overlay is only useful
+      # with it enabled.
+      GLITCHTIP_ENABLE_DUCKDB: "true"
+volumes:
+  garage-meta:
+  garage-data:
