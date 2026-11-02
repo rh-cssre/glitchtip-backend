@@ -1,0 +1,19 @@
+# Single-node Garage, used as the S3-compatible server for local development
+# and CI. Everything here is a fixed development value, deliberately committed
+# so the service needs no setup. Never reuse this for anything reachable from
+# a network you do not own.
+#
+# This file exists as a file, rather than as environment variables, because
+# Garage has no configless mode: it refuses to start without it, even with
+# --single-node. GitLab CI services cannot mount files and the upstream image
+# is `scratch` (one file, /garage -- no shell to write one), so CI consumes
+# this through an image with it baked in. See Dockerfile.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+replication_factor = 1
+rpc_bind_addr = "[::]:3901"
+rpc_secret = "0000000000000000000000000000000000000000000000000000000000000001"
+
+[s3_api]
+s3_region = "us-east-1"
+api_bind_addr = "[::]:3900"

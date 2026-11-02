@@ -1,0 +1,99 @@
+[
+  {
+    "event_id": "9d6bfa87088a408dbba14df512856296",
+    "sent_at": "2024-02-27T14:26:53.408Z",
+    "sdk": { "name": "sentry.javascript.angular-ivy", "version": "7.93.0" },
+    "trace": {
+      "environment": "dev",
+      "release": "test",
+      "public_key": "7518f09926c24340b44b26b057262d24",
+      "trace_id": "ea1e340b3ea54461be2de3f905c9d2e7"
+    }
+  },
+  { "type": "event" },
+  {
+    "exception": {
+      "values": [
+        {
+          "type": "EvalError",
+          "value": "MDN says \"EvalError is not used in the current ECMAScript specification and will thus not be thrown by the runtime. However, the object itself remains for backwards compatibility with earlier versions of the specification.\"",
+          "stacktrace": {
+            "frames": [
+              {
+                "filename": "http://localhost:4201/vendor.js",
+                "function": "onInvokeTask",
+                "in_app": true,
+                "lineno": 79475,
+                "colno": 25
+              },
+              {
+                "filename": "http://localhost:4201/polyfills.js",
+                "function": "invokeTask",
+                "in_app": true,
+                "lineno": 8289,
+                "colno": 54
+              }
+            ]
+          },
+          "mechanism": { "type": "angular", "handled": false }
+        }
+      ]
+    },
+    "level": "error",
+    "event_id": "9d6bfa87088a408dbba14df512856296",
+    "platform": "javascript",
+    "request": {
+      "url": "http://localhost:4201/",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:122.0) Gecko/20100101 Firefox/122.0"
+      }
+    },
+    "timestamp": 1709044013.405,
+    "environment": "dev",
+    "release": "test",
+    "sdk": {
+      "integrations": [
+        "InboundFilters",
+        "FunctionToString",
+        "Breadcrumbs",
+        "GlobalHandlers",
+        "LinkedErrors",
+        "Dedupe",
+        "HttpContext",
+        "BrowserTracing"
+      ],
+      "name": "sentry.javascript.angular-ivy",
+      "version": "7.93.0",
+      "packages": [{ "name": "npm:@sentry/angular-ivy", "version": "7.93.0" }]
+    },
+    "contexts": {
+      "trace": {
+        "trace_id": "ea1e340b3ea54461be2de3f905c9d2e7",
+        "span_id": "bdd3f2e9b0562060"
+      },
+      "angular": { "version": 17 }
+    },
+    "breadcrumbs": [
+      {
+        "timestamp": 1709044004.922,
+        "category": "console",
+        "data": {
+          "arguments": ["Angular is running in development mode."],
+          "logger": "console"
+        },
+        "level": "log",
+        "message": "Angular is running in development mode."
+      },
+      {
+        "timestamp": 1709044004.924,
+        "category": "navigation",
+        "data": { "from": "/", "to": "/" }
+      },
+      {
+        "timestamp": 1709044013.395,
+        "category": "ui.click",
+        "message": "body > app-root > ol > li > button"
+      }
+    ]
+  }
+]

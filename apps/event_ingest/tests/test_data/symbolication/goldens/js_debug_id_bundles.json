@@ -1,0 +1,312 @@
+[
+  {
+    "culprit": "formatLabel(assets/app.3f9a1c)",
+    "exception": {
+      "values": [
+        {
+          "raw_stacktrace": {
+            "frames": [
+              {
+                "abs_path": "app:///node_modules/widget-kit/widget.min.js",
+                "colno": 188,
+                "filename": "app:///node_modules/widget-kit/widget.min.js",
+                "function": "?",
+                "lineno": 1
+              },
+              {
+                "abs_path": "app:///node_modules/widget-kit/widget.min.js",
+                "colno": 67,
+                "filename": "app:///node_modules/widget-kit/widget.min.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              }
+            ]
+          },
+          "stacktrace": {
+            "frames": [
+              {
+                "abs_path": "app:///node_modules/widget-kit/widget.min.js",
+                "colno": 36,
+                "context_line": "  return elements.map((element) => renderWidget(element, { size: \"large\" }));",
+                "filename": "../src/widget.js",
+                "function": "<anonymous>",
+                "in_app": true,
+                "lineno": 11,
+                "module": "widget-kit/widget",
+                "post_context": [
+                  "}",
+                  "",
+                  "globalThis.mountAll = mountAll;"
+                ],
+                "pre_context": [
+                  "  element.textContent = settings.size;",
+                  "  return element;",
+                  "}",
+                  "",
+                  "export function mountAll(elements) {"
+                ]
+              },
+              {
+                "abs_path": "app:///node_modules/widget-kit/widget.min.js",
+                "colno": 5,
+                "context_line": "    throw new Error(\"renderWidget needs an element for \" + settings.size);",
+                "filename": "../src/widget.js",
+                "function": "renderWidget",
+                "in_app": true,
+                "lineno": 4,
+                "module": "widget-kit/widget",
+                "post_context": [
+                  "  }",
+                  "  element.textContent = settings.size;",
+                  "  return element;",
+                  "}",
+                  ""
+                ],
+                "pre_context": [
+                  "function renderWidget(element, options) {",
+                  "  const settings = Object.assign({ size: \"small\" }, options);",
+                  "  if (!element) {"
+                ]
+              }
+            ]
+          },
+          "type": "Error",
+          "value": "renderWidget needs an element for large"
+        },
+        {
+          "mechanism": {
+            "handled": false,
+            "type": "onerror"
+          },
+          "raw_stacktrace": {
+            "frames": [
+              {
+                "abs_path": "https://example.com/assets/vendor.js",
+                "colno": 10,
+                "filename": "/assets/vendor.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              },
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 75,
+                "filename": "/assets/app.3f9a1c.min.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 2
+              },
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 372,
+                "filename": "/assets/app.3f9a1c.min.js",
+                "function": "t",
+                "in_app": true,
+                "lineno": 1
+              },
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 345,
+                "filename": "/assets/app.3f9a1c.min.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              },
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 260,
+                "filename": "/assets/app.3f9a1c.min.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              },
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "filename": "/assets/app.3f9a1c.min.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              },
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 37,
+                "filename": "/assets/app.3f9a1c.min.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              },
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 147,
+                "filename": "/assets/app.3f9a1c.min.js",
+                "function": "?",
+                "lineno": 1
+              }
+            ]
+          },
+          "stacktrace": {
+            "frames": [
+              {
+                "abs_path": "https://example.com/assets/vendor.js",
+                "colno": 10,
+                "filename": "/assets/vendor.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              },
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 5,
+                "context_line": "    builder.addRow(name, values);",
+                "filename": "../src/index.js",
+                "function": "buildReport",
+                "in_app": true,
+                "lineno": 24,
+                "module": "assets/app.3f9a1c",
+                "post_context": [
+                  "  }",
+                  "  return builder.render();",
+                  "}",
+                  "",
+                  "globalThis.buildReport = buildReport;"
+                ],
+                "pre_context": [
+                  "}",
+                  "",
+                  "export function buildReport(data) {",
+                  "  const builder = new ReportBuilder(\"Report\");",
+                  "  for (const [name, values] of Object.entries(data)) {"
+                ]
+              },
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 20,
+                "context_line": "    this.rows.push(formatLabel(name, mean));",
+                "filename": "../src/index.js",
+                "function": "ReportBuilder.addRow",
+                "in_app": true,
+                "lineno": 12,
+                "module": "assets/app.3f9a1c",
+                "post_context": [
+                  "    return this;",
+                  "  }",
+                  "",
+                  "  render() {",
+                  "    return [this.title, ...this.rows].join(\"\\n\");"
+                ],
+                "pre_context": [
+                  "    this.rows = [];",
+                  "  }",
+                  "",
+                  "  addRow(name, values) {",
+                  "    const mean = average(values);"
+                ]
+              },
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 18,
+                "context_line": "    const mean = average(values);",
+                "filename": "../src/index.js",
+                "function": "ReportBuilder.addRow",
+                "in_app": true,
+                "lineno": 11,
+                "module": "assets/app.3f9a1c",
+                "post_context": [
+                  "    this.rows.push(formatLabel(name, mean));",
+                  "    return this;",
+                  "  }",
+                  "",
+                  "  render() {"
+                ],
+                "pre_context": [
+                  "    this.title = title;",
+                  "    this.rows = [];",
+                  "  }",
+                  "",
+                  "  addRow(name, values) {"
+                ]
+              },
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 10,
+                "context_line": "  return divide(total, values.length);",
+                "filename": "../src/math.js",
+                "function": "average",
+                "in_app": true,
+                "lineno": 10,
+                "module": "assets/app.3f9a1c",
+                "post_context": [
+                  "}"
+                ],
+                "pre_context": [
+                  "  return numerator / denominator;",
+                  "}",
+                  "",
+                  "export function average(values) {",
+                  "  const total = values.reduce((sum, value) => sum + value, 0);"
+                ]
+              },
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "filename": "/assets/app.3f9a1c.min.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              },
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 5,
+                "context_line": "    throw new TypeError(\"formatLabel: value is required for \" + label);",
+                "filename": "../node_modules/tiny-format/index.js",
+                "function": "formatLabel",
+                "in_app": true,
+                "lineno": 4,
+                "module": "assets/app.3f9a1c",
+                "post_context": [
+                  "  }",
+                  "  return label + \": \" + String(value);",
+                  "}"
+                ],
+                "pre_context": [
+                  "// A stand-in third-party dependency, so the bundle has a node_modules source.",
+                  "export function formatLabel(label, value) {",
+                  "  if (value === undefined) {"
+                ]
+              },
+              {
+                "abs_path": "https://example.com/assets/app.3f9a1c.min.js",
+                "colno": 5,
+                "context_line": "    throw new RangeError(\"Cannot divide \" + numerator + \" by zero\");",
+                "filename": "../src/math.js",
+                "function": "divide",
+                "lineno": 3,
+                "module": "assets/app.3f9a1c",
+                "post_context": [
+                  "  }",
+                  "  return numerator / denominator;",
+                  "}",
+                  "",
+                  "export function average(values) {"
+                ],
+                "pre_context": [
+                  "export function divide(numerator, denominator) {",
+                  "  if (denominator === 0) {"
+                ]
+              }
+            ]
+          },
+          "type": "RangeError",
+          "value": "Cannot divide 3 by zero"
+        }
+      ]
+    },
+    "metadata": {
+      "filename": "../node_modules/tiny-format/index.js",
+      "function": "formatLabel",
+      "type": "RangeError",
+      "value": "Cannot divide 3 by zero"
+    },
+    "title": "RangeError: Cannot divide 3 by zero"
+  }
+]

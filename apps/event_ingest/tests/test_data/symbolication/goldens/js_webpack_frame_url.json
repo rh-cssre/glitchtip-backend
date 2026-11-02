@@ -1,0 +1,76 @@
+[
+  {
+    "culprit": "",
+    "exception": {
+      "values": [
+        {
+          "stacktrace": {
+            "frames": []
+          },
+          "type": "Error",
+          "value": "unrelated"
+        }
+      ]
+    },
+    "metadata": {
+      "type": "Error",
+      "value": "unrelated"
+    },
+    "title": "Error: unrelated"
+  },
+  {
+    "culprit": "renderWidget(dist/widget)",
+    "exception": {
+      "values": [
+        {
+          "raw_stacktrace": {
+            "frames": [
+              {
+                "abs_path": "webpack:///./dist/widget.min.js",
+                "colno": 67,
+                "filename": "webpack:///./dist/widget.min.js",
+                "function": "?",
+                "lineno": 1
+              }
+            ]
+          },
+          "stacktrace": {
+            "frames": [
+              {
+                "abs_path": "webpack:///./dist/widget.min.js",
+                "colno": 5,
+                "context_line": "    throw new Error(\"renderWidget needs an element for \" + settings.size);",
+                "filename": "./dist/widget.min.js",
+                "function": "renderWidget",
+                "in_app": true,
+                "lineno": 4,
+                "module": "dist/widget",
+                "post_context": [
+                  "  }",
+                  "  element.textContent = settings.size;",
+                  "  return element;",
+                  "}",
+                  ""
+                ],
+                "pre_context": [
+                  "function renderWidget(element, options) {",
+                  "  const settings = Object.assign({ size: \"small\" }, options);",
+                  "  if (!element) {"
+                ]
+              }
+            ]
+          },
+          "type": "Error",
+          "value": "renderWidget needs an element for large"
+        }
+      ]
+    },
+    "metadata": {
+      "filename": "./dist/widget.min.js",
+      "function": "renderWidget",
+      "type": "Error",
+      "value": "renderWidget needs an element for large"
+    },
+    "title": "Error: renderWidget needs an element for large"
+  }
+]

@@ -1,0 +1,34 @@
+from django.utils import timezone
+
+from apps.performance.test_data import generate_fake_transaction_group
+from glitchtip.base_commands import MakeSampleCommand
+
+
+class Command(MakeSampleCommand):
+    help = "Create sample transaction groups for dev and demonstration purposes"
+
+    def handle(self, *args, **options):
+        super().handle(*args, **options)
+
+        quantity = options["quantity"]
+        total_count = 0
+
+        now = timezone.now()
+        self._ensure_partitions(
+            now,
+            now,
+            weekly_tables=["projects_transactioneventprojecthourlystatistic"],
+        )
+
+        for _ in range(quantity):
+            group = generate_fake_transaction_group(self.project)
+            total_count += group.count
+            self.progress_tick()
+
+        # Populate transaction stats with total count at current hour
+        self.upsert_hourly_project_stats(
+            "projects_transactioneventprojecthourlystatistic",
+            [now] * total_count,
+        )
+
+        self.success_message(f'Successfully created "{quantity}" transaction groups')

@@ -1,0 +1,119 @@
+[
+  {
+    "culprit": "computeTotal_159_99(assets/large)",
+    "exception": {
+      "values": [
+        {
+          "raw_stacktrace": {
+            "frames": [
+              {
+                "abs_path": "https://example.com/assets/large.min.js",
+                "colno": 27,
+                "filename": "/assets/large.min.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              },
+              {
+                "abs_path": "https://example.com/assets/large.min.js",
+                "colno": 761159,
+                "filename": "/assets/large.min.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              },
+              {
+                "abs_path": "https://example.com/assets/large.min.js",
+                "colno": 1526733,
+                "filename": "/assets/large.min.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              }
+            ]
+          },
+          "stacktrace": {
+            "frames": [
+              {
+                "abs_path": "https://example.com/assets/large.min.js",
+                "colno": 5,
+                "context_line": "    throw new Error(\"negative input in computeTotal_0_0\");",
+                "filename": "webpack:///./src/generated/module_000.js",
+                "function": "computeTotal_0_0",
+                "in_app": true,
+                "lineno": 3,
+                "module": "assets/large",
+                "post_context": [
+                  "  }",
+                  "  return firstNumber + secondNumber;",
+                  "}",
+                  "export function computeTotal_0_1(firstNumber, secondNumber) {",
+                  "  if (secondNumber < 0) {"
+                ],
+                "pre_context": [
+                  "export function computeTotal_0_0(firstNumber, secondNumber) {",
+                  "  if (secondNumber < 0) {"
+                ]
+              },
+              {
+                "abs_path": "https://example.com/assets/large.min.js",
+                "colno": 5,
+                "context_line": "    throw new Error(\"negative input in computeTotal_80_50\");",
+                "filename": "webpack:///./src/generated/module_080.js",
+                "function": "computeTotal_80_50",
+                "in_app": true,
+                "lineno": 303,
+                "module": "assets/large",
+                "post_context": [
+                  "  }",
+                  "  return firstNumber + secondNumber;",
+                  "}",
+                  "export function computeTotal_80_51(firstNumber, secondNumber) {",
+                  "  if (secondNumber < 0) {"
+                ],
+                "pre_context": [
+                  "  }",
+                  "  return firstNumber + secondNumber;",
+                  "}",
+                  "export function computeTotal_80_50(firstNumber, secondNumber) {",
+                  "  if (secondNumber < 0) {"
+                ]
+              },
+              {
+                "abs_path": "https://example.com/assets/large.min.js",
+                "colno": 5,
+                "context_line": "    throw new Error(\"negative input in computeTotal_159_99\");",
+                "filename": "webpack:///./src/generated/module_159.js",
+                "function": "computeTotal_159_99",
+                "in_app": true,
+                "lineno": 597,
+                "module": "assets/large",
+                "post_context": [
+                  "  }",
+                  "  return firstNumber + secondNumber;",
+                  "}"
+                ],
+                "pre_context": [
+                  "  }",
+                  "  return firstNumber + secondNumber;",
+                  "}",
+                  "export function computeTotal_159_99(firstNumber, secondNumber) {",
+                  "  if (secondNumber < 0) {"
+                ]
+              }
+            ]
+          },
+          "type": "Error",
+          "value": "negative input"
+        }
+      ]
+    },
+    "metadata": {
+      "filename": "webpack:///./src/generated/module_159.js",
+      "function": "computeTotal_159_99",
+      "type": "Error",
+      "value": "negative input"
+    },
+    "title": "Error: negative input"
+  }
+]

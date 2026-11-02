@@ -1,0 +1,487 @@
+import re
+import uuid
+from datetime import timedelta
+
+from django.db import connection
+from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
+from django.urls import reverse
+from django.utils import timezone
+from model_bakery import baker
+
+from apps.organizations_ext.constants import OrganizationUserRole
+from glitchtip.partition_manager import UUID7Helper
+from glitchtip.test_utils.test_case import APIPermissionTestCase, GlitchTipTestCaseMixin
+
+
+def get_list_issue_event_url(issue_id: int) -> str:
+    return reverse("api:list_issue_event", args=[issue_id])
+
+
+def get_issue_event_url(issue_id: int, event_id: str) -> str:
+    return reverse(
+        "api:get_issue_event",
+        kwargs={"issue_id": issue_id, "event_id": event_id},
+    )
+
+
+def get_latest_issue_event_url(issue_id: int) -> str:
+    return reverse("api:get_latest_issue_event", kwargs={"issue_id": issue_id})
+
+
+def get_event_json_url(organization_slug: str, issue_id: int, event_id: str) -> str:
+    return reverse(
+        "api:get_event_json",
+        kwargs={
+            "organization_id_or_slug": organization_slug,
+            "issue_id": issue_id,
+            "event_id": event_id,
+        },
+    )
+
+
+class IssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
+    def setUp(self):
+        super().create_logged_in_user()
+        self.async_client.force_login(self.user)
+
+    # Kept synchronous: assertNumQueries cannot observe queries issued on the
+    # async DB connection used by the async test client.
+    def test_multi_page_list(self):
+        now = timezone.now()
+        # Pin the bracketing events' ids so list ordering (by -id) is
+        # deterministic; same-millisecond ids otherwise sort randomly, and the
+        # 50 middle events (created "now") fall between these two.
+        first_event = baker.make(
+            "issue_events.IssueEvent",
+            issue__project=self.project,
+            id=UUID7Helper.from_datetime(now - timedelta(seconds=1)),
+        )
+        baker.make(
+            "issue_events.IssueEvent",
+            issue__project=self.project,
+            issue_id=first_event.issue_id,
+            _quantity=50,
+        )
+        last_event = baker.make(
+            "issue_events.IssueEvent",
+            issue__project=self.project,
+            issue_id=first_event.issue_id,
+            id=UUID7Helper.from_datetime(now + timedelta(seconds=1)),
+        )
+        url = get_list_issue_event_url(first_event.issue_id)
+
+        with self.assertNumQueries(2):
+            res = self.client.get(url)
+
+        self.assertEqual(res.headers.get("X-Hits"), "52")
+        self.assertIn('rel="previous"; results="false"', res.headers.get("Link"))
+
+        self.assertEqual(res.json()[0]["id"], last_event.id.hex)
+        self.assertNotContains(res, first_event.id.hex)
+
+        pattern = r"(?<=\<).+?(?=\>)"
+        links = re.findall(pattern, res.headers.get("Link"))
+
+        res = self.client.get(links[1])
+
+        self.assertEqual(res.headers.get("X-Hits"), "52")
+        self.assertIn('rel="previous"; results="true"', res.headers.get("Link"))
+        self.assertIn('rel="next"; results="false"', res.headers.get("Link"))
+
+        self.assertEqual(res.json()[-1]["id"], first_event.id.hex)
+        self.assertNotContains(res, last_event.id.hex)
+
+    # Kept synchronous: see note on test_multi_page_list.
+    def test_project_list_scopes_project_to_org(self):
+        """The project join must carry the org id: project slugs repeat across
+        orgs, and without it the planner hash-joins every event of the org."""
+        event = baker.make(
+            "issue_events.IssueEvent",
+            issue__project=self.project,
+            organization=self.organization,
+        )
+        url = reverse(
+            "api:list_project_issue_event",
+            args=[self.organization.slug, self.project.slug],
+        )
+
+        with CaptureQueriesContext(connection) as ctx:
+            res = self.client.get(url)
+
+        self.assertContains(res, event.id.hex)
+        scoped = f'"projects_project"."organization_id" = {self.organization.id}'
+        event_queries = [
+            q["sql"]
+            for q in ctx.captured_queries
+            if "issue_events_issueevent" in q["sql"]
+        ]
+        self.assertTrue(event_queries)
+        for sql in event_queries:
+            self.assertIn(scoped, sql)
+
+    # Kept synchronous: see note on test_multi_page_list.
+    def test_single_page_list(self):
+        """
+        Single page query should not hit DB for count
+        """
+        first_event = baker.make("issue_events.IssueEvent", issue__project=self.project)
+        last_event = baker.make(
+            "issue_events.IssueEvent",
+            issue__project=self.project,
+            issue_id=first_event.issue_id,
+        )
+        url = get_list_issue_event_url(first_event.issue_id)
+
+        with self.assertNumQueries(1):
+            res = self.client.get(url)
+
+        self.assertEqual(res.headers.get("X-Hits"), "2")
+        self.assertContains(res, last_event.id.hex)
+        self.assertContains(res, first_event.id.hex)
+
+    async def test_retrieve(self):
+        issue = await baker.amake("issue_events.issue", project=self.project)
+        org = self.project.organization
+        now = timezone.now()
+        await baker.amake(
+            "issue_events.IssueEvent", issue=issue, organization=org, _quantity=10
+        )
+        # prev/next navigate by id (UUIDv7), and from_datetime fills the
+        # sub-millisecond bits randomly — so events created in the same
+        # millisecond sort arbitrarily. Pin explicit, increasing ids.
+        previous_event = await baker.amake(
+            "issue_events.IssueEvent",
+            issue=issue,
+            organization=org,
+            id=UUID7Helper.from_datetime(now + timedelta(seconds=1)),
+        )
+        latest_event = await baker.amake(
+            "issue_events.IssueEvent",
+            issue=issue,
+            organization=org,
+            id=UUID7Helper.from_datetime(now + timedelta(seconds=2)),
+        )
+        url = get_issue_event_url(issue.id, "a" * 32)
+        res = await self.async_client.get(url)
+        self.assertEqual(res.status_code, 404)
+
+        url = get_issue_event_url(issue.id, latest_event.id)
+        res = await self.async_client.get(url)
+        self.assertContains(res, latest_event.id.hex)
+
+        url = get_latest_issue_event_url(issue.id)
+        res = await self.async_client.get(url)
+        event_details = res.json()
+        self.assertEqual(event_details["id"], latest_event.id.hex)
+        self.assertEqual(event_details["previousEventID"], previous_event.id.hex)
+
+    async def test_retrieve_by_sentry_event_id(self):
+        """Lookup by client-provided sentry SDK event_id (UUIDv4) should work."""
+        issue = await baker.amake("issue_events.issue", project=self.project)
+        sentry_event_id = uuid.uuid4()
+        await baker.amake(
+            "issue_events.IssueEvent",
+            issue=issue,
+            event_id=sentry_event_id,
+            organization=self.organization,
+        )
+        url = get_issue_event_url(issue.id, sentry_event_id)
+        res = await self.async_client.get(url)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["eventID"], sentry_event_id.hex)
+
+        # Also test the JSON endpoint
+        url = get_event_json_url(self.organization.slug, issue.id, sentry_event_id)
+        res = await self.async_client.get(url)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["event_id"], sentry_event_id.hex)
+
+    async def test_relative_event_ordering(self):
+        issue = await baker.amake("issue_events.issue", project=self.project)
+        org = self.project.organization
+        now = timezone.now()
+        await baker.amake("issue_events.IssueEvent", issue=issue, organization=org)
+        # Explicit, increasing UUIDv7 ids so id-based prev/next navigation is
+        # deterministic (same-millisecond ids otherwise sort randomly).
+        event1 = await baker.amake(
+            "issue_events.IssueEvent",
+            issue=issue,
+            organization=org,
+            id=UUID7Helper.from_datetime(now + timedelta(seconds=1)),
+        )
+        event2 = await baker.amake(
+            "issue_events.IssueEvent",
+            issue=issue,
+            organization=org,
+            id=UUID7Helper.from_datetime(now + timedelta(seconds=2)),
+        )
+        event3 = await baker.amake(
+            "issue_events.IssueEvent",
+            issue=issue,
+            organization=org,
+            id=UUID7Helper.from_datetime(now + timedelta(seconds=3)),
+        )
+        await baker.amake("issue_events.IssueEvent", issue=issue, organization=org)
+        url = get_issue_event_url(issue.id, event2.id)
+        res = await self.async_client.get(url)
+        event_details = res.json()
+        self.assertEqual(event_details["nextEventID"], event3.id.hex)
+        self.assertEqual(event_details["previousEventID"], event1.id.hex)
+
+    async def test_authentication(self):
+        url = get_list_issue_event_url(1)
+        await self.async_client.alogout()
+        res = await self.async_client.get(url)
+        self.assertEqual(res.status_code, 401)
+
+
+class IssueEventAPIPermissionTestCase(APIPermissionTestCase):
+    def setUp(self):
+        self.create_user_org()
+        self.set_client_credentials(self.auth_token.token)
+        self.team = baker.make("teams.Team", organization=self.organization)
+        self.team.members.add(self.org_user)
+        self.project = baker.make("projects.Project", organization=self.organization)
+        self.project.teams.add(self.team)
+        self.event = baker.make(
+            "issue_events.IssueEvent",
+            issue__project=self.project,
+            organization=self.organization,
+        )
+
+        self.list_url = get_list_issue_event_url(self.event.issue_id)
+        self.project_list_url = reverse(
+            "api:list_project_issue_event",
+            kwargs={
+                "organization_id_or_slug": self.organization.slug,
+                "project_slug": self.project.slug,
+            },
+        )
+        self.detail_url = get_issue_event_url(self.event.issue_id, self.event.id)
+        self.project_detail_url = reverse(
+            "api:get_project_issue_event",
+            kwargs={
+                "organization_id_or_slug": self.organization.slug,
+                "project_slug": self.project.slug,
+                "event_id": self.event.id.hex,
+            },
+        )
+        self.latest_detail_url = get_latest_issue_event_url(self.event.issue_id)
+        self.event_json_url = get_event_json_url(
+            self.organization.slug, self.event.issue_id, self.event.id
+        )
+
+    def test_list(self):
+        self.assertGetReqStatusCode(self.list_url, 403)
+        self.assertGetReqStatusCode(self.project_list_url, 403)
+        self.auth_token.add_permission("event:read")
+        self.assertGetReqStatusCode(self.list_url, 200)
+        self.assertGetReqStatusCode(self.project_list_url, 200)
+
+    def test_retrieve(self):
+        self.assertGetReqStatusCode(self.detail_url, 403)
+        self.assertGetReqStatusCode(self.project_detail_url, 403)
+        self.assertGetReqStatusCode(self.latest_detail_url, 403)
+        self.auth_token.add_permission("event:read")
+        self.assertGetReqStatusCode(self.detail_url, 200)
+        self.assertGetReqStatusCode(self.project_detail_url, 200)
+        self.assertGetReqStatusCode(self.latest_detail_url, 200)
+
+    def test_event_json_view(self):
+        url = self.event_json_url
+        self.assertGetReqStatusCode(url, 403)
+        self.auth_token.add_permission("event:read")
+        self.assertGetReqStatusCode(url, 200)
+
+
+class CommentsAPIPermissionTests(APIPermissionTestCase):
+    def setUp(self):
+        self.create_org_team_project()
+        self.set_client_credentials(self.auth_token.token)
+        self.project = baker.make("projects.Project", organization=self.organization)
+        self.issue = baker.make("issue_events.Issue", project=self.project)
+        self.comment = baker.make(
+            "issue_events.Comment", issue=self.issue, user=self.user, text="text"
+        )
+
+        self.list_url = reverse(
+            "api:list_comments",
+            kwargs={"issue_id": self.issue.id},
+        )
+
+    def test_list(self):
+        self.assertGetReqStatusCode(self.list_url, 403)
+
+        self.auth_token.add_permission("event:read")
+        self.assertGetReqStatusCode(self.list_url, 200)
+
+    def test_create(self):
+        self.auth_token.add_permission("event:read")
+        data = {"data": {"text": "Test"}}
+        url = reverse(
+            "api:add_comment",
+            kwargs={"issue_id": self.issue.id},
+        )
+        self.assertPostReqStatusCode(url, data, 403)
+
+        self.auth_token.add_permission("event:write")
+        self.assertPostReqStatusCode(url, data, 201)
+
+    def test_destroy(self):
+        self.auth_token.add_permissions(["event:read", "event:write"])
+        url = reverse(
+            "api:delete_comment",
+            kwargs={"issue_id": self.issue.id, "comment_id": self.comment.id},
+        )
+        self.assertDeleteReqStatusCode(url, 403)
+
+        self.auth_token.add_permission("event:admin")
+        self.assertDeleteReqStatusCode(url, 204)
+
+    def test_update(self):
+        self.auth_token.add_permission("event:read")
+        data = {"data": {"text": "Test"}}
+        url = reverse(
+            "api:update_comment",
+            kwargs={"issue_id": self.issue.id, "comment_id": self.comment.id},
+        )
+        self.assertPutReqStatusCode(url, data, 403)
+
+        self.auth_token.add_permission("event:write")
+        self.assertPutReqStatusCode(url, data, 200)
+
+
+class OrganizationScopedIssueEventAPITestCase(GlitchTipTestCaseMixin, TestCase):
+    """Org-scoped twins of the bare ``/issues/{id}/events/`` routes.
+
+    ``other_organization`` is one the user *is* a member of, so an event
+    reachable through it proves the slug is being ignored rather than merely
+    proving that membership filtering works.
+    """
+
+    def setUp(self):
+        super().create_logged_in_user()
+        self.async_client.force_login(self.user)
+        self.issue = baker.make("issue_events.Issue", project=self.project)
+        self.event = baker.make(
+            "issue_events.IssueEvent",
+            issue=self.issue,
+            organization=self.organization,
+        )
+        self.other_organization = baker.make("organizations_ext.Organization")
+        self.other_organization.add_user(self.user, OrganizationUserRole.ADMIN)
+
+    def list_url(self, organization_slug: str, issue_id: int) -> str:
+        return reverse(
+            "api:list_organization_issue_event",
+            kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
+        )
+
+    def latest_url(self, organization_slug: str, issue_id: int) -> str:
+        return reverse(
+            "api:get_organization_latest_issue_event",
+            kwargs={"organization_id_or_slug": organization_slug, "issue_id": issue_id},
+        )
+
+    def detail_url(self, organization_slug: str, issue_id: int, event_id: str) -> str:
+        return reverse(
+            "api:get_organization_issue_event",
+            kwargs={
+                "organization_id_or_slug": organization_slug,
+                "issue_id": issue_id,
+                "event_id": event_id,
+            },
+        )
+
+    async def test_list(self):
+        res = await self.async_client.get(
+            self.list_url(self.organization.slug, self.issue.id)
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, self.event.id.hex)
+
+    async def test_list_wrong_organization(self):
+        res = await self.async_client.get(
+            self.list_url(self.other_organization.slug, self.issue.id)
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.json()), 0)
+
+    async def test_latest(self):
+        res = await self.async_client.get(
+            self.latest_url(self.organization.slug, self.issue.id)
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["id"], self.event.id.hex)
+
+    async def test_latest_wrong_organization(self):
+        res = await self.async_client.get(
+            self.latest_url(self.other_organization.slug, self.issue.id)
+        )
+        self.assertEqual(res.status_code, 404)
+
+    async def test_retrieve(self):
+        res = await self.async_client.get(
+            self.detail_url(self.organization.slug, self.issue.id, self.event.id.hex)
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["id"], self.event.id.hex)
+
+    async def test_retrieve_wrong_organization(self):
+        res = await self.async_client.get(
+            self.detail_url(
+                self.other_organization.slug, self.issue.id, self.event.id.hex
+            )
+        )
+        self.assertEqual(res.status_code, 404)
+
+    async def test_retrieve_relative_event_ordering(self):
+        """prev/next are org-scoped subqueries; scoping must not break navigation."""
+        now = timezone.now()
+        events = [
+            await baker.amake(
+                "issue_events.IssueEvent",
+                issue=self.issue,
+                organization=self.organization,
+                id=UUID7Helper.from_datetime(now + timedelta(seconds=seconds)),
+            )
+            for seconds in (1, 2, 3)
+        ]
+        res = await self.async_client.get(
+            self.detail_url(self.organization.slug, self.issue.id, events[1].id.hex)
+        )
+        self.assertEqual(res.status_code, 200)
+        event_details = res.json()
+        self.assertEqual(event_details["nextEventID"], events[2].id.hex)
+        self.assertEqual(event_details["previousEventID"], events[0].id.hex)
+
+    async def test_retrieve_by_sentry_event_id(self):
+        """The UUIDv4 branch resolves the org separately; it must scope too."""
+        sentry_event_id = uuid.uuid4()
+        await baker.amake(
+            "issue_events.IssueEvent",
+            issue=self.issue,
+            event_id=sentry_event_id,
+            organization=self.organization,
+        )
+        res = await self.async_client.get(
+            self.detail_url(self.organization.slug, self.issue.id, sentry_event_id.hex)
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["eventID"], sentry_event_id.hex)
+
+    async def test_retrieve_by_sentry_event_id_wrong_organization(self):
+        sentry_event_id = uuid.uuid4()
+        await baker.amake(
+            "issue_events.IssueEvent",
+            issue=self.issue,
+            event_id=sentry_event_id,
+            organization=self.organization,
+        )
+        res = await self.async_client.get(
+            self.detail_url(
+                self.other_organization.slug, self.issue.id, sentry_event_id.hex
+            )
+        )
+        self.assertEqual(res.status_code, 404)
