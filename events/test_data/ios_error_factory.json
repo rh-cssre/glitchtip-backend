@@ -1,0 +1,778 @@
+        {
+          "type": "event",
+          "length": 33155,
+          "data": {
+            "user": {
+              "id": "AAF5A199-3F2D-4C05-83DC-70B9C761B6C2"
+            },
+            "level": "error",
+            "threads": {
+              "values": [
+                {
+                  "id": 0,
+                  "current": true,
+                  "crashed": false,
+                  "main": true,
+                  "stacktrace": {
+                    "frames": [
+                      {
+                        "package": "dyld",
+                        "symbol_addr": "0x00000000000ac0e0",
+                        "image_addr": "0x0000000104ca0000",
+                        "function": "_ZN3lslL10sPoolBytesE",
+                        "instruction_addr": "0x0000000104ca6b98",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Users/luisarmendariz/Library/Developer/CoreSimulator/Devices/F450C507-A0C6-4E5F-9FF1-CF46601EEB8C/data/Containers/Bundle/Application/9D641C6D-7A19-4AF1-9486-0E055CF288C8/ErrorFactory.app/ErrorFactory.debug.dylib",
+                        "symbol_addr": "0x00000001052446e4",
+                        "image_addr": "0x0000000105240000",
+                        "function": "main",
+                        "instruction_addr": "0x00000001052446f0",
+                        "in_app": true
+                      },
+                      {
+                        "package": "/Users/luisarmendariz/Library/Developer/CoreSimulator/Devices/F450C507-A0C6-4E5F-9FF1-CF46601EEB8C/data/Containers/Bundle/Application/9D641C6D-7A19-4AF1-9486-0E055CF288C8/ErrorFactory.app/ErrorFactory.debug.dylib",
+                        "symbol_addr": "0x0000000105244620",
+                        "image_addr": "0x0000000105240000",
+                        "function": "$s12ErrorFactory0aB3AppV5$mainyyFZ",
+                        "instruction_addr": "0x0000000105244648",
+                        "in_app": true
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001da31b398",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$s7SwiftUI3AppPAAE4mainyyFZ",
+                        "instruction_addr": "0x00000001da31b42c",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001da58d2b4",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$s7SwiftUI6runAppys5NeverOxAA0D0RzlF",
+                        "instruction_addr": "0x00000001da58d368",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001da58d57c",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$s7SwiftUI17KitRendererCommon33_ACC2C5639A7D76F611E170E831FCA491LLys5NeverOyXlXpFAESpySpys4Int8VGSgGXEfU_",
+                        "instruction_addr": "0x00000001da58d620",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore",
+                        "symbol_addr": "0x000000018634c720",
+                        "image_addr": "0x000000018519e000",
+                        "function": "UIApplicationMain",
+                        "instruction_addr": "0x000000018634c79c",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore",
+                        "symbol_addr": "0x0000000186348270",
+                        "image_addr": "0x000000018519e000",
+                        "function": "-[UIApplication _run]",
+                        "instruction_addr": "0x0000000186348574",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/GraphicsServices.framework/GraphicsServices",
+                        "symbol_addr": "0x0000000192a66948",
+                        "image_addr": "0x0000000192a64000",
+                        "function": "GSEventRunModal",
+                        "instruction_addr": "0x0000000192a669bc",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
+                        "symbol_addr": "0x000000018044fafc",
+                        "image_addr": "0x00000001803c3000",
+                        "function": "_CFRunLoopRunSpecificWithOptions",
+                        "instruction_addr": "0x000000018044fcec",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
+                        "symbol_addr": "0x0000000180454954",
+                        "image_addr": "0x00000001803c3000",
+                        "function": "__CFRunLoopRun",
+                        "instruction_addr": "0x0000000180455188",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
+                        "symbol_addr": "0x0000000180455ee0",
+                        "image_addr": "0x00000001803c3000",
+                        "function": "__CFRunLoopDoSource1",
+                        "instruction_addr": "0x00000001804560c0",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
+                        "symbol_addr": "0x0000000180456a70",
+                        "image_addr": "0x00000001803c3000",
+                        "function": "__CFRUNLOOP_IS_CALLING_OUT_TO_A_SOURCE1_PERFORM_FUNCTION__",
+                        "instruction_addr": "0x0000000180456aa8",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
+                        "symbol_addr": "0x000000018041a408",
+                        "image_addr": "0x00000001803c3000",
+                        "function": "__CFMachPortPerform",
+                        "instruction_addr": "0x000000018041a4ac",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UpdateCycle.framework/UpdateCycle",
+                        "symbol_addr": "0x0000000250191264",
+                        "image_addr": "0x0000000250190000",
+                        "function": "_ZN2UC10DriverCore18continueProcessingEv",
+                        "instruction_addr": "0x00000002501912b4",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore",
+                        "symbol_addr": "0x000000018626406c",
+                        "image_addr": "0x000000018519e000",
+                        "function": "schedulerStepScheduledMainSectionContinue",
+                        "instruction_addr": "0x00000001862640a4",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore",
+                        "symbol_addr": "0x000000018582f300",
+                        "image_addr": "0x000000018519e000",
+                        "function": "_UIUpdateSequenceRunNext",
+                        "instruction_addr": "0x000000018582f378",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore",
+                        "symbol_addr": "0x000000018620c428",
+                        "image_addr": "0x000000018519e000",
+                        "function": "updateCycleEntry",
+                        "instruction_addr": "0x000000018620c4d0",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore",
+                        "symbol_addr": "0x0000000186212c64",
+                        "image_addr": "0x000000018519e000",
+                        "function": "__processEventQueue",
+                        "instruction_addr": "0x0000000186213f24",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore",
+                        "symbol_addr": "0x0000000186210dd0",
+                        "image_addr": "0x000000018519e000",
+                        "function": "__dispatchPreprocessedEventFromEventQueue",
+                        "instruction_addr": "0x0000000186211270",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore",
+                        "symbol_addr": "0x000000018636216c",
+                        "image_addr": "0x000000018519e000",
+                        "function": "-[UIApplication sendEvent:]",
+                        "instruction_addr": "0x00000001863622e4",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore",
+                        "symbol_addr": "0x0000000186383964",
+                        "image_addr": "0x000000018519e000",
+                        "function": "-[UIWindow sendEvent:]",
+                        "instruction_addr": "0x0000000186384450",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore",
+                        "symbol_addr": "0x0000000185dfbebc",
+                        "image_addr": "0x000000018519e000",
+                        "function": "-[UIGestureEnvironment _updateForEvent:window:]",
+                        "instruction_addr": "0x0000000185dfc090",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/Gestures.framework/Gestures",
+                        "symbol_addr": "0x000000023105ac44",
+                        "image_addr": "0x0000000230fe0000",
+                        "function": "GFGestureNodeCoordinatorCreate",
+                        "instruction_addr": "0x000000023105b464",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/Gestures.framework/Gestures",
+                        "symbol_addr": "0x000000023102f7e4",
+                        "image_addr": "0x0000000230fe0000",
+                        "function": "__swift_memcpy24_8",
+                        "instruction_addr": "0x00000002310343dc",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/Gestures.framework/Gestures",
+                        "symbol_addr": "0x0000000231002ed8",
+                        "image_addr": "0x0000000230fe0000",
+                        "function": "_swift_stdlib_malloc_size",
+                        "instruction_addr": "0x000000023100869c",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/Gestures.framework/Gestures",
+                        "symbol_addr": "0x0000000230feb7f0",
+                        "image_addr": "0x0000000230fe0000",
+                        "function": "GFGestureNodeDefaultValue",
+                        "instruction_addr": "0x0000000230fec6a0",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore",
+                        "symbol_addr": "0x0000000185e0f1a0",
+                        "image_addr": "0x000000018519e000",
+                        "function": "-[UIGestureRecognizer gestureNode:didUpdatePhase:]",
+                        "instruction_addr": "0x0000000185e0f2c8",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore",
+                        "symbol_addr": "0x0000000185e0a4ec",
+                        "image_addr": "0x000000018519e000",
+                        "function": "-[UIGestureRecognizer _updateGestureForActiveEvents]",
+                        "instruction_addr": "0x0000000185e0a62c",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore",
+                        "symbol_addr": "0x0000000185e0a940",
+                        "image_addr": "0x000000018519e000",
+                        "function": "_UIGestureRecognizerSendActions",
+                        "instruction_addr": "0x0000000185e0a68",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore",
+                        "symbol_addr": "0x0000000185e0dd2c",
+                        "image_addr": "0x000000018519e000",
+                        "function": "_UIGestureRecognizerSendTargetActions",
+                        "instruction_addr": "0x0000000185e0dd84",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore",
+                        "symbol_addr": "0x0000000185e04b64",
+                        "image_addr": "0x000000018519e000",
+                        "function": "-[UIGestureRecognizerTarget _sendActionWithGestureRecognizer:]",
+                        "instruction_addr": "0x0000000185e04bb0",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001da728924",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$s7SwiftUI32UIKitResponderEventBindingBridgeC12flushActionsyyFTo",
+                        "instruction_addr": "0x00000001da72893c",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001da728750",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$s7SwiftUI32UIKitResponderEventBindingBridgeC12flushActionsyyF",
+                        "instruction_addr": "0x00000001da7288e0",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUICore.framework/SwiftUICore",
+                        "symbol_addr": "0x00000001db4693dc",
+                        "image_addr": "0x00000001daf5b000",
+                        "function": "$s7SwiftUI6UpdateO13enqueueAction6reason_s6UInt32VAA16CustomEventTraceV0eI4TypeO6ReasonOSg_yyctFZ",
+                        "instruction_addr": "0x00000001db469498",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUICore.framework/SwiftUICore",
+                        "symbol_addr": "0x00000001db4696e4",
+                        "image_addr": "0x00000001daf5b000",
+                        "function": "$s7SwiftUI6UpdateO3endyyFZ",
+                        "instruction_addr": "0x00000001db469760",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUICore.framework/SwiftUICore",
+                        "symbol_addr": "0x00000001db46a2c4",
+                        "image_addr": "0x00000001daf5b000",
+                        "function": "$s7SwiftUI6UpdateO15dispatchActionsyyFZ",
+                        "instruction_addr": "0x00000001db46a708",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001da31edb4",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$s7SwiftUI16PlatformItemListV26containerSelectionBehaviorAC0D0V0gH0VSgvgyycfU_Tf2i_nTm",
+                        "instruction_addr": "0x00000001da31ede0",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001da0622b0",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$sIeg_ytIegr_TR",
+                        "instruction_addr": "0x00000001da0622c4",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUICore.framework/SwiftUICore",
+                        "symbol_addr": "0x00000001db19d06c",
+                        "image_addr": "0x00000001daf5b000",
+                        "function": "$sIg_Ieg_TR",
+                        "instruction_addr": "0x00000001db19d080",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUICore.framework/SwiftUICore",
+                        "symbol_addr": "0x00000001db026da0",
+                        "image_addr": "0x00000001daf5b000",
+                        "function": "$sSDySo21NSAttributedStringKeyaypGSo8_NSRangeVSpy10ObjectiveC8ObjCBoolVGIggyy_AceIIeggyy_TRTA",
+                        "instruction_addr": "0x00000001db026db4",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001dab48954",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$s7SwiftUI31PrimitiveButtonGestureCallbacks33_2218E1141B3D7C3A65B6697591AFB638LLV8dispatch5phase5stateyycSgAA0E5PhaseOyAA0cdE4CoreACLLV5ValueVG_AA0d5PressQ0OztFyycfU0_TA",
+                        "instruction_addr": "0x00000001dab489a8",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001dab429a4",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$s7SwiftUI14_ButtonGestureV12internalBodyQrvgAA04_MapD0VyAA09PrimitivecD0VytGyXEfU_ySo7CGPointVSgcfU0_",
+                        "instruction_addr": "0x00000001dab429f4",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001dabd0d2c",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$sScM14assumeIsolated_4file4linexxyKScMYcXE_s12StaticStringVSutKs8SendableRzlFZyt_Tg5",
+                        "instruction_addr": "0x00000001dabd0db0",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001dab477fc",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$s7SwiftUI14_ButtonGestureV12internalBodyQrvgAA04_MapD0VyAA09PrimitivecD0VytGyXEfU_ySo7CGPointVSgcfU0_yyScMYcXEfU_TA",
+                        "instruction_addr": "0x00000001dab47818",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001da46d238",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$s7SwiftUI14ButtonBehaviorV4bodyQrvgyyYbcACyxGYbcfu_yyYbcfu0_TA",
+                        "instruction_addr": "0x00000001da46d258",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001da46762c",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$s7SwiftUI14ButtonBehaviorV5ended33_AEEDD090E917AC57C12008D974DC6805LLyyF",
+                        "instruction_addr": "0x00000001da46770c",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001d9e8a8bc",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$s7SwiftUI27FlexibleBorderedButtonStyle33_A3388C042543B1D2E497C2B474EB4854LLV8makeBody13configurationQrAA09PrimitiveeF13ConfigurationV_tFyycAHYbcfu_yycfu0_TA",
+                        "instruction_addr": "0x00000001d9e8a8f0",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001dab9b628",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$s7SwiftUI12ButtonActionO14callAsFunctionyyF",
+                        "instruction_addr": "0x00000001dab9b7ac",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001dabd0d2c",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$sScM14assumeIsolated_4file4linexxyKScMYcXE_s12StaticStringVSutKs8SendableRzlFZyt_Tg5",
+                        "instruction_addr": "0x00000001dabd0db0",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+                        "symbol_addr": "0x00000001da4cf908",
+                        "image_addr": "0x00000001d9dd4000",
+                        "function": "$s7SwiftUI31UICollectionViewListCoordinatorC010collectionD0_35willPerformPreviewActionForMenuWith8animatorySo0cD0C_So09UIContextM13ConfigurationCSo0pM26InteractionCommitAnimating_ptFyycfU0_yyXEfU_TA",
+                        "instruction_addr": "0x00000001da4cf920",
+                        "in_app": false
+                      },
+                      {
+                        "package": "/Users/luisarmendariz/Library/Developer/CoreSimulator/Devices/F450C507-A0C6-4E5F-9FF1-CF46601EEB8C/data/Containers/Bundle/Application/9D641C6D-7A19-4AF1-9486-0E055CF288C8/ErrorFactory.app/ErrorFactory.debug.dylib",
+                        "symbol_addr": "0x00000001052426f8",
+                        "image_addr": "0x0000000105240000",
+                        "function": "",
+                        "instruction_addr": "0x0000000105242704",
+                        "in_app": true
+                      },
+                      {
+                        "package": "/Users/luisarmendariz/Library/Developer/CoreSimulator/Devices/F450C507-A0C6-4E5F-9FF1-CF46601EEB8C/data/Containers/Bundle/Application/9D641C6D-7A19-4AF1-9486-0E055CF288C8/ErrorFactory.app/ErrorFactory.debug.dylib",
+                        "symbol_addr": "0x000000010524270c",
+                        "image_addr": "0x0000000105240000",
+                        "function": "$s12ErrorFactory11ContentViewV07triggerA0yyF",
+                        "instruction_addr": "0x0000000105242890",
+                        "in_app": true
+                      },
+                      {
+                        "package": "/Users/luisarmendariz/Library/Developer/CoreSimulator/Devices/F450C507-A0C6-4E5F-9FF1-CF46601EEB8C/data/Containers/Bundle/Application/9D641C6D-7A19-4AF1-9486-0E055CF288C8/ErrorFactory.app/ErrorFactory.debug.dylib",
+                        "symbol_addr": "0x000000010530b8c8",
+                        "image_addr": "0x0000000105240000",
+                        "function": "$s6Sentry0A3SDKC7capture5errorAA0A2IdCs5Error_p_tFZ",
+                        "instruction_addr": "0x000000010530b904",
+                        "in_app": true
+                      },
+                      {
+                        "package": "/Users/luisarmendariz/Library/Developer/CoreSimulator/Devices/F450C507-A0C6-4E5F-9FF1-CF46601EEB8C/data/Containers/Bundle/Application/9D641C6D-7A19-4AF1-9486-0E055CF288C8/ErrorFactory.app/ErrorFactory.debug.dylib",
+                        "symbol_addr": "0x00000001052873cc",
+                        "image_addr": "0x0000000105240000",
+                        "function": "+[SentrySDKInternal captureError:]",
+                        "instruction_addr": "0x0000000105287424",
+                        "in_app": true
+                      },
+                      {
+                        "package": "/Users/luisarmendariz/Library/Developer/CoreSimulator/Devices/F450C507-A0C6-4E5F-9FF1-CF46601EEB8C/data/Containers/Bundle/Application/9D641C6D-7A19-4AF1-9486-0E055CF288C8/ErrorFactory.app/ErrorFactory.debug.dylib",
+                        "symbol_addr": "0x0000000105287544",
+                        "image_addr": "0x0000000105240000",
+                        "function": "+[SentrySDKInternal captureError:withScope:]",
+                        "instruction_addr": "0x0000000105287598",
+                        "in_app": true
+                      },
+                      {
+                        "package": "/Users/luisarmendariz/Library/Developer/CoreSimulator/Devices/F450C507-A0C6-4E5F-9FF1-CF46601EEB8C/data/Containers/Bundle/Application/9D641C6D-7A19-4AF1-9486-0E055CF288C8/ErrorFactory.app/ErrorFactory.debug.dylib",
+                        "symbol_addr": "0x0000000105273b1c",
+                        "image_addr": "0x0000000105240000",
+                        "function": "-[SentryHub captureError:withScope:]",
+                        "instruction_addr": "0x0000000105273bc0",
+                        "in_app": true
+                      },
+                      {
+                        "package": "/Users/luisarmendariz/Library/Developer/CoreSimulator/Devices/F450C507-A0C6-4E5F-9FF1-CF46601EEB8C/data/Containers/Bundle/Application/9D641C6D-7A19-4AF1-9486-0E055CF288C8/ErrorFactory.app/ErrorFactory.debug.dylib",
+                        "symbol_addr": "0x000000010524fd00",
+                        "image_addr": "0x0000000105240000",
+                        "function": "-[SentryClient captureError:withScope:incrementSessionErrors:]",
+                        "instruction_addr": "0x000000010524fd64",
+                        "in_app": true
+                      },
+                      {
+                        "package": "/Users/luisarmendariz/Library/Developer/CoreSimulator/Devices/F450C507-A0C6-4E5F-9FF1-CF46601EEB8C/data/Containers/Bundle/Application/9D641C6D-7A19-4AF1-9486-0E055CF288C8/ErrorFactory.app/ErrorFactory.debug.dylib",
+                        "symbol_addr": "0x000000010525187c",
+                        "image_addr": "0x0000000105240000",
+                        "function": "-[SentryClient prepareEvent:withScope:alwaysAttachStacktrace:isFatalEvent:]",
+                        "instruction_addr": "0x0000000105251d24",
+                        "in_app": true
+                      },
+                      {
+                        "package": "/Users/luisarmendariz/Library/Developer/CoreSimulator/Devices/F450C507-A0C6-4E5F-9FF1-CF46601EEB8C/data/Containers/Bundle/Application/9D641C6D-7A19-4AF1-9486-0E055CF288C8/ErrorFactory.app/ErrorFactory.debug.dylib",
+                        "symbol_addr": "0x000000010525d41c",
+                        "image_addr": "0x0000000105240000",
+                        "function": "-[SentryThreadInspector getCurrentThreads]",
+                        "instruction_addr": "0x000000010525d62c",
+                        "in_app": true
+                      },
+                      {
+                        "package": "/Users/luisarmendariz/Library/Developer/CoreSimulator/Devices/F450C507-A0C6-4E5F-9FF1-CF46601EEB8C/data/Containers/Bundle/Application/9D641C6D-7A19-4AF1-9486-0E055CF288C8/ErrorFactory.app/ErrorFactory.debug.dylib",
+                        "symbol_addr": "0x00000001052b8360",
+                        "image_addr": "0x0000000105240000",
+                        "function": "-[SentryStacktraceBuilder buildStacktraceForCurrentThread]",
+                        "instruction_addr": "0x00000001052b8380",
+                        "in_app": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": 1,
+                  "current": false,
+                  "crashed": false,
+                  "main": false
+                },
+                {
+                  "id": 2,
+                  "current": false,
+                  "crashed": false,
+                  "main": false
+                },
+                {
+                  "id": 3,
+                  "current": false,
+                  "crashed": false,
+                  "name": "SentryCrash Exception Handler (Secondary)",
+                  "main": false
+                },
+                {
+                  "id": 4,
+                  "current": false,
+                  "crashed": false,
+                  "name": "SentryCrash Exception Handler (Primary)",
+                  "main": false
+                },
+                {
+                  "id": 5,
+                  "current": false,
+                  "crashed": false,
+                  "name": "io.sentry.app-hang-tracker",
+                  "main": false
+                },
+                {
+                  "id": 6,
+                  "current": false,
+                  "crashed": false,
+                  "main": false
+                },
+                {
+                  "id": 7,
+                  "current": false,
+                  "crashed": false,
+                  "name": "com.apple.uikit.eventfetch-thread",
+                  "main": false
+                },
+                {
+                  "id": 8,
+                  "current": false,
+                  "crashed": false,
+                  "name": "com.apple.NSURLConnectionLoader",
+                  "main": false
+                }
+              ]
+            },
+            "platform": "cocoa",
+            "extra": {},
+            "timestamp": 1768625462.2184958,
+            "release": "com.glitchtip.ErrorFactory@1.0+1",
+            "contexts": {
+              "app": {
+                "build_type": "simulator",
+                "app_version": "1.0",
+                "app_identifier": "com.glitchtip.ErrorFactory",
+                "app_start_time": "2026-01-17T04:50:49Z",
+                "device_app_hash": "1ba600bff799ff7755bc0aa496e972a6318d06b7",
+                "app_id": "A50DB00E-7390-3039-BF53-8C5D18216601",
+                "app_build": "1",
+                "in_foreground": true,
+                "app_memory": 28360704,
+                "view_names": [
+                  "UIHostingController<ModifiedContent<AnyView, RootModifier>>"
+                ],
+                "app_name": "ErrorFactory"
+              },
+              "user info": {
+                "NSLocalizedDescription": "This is a test error"
+              },
+              "os": {
+                "build": "24G90",
+                "rooted": false,
+                "kernel_version": "Darwin Kernel Version 24.6.0: Mon Jul 14 11:30:40 PDT 2025; root:xnu-11417.140.69~1/RELEASE_ARM64_T6041",
+                "name": "iOS",
+                "version": "26.2"
+              },
+              "device": {
+                "family": "iOS",
+                "arch": "arm64",
+                "simulator": true,
+                "memory_size": 51539607552,
+                "free_memory": 130301952,
+                "model": "iPhone18,1",
+                "model_id": "simulator",
+                "locale": "en_US",
+                "processor_count": 14,
+                "usable_memory": 26438959104,
+                "thermal_state": "nominal"
+              },
+              "trace": {
+                "span_id": "0f628b806b1e41d1",
+                "trace_id": "2318f42cb6b14ca89100156bfd4c6c2e"
+              },
+              "culture": {
+                "locale": "en_US",
+                "timezone": "America/Los_Angeles",
+                "display_name": "English (United States)",
+                "calendar": "Gregorian Calendar",
+                "is_24_hour_format": false
+              }
+            },
+            "breadcrumbs": [
+              {
+                "message": "Breadcrumb Tracking",
+                "timestamp": "2026-01-17T04:50:49.397Z",
+                "level": "info",
+                "type": "debug",
+                "category": "started"
+              },
+              {
+                "data": {
+                  "screen": "UIHostingController<ModifiedContent<AnyView, RootModifier>>",
+                  "beingPresented": "false",
+                  "window_windowLevel": "0.000000",
+                  "window_isKeyWindow": "true",
+                  "window": "<UIWindow: 0x105627a40; frame = (0 0; 402 874); gestureRecognizers = <NSArray: 0x600000c46100>; layer = <UIWindowLayer: 0x60000174bd00>>",
+                  "is_window_rootViewController": "true"
+                },
+                "timestamp": "2026-01-17T04:50:49.543Z",
+                "level": "info",
+                "type": "navigation",
+                "category": "ui.lifecycle"
+              },
+              {
+                "data": {
+                  "state": "foreground"
+                },
+                "timestamp": "2026-01-17T04:50:49.546Z",
+                "level": "info",
+                "type": "navigation",
+                "category": "app.lifecycle"
+              }
+            ],
+            "dist": "1",
+            "tags": {},
+            "environment": "production",
+            "event_id": "4b231bf0e26e42edb57900a186d65cda",
+            "sdk": {
+              "packages": [],
+              "features": [
+                "captureFailedRequests",
+                "experimentalViewRenderer",
+                "dataSwizzling"
+              ],
+              "integrations": [
+                "CoreDataTracking",
+                "ANRTracking",
+                "Crash",
+                "WatchdogTerminationTracking",
+                "AutoBreadcrumbTracking",
+                "FileIOTracking",
+                "NetworkTracking",
+                "UIEventTracking",
+                "AutoSessionTracking",
+                "PerformanceTracking",
+                "AppStartTracking",
+                "FramesTracking"
+              ],
+              "name": "sentry.cocoa",
+              "settings": {
+                "infer_ip": "never"
+              },
+              "version": "8.58.0"
+            },
+            "debug_meta": {
+              "images": [
+                {
+                  "image_vmaddr": "0x00000001daf5b000",
+                  "debug_id": "F7E2BB37-D266-38FC-B8CC-80664C89F0B4",
+                  "image_addr": "0x00000001daf5b000",
+                  "type": "macho",
+                  "image_size": 13808928,
+                  "code_file": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUICore.framework/SwiftUICore"
+                },
+                {
+                  "image_vmaddr": "0x0000000230fe0000",
+                  "debug_id": "F19999F3-DB13-3984-BEF8-CC5C36F65EF9",
+                  "image_addr": "0x0000000230fe0000",
+                  "type": "macho",
+                  "image_size": 694937,
+                  "code_file": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/Gestures.framework/Gestures"
+                },
+                {
+                  "debug_id": "505C8E5B-CD6A-35B5-9ED8-D27FF11BA864",
+                  "image_addr": "0x0000000105240000",
+                  "type": "macho",
+                  "image_size": 1736704,
+                  "code_file": "/Users/luisarmendariz/Library/Developer/CoreSimulator/Devices/F450C507-A0C6-4E5F-9FF1-CF46601EEB8C/data/Containers/Bundle/Application/9D641C6D-7A19-4AF1-9486-0E055CF288C8/ErrorFactory.app/ErrorFactory.debug.dylib"
+                },
+                {
+                  "debug_id": "3247E185-CED2-36FF-9E29-47A77C23E004",
+                  "image_addr": "0x0000000104ca0000",
+                  "type": "macho",
+                  "image_size": 638976,
+                  "code_file": "dyld"
+                },
+                {
+                  "image_vmaddr": "0x000000018519e000",
+                  "debug_id": "196154FF-BA04-33CD-9277-98F9AA0B7499",
+                  "image_addr": "0x000000018519e000",
+                  "type": "macho",
+                  "image_size": 35792672,
+                  "code_file": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore"
+                },
+                {
+                  "image_vmaddr": "0x0000000192a64000",
+                  "debug_id": "4E5B0462-6170-3367-9475-4FF8B8DFE4E6",
+                  "image_addr": "0x0000000192a64000",
+                  "type": "macho",
+                  "image_size": 32192,
+                  "code_file": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/GraphicsServices.framework/GraphicsServices"
+                },
+                {
+                  "image_vmaddr": "0x00000001d9dd4000",
+                  "debug_id": "719CF349-8C4A-3054-9536-23EB53648EE0",
+                  "image_addr": "0x00000001d9dd4000",
+                  "type": "macho",
+                  "image_size": 18375808,
+                  "code_file": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/SwiftUI.framework/SwiftUI"
+                },
+                {
+                  "image_vmaddr": "0x00000001803c3000",
+                  "debug_id": "4F6D050D-95EE-3A95-969C-3A98B29DF6FF",
+                  "image_addr": "0x00000001803c3000",
+                  "type": "macho",
+                  "image_size": 4309888,
+                  "code_file": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation"
+                },
+                {
+                  "image_vmaddr": "0x0000000250190000",
+                  "debug_id": "E2E29A67-7D1D-333D-9227-E405451EDB7D",
+                  "image_addr": "0x0000000250190000",
+                  "type": "macho",
+                  "image_size": 7840,
+                  "code_file": "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/UpdateCycle.framework/UpdateCycle"
+                }
+              ]
+            },
+            "exception": {
+              "values": [
+                {
+                  "value": "Code: 1",
+                  "type": "ErrorFactory",
+                  "mechanism": {
+                    "data": {
+                      "NSLocalizedDescription": "This is a test error"
+                    },
+                    "meta": {
+                      "ns_error": {
+                        "code": 1,
+                        "domain": "ErrorFactory"
+                      }
+                    },
+                    "type": "NSError",
+                    "description": "Error Domain=ErrorFactory Code=1 \"This is a test error\" UserInfo={NSLocalizedDescription=This is a test error}"
+                  }
+                }
+              ]
+            }
+          }
+        }
