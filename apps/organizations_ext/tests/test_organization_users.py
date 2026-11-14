@@ -8,7 +8,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from ..constants import OrganizationUserRole
-from ..models import OrganizationUser
+from ..models import OrganizationOwner, OrganizationUser
 
 
 class OrganizationUsersTestCase(TestCase):
@@ -415,6 +415,22 @@ class OrganizationUsersTestCase(TestCase):
             res.status_code,
             204,
             "Can remove self after transferring ownership",
+        )
+
+    async def test_organization_users_delete_primary_owner(self):
+        """A co-owner can't remove the designated owner, which would delete the
+        OrganizationOwner record with it."""
+        co_owner = await baker.amake("users.user")
+        await self.organization.aadd_user(co_owner, role=OrganizationUserRole.OWNER)
+        await self.async_client.aforce_login(co_owner)
+
+        url = self.get_org_member_detail_url(self.organization.slug, self.org_user.pk)
+        res = await self.async_client.delete(url)
+        self.assertContains(res, "Transfer ownership first.", status_code=400)
+        self.assertTrue(
+            await OrganizationOwner.objects.filter(
+                organization=self.organization, organization_user=self.org_user
+            ).aexists()
         )
 
     async def test_organization_users_delete_without_permissions(self):

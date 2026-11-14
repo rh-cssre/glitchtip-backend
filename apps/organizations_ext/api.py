@@ -324,14 +324,15 @@ async def delete_organization_member(
         id=member_id,
     )
     is_self = org_user.user_id == user_id
-    if is_self and org_user.is_owner:
-        raise HttpError(400, "User is organization owner. Transfer ownership first.")
     if not is_self:
         if org_user.actor_role < OrganizationUserRole.MANAGER:
             raise HttpError(
                 403, "Removing another member requires the manager role or above."
             )
         check_role_ceiling(org_user.actor_role, org_user.role)
+    # Deleting the member would cascade to the OrganizationOwner record.
+    if org_user.is_owner:
+        raise HttpError(400, "User is organization owner. Transfer ownership first.")
     try:
         await org_user.adelete()
     except IntegrityError as err:
