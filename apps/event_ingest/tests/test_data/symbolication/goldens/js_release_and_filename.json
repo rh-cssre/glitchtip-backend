@@ -1,0 +1,164 @@
+[
+  {
+    "culprit": "?(/dist/other.js)",
+    "exception": {
+      "values": [
+        {
+          "mechanism": {
+            "handled": false,
+            "type": "onerror"
+          },
+          "raw_stacktrace": {
+            "frames": [
+              {
+                "abs_path": "http://localhost:8080/dist/bundle.js",
+                "colno": 1799,
+                "filename": "/dist/bundle.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 2
+              },
+              {
+                "abs_path": "http://localhost:8080/dist/bundle.js",
+                "colno": 73992,
+                "filename": "/dist/bundle.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 2
+              },
+              {
+                "abs_path": "http://localhost:8080/dist/bundle.js",
+                "colno": 74012,
+                "filename": "/dist/bundle.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 2
+              },
+              {
+                "abs_path": "http://localhost:8080/dist/bundle.js",
+                "colno": 74016,
+                "filename": "/dist/bundle.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 2
+              },
+              {
+                "abs_path": "http://localhost:8080/dist/other.js",
+                "colno": 5,
+                "filename": "/dist/other.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              }
+            ]
+          },
+          "stacktrace": {
+            "frames": [
+              {
+                "abs_path": "http://localhost:8080/dist/bundle.js",
+                "colno": 5,
+                "context_line": "    throw new TypeError(s ? \"Object is not iterable.\" : \"Symbol.iterator is not defined.\");",
+                "filename": "webpack://small-js-error-factory/./node_modules/tslib/tslib.es6.js",
+                "function": "__values",
+                "in_app": true,
+                "lineno": 124,
+                "module": "dist/bundle",
+                "post_context": [
+                  "}",
+                  "",
+                  "export function __read(o, n) {",
+                  "    var m = typeof Symbol === \"function\" && o[Symbol.iterator];",
+                  "    if (!m) return o;"
+                ],
+                "pre_context": [
+                  "        next: function () {",
+                  "            if (o && i >= o.length) o = void 0;",
+                  "            return { value: o && o[i++], done: !o };",
+                  "        }",
+                  "    };"
+                ]
+              },
+              {
+                "abs_path": "http://localhost:8080/dist/bundle.js",
+                "colno": 7,
+                "context_line": "throw Error(\"The error\");",
+                "filename": "webpack://small-js-error-factory/./src/index.ts",
+                "function": "<anonymous>",
+                "in_app": true,
+                "lineno": 9,
+                "module": "dist/bundle",
+                "post_context": [
+                  "console.log(foo);"
+                ],
+                "pre_context": [
+                  "  dsn: \"http://c30a07050f594ecc9bd3cb97604f9da1@172.17.0.1:8000/1\",",
+                  "  \"release\": \"test\"",
+                  "});",
+                  "",
+                  "let foo = \"bar\";"
+                ]
+              },
+              {
+                "abs_path": "http://localhost:8080/dist/bundle.js",
+                "colno": 13,
+                "context_line": "throw Error(\"The error\");",
+                "filename": "webpack://small-js-error-factory/./src/index.ts",
+                "function": "<anonymous>",
+                "in_app": true,
+                "lineno": 9,
+                "module": "dist/bundle",
+                "post_context": [
+                  "console.log(foo);"
+                ],
+                "pre_context": [
+                  "  dsn: \"http://c30a07050f594ecc9bd3cb97604f9da1@172.17.0.1:8000/1\",",
+                  "  \"release\": \"test\"",
+                  "});",
+                  "",
+                  "let foo = \"bar\";"
+                ]
+              },
+              {
+                "abs_path": "http://localhost:8080/dist/bundle.js",
+                "colno": 13,
+                "context_line": "throw Error(\"The error\");",
+                "filename": "webpack://small-js-error-factory/./src/index.ts",
+                "function": "<anonymous>",
+                "in_app": true,
+                "lineno": 9,
+                "module": "dist/bundle",
+                "post_context": [
+                  "console.log(foo);"
+                ],
+                "pre_context": [
+                  "  dsn: \"http://c30a07050f594ecc9bd3cb97604f9da1@172.17.0.1:8000/1\",",
+                  "  \"release\": \"test\"",
+                  "});",
+                  "",
+                  "let foo = \"bar\";"
+                ]
+              },
+              {
+                "abs_path": "http://localhost:8080/dist/other.js",
+                "colno": 5,
+                "filename": "/dist/other.js",
+                "function": "?",
+                "in_app": true,
+                "lineno": 1
+              }
+            ]
+          },
+          "type": "Error",
+          "value": "The error"
+        }
+      ]
+    },
+    "metadata": {
+      "filename": "/dist/other.js",
+      "function": "?",
+      "type": "Error",
+      "value": "The error"
+    },
+    "title": "Error: The error"
+  }
+]

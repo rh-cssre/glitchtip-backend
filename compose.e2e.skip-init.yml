@@ -1,0 +1,23 @@
+# Override: migrations run as their own step and the server starts with
+# SKIP_INIT. Both paths are safe to run concurrently now that init_database
+# takes a lock, but keeping schema changes off the serving path is still the
+# better shape for a large install — so it gets test coverage.
+services:
+  migrate:
+    build: .
+    command: ./bin/run-migrate.sh
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      VALKEY_URL: redis://valkey:6379
+      SECRET_KEY: change_me
+
+  # environment merges with compose.e2e.yml's, so only the difference goes here
+  glitchtip:
+    environment:
+      SKIP_INIT: "true"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully

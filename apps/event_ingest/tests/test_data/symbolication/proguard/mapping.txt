@@ -1,0 +1,25 @@
+# compiler: R8
+# compiler_version: 8.5.35
+# min_api: 24
+# pg_map_id: 3f1d2c4
+# common_typos_disable
+# {"id":"com.android.tools.r8.mapping","version":"2.2"}
+com.example.app.MainActivity -> a.a.a:
+# {"id":"sourceFile","fileName":"MainActivity.kt"}
+    android.widget.Button submitButton -> a
+    1:1:void <init>():9:9 -> <init>
+    1:4:void onCreate(android.os.Bundle):13:16 -> a
+    5:5:void onCreate(android.os.Bundle):18:18 -> a
+    1:1:void onSubmit(android.view.View):22:22 -> b
+    2:2:void onSubmit(android.view.View):23:23 -> b
+com.example.app.data.UserRepository -> a.a.b:
+# {"id":"sourceFile","fileName":"UserRepository.kt"}
+    java.util.Map cache -> a
+    1:1:void <init>():3:3 -> <init>
+    1:2:java.lang.String loadUser(int):7:8 -> a
+    3:3:void com.example.app.data.Validator.requirePositive(int):6:6 -> a
+    3:3:java.lang.String loadUser(int):9 -> a
+    4:4:java.lang.String loadUser(int):11:11 -> a
+com.example.app.data.Validator -> a.a.c:
+# {"id":"sourceFile","fileName":"Validator.kt"}
+    1:1:void requirePositive(int):6:6 -> a
