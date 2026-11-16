@@ -1,0 +1,70 @@
+{% extends "email/email_base.html" %}
+{% block title_text %}Your GlitchTip support license key{% endblock %}
+{% block content %}
+<tr>
+    <td style="background-color: #fefefe;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+            <tr>
+                <td style="padding: 24px 24px 12px 24px; font-family: 'IBM Plex Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px; color: #1a1a1a;">
+                    <p style="margin: 0;">
+                        Thank you for purchasing a GlitchTip support plan. Your license
+                        is below — please keep this email for your records.
+                    </p>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 4px 24px 20px 24px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border: 1px solid #e6e6e6; border-radius: 8px; background-color: #ffffff;">
+                        <tr>
+                            <td style="padding: 34px 24px; text-align: center; font-family: 'IBM Plex Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;">
+                                <div style="text-transform: uppercase; letter-spacing: 0.16em; font-size: 11px; font-weight: 600; color: #a0a0a0;">
+                                    Certificate of Commercial Licensure
+                                </div>
+                                <div style="margin: 16px auto; width: 44px; height: 2px; background-color: #d94a5f; line-height: 2px; font-size: 0;">&nbsp;</div>
+                                <div style="text-transform: uppercase; letter-spacing: 0.12em; font-size: 11px; color: #a0a0a0; margin-bottom: 10px;">
+                                    License key
+                                </div>
+                                <div style="font-family: 'IBM Plex Mono', 'Courier New', Courier, monospace; font-size: 20px; font-weight: 700; color: #1a1a1a; word-break: break-all;">
+                                    {{ license_key }}
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 0 24px; font-family: 'IBM Plex Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px; color: #1a1a1a;">
+                    <p style="margin: 0 0 8px 0;">Add it to your self-hosted instance:</p>
+                    <ul style="padding: 0; margin: 0; list-style-type: disc;">
+                        <li style="margin: 0 0 6px 24px;">
+                            Set the <b>GLITCHTIP_LICENSE_KEY</b> environment variable, then restart, or
+                        </li>
+                        <li style="margin: 0 0 0 24px;">
+                            Enter it in the Django admin under <b>Stripe &rarr; Support licenses</b> (superuser only).
+                        </li>
+                    </ul>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 28px 24px; text-align: center;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
+                        <tr>
+                            <td style="background-color: #d94a5f; border-radius: 8px;">
+                                <a href="{{ support_url }}" style="display: inline-block; padding: 13px 32px; color: #ffffff; font-family: 'IBM Plex Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 16px; font-weight: 600; text-decoration: none;">Go to support</a>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 0 24px 28px 24px; font-family: 'IBM Plex Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 21px; color: #8a8a8a; text-align: center;">
+                    See the <a href="https://glitchtip.com/documentation" style="color: #d94a5f; text-decoration: none;">documentation</a>
+                    to get started, or email
+                    <a href="mailto:sales@glitchtip.com" style="color: #d94a5f; text-decoration: none;">sales@glitchtip.com</a>
+                    with any questions.
+                </td>
+            </tr>
+        </table>
+    </td>
+</tr>
+{% endblock %}

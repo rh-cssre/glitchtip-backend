@@ -1,6 +1,3 @@
-import six
-import logging
-from datetime import datetime
 from sentry.utils.safe import get_path
 
 
