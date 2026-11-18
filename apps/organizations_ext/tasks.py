@@ -224,11 +224,13 @@ async def _report_overage(
     file the figure under the new one -- the whole prior cycle, billed again.
 
     ``overage_units`` is usage above the cycle's quota and ``cap_units`` what
-    the spend cap affords. Within a cycle the cap is floored at what has
-    already been billed: lowering it stops growth from that point but doesn't
-    retract billed usage, or dropping the cap to a dollar on the last day would
-    forgive the month. The floor is on the cap, not on the figure sent, so it
-    can never pin a figure the true total no longer supports.
+    the caller's copy of the spend cap affords; it only decides whether to take
+    the lock, and the figure sent uses the cap re-read under it. Within a cycle
+    the cap is floored at what has already been billed: lowering it stops
+    growth from that point but doesn't retract billed usage, or dropping the
+    cap to a dollar on the last day would forgive the month. The floor is on
+    the cap, not on the figure sent, so it can never pin a figure the true
+    total no longer supports.
     """
     from apps.stripe.client import create_meter_event
 
@@ -248,15 +250,16 @@ async def _report_overage(
     def in_cycle(at):
         return at is not None and cycle_start <= at < cycle_end
 
-    def figure(last_units: int, last_at) -> int:
+    def figure(cap_units: int, last_units: int, last_at) -> int:
         return billable_units(
             overage_units, cap_units, last_units, last_at, cycle_start, cycle_end
         )
 
     # The caller's copy of the record is enough to know nothing new is due,
-    # which is the common case; a stale copy only errs toward the locked re-read.
+    # which is the common case. A stale copy errs toward the locked re-read,
+    # or, after a raised cap, defers the new units to a later check.
     if in_cycle(org.overage_last_reported_at) and (
-        figure(org.overage_last_reported_units, org.overage_last_reported_at)
+        figure(cap_units, org.overage_last_reported_units, org.overage_last_reported_at)
         == org.overage_last_reported_units
     ):
         return
@@ -265,10 +268,22 @@ async def _report_overage(
     if not await cache.aadd(lock_key, "1", 60):
         return
     try:
-        last_units, last_at = await Organization.objects.values_list(
-            "overage_last_reported_units", "overage_last_reported_at"
+        # The caller's copy can predate a lowered cap or overage switched off,
+        # and the floor would keep a figure sent from it for the cycle.
+        (
+            last_units,
+            last_at,
+            cap_cents,
+            enabled,
+        ) = await Organization.objects.values_list(
+            "overage_last_reported_units",
+            "overage_last_reported_at",
+            "overage_spend_cap_cents",
+            "metered_billing_enabled",
         ).aget(id=org.id)
-        units = figure(last_units, last_at)
+        if not enabled:
+            return
+        units = figure(units_for_budget(cap_cents), last_units, last_at)
         if in_cycle(last_at):
             # Two measurements in the same second have no defined order at
             # Stripe, so only a strictly later one goes; and an unchanged figure
