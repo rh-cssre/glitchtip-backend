@@ -1,0 +1,16 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff
+        entry: uv run ruff check
+        language: system
+        types: [python]
+        files: ^(glitchtip|apps)/
+
+      - id: vulture
+        name: vulture
+        entry: uv run vulture apps/ glitchtip/ vulture_whitelist.py --min-confidence 100 --exclude "*/migrations/*,glitchtip/test_runner.py,apps/organizations_ext/api.py"
+        language: system
+        pass_filenames: false
+        always_run: true
